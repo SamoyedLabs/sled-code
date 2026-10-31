@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off -- This test exercises a standalone Node launcher outside the Effect runtime.
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import { privateDesktopLaunchEnvironment } from "./private-desktop-launch.ts";

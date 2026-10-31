@@ -1,4 +1,3 @@
-import type { EnvironmentId } from "@t3tools/contracts";
 import {
   RemoteDesktopView,
   remoteDesktopAcceptanceEnabled,
@@ -27,6 +26,15 @@ function value<A, E>(result: AtomCommandResult<A, E>): A {
   if (AsyncResult.isFailure(result)) throw squashAtomCommandFailure(result);
   throw new Error("Remote desktop request did not complete");
 }
+
+const idleSnapshot: ReturnType<RemoteDesktopSession["snapshot"]> = {
+  phase: "idle",
+  host: "",
+  path: null,
+  error: null,
+};
+const snapshotIdle = () => idleSnapshot;
+const subscribeIdle = () => () => {};
 
 export function RemoteDesktopRouteScreen() {
   useFocusEffect(
@@ -67,64 +75,68 @@ export function RemoteDesktopRouteScreen() {
     reportFailure: false,
     reportDefect: false,
   });
-  const signalingReady = useCallback(
-    (environmentId: EnvironmentId) =>
-      connectionsRef.current.connectedEnvironments.some(
-        (entry) =>
-          entry.environmentId === environmentId &&
-          entry.isEnabled &&
-          entry.connectionState === "connected",
-      ),
-    [],
-  );
-  // The RPC commands share the application's registry; this owner lives exactly
-  // as long as the mounted route and reads the current native view through its ref.
-  const [session] = useState(
-    // oxlint-disable-next-line react/refs -- The constructor stores callbacks; ref reads occur later during native events and RPC recovery, never during render.
-    () =>
-      new RemoteDesktopSession({
-        signalingReady,
-        ...(remoteDesktopAcceptanceEnabled
-          ? {
-              trace: (environmentId, event) => {
-                const connection = connectionsRef.current.connectedEnvironments.find(
-                  (entry) => entry.environmentId === environmentId,
-                );
-                void native.current
-                  ?.recordAcceptanceEvent(
-                    JSON.stringify({
-                      ...event,
-                      connectionState: connection?.connectionState ?? "missing",
-                    }),
-                  )
-                  .catch(() => {});
-              },
-            }
-          : {}),
-        native: () => native.current,
-        rpc: {
-          status: async (environmentId) => value(await status({ environmentId, input: {} })),
-          start: async (environmentId, input) => value(await start({ environmentId, input })),
-          renew: async (environmentId, input) => value(await renew({ environmentId, input })),
-          restart: async (environmentId, input) => value(await restart({ environmentId, input })),
-          stop: async (environmentId, input) => {
-            value(await stop({ environmentId, input }));
-          },
-        },
-      }),
-  );
-  const state = useSyncExternalStore(session.subscribe, session.snapshot);
-  const [selectionError, setSelectionError] = useState<string | null>(null);
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Route lifetime and app backgrounding revoke the external native session and all recovery work.
+  const rpcRef = useRef({ status, start, renew, restart, stop });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- The imperative session reads the current registry-bound RPC callbacks after commit.
   useEffect(() => {
+    rpcRef.current = { status, start, renew, restart, stop };
+  }, [status, start, renew, restart, stop]);
+  const [session, setSession] = useState<RemoteDesktopSession | null>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Own the native session and app-background subscription for this mounted route.
+  useEffect(() => {
+    const owner = new RemoteDesktopSession({
+      signalingReady: (environmentId) =>
+        connectionsRef.current.connectedEnvironments.some(
+          (entry) =>
+            entry.environmentId === environmentId &&
+            entry.isEnabled &&
+            entry.connectionState === "connected",
+        ),
+      ...(remoteDesktopAcceptanceEnabled
+        ? {
+            trace: (environmentId, event) => {
+              const connection = connectionsRef.current.connectedEnvironments.find(
+                (entry) => entry.environmentId === environmentId,
+              );
+              void native.current
+                ?.recordAcceptanceEvent(
+                  JSON.stringify({
+                    ...event,
+                    connectionState: connection?.connectionState ?? "missing",
+                  }),
+                )
+                .catch(() => {});
+            },
+          }
+        : {}),
+      native: () => native.current,
+      rpc: {
+        status: async (environmentId) =>
+          value(await rpcRef.current.status({ environmentId, input: {} })),
+        start: async (environmentId, input) =>
+          value(await rpcRef.current.start({ environmentId, input })),
+        renew: async (environmentId, input) =>
+          value(await rpcRef.current.renew({ environmentId, input })),
+        restart: async (environmentId, input) =>
+          value(await rpcRef.current.restart({ environmentId, input })),
+        stop: async (environmentId, input) => {
+          value(await rpcRef.current.stop({ environmentId, input }));
+        },
+      },
+    });
+    setSession(owner);
     const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "background") session.stop();
+      if (state === "background") owner.stop();
     });
     return () => {
       subscription.remove();
-      session.stop();
+      owner.stop();
     };
-  }, [session]);
+  }, []);
+  const state = useSyncExternalStore(
+    session?.subscribe ?? subscribeIdle,
+    session?.snapshot ?? snapshotIdle,
+  );
+  const [selectionError, setSelectionError] = useState<string | null>(null);
 
   const chooseHost = () => {
     const hosts = connections.connectedEnvironments.filter(
@@ -146,7 +158,10 @@ export function RemoteDesktopRouteScreen() {
         const host = hosts[index - 1];
         if (host) {
           setSelectionError(null);
-          void session.connect({ environmentId: host.environmentId, label: host.environmentLabel });
+          void session?.connect({
+            environmentId: host.environmentId,
+            label: host.environmentLabel,
+          });
         }
       },
     );
@@ -163,7 +178,7 @@ export function RemoteDesktopRouteScreen() {
             icon="chevron.left"
             accessibilityLabel="Back"
             onPress={() => {
-              session.stop();
+              session?.stop();
               if (navigation.canGoBack()) navigation.goBack();
               else navigation.navigate("Home");
             }}
@@ -175,8 +190,9 @@ export function RemoteDesktopRouteScreen() {
           </AppText>
           <Button
             label={state.phase === "idle" ? "Connect to Mac" : "Disconnect"}
+            disabled={session === null}
             tone="secondary"
-            onPress={state.phase === "idle" ? chooseHost : session.stop}
+            onPress={state.phase === "idle" ? chooseHost : () => session?.stop()}
           />
         </View>
         {error ? (
@@ -191,7 +207,7 @@ export function RemoteDesktopRouteScreen() {
         pointerEvents={
           state.phase === "connecting" || state.phase === "recovering" ? "none" : "auto"
         }
-        onNativeState={(event) => session.nativeState(event.nativeEvent)}
+        onNativeState={(event) => session?.nativeState(event.nativeEvent)}
       />
     </View>
   );

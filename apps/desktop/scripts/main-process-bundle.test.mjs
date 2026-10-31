@@ -114,9 +114,14 @@ it("loads the emitted packaged boot entry and backend cache preload", async () =
   const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-desktop-boot-"));
   try {
     const entries = ["src/boot.ts", "src/compileCache.ts"];
-    await NodeFSP.mkdir(NodePath.join(directory, "src"));
+    await NodeFSP.mkdir(NodePath.join(directory, "src/app"), { recursive: true });
+    await NodeFSP.mkdir(NodePath.join(directory, "node_modules/electron"), { recursive: true });
+    await NodeFSP.writeFile(
+      NodePath.join(directory, "node_modules/electron/index.js"),
+      "exports.app = { setName() {} };",
+    );
     await Promise.all(
-      entries.map((entry) =>
+      [...entries, "src/app/DesktopStorageIdentity.ts"].map((entry) =>
         NodeFSP.copyFile(new URL(`../${entry}`, import.meta.url), NodePath.join(directory, entry)),
       ),
     );

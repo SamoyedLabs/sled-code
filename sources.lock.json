@@ -3,14 +3,14 @@
   "t3code": {
     "repository": "https://github.com/pingdotgg/t3code.git",
     "channel": "nightly",
-    "tag": "v0.1.4-nightly.20261028.3824",
-    "commit": "eb751fa0730d6a51d56547cb7fcaf4822a7e0e3b",
+    "tag": "v0.1.7-nightly.20261031.3991",
+    "commit": "15fe2832727893cbdd2214383f9f971474849695",
     "checkout": ".",
     "desktopPath": "apps/desktop",
     "mobilePath": "apps/mobile",
     "mobilePreviewProfile": "preview:dev",
     "mobileIOSBetaProfile": "testflight",
-    "latestReleaseVerifiedAtUTC": "2026-10-28 15:27:30 UTC"
+    "latestReleaseVerifiedAtUTC": "2026-10-31"
   },
   "sill": {
     "repository": "https://github.com/Saffsanity/sill.git",

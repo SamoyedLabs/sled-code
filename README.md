@@ -8,7 +8,7 @@ Sled Code preserves T3's coding agents, development sessions, web, Electron desk
 
 Use the Node and pnpm versions in `package.json`. Install dependencies with `pnpm install --frozen-lockfile`, then run `pnpm dev`. Upstream development guidance remains in [AGENTS.md](AGENTS.md) and [the original README](README.upstream.md).
 
-Native streaming builds on macOS require Xcode, its command-line tools and CocoaPods:
+Native streaming builds require Xcode 26 or newer, its command-line tools and CocoaPods. CI selects Xcode 26.3 for the Security framework declarations; the host deployment target remains macOS 14:
 
 ```sh
 python3 scripts/sled/prepare-native.py
