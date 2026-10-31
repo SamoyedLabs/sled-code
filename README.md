@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="apps/mobile/branding/sled-icon.png" alt="Sled's Samoyed logo" width="112" height="112" />
+  <img src="docs/assets/sled-icon-rounded.png" alt="Sled's Samoyed logo" width="112" height="112" />
 </p>
 
 <h1 align="center">Sled Code</h1>
@@ -11,8 +11,8 @@
 
 <p align="center">
   <a href="https://github.com/SamoyedLabs/sled-code/actions/workflows/ci.yml"><img src="https://github.com/SamoyedLabs/sled-code/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status" /></a>
-  <img src="https://img.shields.io/badge/focus-macOS%20%2B%20iOS-263A2E?style=flat&amp;logo=apple&amp;logoColor=white" alt="Focused on macOS and iOS" />
-  <img src="https://img.shields.io/badge/status-private%20beta-414B43?style=flat" alt="Private beta" />
+  <img src="https://img.shields.io/badge/focus-macOS%20%2B%20iOS-242424?style=flat&amp;logo=apple&amp;logoColor=white" alt="Focused on macOS and iOS" />
+  <img src="https://img.shields.io/badge/status-private%20beta-444444?style=flat" alt="Private beta" />
 </p>
 
 <p align="center">
@@ -24,8 +24,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/remote-workspace.svg" alt="Illustrated workflow: a Mac streams its desktop to Sled's native iOS client over an encrypted direct or relayed connection." width="100%" />
-  <br /><sub>Illustrated Mac → iPhone workflow.</sub>
+  <img src="docs/assets/sled-hero.png" alt="Sled Code — Your Mac. Anywhere. White Samoyed mascot on charcoal." width="100%" />
 </p>
 
 Sled Code builds on [T3 Code](https://github.com/pingdotgg/t3code), bringing its coding agents and development sessions together with native graphical access to your Mac. Open your workspace on your phone, move between agent sessions and the desktop, and interact with the applications running on your development machine.

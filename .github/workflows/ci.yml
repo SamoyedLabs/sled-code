@@ -21,12 +21,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || inputs.candidate_sha || github.sha }}
-  cancel-in-progress: ${{ github.event_name != 'push' }}
+  group: ci-${{ github.event.pull_request.number || inputs.candidate_sha || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   automation:
     name: Automation
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.automation != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -47,13 +49,17 @@ jobs:
   # server shards, a server change does not run the mobile tests, and the macOS
   # lint (~6.7x a Linux minute) runs only for native mobile sources.
   # .github/scripts/ci-changes.cjs maps changed files to workspace packages and
-  # their dependents. Pushes to main still run every Linux job. Detection fails
-  # open: if the diff cannot be resolved, everything runs.
+  # their dependents, on both PRs and main. Detection fails open: if the diff
+  # cannot be resolved or a path has no known owner, everything runs.
   changes:
     name: Changes
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
+      docs: ${{ steps.detect.outputs.docs }}
+      docs_files: ${{ steps.detect.outputs.docs_files }}
+      lint: ${{ steps.detect.outputs.lint }}
+      automation: ${{ steps.detect.outputs.automation }}
       typecheck: ${{ steps.detect.outputs.typecheck }}
       build: ${{ steps.detect.outputs.build }}
       test: ${{ steps.detect.outputs.test }}
@@ -106,14 +112,49 @@ jobs:
         with:
           base-sha: ${{ inputs.base_sha }}
 
+  docs:
+    name: Docs
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.candidate_sha || github.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            /.gitmodules
+            /package.json
+            /*.md
+            /docs/
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+      - name: Check documentation formatting without installing the application
+        env:
+          DOCS_FILES: ${{ needs.changes.outputs.docs_files }}
+        run: |
+          python3 - <<'PYTHON'
+          import json, os, pathlib, subprocess
+          files = [path for path in json.loads(os.environ["DOCS_FILES"]) if pathlib.Path(path).is_file()]
+          if files:
+              subprocess.run(["npx", "--yes", "--package=oxfmt@0.74.0", "oxfmt", "--check", "--disable-nested-config", "--", *files], check=True)
+          else:
+              print("Only documentation assets or deletions changed; no Markdown to format.")
+          PYTHON
+
   # Lint and the desktop build each get a runner so they run side by side.
   # Typecheck shares the build's install. Lint always runs: it formats every
-  # file, docs included. The `Check` job at the end of this file passes only
+  # application file. Docs-only edits use the lightweight formatter job. `Check` passes only
   # when every other job passes or was skipped by `changes`.
   lint:
     permissions:
       contents: read
     name: Lint
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.lint != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -391,12 +432,13 @@ jobs:
   # isolation that flag buys is preserved exactly. One file at a time keeps
   # about 1.5 cores busy, so 4 vCPU runners lose nothing against 8. The shards
   # split files by recorded duration (apps/server/src/testUtils/weightedShardSequencer.ts).
-  # The shards are the longest jobs, so they gate themselves instead of waiting
-  # ~15s for `changes`: a shard the change cannot affect stops after checkout.
+  # Gate before expanding the matrix so docs-only edits start no server runners.
   test_server:
     permissions:
       contents: read
     name: Test Server ${{ matrix.shard }}
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.test_server != 'false' }}
     runs-on: ubuntu-24.04
     # Shards take 2-5 minutes. When the shared task cache throttles reads, each
     # failed fetch stalls vp for 15-90s, which pushed shards past 10 minutes.
@@ -420,29 +462,8 @@ jobs:
             !/apps/mobile/modules/t3-terminal/Vendor/**/*.a
           sparse-checkout-cone-mode: false
 
-      - name: Verify dispatched commit
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-          DISPATCH_SHA: ${{ github.sha }}
-          BASE_SHA: ${{ inputs.base_sha }}
-        run: |
-          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
-          test "$DISPATCH_SHA" = "$CANDIDATE_SHA"
-          if [[ -n "$BASE_SHA" ]]; then
-            [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-            test "$(git rev-parse HEAD^1)" = "$BASE_SHA"
-          fi
-
-      - name: Detect affected jobs
-        id: changes
-        uses: ./.github/actions/ci-changes
-        with:
-          base-sha: ${{ inputs.base_sha }}
-
       - name: Setup Vite+
-        if: steps.changes.outputs.test_server != 'false'
+        if: needs.changes.outputs.test_server != 'false'
         uses: ./.github/actions/setup-ci-deps
 
       # No Electron setup here: `t3` (apps/server) has no Electron dependency
@@ -451,23 +472,23 @@ jobs:
       # Cache the pinned browser and skip apt unless shared libraries are missing.
       - name: Resolve Playwright version
         id: playwright_version
-        if: steps.changes.outputs.test_server != 'false'
+        if: needs.changes.outputs.test_server != 'false'
         run: echo "version=$(node -p "require('./apps/server/node_modules/playwright-core/package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Cache Chromium
         id: chromium_cache
-        if: steps.changes.outputs.test_server != 'false'
+        if: needs.changes.outputs.test_server != 'false'
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-shell-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright_version.outputs.version }}
 
       - name: Install Chromium for server browser integration tests
-        if: steps.changes.outputs.test_server != 'false' && steps.chromium_cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.test_server != 'false' && steps.chromium_cache.outputs.cache-hit != 'true'
         run: node apps/server/node_modules/playwright-core/cli.js install --only-shell chromium
 
       - name: Install missing Chromium system dependencies
-        if: steps.changes.outputs.test_server != 'false'
+        if: needs.changes.outputs.test_server != 'false'
         run: |
           browser=$(find "$HOME/.cache/ms-playwright" -name chrome-headless-shell -type f -print -quit)
           test -n "$browser"
@@ -476,7 +497,7 @@ jobs:
           fi
 
       - name: Test
-        if: steps.changes.outputs.test_server != 'false'
+        if: needs.changes.outputs.test_server != 'false'
         env:
           T3CODE_TRANSFER_BUDGET_REPORT_PATH: ${{ runner.temp }}/t3code-transfer-budget.md
           T3CODE_TRANSFER_BUDGET_RESULT_PATH: ${{ runner.temp }}/thread-transfer-result.json
@@ -486,7 +507,7 @@ jobs:
           --verify-hits 1 --report "${{ runner.temp }}/test-cache-${{ matrix.shard }}.json" apps/server
 
       - name: Upload test cache measurements
-        if: always() && steps.changes.outputs.test_server != 'false'
+        if: always() && needs.changes.outputs.test_server != 'false'
         uses: actions/upload-artifact@v7
         with:
           name: test-cache-${{ matrix.shard }}
@@ -673,6 +694,7 @@ jobs:
       [
         automation,
         changes,
+        docs,
         lint,
         build,
         test,

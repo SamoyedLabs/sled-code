@@ -14,6 +14,10 @@ export function decide(
 ): {
   affected: Array<string>;
   outputs: {
+    docs: boolean;
+    docs_files: string;
+    lint: boolean;
+    automation: boolean;
     typecheck: boolean;
     build: boolean;
     test: boolean;
