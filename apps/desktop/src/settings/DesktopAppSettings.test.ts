@@ -174,6 +174,7 @@ describe("DesktopSettings", () => {
         );
 
         assert.deepEqual(yield* settings.load, {
+          remoteDesktop: DesktopAppSettings.DEFAULT_DESKTOP_SETTINGS.remoteDesktop,
           linuxPasswordStore: "auto",
           localEnvironmentEnabled: true,
           mainWindowBounds: { x: 120, y: 80, width: 1280, height: 900 },
@@ -269,6 +270,7 @@ describe("DesktopSettings", () => {
         });
 
         assert.deepEqual(yield* settings.load, {
+          remoteDesktop: DesktopAppSettings.DEFAULT_DESKTOP_SETTINGS.remoteDesktop,
           linuxPasswordStore: "auto",
           localEnvironmentEnabled: true,
           mainWindowBounds: null,
@@ -298,6 +300,7 @@ describe("DesktopSettings", () => {
         });
 
         assert.deepEqual(yield* settings.load, {
+          remoteDesktop: DesktopAppSettings.DEFAULT_DESKTOP_SETTINGS.remoteDesktop,
           linuxPasswordStore: "auto",
           localEnvironmentEnabled: true,
           mainWindowBounds: null,
@@ -391,3 +394,33 @@ describe("DesktopSettings", () => {
     ),
   );
 });
+
+// Materialized in the existing DesktopAppSettings.test.ts suite.
+it.effect("persists remote desktop choices without changing unrelated desktop settings", () =>
+  withSettings(
+    Effect.gen(function* () {
+      const settings = yield* DesktopAppSettings.DesktopAppSettings;
+      yield* settings.setServerExposureMode("network-accessible");
+      const before = yield* settings.get;
+      const remoteDesktop = { ...before.remoteDesktop, enabled: true, clipboard: false };
+      yield* settings.setRemoteDesktop(remoteDesktop);
+      assert.deepEqual(yield* settings.load, { ...before, remoteDesktop });
+      assert.isFalse((yield* settings.setRemoteDesktop(remoteDesktop)).changed);
+      const environment = yield* DesktopEnvironment.DesktopEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      // Invalid remote data cannot turn access on or discard valid settings.
+      yield* fs.writeFileString(
+        environment.desktopSettingsPath,
+        JSON.stringify({
+          serverExposureMode: "network-accessible",
+          remoteDesktop: { enabled: "true" },
+        }),
+      );
+      const loaded = yield* settings.load;
+      assert.isFalse(loaded.remoteDesktop.enabled);
+      assert.isTrue(loaded.remoteDesktop.clipboard);
+      assert.isTrue(loaded.remoteDesktop["virtual-display"]);
+      assert.equal(loaded.serverExposureMode, "network-accessible");
+    }),
+  ),
+);

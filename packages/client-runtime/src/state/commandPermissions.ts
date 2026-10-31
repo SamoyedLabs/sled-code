@@ -10,6 +10,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
+import { ConnectionTransientError } from "../connection/model.ts";
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 import { createEnvironmentSessionAtoms } from "./session.ts";
 
@@ -55,9 +56,12 @@ function makeCommandPermissions<R, E>(
             Effect.timeoutOption(6_000),
             Effect.orElseSucceed(() => Option.none<AuthSessionState>()),
           );
-          const missing = scopes.find(
-            (scope) => Option.isNone(session) || !sessionGrantsScope(session.value, scope),
-          );
+          if (Option.isNone(session))
+            return yield* new ConnectionTransientError({
+              reason: "transport",
+              detail: "The connection authorization state is temporarily unavailable.",
+            });
+          const missing = scopes.find((scope) => !sessionGrantsScope(session.value, scope));
           if (missing !== undefined)
             return yield* new EnvironmentAuthorizationError({
               ...authScopeRequiredResponse(missing),

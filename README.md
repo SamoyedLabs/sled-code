@@ -1,142 +1,35 @@
-# T3 Code
+# Sled Code
 
-T3 Code is an "agent harness control surface". It enables control of the agents on your machine with a best-in-class mobile app ([iOS](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824), [Android](https://play.google.com/store/apps/details?id=com.t3tools.t3code)), [web app](https://app.t3.codes) and [Electron-based desktop app](https://t3.codes).
+Remote development with native Mac desktop streaming inside the mobile app, built on [T3 Code](https://github.com/pingdotgg/t3code).
 
-Works with your subscriptions on Claude Code, Codex, Cursor, Grok Build, OpenCode, and Google Antigravity. If they're set up on your computer, T3 Code can control them.
+Sled Code preserves T3's coding agents, development sessions, web, Electron desktop and Expo mobile clients. The initial custom integration targets macOS hosts and iOS clients, with Sill capture, hardware video, remote input, clipboard, audio, virtual displays, direct WebRTC and relay fallback. The Mac host can follow the desktop app lifetime or remain available in persistent mode.
 
-## "Wait, what are you selling me?"
+## Development
 
-Nothing. We built T3 Code because we wanted the best possible development experience with agents. We were inspired by existing solutions like the Codex desktop app, Conductor, Claude Desktop and Cursor Glass, but none met our bar.
+Use the Node and pnpm versions in `package.json`. Install dependencies with `pnpm install --frozen-lockfile`, then run `pnpm dev`. Upstream development guidance remains in [AGENTS.md](AGENTS.md) and [the original README](README.upstream.md).
 
-We wanted something performant, remote-ready, and truly open. If we ever go the wrong direction, we want you to have everything you need to fork and build the editor that you want.
+Native streaming builds on macOS require Xcode, its command-line tools and CocoaPods:
 
-## Installation
-
-> [!WARNING]
-> T3 Code currently supports Codex, Claude, Cursor, Grok Build, OpenCode, and Antigravity. Install and authenticate at least one provider before use:
->
-> - Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
-> - Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
-> - Cursor: install [Cursor CLI](https://cursor.com/cli) and run `agent login`
-> - Grok Build: install [Grok Build CLI](https://x.ai/cli) and run `grok login`
-> - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
-> - Antigravity: enable it in Settings, then use **Install Antigravity** and **Sign in with Google**. No CLI is required.
-
-### Command line
-
-```bash
-curl -fsSL https://t3.codes/install.sh | sh
+```sh
+python3 scripts/sled/prepare-native.py
+swift build --package-path native/remote-desktop --product T3RemoteHost
+python3 scripts/build-desktop.py
 ```
 
-On Windows, in PowerShell:
+The native setup verifies the pinned WebRTC archive checksum and installs ignored frameworks; it does not patch application source. Sill's modified host is tracked under `native/remote-desktop`; mobile native sources are tracked under `apps/mobile/modules/t3-remote-desktop`. Dependency versions and provenance are in `sources.lock.json`.
 
-```powershell
-irm https://t3.codes/install.ps1 | iex
+The iPhone app is Sled, bundle `com.samoyedlabs.sled`. Expo updates are disabled by default. TestFlight archives use `python3 scripts/testflight-ios.py archive --team <YOUR_TEAM_ID> --prepare`; export and upload are separate explicit actions. Signing material belongs in ignored `.tools/apple-credentials/`, never in the repository. See [maintenance and releases](docs/operations/sled-maintenance.md).
+
+## Upstream updates
+
+This is an independent repository retaining T3's history. Configure its source remote with:
+
+```sh
+git remote add upstream https://github.com/pingdotgg/t3code.git
 ```
 
-Then run `t3` to start the server and open the local web app. `t3 service install` keeps it running in the background, `t3 update` moves to a newer release, and `t3 --help` has the full reference.
+The Sled Upstream workflow checks published nightlies every six hours. A candidate must pass CI on its exact commit before automatic promotion. Unresolved conflicts and changes requiring review remain staged. Physical phone testing is exceptional; native changes alone do not require it. See [maintenance policy](docs/operations/sled-maintenance.md).
 
-To try it once without installing, run `npx t3@latest` instead.
+## Attribution
 
-### Desktop app
-
-Install the latest version of the desktop app from [GitHub Releases](https://github.com/pingdotgg/t3code/releases), or from your favorite package registry:
-
-#### Windows (`winget`)
-
-```bash
-winget install T3Tools.T3Code
-```
-
-#### Windows (`scoop`)
-
-```bash
-scoop install extras/t3code
-```
-
-#### macOS (Homebrew)
-
-```bash
-brew install --cask t3-code
-```
-
-#### Debian, Ubuntu (`.deb`)
-
-Download the `.deb` from [GitHub Releases](https://github.com/pingdotgg/t3code/releases), then:
-
-```bash
-sudo apt install ./T3-Code-*.deb
-```
-
-#### Arch Linux (AUR)
-
-Stable:
-
-```bash
-yay -S t3code-bin
-```
-
-Nightly:
-
-```bash
-yay -S t3code-nightly-bin
-```
-
-The AUR packaging is maintained in this repository under [`packaging/aur`](./packaging/aur).
-
-## Some notes
-
-We are very very early in this project. Expect bugs.
-
-We are (mostly) not accepting contributions yet. Small fixes may be considered. Big features will not be.
-
-## Documentation
-
-Full docs live in [docs/](./docs). There's no docs site yet.
-
-- [FAQ](./docs/user/faq.md)
-- [Install and first run](./docs/user/install.md)
-- [Permission modes](./docs/user/permission-modes.md)
-- [Keyboard shortcuts](./docs/user/keybindings.md)
-- [Project settings](./docs/user/project-settings.md)
-- [Appearance preferences](./docs/user/appearance.md)
-- [Remote access from a phone or another machine](./docs/user/remote-access.md)
-- [Connect Claude Code, Codex, ChatGPT and other agents over MCP](./docs/user/outside-agents.md)
-- [Keeping app and server in sync](./docs/user/updating.md)
-- [Source control integrations](./docs/user/source-control.md)
-- Multiple accounts: [Codex](./docs/user/providers-codex.md) · [Claude](./docs/user/providers-claude.md)
-- [Run T3 Code as a background service](./docs/user/background-service.md)
-
-Building from source? Start at [docs/internals/overview.md](./docs/internals/overview.md).
-
-## If you REALLY want to contribute still.... read this first
-
-### Install `vp`
-
-T3 Code uses Vite+ so you'll need to install the global `vp` command-line tool.
-
-#### macOS / Linux
-
-```bash
-curl -fsSL https://vite.plus | bash
-```
-
-#### Windows
-
-```bash
-irm https://vite.plus/ps1 | iex
-```
-
-Checkout their getting started guide for more information: https://viteplus.dev/guide/
-
-### Install dependencies
-
-```bash
-vp i
-```
-
-Read [CONTRIBUTING.md](./CONTRIBUTING.md) before reporting a bug or opening a PR.
-
-Have a feature request? Start an [Ideas discussion](https://github.com/pingdotgg/t3code/discussions/categories/ideas).
-
-Need support? Join the [Discord](https://discord.gg/jn4EGJjrvv).
+T3 Code is MIT licensed; its original copyright and license are retained in `LICENSE`. Sill is Apache-2.0 licensed; its license and modification notice are in `native/remote-desktop/` and the mobile module's `Vendor/`. WebRTC dependency notices and provenance accompany the native components.

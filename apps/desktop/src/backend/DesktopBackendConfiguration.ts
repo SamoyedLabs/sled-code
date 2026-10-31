@@ -1,3 +1,7 @@
+// @effect-diagnostics nodeBuiltinImport:off -- Packaged background host resource paths and per-launch identity.
+import * as NodePath from "node:path";
+import * as NodeCrypto from "node:crypto";
+const guiInstance = NodeCrypto.randomUUID();
 import * as NodeOS from "node:os";
 
 import { parsePersistedServerObservabilitySettings } from "@t3tools/shared/serverSettings";
@@ -6,6 +10,11 @@ import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
+import {
+  existingRemoteDesktopAgent,
+  remoteDesktopAgentAvailable,
+  remoteDesktopAgentProxy,
+} from "../remote-desktop/RemoteDesktopAgentClient.ts";
 import * as Hex from "effect/encoding/Hex";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -511,6 +520,8 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       desktopTelemetryControlFd: 5,
       desktopBrowserFd: 6,
       desktopBrowserControlFd: 7,
+      desktopRemoteDesktopFd: 8,
+      desktopRemoteDesktopControlFd: 9,
       ...Option.match(input.resourceMonitorPath, {
         onNone: () => ({}),
         onSome: (resourceMonitorPath) => ({ resourceMonitorPath }),
@@ -523,9 +534,9 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       // Packaged builds have a separate cache; --require prevents cache settings leaking to provider subprocesses.
       args: [
         ...(environment.isPackaged ? ["--require", environment.compileCachePath] : []),
-        environment.backendEntryPath,
-        "--bootstrap-fd",
-        "3",
+        ...(remoteDesktopAgentAvailable()
+          ? [remoteDesktopAgentProxy()!, environment.backendEntryPath]
+          : [environment.backendEntryPath, "--bootstrap-fd", "3"]),
       ],
       entryPath: environment.backendEntryPath,
       cwd: environment.backendCwd,
@@ -533,6 +544,10 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
         ...backendChildEnvPatch(),
         ELECTRON_RUN_AS_NODE: "1",
         T3CODE_CLI_PATH: Option.getOrUndefined(input.cliPath),
+        T3_REMOTE_APP_BUNDLE: remoteDesktopAgentAvailable()
+          ? NodePath.resolve(process.resourcesPath, "../..")
+          : undefined,
+        T3_REMOTE_GUI_INSTANCE: guiInstance,
       },
       extendEnv: true,
       bootstrap,
@@ -729,11 +744,17 @@ export const make = Effect.gen(function* () {
     Option.match(current, {
       onSome: (secret) => Effect.succeed([secret, current] as const),
       onNone: () =>
-        crypto.randomBytes(32).pipe(
-          Effect.map((bytes) => {
-            const secret = Hex.encode(bytes);
-            return [secret, Option.some(secret)] as const;
-          }),
+        Effect.promise(() => existingRemoteDesktopAgent(environment.baseDir)).pipe(
+          Effect.flatMap((existing) =>
+            existing
+              ? Effect.succeed([existing.secret, Option.some(existing.secret)] as const)
+              : crypto.randomBytes(32).pipe(
+                  Effect.map((bytes) => {
+                    const secret = Hex.encode(bytes);
+                    return [secret, Option.some(secret)] as const;
+                  }),
+                ),
+          ),
         ),
     }),
   );

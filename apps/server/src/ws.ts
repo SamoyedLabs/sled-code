@@ -267,6 +267,18 @@ import * as AgentSessionScanner from "./project/AgentSessionScanner.ts";
 import * as AgentSessionImporter from "./project/AgentSessionImporter.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
 
+import * as RemoteDesktop from "./remoteDesktop/Service.ts";
+import { RemoteDesktopError } from "@t3tools/contracts";
+const toRemoteDesktopRpcError = (error: RemoteDesktop.RequestFailure) =>
+  error._tag === "RemoteDesktopError"
+    ? error
+    : new RemoteDesktopError({
+        reason:
+          error._tag === "RemoteDesktopAuthorizationLookupError"
+            ? "authorization_unavailable"
+            : "transport",
+      });
+
 const CONFIG_DISCOVERY_TIMEOUT = Duration.seconds(5);
 const isProviderUploadFeedbackError = Schema.is(ProviderUploadFeedbackError);
 
@@ -1224,6 +1236,10 @@ export const layerWsRpc = (
   Layer.effectContext(
     Effect.gen(function* () {
       const currentSessionId = currentSession.sessionId;
+      const remoteDesktop = Option.getOrElse(
+        yield* Effect.serviceOption(RemoteDesktop.Service),
+        () => RemoteDesktop.unavailable,
+      );
       const sql = yield* SqlClient.SqlClient;
       const threadManagement = yield* ThreadManagementService.ThreadManagementService;
       const intakeContext = yield* Effect.context<
@@ -3008,6 +3024,18 @@ export const layerWsRpc = (
               (unsubscribe) => Effect.sync(unsubscribe),
             ),
           ),
+        [WS_METHODS.remoteDesktopRestart]: (input) =>
+          remoteDesktop
+            .restart(currentSession, input)
+            .pipe(Effect.mapError(toRemoteDesktopRpcError)),
+        [WS_METHODS.remoteDesktopStatus]: () =>
+          remoteDesktop.status(currentSession).pipe(Effect.mapError(toRemoteDesktopRpcError)),
+        [WS_METHODS.remoteDesktopStart]: (input) =>
+          remoteDesktop.start(currentSession, input).pipe(Effect.mapError(toRemoteDesktopRpcError)),
+        [WS_METHODS.remoteDesktopRenew]: (input) =>
+          remoteDesktop.renew(currentSession, input).pipe(Effect.mapError(toRemoteDesktopRpcError)),
+        [WS_METHODS.remoteDesktopStop]: (input) =>
+          remoteDesktop.stop(currentSession, input).pipe(Effect.mapError(toRemoteDesktopRpcError)),
         [WS_METHODS.previewOpen]: (input) => previewManager.open(input),
         [WS_METHODS.previewResize]: (input) => previewManager.resize(input),
         [WS_METHODS.previewAdjust]: (input) => previewManager.adjust(input),
@@ -3247,6 +3275,7 @@ export const WS_RPC_SERVER_OPTIONS = {
 
 export const layer = Layer.unwrap(
   Effect.gen(function* () {
+    const remoteDesktop = yield* RemoteDesktop.Service;
     const serverBrowser = yield* ServerBrowser.ServerBrowser;
     const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
     const pullRequests = yield* PullRequestService.PullRequestService;
@@ -3322,6 +3351,7 @@ export const layer = Layer.unwrap(
               Layer.provide(Layer.succeed(SqlClient.SqlClient, sql)),
               Layer.provide(AgentSessionScanner.layer),
               Layer.provide(ProviderMaintenanceRunner.layer),
+              Layer.provide(Layer.succeed(RemoteDesktop.Service, remoteDesktop)),
               Layer.provide(Layer.succeed(ServerSelfUpdate.ServerSelfUpdate, serverSelfUpdate)),
               // Share server-lifetime PR caches so WS mutations invalidate every client's HTTP diffs.
               Layer.provide(Layer.succeed(PullRequestService.PullRequestService, pullRequests)),

@@ -162,6 +162,13 @@ function decide(files, packages, full) {
       test_server: has("t3"),
       rust: everything || rust,
       release_smoke: scriptsChanged,
+      remote_native:
+        files === null ||
+        files.some((file) =>
+          /^native\/remote-desktop\/|^scripts\/sled\/prepare-native\.py$|^scripts\/prepare-webrtc|^sources\.lock\.json$|^\.github\/workflows\/ci\.yml$/.test(
+            file,
+          ),
+        ),
       mobile_native: files === null || files.some((file) => MOBILE_NATIVE.test(file)),
     },
   };

@@ -1,5 +1,7 @@
 import { NATIVE_WORKSPACE_COLUMNS_SUPPORTED } from "../native/NativeWorkspaceColumns";
 import Constants from "expo-constants";
+import { Image } from "expo-image";
+import { T3_CODE_BRAND_MARK_SOURCE } from "./brandAssets";
 import type { NativeStackNavigationOptions } from "@react-navigation/native-stack";
 import { useState } from "react";
 import { Platform, View } from "react-native";
@@ -25,7 +27,10 @@ export function CompactBrandTitle(
     readonly fit?: boolean;
   } = {},
 ) {
-  const stageLabel = resolveMobileStageLabel(Constants.expoConfig?.extra?.appVariant);
+  const privateBrand = Constants.expoConfig?.extra?.iosPersonalTeamBuild === true;
+  const stageLabel = privateBrand
+    ? "Beta"
+    : resolveMobileStageLabel(Constants.expoConfig?.extra?.appVariant);
   const titleOffset = brandTitleOffset();
   const { scale } = useAndroidControlSizing();
   const [availableWidth, setAvailableWidth] = useState<number | null>(null);
@@ -40,7 +45,9 @@ export function CompactBrandTitle(
         props.fit && showStage ? (event) => setFullWidth(event.nativeEvent.layout.width) : undefined
       }
       aria-level={1}
-      accessibilityLabel={props.accessibilityLabel ?? "T3 Code, Threads"}
+      accessibilityLabel={
+        props.accessibilityLabel ?? `${Constants.expoConfig?.name ?? "T3 Code"}, Threads`
+      }
       accessible
       role="heading"
       className="flex-row items-center gap-1.5"
@@ -50,7 +57,14 @@ export function CompactBrandTitle(
         props.fit && { flexShrink: 0 },
       ]}
     >
-      <T3Wordmark colorClassName="accent-icon" height={Math.round(15 * scale)} />
+      {privateBrand ? (
+        <Image
+          source={T3_CODE_BRAND_MARK_SOURCE}
+          style={{ width: 24 * scale, height: 24 * scale, borderRadius: 6 * scale }}
+        />
+      ) : (
+        <T3Wordmark colorClassName="accent-icon" height={Math.round(15 * scale)} />
+      )}
       {/* A logo beside a fixed-size wordmark: it may grow with Dynamic Type, not crowd the bar. */}
       <Text
         allowFontScaling={props.allowFontScaling}
@@ -58,7 +72,7 @@ export function CompactBrandTitle(
         className="font-t3-medium text-foreground-muted"
         style={{ fontSize: 21 * scale, letterSpacing: -0.5 * scale }}
       >
-        Code
+        {privateBrand ? Constants.expoConfig?.name : "Code"}
       </Text>
       {showStage ? (
         <View

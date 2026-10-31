@@ -1,0 +1,7 @@
+{
+  "platforms": ["apple"],
+  "apple": {
+    "modules": ["T3RemoteDesktopModule"],
+    "podspecPath": "T3RemoteDesktop.podspec"
+  }
+}

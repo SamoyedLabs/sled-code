@@ -5,8 +5,14 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { test } = require("node:test");
 
-const release = readFileSync(join(__dirname, "../workflows/release.yml"), "utf8");
-const preview = readFileSync(join(__dirname, "../workflows/web-preview.yml"), "utf8");
+const release = readFileSync(
+  join(__dirname, "../../docs/operations/upstream-workflows/release.yml.disabled"),
+  "utf8",
+);
+const preview = readFileSync(
+  join(__dirname, "../../docs/operations/upstream-workflows/web-preview.yml.disabled"),
+  "utf8",
+);
 const stepPattern =
   /        name: (?:Build staged deployment|Deploy preview)\n        shell: bash\n        run: \|\n((?:          .*\n|\n)+)/g;
 const steps = [

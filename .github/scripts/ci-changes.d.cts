@@ -22,6 +22,7 @@ export function decide(
     test_server: boolean;
     rust: boolean;
     release_smoke: boolean;
+    remote_native: boolean;
     mobile_native: boolean;
   };
 };

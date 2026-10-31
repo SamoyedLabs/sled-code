@@ -82,6 +82,10 @@ import * as PortScanner from "./preview/PortScanner.ts";
 import * as ServerBrowser from "./preview/ServerBrowser.ts";
 import * as PreviewAgentActivity from "./preview/PreviewAgentActivity.ts";
 import * as DesktopBrowserChannel from "./preview/DesktopBrowserChannel.ts";
+import * as RemoteDesktop from "./remoteDesktop/Service.ts";
+import * as RemoteDesktopNative from "./remoteDesktop/NativeChannel.ts";
+import * as RemoteDesktopAuthority from "./remoteDesktop/Authority.ts";
+import * as RemoteDesktopConnectivity from "./remoteDesktop/Connectivity.ts";
 import * as ServerBrowserStream from "./preview/ServerBrowserStream.ts";
 import * as PreviewBrowser from "./preview/PreviewBrowser.ts";
 import * as ProcessRunner from "./processRunner.ts";
@@ -762,6 +766,13 @@ const layerMakeRoutes = Layer.mergeAll(
     ),
   ),
   Layer.provide(PreviewBrowser.layer),
+  Layer.provide(
+    RemoteDesktop.layer.pipe(
+      Layer.provide(RemoteDesktopNative.layer),
+      Layer.provide(RemoteDesktopAuthority.layer),
+      Layer.provide(RemoteDesktopConnectivity.layer.pipe(Layer.provide(ServerSecretStore.layer))),
+    ),
+  ),
   // Links to other environments, shared by Settings (WebSocket) and agents (/mcp).
   Layer.provide(
     PeerForwarding.layer.pipe(

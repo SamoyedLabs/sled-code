@@ -5,6 +5,7 @@ import {
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
   AuthPreviewOperateScope,
+  AuthDesktopOperateScope,
   AuthSettingsWriteScope,
   AuthSourceControlWriteScope,
   AuthTerminalOperateScope,
@@ -15,6 +16,11 @@ import { WS_METHODS } from "./rpc.ts";
 
 /** Incremental client enforcement; the server still authorizes every request. */
 export const CLIENT_GUARDED_RPC_SCOPES = {
+  [WS_METHODS.remoteDesktopStatus]: AuthDesktopOperateScope,
+  [WS_METHODS.remoteDesktopStart]: AuthDesktopOperateScope,
+  [WS_METHODS.remoteDesktopRenew]: AuthDesktopOperateScope,
+  [WS_METHODS.remoteDesktopStop]: AuthDesktopOperateScope,
+  [WS_METHODS.remoteDesktopRestart]: AuthDesktopOperateScope,
   [WS_METHODS.previewClose]: AuthPreviewOperateScope,
   // Stopping a server signals its processes, as closing a terminal does.
   [WS_METHODS.previewStopLocalServer]: AuthTerminalOperateScope,

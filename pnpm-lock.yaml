@@ -581,6 +581,9 @@ importers:
       '@t3tools/mobile-highlights-native':
         specifier: file:./modules/t3-highlights
         version: file:apps/mobile/modules/t3-highlights
+      '@t3tools/mobile-remote-desktop-native':
+        specifier: file:./modules/t3-remote-desktop
+        version: file:apps/mobile/modules/t3-remote-desktop
       '@t3tools/mobile-review-diff-native':
         specifier: file:./modules/t3-review-diff
         version: file:apps/mobile/modules/t3-review-diff
@@ -6380,6 +6383,9 @@ packages:
 
   '@t3tools/mobile-highlights-native@file:apps/mobile/modules/t3-highlights':
     resolution: {directory: apps/mobile/modules/t3-highlights, type: directory}
+
+  '@t3tools/mobile-remote-desktop-native@file:apps/mobile/modules/t3-remote-desktop':
+    resolution: {directory: apps/mobile/modules/t3-remote-desktop, type: directory}
 
   '@t3tools/mobile-review-diff-native@file:apps/mobile/modules/t3-review-diff':
     resolution: {directory: apps/mobile/modules/t3-review-diff, type: directory}
@@ -15898,6 +15904,8 @@ snapshots:
       defer-to-connect: 2.0.1
 
   '@t3tools/mobile-highlights-native@file:apps/mobile/modules/t3-highlights': {}
+
+  '@t3tools/mobile-remote-desktop-native@file:apps/mobile/modules/t3-remote-desktop': {}
 
   '@t3tools/mobile-review-diff-native@file:apps/mobile/modules/t3-review-diff': {}
 

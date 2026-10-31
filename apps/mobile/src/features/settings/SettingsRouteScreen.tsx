@@ -156,6 +156,7 @@ function environmentsRow(count: number): SettingsListRow {
 }
 
 function SettingsList(props: { readonly connections: readonly SettingsListRow[] }) {
+  const navigation = useNavigation();
   // UIKit's scroll-edge material takes the scroll view's own color; like the chat list, match
   // the sidebar's surface so the bar doesn't darken over content at rest.
   // Grouped cards only lift off the screen surface; the drawer is as dark as they are.
@@ -189,6 +190,15 @@ function SettingsList(props: { readonly connections: readonly SettingsListRow[] 
               : Math.max(Math.max(insets.bottom, 18) + 18, workspace?.bottomClearance ?? 0),
         }}
       >
+        {Platform.OS === "ios" ? (
+          <SettingsSection title="Remote access">
+            <SettingsRow
+              icon="desktopcomputer"
+              label="Remote Desktop (Prototype)"
+              onPress={() => navigation.navigate("RemoteDesktop")}
+            />
+          </SettingsSection>
+        ) : null}
         {sections.length ? (
           sections.map((section, index) => (
             <SettingsSection key={section.title ?? `untitled-${index}`} title={section.title}>

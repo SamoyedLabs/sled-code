@@ -589,6 +589,8 @@ function NotFoundScreen() {
   );
 }
 
+import { RemoteDesktopRouteScreen } from "./features/remote-desktop/RemoteDesktopRouteScreen";
+
 const RootStackConfig = createWorkspaceStackNavigator({
   initialRouteName: "Home",
   UNSTABLE_router: workspaceDetailRouter,
@@ -607,6 +609,11 @@ const RootStackConfig = createWorkspaceStackNavigator({
           }),
         }
       : {}),
+    RemoteDesktop: createNativeStackScreen({
+      screen: RemoteDesktopRouteScreen,
+      linking: "remote-desktop",
+      options: { ...DETAIL_HEADER_OPTIONS, title: "Remote Desktop", headerShown: false },
+    }),
     Home: createNativeStackScreen({
       screen: WorkspaceRootScreen,
       linking: "",

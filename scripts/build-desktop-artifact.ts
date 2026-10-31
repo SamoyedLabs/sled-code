@@ -2,6 +2,7 @@
 // @effect-diagnostics nodeBuiltinImport:off - Node's typed junction API avoids Windows symlink privileges while keeping the probe isolated.
 
 import * as NodeFSP from "node:fs/promises";
+import { privateDesktopLaunchEnvironment } from "./private-desktop-launch.ts";
 import * as NodeCrypto from "node:crypto";
 import * as NodeModule from "node:module";
 // plist is CommonJS; Node cannot load its named exports from an ES module.
@@ -977,6 +978,8 @@ export const DESKTOP_ELECTRON_LANGUAGES = ["en-US"] as const;
 export const DESKTOP_FILE_EXCLUSIONS = [
   // Cursor walks from argv[1] to platform assets; helpers and native addons need real paths outside ASAR.
   "!**/node_modules/@cursor/sdk-*/**/*",
+  "!apps/desktop/prod-resources/remote-desktop",
+  "!apps/desktop/prod-resources/remote-desktop/**/*",
   "!apps/desktop/prod-resources/cursor-sdk",
   "!apps/desktop/prod-resources/cursor-sdk/**/*",
   // The installed Claude CLI is supplied explicitly; exclude optional bundled executables, retaining SDK JavaScript.
@@ -2771,8 +2774,14 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   arch?: typeof BuildArch.Type,
 ) {
   const buildConfig: Record<string, unknown> = {
-    appId: DESKTOP_APP_ID,
-    productName: resolveDesktopProductName(version),
+    appId: (yield* Config.Boolean("T3CODE_DESKTOP_PRIVATE_BUILD").pipe(Config.withDefault(false)))
+      ? "com.t3tools.t3code.remote-dev"
+      : DESKTOP_APP_ID,
+    productName: (yield* Config.Boolean("T3CODE_DESKTOP_PRIVATE_BUILD").pipe(
+      Config.withDefault(false),
+    ))
+      ? "T3 Code (Remote Dev)"
+      : resolveDesktopProductName(version),
     artifactName: "T3-Code-${version}-${arch}.${ext}",
     electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],
     files: [
@@ -2792,12 +2801,34 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       : {}),
     extraResources: [
       ...DESKTOP_EXTRA_RESOURCES,
+      ...(platform === "mac"
+        ? [{ from: "apps/desktop/prod-resources/remote-desktop", to: "remote-desktop" }]
+        : []),
       ...(platform === "linux" ? LINUX_CAPTURE_EXTRA_RESOURCES : []),
       ...(platform === "linux" ? LINUX_BROWSER_SECRET_EXTRA_RESOURCES : []),
       ...(platform === "win" ? WINDOWS_SERVER_EXTRA_RESOURCES : []),
       ...(platform === "win" && wslRuntimeBundled ? WSL_RUNTIME_EXTRA_RESOURCES : []),
     ],
   };
+  const privateLaunch =
+    platform === "mac" &&
+    (yield* Config.Boolean("T3CODE_DESKTOP_PRIVATE_BUILD").pipe(Config.withDefault(false)))
+      ? privateDesktopLaunchEnvironment(
+          yield* Config.String("T3CODE_DESKTOP_PRIVATE_HOME"),
+          yield* Config.all({
+            T3CODE_RELAY_URL: Config.String("T3CODE_RELAY_URL").pipe(Config.withDefault("")),
+            T3CODE_CLERK_PUBLISHABLE_KEY: Config.String("T3CODE_CLERK_PUBLISHABLE_KEY").pipe(
+              Config.withDefault(""),
+            ),
+            T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: Config.String(
+              "T3CODE_CLERK_CLI_OAUTH_CLIENT_ID",
+            ).pipe(Config.withDefault("")),
+            T3CODE_CLERK_JWT_TEMPLATE: Config.String("T3CODE_CLERK_JWT_TEMPLATE").pipe(
+              Config.withDefault(""),
+            ),
+          }),
+        )
+      : undefined;
   const updateChannel = resolveDesktopUpdateChannel(version);
   // Missing publish config infers a GitHub feed from tokens; staging has no repository, so manifest generation would crash.
   buildConfig.publish = null;
@@ -2823,6 +2854,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       icon: "icon.icns",
       category: "public.app-category.developer-tools",
       extendInfo: {
+        ...(privateLaunch ? { LSEnvironment: privateLaunch } : {}),
         // macOS 26 offers Messages/Mail codes in every text field unless opted out.
         NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
         NSLocalNetworkUsageDescription:
@@ -3793,6 +3825,12 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
   // electron-builder is filtering out stageResourcesDir directory in the AppImage for production
   const stageProdResourcesDir = path.join(stageAppDir, "apps/desktop/prod-resources");
   yield* fs.copy(stageResourcesDir, stageProdResourcesDir);
+  if (options.platform === "mac") {
+    yield* stageRemoteDesktopBundle(
+      path.join(repoRoot, "apps/desktop/prod-resources/remote-desktop"),
+      path.join(stageProdResourcesDir, "remote-desktop"),
+    );
+  }
 
   const configuredMacPasskeySigning =
     options.platform === "mac" && options.signed
@@ -4090,6 +4128,55 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   const repoRoot = yield* RepoRoot;
   return yield* withDesktopBuildLock(repoRoot, buildDesktopArtifactUnlocked(options));
 });
+
+// Materialized in scripts/build-desktop-artifact.ts before its CLI definition.
+export const stageRemoteDesktopBundle = Effect.fn("desktopArtifact.stageRemoteDesktopBundle")(
+  function* (source: string, destination: string) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const realSource = yield* fs.realPath(source);
+    const pending = [source];
+    while (pending.length > 0) {
+      const directory = pending.pop();
+      if (directory === undefined) break;
+      for (const name of yield* fs.readDirectory(directory)) {
+        const entry = path.join(directory, name);
+        const target = yield* fs.readLink(entry).pipe(Effect.option);
+        if (Option.isSome(target)) {
+          const relative = path.relative(realSource, yield* fs.realPath(entry));
+          if (
+            path.isAbsolute(target.value) ||
+            relative === ".." ||
+            relative.startsWith(`..${path.sep}`) ||
+            path.isAbsolute(relative)
+          ) {
+            return yield* new BundleNotSelfContainedError({
+              exitCode: -1,
+              output:
+                "Remote desktop native bundle links must be relative and stay inside the bundle.",
+            });
+          }
+        } else if ((yield* fs.stat(entry)).type === "Directory") pending.push(entry);
+      }
+    }
+    // Node's default cp rewrites relative links into absolute source paths.
+    // A signed, versioned macOS framework needs the original link text.
+    yield* Effect.tryPromise({
+      try: () =>
+        NodeFSP.cp(source, destination, {
+          recursive: true,
+          dereference: false,
+          verbatimSymlinks: true,
+          preserveTimestamps: true,
+        }),
+      catch: () =>
+        new BundleNotSelfContainedError({
+          exitCode: -1,
+          output: "Could not stage the remote desktop native bundle.",
+        }),
+    });
+  },
+);
 
 const buildDesktopArtifactCli = Command.make("build-desktop-artifact", {
   platform: Flag.Literals("platform", BuildPlatform.literals).pipe(

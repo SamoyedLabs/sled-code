@@ -33,6 +33,15 @@ import {
   ChatGptHandoffInput,
   ChatGptHandoffState,
 } from "./providerSetup.ts";
+import { RemoteDesktopRestartInput } from "./remoteDesktop.ts";
+import {
+  RemoteDesktopStatus,
+  RemoteDesktopStartInput,
+  RemoteDesktopSessionInput,
+  RemoteDesktopAnswer,
+  RemoteDesktopLease,
+  RemoteDesktopError,
+} from "./remoteDesktop.ts";
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
@@ -459,7 +468,12 @@ export const WS_METHODS = {
   terminalClear: "terminal.clear",
   terminalClose: "terminal.close",
 
+  remoteDesktopStatus: "remoteDesktop.status",
+  remoteDesktopStart: "remoteDesktop.start",
+  remoteDesktopRenew: "remoteDesktop.renew",
+  remoteDesktopStop: "remoteDesktop.stop",
   previewOpen: "preview.open",
+  remoteDesktopRestart: "remoteDesktop.restart",
   previewResize: "preview.resize",
   previewAdjust: "preview.adjust",
   previewClose: "preview.close",
@@ -1536,6 +1550,31 @@ const WsTerminalCloseRpc = Rpc.make(WS_METHODS.terminalClose, {
   error: Schema.Union([TerminalError, EnvironmentAuthorizationError]),
 });
 
+const WsRemoteDesktopRestartRpc = Rpc.make(WS_METHODS.remoteDesktopRestart, {
+  payload: RemoteDesktopRestartInput,
+  success: RemoteDesktopAnswer,
+  error: Schema.Union([RemoteDesktopError, EnvironmentAuthorizationError]),
+});
+const WsRemoteDesktopStatusRpc = Rpc.make(WS_METHODS.remoteDesktopStatus, {
+  payload: Schema.Struct({}),
+  success: RemoteDesktopStatus,
+  error: Schema.Union([RemoteDesktopError, EnvironmentAuthorizationError]),
+});
+const WsRemoteDesktopStartRpc = Rpc.make(WS_METHODS.remoteDesktopStart, {
+  payload: RemoteDesktopStartInput,
+  success: RemoteDesktopAnswer,
+  error: Schema.Union([RemoteDesktopError, EnvironmentAuthorizationError]),
+});
+const WsRemoteDesktopRenewRpc = Rpc.make(WS_METHODS.remoteDesktopRenew, {
+  payload: RemoteDesktopSessionInput,
+  success: RemoteDesktopLease,
+  error: Schema.Union([RemoteDesktopError, EnvironmentAuthorizationError]),
+});
+const WsRemoteDesktopStopRpc = Rpc.make(WS_METHODS.remoteDesktopStop, {
+  payload: RemoteDesktopSessionInput,
+  success: Schema.Void,
+  error: Schema.Union([RemoteDesktopError, EnvironmentAuthorizationError]),
+});
 const WsPreviewOpenRpc = Rpc.make(WS_METHODS.previewOpen, {
   payload: PreviewOpenInput,
   success: PreviewSessionSnapshot,
@@ -2073,7 +2112,12 @@ export const WsRpcGroup = RpcGroup.make(
   WsTerminalClearRpc,
   WsTerminalCloseRpc,
   WsSubscribeTerminalMetadataRpc,
+  WsRemoteDesktopStatusRpc,
+  WsRemoteDesktopStartRpc,
+  WsRemoteDesktopRenewRpc,
+  WsRemoteDesktopStopRpc,
   WsPreviewOpenRpc,
+  WsRemoteDesktopRestartRpc,
   WsPreviewResizeRpc,
   WsPreviewAdjustRpc,
   WsPreviewCloseRpc,

@@ -330,7 +330,9 @@ it.layer(NodeServices.layer)("Discord release CLI and workflow", (it) => {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const temp = yield* fs.makeTempDirectoryScoped({ prefix: "discord release " });
       const workflow = yield* fs.readFileString(
-        yield* path.fromFileUrl(new URL("../.github/workflows/release.yml", import.meta.url)),
+        yield* path.fromFileUrl(
+          new URL("../docs/operations/upstream-workflows/release.yml.disabled", import.meta.url),
+        ),
       );
       const publishedNotes =
         Array.from({ length: 50 }, () => notes).join("\n\n") +

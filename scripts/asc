@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+"""Run the pinned ASC CLI with this project's private authentication profile."""
+import os
+from pathlib import Path
+import sys
+
+root = Path(__file__).resolve().parents[1]
+binary = root / '.tools/asc/asc'
+if not binary.exists():
+    raise SystemExit('Install the ASC CLI into .tools/asc/asc first')
+env = dict(os.environ)
+env.update(ASC_CONFIG_PATH=str(root / '.tools/apple-credentials/asc.json'),
+           ASC_BYPASS_KEYCHAIN='1')
+os.execve(binary, [str(binary), *sys.argv[1:]], env)

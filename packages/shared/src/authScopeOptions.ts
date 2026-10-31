@@ -9,6 +9,7 @@ import {
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
   AuthPreviewOperateScope,
+  AuthDesktopOperateScope,
   AuthProvidersManageScope,
   AuthRelayReadScope,
   AuthRelayWriteScope,
@@ -52,6 +53,11 @@ export const AUTH_SCOPE_OPTIONS: ReadonlyArray<{
     scope: AuthPreviewOperateScope,
     title: "Control previews",
     description: "Open browser previews and host browser automation.",
+  },
+  {
+    scope: AuthDesktopOperateScope,
+    title: "Control desktop",
+    description: "View and control the host desktop, applications, audio, and shared clipboard.",
   },
   {
     scope: AuthDiagnosticsReadScope,

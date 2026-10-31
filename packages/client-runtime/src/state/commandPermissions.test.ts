@@ -12,6 +12,7 @@ import {
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
   AuthPreviewOperateScope,
+  AuthDesktopOperateScope,
   AuthSettingsWriteScope,
   AuthSourceControlWriteScope,
   ThreadId,
@@ -66,6 +67,33 @@ const setup = Effect.gen(function* () {
 });
 
 describe("command permissions", () => {
+  it.effect.each([
+    WS_METHODS.remoteDesktopStatus,
+    WS_METHODS.remoteDesktopStart,
+    WS_METHODS.remoteDesktopRenew,
+    WS_METHODS.remoteDesktopStop,
+    WS_METHODS.remoteDesktopRestart,
+  ] as const)(
+    "requires explicit desktop permission for %s in the destination environment",
+    (method) =>
+      Effect.gen(function* () {
+        const registry = yield* setup;
+        const command = createCommandPermissions(runtime, method);
+        registry.set(sessions(env), AsyncResult.success(grant(true)));
+        expect(registry.get(command.permissionAtom(env))).toBe(false);
+        expect(yield* command.authorize(registry, env).pipe(Effect.flip)).toMatchObject({
+          requiredPermission: AuthDesktopOperateScope,
+        });
+        registry.set(
+          sessions(env),
+          AsyncResult.success({ ...grant(false), permissions: [AuthDesktopOperateScope] }),
+        );
+        expect(registry.get(command.permissionAtom(env))).toBe(true);
+        yield* command.authorize(registry, env);
+        registry.set(sessions(other), AsyncResult.success(grant(true)));
+        expect(registry.get(command.permissionAtom(other))).toBe(false);
+      }).pipe(Effect.scoped),
+  );
   it.effect("requires the destination preview grant to close a browser tab", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -148,14 +176,14 @@ describe("command permissions", () => {
     ),
   );
   it.effect(
-    "denies failed and unauthenticated sessions, but accepts a cached refreshing grant",
+    "keeps unavailable grants distinct from denied sessions and accepts a cached refreshing grant",
     () =>
       Effect.scoped(
         Effect.gen(function* () {
           const registry = yield* setup;
           registry.set(sessions(env), AsyncResult.failure(Cause.fail("offline")));
           expect((yield* permissions.authorize(registry, env).pipe(Effect.flip))._tag).toBe(
-            "EnvironmentAuthorizationError",
+            "ConnectionTransientError",
           );
           registry.set(
             sessions(env),
@@ -219,9 +247,9 @@ it.effect(
         const registry = yield* setup;
         registry.set(sessions(env), AsyncResult.success(grant(true)));
         const git = createCommandPermissions(runtime, WS_METHODS.vcsInit);
-        expect((yield* git.authorize(registry, env).pipe(Effect.flip)).requiredPermission).toBe(
-          AuthSourceControlWriteScope,
-        );
+        expect(yield* git.authorize(registry, env).pipe(Effect.flip)).toMatchObject({
+          requiredPermission: AuthSourceControlWriteScope,
+        });
         registry.set(
           sessions(env),
           AsyncResult.success({
@@ -239,9 +267,9 @@ it.effect(
           threadId: ThreadId.make("thread"),
         };
         expect(registry.get(prepare.permissionAtom(env, input))).toBe(false);
-        expect(
-          (yield* prepare.authorize(registry, env, input).pipe(Effect.flip)).requiredScope,
-        ).toBe(AuthOrchestrationOperateScope);
+        expect(yield* prepare.authorize(registry, env, input).pipe(Effect.flip)).toMatchObject({
+          requiredScope: AuthOrchestrationOperateScope,
+        });
         yield* prepare.authorize(registry, env, { ...input, threadId: undefined });
         registry.set(
           sessions(env),
@@ -430,9 +458,9 @@ it.effect("requires access management to answer a link request", () =>
       registry.set(sessions(env), AsyncResult.success(grant(true)));
       const answer = createCommandPermissions(runtime, WS_METHODS.peerLinksAnswerRequest);
       expect(registry.get(answer.permissionAtom(env))).toBe(false);
-      expect((yield* answer.authorize(registry, env).pipe(Effect.flip)).requiredPermission).toBe(
-        AuthAccessWriteScope,
-      );
+      expect(yield* answer.authorize(registry, env).pipe(Effect.flip)).toMatchObject({
+        requiredPermission: AuthAccessWriteScope,
+      });
       registry.set(
         sessions(env),
         AsyncResult.success({

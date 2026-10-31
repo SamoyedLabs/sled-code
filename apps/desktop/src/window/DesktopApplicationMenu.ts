@@ -9,6 +9,10 @@ import type * as Electron from "electron";
 import { makeComponentLogger } from "../app/DesktopObservability.ts";
 import * as ElectronDialog from "../electron/ElectronDialog.ts";
 import * as ElectronMenu from "../electron/ElectronMenu.ts";
+import * as RemoteDesktopHost from "../remote-desktop/RemoteDesktopHost.ts";
+import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
+import { setUpRemoteDesktopPermissions } from "../remote-desktop/RemoteDesktopPermissions.ts";
+import * as MacPermissions from "../permissions/MacPermissions.ts";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopUpdates from "../updates/DesktopUpdates.ts";
 import * as DesktopWindow from "./DesktopWindow.ts";
@@ -113,7 +117,10 @@ const handleCheckForUpdatesMenuClick = Effect.gen(function* () {
 }).pipe(Effect.withSpan("desktop.menu.handleCheckForUpdatesClick"));
 
 /** @public */
+
 export const make = Effect.gen(function* () {
+  const macPermissions = yield* MacPermissions.MacPermissions;
+  const desktopSettings = yield* DesktopAppSettings.DesktopAppSettings;
   const electronMenu = yield* ElectronMenu.ElectronMenu;
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const context = yield* Effect.context<DesktopApplicationMenuRuntimeServices>();
@@ -314,6 +321,27 @@ export const make = Effect.gen(function* () {
       },
     );
 
+    if (environment.platform === "darwin") {
+      const preferences = (yield* desktopSettings.get).remoteDesktop;
+      RemoteDesktopHost.configureRemoteDesktopHost(
+        preferences,
+        (next) => runPromise(desktopSettings.setRemoteDesktop(next)),
+        (explicit) => {
+          const executable = RemoteDesktopHost.remoteDesktopExecutable();
+          if (!executable) return Promise.reject(new Error("Native helper unavailable"));
+          return setUpRemoteDesktopPermissions(
+            executable,
+            (permission, isGranted) =>
+              runPromise(macPermissions.showHelper(permission, null, isGranted)),
+            explicit,
+          );
+        },
+        () => {
+          void runPromise(dispatchMenuAction("open-remote-desktop-settings"));
+        },
+        environment.baseDir,
+      );
+    }
     yield* electronMenu.setApplicationMenu(template);
   }).pipe(Effect.withSpan("desktop.menu.configure"));
 

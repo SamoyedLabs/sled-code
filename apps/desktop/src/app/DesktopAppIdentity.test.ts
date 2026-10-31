@@ -178,6 +178,16 @@ describe("DesktopAppIdentity", () => {
   it.effect.each([
     { stage: "Beta", environment: {} },
     {
+      stage: "Beta",
+      environment: { env: { T3CODE_HOME: "/private-review/one" } },
+      storageName: "T3 Code Private e28ff0a0df60d195",
+    },
+    {
+      stage: "Beta",
+      environment: { env: { T3CODE_HOME: "/private-review/two" } },
+      storageName: "T3 Code Private 6f417e6bd7866dd9",
+    },
+    {
       stage: "Nightly",
       environment: { appVersion: "0.0.43-nightly.20260929.2428" },
     },
@@ -185,25 +195,30 @@ describe("DesktopAppIdentity", () => {
       stage: "Dev",
       environment: { env: { VITE_DEV_SERVER_URL: "http://localhost:5173" } },
     },
-  ])("uses a valid native User-Agent product name for $stage", ({ stage, environment }) => {
-    const calls: ElectronAppCalls = {
-      setAboutPanelOptions: [],
-      setDockIcon: [],
-      setName: [],
-    };
+  ])(
+    "uses a valid native User-Agent product name for $stage",
+    ({ stage, environment, storageName }) => {
+      const calls: ElectronAppCalls = {
+        setAboutPanelOptions: [],
+        setDockIcon: [],
+        setName: [],
+      };
 
-    return withIdentity(
-      Effect.gen(function* () {
-        const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
-        yield* identity.configure;
+      return withIdentity(
+        Effect.gen(function* () {
+          const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
+          yield* identity.configure;
 
-        const runtimeName = calls.setName[0];
-        assert.isDefined(runtimeName);
-        assert.equal(runtimeName, `T3 Code ${stage}`);
-        assert.match(runtimeName.replaceAll(" ", ""), /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/);
-        assert.equal(calls.setAboutPanelOptions[0]?.applicationName, `T3 Code (${stage})`);
-      }),
-      { calls, environment },
-    );
-  });
+          const runtimeName = calls.setName[0];
+          assert.isDefined(runtimeName);
+          assert.equal(runtimeName, storageName ?? `T3 Code ${stage}`);
+          yield* identity.configure;
+          assert.equal(calls.setName[1], runtimeName);
+          assert.match(runtimeName.replaceAll(" ", ""), /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/);
+          assert.equal(calls.setAboutPanelOptions[0]?.applicationName, `T3 Code (${stage})`);
+        }),
+        { calls, environment },
+      );
+    },
+  );
 });

@@ -1,6 +1,7 @@
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import { consumeRemoteDesktopSettingsLaunch } from "../remote-desktop/RemoteDesktopAgentClient.ts";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -343,7 +344,12 @@ export const make = Effect.gen(function* () {
   > {
     if (yield* Ref.get(desktopState.quitting)) return Option.none();
     yield* previewManager.getBrowserSession();
-    const applicationUrl = getDesktopUrl(environment.isDevelopment);
+    const requestedRemoteSettings = yield* Effect.promise(() =>
+      consumeRemoteDesktopSettingsLaunch(environment.baseDir),
+    );
+    const applicationUrl =
+      getDesktopUrl(environment.isDevelopment) +
+      (requestedRemoteSettings ? "#/settings/devices" : "");
     const iconPaths = yield* assets.iconPaths;
     const iconOption = getIconOption(iconPaths, environment.platform);
     const shouldUseDarkColors = yield* electronTheme.shouldUseDarkColors;

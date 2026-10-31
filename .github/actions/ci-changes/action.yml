@@ -1,5 +1,10 @@
 name: CI changes
 description: Decide which CI jobs a change needs. See .github/scripts/ci-changes.cjs.
+inputs:
+  base-sha:
+    description: Exact base for a dispatched candidate build
+    required: false
+    default: ""
 outputs:
   typecheck:
     value: ${{ steps.detect.outputs.typecheck }}
@@ -17,6 +22,8 @@ outputs:
     value: ${{ steps.detect.outputs.rust }}
   release_smoke:
     value: ${{ steps.detect.outputs.release_smoke }}
+  remote_native:
+    value: ${{ steps.detect.outputs.remote_native }}
   mobile_native:
     value: ${{ steps.detect.outputs.mobile_native }}
 runs:
@@ -27,6 +34,7 @@ runs:
       env:
         EVENT_NAME: ${{ github.event_name }}
         BEFORE_SHA: ${{ github.event.before }}
+        DISPATCH_BASE_SHA: ${{ inputs.base-sha }}
       run: |
         set -uo pipefail
 
@@ -42,7 +50,13 @@ runs:
 
         # Reads the change from git rather than the REST API: every job that
         # runs this shares the repository's 1,000 requests/hour GITHUB_TOKEN quota.
-        if [[ "$EVENT_NAME" == pull_request ]]; then
+        if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
+          [[ "$DISPATCH_BASE_SHA" =~ ^[0-9a-f]{40}$ ]] || fail_open "Dispatch has no exact base commit."
+          base=$DISPATCH_BASE_SHA
+          git fetch --quiet --no-tags --depth=1 --filter=blob:none origin "$base" \
+            || fail_open "Could not fetch dispatch base."
+          mode=()
+        elif [[ "$EVENT_NAME" == pull_request ]]; then
           # A pull request checks out GitHub's merge commit with fetch-depth: 2,
           # so its first parent is the base branch and the diff is the PR's change.
           base=HEAD^1

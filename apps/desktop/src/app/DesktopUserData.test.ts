@@ -40,3 +40,28 @@ it.effect.each(["t3code", "T3 Code (Alpha)"])(
       );
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
+
+// Materialized in the existing DesktopUserData.test.ts suite.
+it.effect.each(["darwin", "win32", "linux"] as const)(
+  "keeps an explicitly isolated %s profile away from existing Chromium data",
+  (platform) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-isolated-profile-" });
+      const appDataDirectory = path.join(root, "regular");
+      const electronUserDataDirectory = path.join(root, "isolated");
+      yield* fs.makeDirectory(path.join(appDataDirectory, "T3 Code (Alpha)"), { recursive: true });
+      const oldState = path.join(appDataDirectory, "T3 Code (Alpha)/Local State");
+      yield* fs.writeFileString(oldState, "existing profile must stay untouched");
+      const result = yield* resolveUserDataPath({
+        appDataDirectory,
+        electronUserDataDirectory,
+        isDevelopment: false,
+        platform,
+      });
+      assert.equal(result, path.join(electronUserDataDirectory, "t3code-v2"));
+      assert.equal(yield* fs.readFileString(oldState), "existing profile must stay untouched");
+      assert.isFalse(yield* fs.exists(path.join(result, "Local State")));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);

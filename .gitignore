@@ -48,3 +48,12 @@ node_modules/
 
 # pnpm content-addressable store; never belongs in the repo.
 .pnpm-store/
+
+# Sled private build artifacts and credentials
+.tools/
+__pycache__/
+/dist/
+native/remote-desktop/.build/
+native/remote-desktop/Frameworks/
+apps/mobile/modules/t3-remote-desktop/Frameworks/
+apps/desktop/prod-resources/remote-desktop/*.app/

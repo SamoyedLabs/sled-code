@@ -1,3 +1,4 @@
+import { privateDesktopStorageName } from "./DesktopStorageIdentity.ts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -93,7 +94,9 @@ export const make = Effect.gen(function* () {
     const commitHash = yield* resolveAboutCommitHash;
     // Electron strips spaces but keeps parentheses in its User-Agent token, breaking Turnstile in preview sessions.
     yield* electronApp.setName(
-      `${environment.branding.baseName} ${environment.branding.stageLabel}`,
+      (environment.platform === "darwin"
+        ? privateDesktopStorageName(environment.electronUserDataDirectory)
+        : undefined) ?? `${environment.branding.baseName} ${environment.branding.stageLabel}`,
     );
     yield* electronApp.setAboutPanelOptions({
       applicationName: environment.displayName,

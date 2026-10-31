@@ -29,6 +29,7 @@ import { waitForHttpReady as waitForHttpReadyShared } from "@t3tools/shared/http
 import * as DesktopObservability from "../app/DesktopObservability.ts";
 import * as DesktopTelemetryPublisher from "../telemetry/DesktopTelemetryPublisher.ts";
 import * as DesktopBrowserHost from "../preview/DesktopBrowserHost.ts";
+import * as DesktopRemoteDesktopBridge from "../remote-desktop/DesktopRemoteDesktopBridge.ts";
 import * as DesktopWslEnvironment from "../wsl/DesktopWslEnvironment.ts";
 
 const INITIAL_RESTART_DELAY = Duration.millis(500);
@@ -188,6 +189,8 @@ export type BackendProcessError = typeof BackendProcessError.Type;
 interface RunBackendProcessOptions extends DesktopBackendStartConfig {
   readonly desktopTelemetryStream: Stream.Stream<Uint8Array>;
   readonly desktopBrowserStream?: Stream.Stream<Uint8Array>;
+  readonly remoteDesktopStream?: Stream.Stream<Uint8Array>;
+  readonly onRemoteDesktopCommand?: (line: string) => Effect.Effect<void>;
   readonly onDesktopBrowserCommand?: (line: string) => Effect.Effect<void>;
   readonly onDesktopTelemetryControl?: (
     message: DesktopTelemetryControlMessageValue,
@@ -431,6 +434,20 @@ export const runBackendProcess = Effect.fn("runBackendProcess")(function* (
       additionalFds[`fd${options.bootstrap.desktopBrowserControlFd}`] = { type: "output" };
     }
   }
+  if (options.bootstrapDelivery === "fd3") {
+    if (
+      options.bootstrap.desktopRemoteDesktopFd !== undefined &&
+      options.remoteDesktopStream !== undefined
+    ) {
+      additionalFds[`fd${options.bootstrap.desktopRemoteDesktopFd}`] = {
+        type: "input",
+        stream: options.remoteDesktopStream,
+      };
+    }
+    if (options.bootstrap.desktopRemoteDesktopControlFd !== undefined) {
+      additionalFds[`fd${options.bootstrap.desktopRemoteDesktopControlFd}`] = { type: "output" };
+    }
+  }
   const command = ChildProcess.make(options.executablePath, options.args, {
     cwd: options.cwd,
     env: options.env,
@@ -512,6 +529,22 @@ export const runBackendProcess = Effect.fn("runBackendProcess")(function* (
           fd: browserFd,
           cause: Cause.pretty(cause),
         }),
+      ),
+      Effect.forkScoped,
+    );
+  }
+  if (
+    options.bootstrap.desktopRemoteDesktopControlFd !== undefined &&
+    options.onRemoteDesktopCommand !== undefined
+  ) {
+    const fd = options.bootstrap.desktopRemoteDesktopControlFd;
+    const receive = options.onRemoteDesktopCommand;
+    yield* handle.getOutputFd(fd).pipe(
+      Stream.decodeText(),
+      Stream.splitLines,
+      Stream.runForEach(receive),
+      Effect.catchCause(() =>
+        logBackendProcessWarning("remote desktop control pipe stopped", { fd }),
       ),
       Effect.forkScoped,
     );
@@ -625,6 +658,9 @@ export const makeBackendInstance = Effect.fn("makeBackendInstance")(function* (
   const backendOutputLog = yield* backendOutputLogFactory.forInstance(spec.id);
   const desktopTelemetryPublisher = yield* DesktopTelemetryPublisher.DesktopTelemetryPublisher;
   const desktopBrowserHost = yield* DesktopBrowserHost.DesktopBrowserHost;
+  const remoteDesktopBridge = yield* Effect.serviceOption(
+    DesktopRemoteDesktopBridge.DesktopRemoteDesktopBridge,
+  );
   const wslEnvironment = yield* DesktopWslEnvironment.DesktopWslEnvironment;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const httpClient = yield* HttpClient.HttpClient;
@@ -882,10 +918,20 @@ export const makeBackendInstance = Effect.fn("makeBackendInstance")(function* (
           );
         });
 
+        const remoteDesktop = yield* Option.match(remoteDesktopBridge, {
+          onNone: () =>
+            Effect.succeed({
+              events: Stream.empty,
+              handleCommandLine: (_line: string) => Effect.void,
+            }),
+          onSome: (bridge) => bridge.open(`${spec.id}:${runId}`).pipe(Scope.provide(runScope)),
+        });
         const program = runBackendProcess({
           ...config.value,
           desktopTelemetryStream: desktopTelemetryPublisher.encoded,
           desktopBrowserStream: desktopBrowserHost.events,
+          remoteDesktopStream: remoteDesktop.events,
+          onRemoteDesktopCommand: remoteDesktop.handleCommandLine,
           onDesktopBrowserCommand: desktopBrowserHost.handleCommandLine,
           onDesktopTelemetryControl: (message) =>
             desktopTelemetryPublisher.handleControlForSource(spec.id, message),

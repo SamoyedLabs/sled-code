@@ -1,4 +1,5 @@
 import type { ExpoConfig } from "expo/config";
+import { SLED_BRANDING } from "./branding/sled.ts";
 
 import { BRAND_ASSET_PATHS } from "../../scripts/lib/brand-assets.ts";
 import { loadRepoEnv } from "../../scripts/lib/public-config.ts";
@@ -15,6 +16,24 @@ const runtimeVersionPolicy =
   (APP_VARIANT === "development" ? "appVersion" : "fingerprint");
 
 const personalTeamBundleIdentifier = repoEnv.T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID?.trim();
+const sledExpoProjectId = repoEnv.SLED_EXPO_PROJECT_ID?.trim();
+const sledExpoOwner = repoEnv.SLED_EXPO_OWNER?.trim();
+const wantsOtaUpdates = repoEnv.T3CODE_MOBILE_UPDATES_ENABLED === "1";
+if (sledExpoProjectId === "d763fcb8-d37c-41ea-a773-b54a0ab4a454") {
+  throw new Error("Sled must use its own Expo project, not T3 Code's upstream project.");
+}
+if (
+  sledExpoProjectId &&
+  !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(sledExpoProjectId)
+) {
+  throw new Error("SLED_EXPO_PROJECT_ID must be an Expo project UUID.");
+}
+if (wantsOtaUpdates && (!sledExpoProjectId || !sledExpoOwner)) {
+  throw new Error(
+    "OTA updates require SLED_EXPO_PROJECT_ID and SLED_EXPO_OWNER for your own Expo project.",
+  );
+}
+
 const IOS_BUNDLE_IDENTIFIER_PATTERN = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
 
 // Compiled into the native project. Without a relay, Observe's native side could dispatch to
@@ -77,26 +96,26 @@ const RELEASE_ASSETS = {
 
 const VARIANT_CONFIG = {
   development: {
-    appName: "T3 Code Dev",
-    scheme: "t3code-dev",
-    iosBundleIdentifier: "com.t3tools.t3code.dev",
-    androidPackage: "com.t3tools.t3code.dev",
+    appName: "Sled Dev",
+    scheme: "sled-dev",
+    iosBundleIdentifier: "com.samoyedlabs.sled.dev",
+    androidPackage: "com.samoyedlabs.sled.dev",
     relyingParty: "clerk.t3.codes",
     assets: DEVELOPMENT_ASSETS,
   },
   preview: {
-    appName: "T3 Code Preview",
-    scheme: "t3code-preview",
-    iosBundleIdentifier: "com.t3tools.t3code.preview",
-    androidPackage: "com.t3tools.t3code.preview",
+    appName: "Sled Preview",
+    scheme: "sled-preview",
+    iosBundleIdentifier: "com.samoyedlabs.sled.preview",
+    androidPackage: "com.samoyedlabs.sled.preview",
     relyingParty: "clerk.t3.codes",
     assets: PREVIEW_ASSETS,
   },
   production: {
-    appName: "T3 Code",
-    scheme: "t3code",
-    iosBundleIdentifier: "com.t3tools.t3code",
-    androidPackage: "com.t3tools.t3code",
+    appName: SLED_BRANDING.appName,
+    scheme: SLED_BRANDING.scheme,
+    iosBundleIdentifier: SLED_BRANDING.bundleIdentifier,
+    androidPackage: SLED_BRANDING.bundleIdentifier,
     relyingParty: "clerk.t3.codes",
     assets: RELEASE_ASSETS,
   },
@@ -113,7 +132,19 @@ function resolveAppVariant(value: string | undefined): AppVariant {
   }
 }
 
-const variant = VARIANT_CONFIG[APP_VARIANT];
+const baseVariant = VARIANT_CONFIG[APP_VARIANT];
+const variant = {
+  ...baseVariant,
+  ...(isIosPersonalTeamBuild
+    ? { appName: SLED_BRANDING.appName, scheme: SLED_BRANDING.scheme }
+    : {}),
+  assets: {
+    ...baseVariant.assets,
+    appIcon: SLED_BRANDING.icon,
+    iosIcon: SLED_BRANDING.icon,
+    splashIcon: SLED_BRANDING.icon,
+  },
+};
 const iosBundleIdentifier = isIosPersonalTeamBuild
   ? personalTeamBundleIdentifier!
   : variant.iosBundleIdentifier;
@@ -223,7 +254,7 @@ const sharingPlugin: NonNullable<ExpoConfig["plugins"]>[number] = [
 
 const config: ExpoConfig = {
   name: variant.appName,
-  slug: "t3-code",
+  slug: SLED_BRANDING.slug,
   platforms: ["ios", "android"],
   scheme: variant.scheme,
   version: repoEnv.T3CODE_MOBILE_VERSION ?? "2.2.0",
@@ -235,8 +266,8 @@ const config: ExpoConfig = {
   icon: variant.assets.appIcon,
   userInterfaceStyle: "automatic",
   updates: {
-    enabled: repoEnv.T3CODE_MOBILE_UPDATES_ENABLED !== "0",
-    url: "https://u.expo.dev/d763fcb8-d37c-41ea-a773-b54a0ab4a454",
+    enabled: wantsOtaUpdates,
+    ...(sledExpoProjectId ? { url: `https://u.expo.dev/${sledExpoProjectId}` } : {}),
     checkAutomatically: "ON_LOAD",
     fallbackToCacheTimeout: 0,
   },
@@ -246,13 +277,13 @@ const config: ExpoConfig = {
     requireFullScreen: process.env.T3_SHOWCASE_CAPTURE_BUILD === "1",
     bundleIdentifier: iosBundleIdentifier,
     // Avoid Personal Team fallback: it cannot sign App Groups, Apple sign-in or push entitlements.
-    appleTeamId: "ARK85ZXQ4Z",
+    ...(repoEnv.T3CODE_IOS_TEAM_ID ? { appleTeamId: repoEnv.T3CODE_IOS_TEAM_ID } : {}),
     associatedDomains: [
       `applinks:${variant.relyingParty}`,
       `webcredentials:${variant.relyingParty}`,
     ],
     entitlements: {
-      "keychain-access-groups": [`$(AppIdentifierPrefix)${variant.iosBundleIdentifier}`],
+      "keychain-access-groups": [`$(AppIdentifierPrefix)${iosBundleIdentifier}`],
     },
     infoPlist: {
       UISupportedInterfaceOrientations: [
@@ -263,9 +294,9 @@ const config: ExpoConfig = {
       NSAppTransportSecurity: {
         NSAllowsArbitraryLoads: true,
       },
-      NSLocalNetworkUsageDescription:
-        "Allow T3 Code to connect to T3 Code servers on your local network or tailnet.",
-      NSPhotoLibraryAddUsageDescription: "Allow T3 Code to save images to your photo library.",
+      NSBonjourServices: ["_t3desktop._tcp"],
+      NSLocalNetworkUsageDescription: `Allow ${variant.appName} to connect to T3 Code servers on your local network or tailnet.`,
+      NSPhotoLibraryAddUsageDescription: `Allow ${variant.appName} to save images to your photo library.`,
       // System picture in picture needs background audio to start and survive outside the app.
       UIBackgroundModes: ["audio"],
       ITSAppUsesNonExemptEncryption: false,
@@ -341,6 +372,7 @@ const config: ExpoConfig = {
       {
         icon: variant.assets.androidNotificationIcon,
         color: variant.assets.androidNotificationColor,
+        enableRemoteNotifications: !isIosPersonalTeamBuild,
         mode: APP_VARIANT === "development" ? "development" : "production",
       },
     ],
@@ -364,7 +396,7 @@ const config: ExpoConfig = {
     [
       "expo-audio",
       {
-        microphonePermission: "Allow T3 Code to use your microphone for voice input.",
+        microphonePermission: `Allow ${variant.appName} to use your microphone for voice input.`,
         recordAudioAndroid: false,
         enableBackgroundPlayback: false,
         enableBackgroundRecording: false,
@@ -373,7 +405,7 @@ const config: ExpoConfig = {
     [
       "expo-camera",
       {
-        cameraPermission: "Allow T3 Code to access your camera so you can scan pairing QR codes.",
+        cameraPermission: `Allow ${variant.appName} to access your camera so you can scan pairing QR codes.`,
         microphonePermission: false,
         barcodeScannerEnabled: true,
         recordAudioAndroid: false,
@@ -455,11 +487,11 @@ const config: ExpoConfig = {
       tracesToken: repoEnv.EXPO_PUBLIC_OTLP_TRACES_TOKEN ?? null,
     },
     eas: {
-      projectId: "d763fcb8-d37c-41ea-a773-b54a0ab4a454",
+      ...(sledExpoProjectId ? { projectId: sledExpoProjectId } : {}),
       observe: { endpointUrl: observeEndpointUrl },
     },
   },
-  owner: "pingdotgg",
+  ...(sledExpoOwner ? { owner: sledExpoOwner } : {}),
   experiments: {
     // Metro only runs babel-plugin-react-compiler when this is set; see src/reactCompilerCoverage.test.ts.
     reactCompiler: true,

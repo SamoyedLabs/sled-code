@@ -7,6 +7,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import * as Electron from "electron";
+import { remoteDesktopMenu } from "../remote-desktop/RemoteDesktopHost.ts";
 
 export interface ElectronMenuPosition {
   readonly x: number;
@@ -190,7 +191,9 @@ export const make = Effect.gen(function* () {
     setApplicationMenu: Effect.fn("ElectronMenu.setApplicationMenu")(function (template) {
       return Effect.try({
         try: () => {
-          Electron.Menu.setApplicationMenu(Electron.Menu.buildFromTemplate([...template]));
+          Electron.Menu.setApplicationMenu(
+            Electron.Menu.buildFromTemplate([...template, ...remoteDesktopMenu(platform)]),
+          );
         },
         catch: (cause) =>
           new ElectronMenuOperationError({

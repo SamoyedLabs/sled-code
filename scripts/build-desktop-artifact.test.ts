@@ -46,6 +46,7 @@ import {
   copyDirectoryPreservingSymlinks,
   LinuxBrowserSecretHostError,
   MacPackagedAppMissingError,
+  stageRemoteDesktopBundle,
   stageBrowserSecret,
   validateMacPackagedPayload,
   validateWindowsPackagedPayload,
@@ -1743,5 +1744,56 @@ it.effect.skipIf(!symlinksSupported)("rebases packaged links into the isolated t
       yield* fs.realPath(path.join(destination, "node_modules/example-absolute")),
       resolvedCopiedPackage,
     );
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+// Materialized in the existing build-desktop-artifact.test.ts fixture suite.
+it.effect.skipIf(!symlinksSupported)("keeps native framework links portable after staging", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-native-bundle-" });
+    const source = path.join(root, "source");
+    const destination = path.join(root, "stage");
+    const framework = "Host.app/Contents/Frameworks/Video.framework";
+    const version = path.join(source, framework, "Versions/A");
+    yield* fs.makeDirectory(version, { recursive: true });
+    yield* fs.writeFileString(path.join(version, "Video"), "native-binary-fixture");
+    yield* fs.symlink("A", path.join(source, framework, "Versions/Current"));
+    yield* fs.symlink("Versions/Current/Video", path.join(source, framework, "Video"));
+
+    yield* stageRemoteDesktopBundle(source, destination);
+    assert.equal(
+      yield* fs.readLink(path.join(destination, framework, "Video")),
+      "Versions/Current/Video",
+    );
+    assert.equal(yield* fs.readLink(path.join(destination, framework, "Versions/Current")), "A");
+    // A packaged app must work after the source checkout is gone.
+    yield* fs.remove(source, { recursive: true });
+    assert.equal(
+      yield* fs.readFileString(path.join(destination, framework, "Video")),
+      "native-binary-fixture",
+    );
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+it.effect.skipIf(!symlinksSupported)("refuses nonportable native bundle links before copying", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-native-bundle-refuse-" });
+    const source = path.join(root, "source");
+    const destination = path.join(root, "stage");
+    yield* fs.makeDirectory(source);
+    yield* fs.writeFileString(path.join(root, "outside"), "outside-fixture");
+    yield* fs.writeFileString(path.join(source, "inside"), "inside-fixture");
+    for (const target of ["../outside", path.join(source, "inside")]) {
+      const link = path.join(source, "link");
+      yield* fs.symlink(target, link);
+      const error = yield* stageRemoteDesktopBundle(source, destination).pipe(Effect.flip);
+      assert.instanceOf(error, BundleNotSelfContainedError);
+      assert.equal(yield* fs.exists(destination), false);
+      yield* fs.remove(link);
+    }
   }).pipe(Effect.provide(NodeServices.layer)),
 );

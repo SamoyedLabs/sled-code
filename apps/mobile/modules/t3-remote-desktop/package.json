@@ -1,0 +1,6 @@
+{
+  "name": "@t3tools/mobile-remote-desktop-native",
+  "version": "0.0.0",
+  "private": true,
+  "main": "index.tsx"
+}

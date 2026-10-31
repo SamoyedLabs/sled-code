@@ -1,0 +1,30 @@
+{
+  "repository": "pingdotgg/t3code",
+  "channel": "nightly",
+  "baseBranch": "main",
+  "candidateBranch": "upstream/nightly",
+  "ciWorkflow": "ci.yml",
+  "requiredJob": "Check",
+  "autoMerge": true,
+  "holdLabels": ["sled:physical-required", "sled:hold"],
+  "reviewPaths": [
+    ".github/workflows/*",
+    ".github/actions/*",
+    "scripts/sled/*",
+    "config/sled-*",
+    "**/*migration*",
+    "**/*Migration*",
+    "**/auth/*",
+    "**/*Auth*",
+    "**/*oauth*",
+    "**/*OAuth*"
+  ],
+  "protectedFeaturePaths": [
+    "apps/mobile/modules/t3-remote-desktop/*",
+    "apps/mobile/src/features/remote-desktop/*",
+    "apps/server/src/remoteDesktop/*",
+    "apps/desktop/src/remote-desktop/*",
+    "packages/contracts/src/remoteDesktop*",
+    "native/remote-desktop/*"
+  ]
+}

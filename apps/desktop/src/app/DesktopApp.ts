@@ -1,6 +1,7 @@
 import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { existingRemoteDesktopAgent } from "../remote-desktop/RemoteDesktopAgentClient.ts";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
@@ -204,7 +205,12 @@ const bootstrap = Effect.gen(function* () {
     return yield* new DesktopDevelopmentBackendPortRequiredError();
   }
 
-  const backendPortSelection = yield* resolveDesktopBackendPort(environment.configuredBackendPort);
+  const backgroundHost = yield* Effect.promise(() =>
+    existingRemoteDesktopAgent(environment.baseDir),
+  );
+  const backendPortSelection = backgroundHost
+    ? { port: backgroundHost.port, selectedByScan: false }
+    : yield* resolveDesktopBackendPort(environment.configuredBackendPort);
   const backendPort = backendPortSelection.port;
   yield* logBootstrapInfo(
     backendPortSelection.selectedByScan

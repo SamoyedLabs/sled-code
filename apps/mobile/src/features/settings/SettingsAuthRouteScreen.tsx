@@ -1,3 +1,6 @@
+import Constants from "expo-constants";
+import { Platform } from "react-native";
+import { PrivateBuildSignIn } from "../remote-desktop/PrivateBuildSignIn";
 import { useAuth } from "@clerk/expo";
 import {
   AuthView,
@@ -52,6 +55,8 @@ function ConfiguredSettingsAuthRouteScreen() {
             isDismissible={false}
             onHostBack={handleHostBack}
           />
+        ) : Platform.OS === "ios" && Constants.expoConfig?.extra?.iosPersonalTeamBuild === true ? (
+          <PrivateBuildSignIn />
         ) : (
           <AuthView isDismissible={false} onHostBack={handleHostBack} />
         )

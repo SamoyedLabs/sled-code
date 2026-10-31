@@ -1,0 +1,432 @@
+// Modified for T3 Code remote desktop; based on Sill 6c5b5d249602ad60ebda79d384698909f2c5e7d7 (Apache-2.0). See MODIFICATIONS.md.
+import SwiftUI
+
+/// How the connect screen's column sits on this screen (docs/remote-access-plan.md §7.10).
+struct ConnectLayout {
+    let size: CGSize
+    /// The Duo's fold across this screen (iOS 27.1, DuoPosture); `.inferred` before it, and on every
+    /// other device, where the rules below are what they were.
+    var fold: FoldInfo = .inferred
+
+    /// 380 pt, or the screen's width less 32 pt on one narrower than 412 pt (which also gives the
+    /// old column the margin it lacked at 375 pt).
+    var columnWidth: CGFloat { size.width < 412 ? max(200, size.width - 32) : 380 }
+    /// The column's leading edge: where the 380 pt column sits centred, or, across the book pose's
+    /// fold, centred in the leading page. What widens the column (the side-by-side card) grows
+    /// towards the trailing edge, so the title never moves sideways.
+    var columnX: CGFloat { DuoPosture.columnX(columnWidth: columnWidth, screenWidth: size.width, fold: fold) }
+    /// The card side by side (a short screen): the viewfinder's 260 pt and its words, from the
+    /// column's leading edge to 24 pt short of the screen's trailing one, at most 620 pt.
+    var sideBySideWidth: CGFloat { max(columnWidth, min(size.width - columnX - 24, 620)) }
+    /// The Duo half-folded upright (the laptop pose): the room above the fold, where the column
+    /// lives, so nothing crosses it and the keyboard has the lower half. Before iOS 27.1 the fold
+    /// is the middle of a 710×1000-like screen (DuoPosture.crease); open flat there is none.
+    var topRoom: CGFloat? { DuoPosture.crease(size, fold)?.top }
+    var topHalf: Bool { topRoom != nil }
+    /// The laptop pose as the device reports it (iOS 27.1): the room above the fold, all the
+    /// connect screen's column has; it scrolls there. Nil elsewhere, the inferred crease included.
+    var roomAboveFold: CGFloat? { DuoPosture.roomAboveFold(size, fold) }
+    /// The book pose: the leading page's width, which holds what would cross the fold.
+    var leadingPage: CGFloat? { DuoPosture.leadingPage(fold) }
+    /// Any height under 520 pt (the Duo's outer display on its side, an iPhone in landscape), or a
+    /// room above the laptop pose's fold under that (373.5 pt with the status bar): the card goes
+    /// side by side.
+    var short: Bool { size.height < 520 || (roomAboveFold ?? .infinity) < 520 }
+    /// The Duo's outer display upright (500×710) and phones: the column anchors to the top while a
+    /// field has the keyboard.
+    var compactPortrait: Bool { size.height > size.width && size.width < 600 }
+}
+
+/// Add a Mac (docs/remote-access-plan.md §7.7–7.8, §7.10), unfolded in the connect screen's column
+/// in place of the rows. Scanning the code on the Mac is the default; Enter Code Instead types its
+/// address and 12-digit code. Pairing progress and every error show inline, never in an alert.
+///
+/// The home card (docs/home-pairing-plan.md §7.5, §7.7–7.8) is the same card for a row whose Mac
+/// shows its code because a tap asked (`home`, the row's name): the scanner, or the code alone,
+/// both going to the door the ask reached (StreamClient.pairHome, the scanner through `scanned`);
+/// one line of words, which is also its collapsed line; every layout rule as above.
+struct AddMacCard: View {
+    @ObservedObject var client: StreamClient
+    let layout: ConnectLayout
+    /// The scanner, or the typed path; the connect screen keeps it so the harness can start there.
+    @Binding var typed: Bool
+    let scannerMode: CodeScanner.Mode
+    /// Folds the card back (Cancel, Esc, the VoiceOver escape gesture).
+    let close: () -> Void
+    /// A field has the keyboard: the column collapses its words to one line.
+    @Binding var editing: Bool
+    /// The home card's Mac, as its row names it; nil for Add a Mac.
+    var home: String? = nil
+
+    @State private var address = ""
+    @State private var code = ""
+    @FocusState private var focus: Field?
+    enum Field: Hashable { case address, code }
+
+    private var device: String { StreamClient.deviceWord }
+    private var working: Bool { if case .working = client.pairing { return true }; if case .paired = client.pairing { return true }; return false }
+    private var problem: PairingProblem? { if case .failed(let p) = client.pairing { return p }; return nil }
+
+    var body: some View {
+        Group {
+            if layout.short && !typed {
+                HStack(alignment: .top, spacing: 16) {
+                    CodeScanner(mode: scannerMode, onLink: { client.scanned($0, tapped: $1, overlay: false) },
+                                retryNeedsTap: client.scanRetryNeedsTap, mac: home)
+                        .frame(width: 260, height: 200)
+                    VStack(alignment: .leading, spacing: 8) {
+                        words
+                        progress
+                        links
+                    }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    words
+                    if typed {
+                        fields
+                    } else if !working {
+                        // Gone while a pairing runs, back after a failure: the new scanner finds the
+                        // code still in view, which StreamClient.scanned holds until it is tapped.
+                        CodeScanner(mode: scannerMode, onLink: { client.scanned($0, tapped: $1, overlay: false) },
+                                    retryNeedsTap: client.scanRetryNeedsTap, mac: home)
+                            .frame(height: layout.short ? 200 : 230)
+                    }
+                    progress
+                    links
+                }
+            }
+        }
+        .onChange(of: focus) { _, f in editing = f != nil }
+        .accessibilityAction(.escape, close)
+        .background(EscapeKey(action: close))
+    }
+
+    // MARK: Words
+
+    @ViewBuilder private var words: some View {
+        if let mac = home {
+            // The home card has one line, the same whether or not the code has the keyboard: the
+            // Mac shows its code now, and the typed path needs no address.
+            Text(typed ? DiscoveryPolicy.HomeCopy.typeCode(mac: mac) : DiscoveryPolicy.HomeCopy.showing(mac: mac, device: device))
+                .font(.system(size: 13))
+                .foregroundStyle(Palette.text)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if editing && (layout.compactPortrait || layout.short) {
+            Text("Type the address and code from your Mac.")
+                .font(.system(size: 13))
+                .foregroundStyle(Palette.muted)
+        } else {
+            Text("Pair this Mac once, then connect to it from T3 Code.")
+                .font(.system(size: 13))
+                .foregroundStyle(Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(typed ? "Type the address and pairing code from T3 Code on your Mac."
+                       : "On your Mac, choose Pair iPhone or iPad… in T3 Code’s Remote Desktop menu, then point this \(device) at the code.")
+                .font(.system(size: 13))
+                .foregroundStyle(Palette.text)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // MARK: The typed path
+
+    private var fields: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // The home card dials the door its ask reached: the code alone.
+            if home == nil {
+                PairingField(prompt: "100.101.102.103 or mac.example.net", label: "Address", text: $address,
+                             keyboard: .URL, submit: .next)
+                    .focused($focus, equals: .address)
+                    .onSubmit { focus = .code }
+                if let problem, problem.field == .address { ProblemLine(text: problem.text) }
+            }
+            PairingField(prompt: "0000 0000 0000", label: "Code", text: $code, keyboard: PairingField.codeKeyboard, submit: .go, monospaced: true)
+                .focused($focus, equals: .code)
+                .onSubmit(pair)
+                .onChange(of: code) { _, typed in
+                    let grouped = PairingField.grouped(typed)
+                    if grouped != typed { code = grouped }
+                }
+            if let problem, problem.field == .code { ProblemLine(text: problem.text) }
+            Button(action: pair) {
+                Text("Pair")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.black)
+                    .frame(minWidth: 88, minHeight: 44)
+                    .padding(.horizontal, 12)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.accent.opacity(working ? 0.4 : 1)))
+            }
+            .buttonStyle(.plain)
+            .disabled(working)
+            .keyboardShortcut(.defaultAction)
+        }
+        .disabled(working)
+    }
+
+    private func pair() {
+        guard !working else { return }
+        focus = nil
+        if home != nil {
+            client.pairHome(code: code)
+        } else {
+            client.pairTyped(code: code, address: address, overlay: false)
+        }
+    }
+
+    // MARK: Progress and errors
+
+    @ViewBuilder private var progress: some View {
+        switch client.pairing {
+        case .working(let text):
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small).tint(Palette.muted)
+                Text(text)
+            }
+            .font(.system(size: 13))
+            .foregroundStyle(Palette.muted)
+            .frame(minHeight: 24)
+            .accessibilityElement(children: .combine)
+        case .paired(let name):
+            Label("Paired with \(name).", systemImage: "checkmark.circle.fill")
+                .font(.system(size: 13))
+                .foregroundStyle(Palette.text)
+        case .failed(let p) where p.field == .card || !typed:
+            ProblemLine(text: p.text)
+        default:
+            EmptyView()
+        }
+    }
+
+    // MARK: Links
+
+    /// Side by side, or one above the other where the words beside a viewfinder are narrow (a
+    /// 667 pt wide phone on its side).
+    private var links: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 18) { pathToggle; cancelButton }
+            VStack(alignment: .leading, spacing: 0) { pathToggle; cancelButton }
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder private var pathToggle: some View {
+        if CodeScanner.isSupported || scannerMode != .live {
+            Button(typed ? "Scan Code Instead" : "Enter Code Instead") {
+                client.pairing = .idle
+                focus = nil
+                typed.toggle()
+            }
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(Palette.accent)
+            .frame(minHeight: 44)
+            .disabled(working)
+        }
+    }
+
+    private var cancelButton: some View {
+        Button("Cancel", action: close)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(Palette.accent)
+            .frame(minHeight: 44)
+            .keyboardShortcut(.cancelAction)
+    }
+}
+
+/// A 48 pt field on the drawer's control colour, like the app drawer's search field.
+struct PairingField: View {
+    let prompt: String
+    let label: String
+    @Binding var text: String
+    var keyboard: UIKeyboardType = .default
+    var submit: SubmitLabel = .done
+    var monospaced = false
+
+    var body: some View {
+        TextField("", text: $text, prompt: Text(prompt).foregroundColor(Palette.muted))
+            .font(.system(size: 15).monospacedDigit())
+            .foregroundStyle(Palette.text)
+            .textFieldStyle(.plain)
+            .keyboardType(keyboard)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .submitLabel(submit)
+            .accessibilityLabel(label)
+            .frame(height: 48)
+            .padding(.horizontal, 14)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.control))
+            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+    }
+
+    /// The number pad on a phone (the Duo's is what the digits are for). On an iPad the number pad
+    /// floats as a popover that swallows the next tap outside it, so Pair took two taps (measured
+    /// on the simulator): the docked keyboard's numbers and punctuation instead, whose Return
+    /// pairs.
+    static var codeKeyboard: UIKeyboardType {
+        UIDevice.current.userInterfaceIdiom == .pad ? .numbersAndPunctuation : .numberPad
+    }
+
+    /// "4829 1355 7208" as it is typed or pasted: digits only, at most 12, in groups of 4.
+    static func grouped(_ text: String) -> String {
+        let digits = text.filter { $0.isASCII && $0.isNumber }.prefix(12)
+        return stride(from: 0, to: digits.count, by: 4).map { i -> String in
+            let start = digits.index(digits.startIndex, offsetBy: i)
+            return String(digits[start..<digits.index(start, offsetBy: min(4, digits.count - i))])
+        }.joined(separator: " ")
+    }
+}
+
+/// An inline problem, orange, under the field it belongs to; VoiceOver announces it.
+struct ProblemLine: View {
+    let text: String
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill").accessibilityHidden(true)
+            Text(text).fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.system(size: 13))
+        .foregroundStyle(Color.orange)
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        .accessibilityElement(children: .combine)
+        .onAppear { AccessibilityNotification.Announcement(text).post() }
+        .onChange(of: text) { _, t in AccessibilityNotification.Announcement(t).post() }
+    }
+}
+
+/// Esc on a hardware keyboard, also while a field has the keyboard. The text system may claim a
+/// key before any key command sees it, and SwiftUI's `.cancelAction` shortcut does not ask for
+/// priority, so while this view is on screen a key command that does sits on the hosting
+/// controller, which every responder chain in the window passes through. ⌘. stays with the
+/// Cancel buttons' shortcuts (verified in the simulator). XCUITest's Escape never reaches the app on
+/// the iPadOS 27 simulator, but a virtual keyboard's does (Tests/keyrig): there this command closed the
+/// Settings panel and skipped the tour, with nothing sent to the Mac (docs/hardware-keyboard-plan.md).
+/// A real keyboard on a device decides (R12).
+struct EscapeKey: UIViewRepresentable {
+    let action: () -> Void
+
+    /// An EscapeKey is on screen in `window` (the tour, the pairing overlay, the Settings panel, the Add a
+    /// Mac card): Esc pressed there is its, and the stream's input view in that window leaves Esc alone
+    /// (InputOverlayView.keyCommands; docs/hardware-keyboard-plan.md §1). Only that window's: each Sill
+    /// window has its own responder chain, and a key pressed in one never reaches an EscapeKey's command
+    /// in another, so Settings open in a window behind leaves Esc to the stream in front.
+    static func onScreen(in window: UIWindow?) -> Bool {
+        guard let window else { return false }
+        return Anchor.live.contains { $0.window === window }
+    }
+
+    func makeUIView(context: Context) -> Anchor { Anchor() }
+    func updateUIView(_ anchor: Anchor, context: Context) { anchor.action = action }
+    static func dismantleUIView(_ anchor: Anchor, coordinator: ()) { anchor.detach() }
+
+    /// A zero-size view that finds its view controller when it joins a window.
+    final class Anchor: UIView {
+        var action: (() -> Void)?
+        /// The anchors on screen in every Sill window, newest last: in one window the pairing overlay
+        /// over a card answers first.
+        fileprivate static var live: [Anchor] = []
+        private weak var host: UIViewController?
+        private let command: UIKeyCommand = {
+            let command = UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [],
+                                       action: #selector(UIViewController.sillEscapeKey(_:)))
+            command.wantsPriorityOverSystemBehavior = true
+            return command
+        }()
+
+        init() {
+            super.init(frame: .zero)
+            isUserInteractionEnabled = false
+            isAccessibilityElement = false
+        }
+        required init?(coder: NSCoder) { fatalError("not used") }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window == nil { detach() } else { attach() }
+        }
+
+        private func attach() {
+            guard host == nil else { return }
+            var responder: UIResponder? = next
+            while let r = responder, !(r is UIViewController) { responder = r.next }
+            guard let controller = responder as? UIViewController else { return }
+            host = controller
+            controller.addKeyCommand(command)
+            Self.live.append(self)
+        }
+
+        func detach() {
+            host?.removeKeyCommand(command)
+            host = nil
+            Self.live.removeAll { $0 === self }
+        }
+
+        /// Esc pressed in `window`: the newest anchor there answers, never one in another Sill window,
+        /// whose panel the person is not looking at.
+        fileprivate static func fire(in window: UIWindow?) {
+            guard let window, let anchor = live.last(where: { $0.window === window }) else {
+                #if DEBUG
+                print("escape: Esc, and no EscapeKey in its window: nothing")
+                #endif
+                return
+            }
+            #if DEBUG
+            let elsewhere = live.filter { $0.window !== window }.count
+            print("escape: Esc to what is on screen in its window (its EscapeKey), not to the Mac"
+                  + (elsewhere == 0 ? "" : "; \(elsewhere) in other windows, left alone"))
+            #endif
+            anchor.action?()
+        }
+    }
+}
+
+extension UIViewController {
+    /// EscapeKey's command: the chain from whichever responder has the keyboard reaches a view
+    /// controller in the window where the key was pressed, which hands the key to the newest anchor in
+    /// that window.
+    @objc fileprivate func sillEscapeKey(_ sender: UIKeyCommand) {
+        EscapeKey.Anchor.fire(in: viewIfLoaded?.window)
+    }
+}
+
+/// A sill://pair link from outside the app, waiting for the person (§7.7): shown in the card's
+/// place on the connect screen, or over the stream. Never acted on by itself: a poster or a message
+/// could otherwise add a look-alike "Mac" that collects keystrokes.
+struct LinkConfirmation: View {
+    let link: PairLink
+    let pair: () -> Void
+    let cancel: () -> Void
+
+    private var at: String { link.addresses.first?.text ?? "its address" }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Pair with \(link.name) at \(at)?")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Palette.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            Text("Only pair with a code your own Mac shows.")
+                .font(.system(size: 13))
+                .foregroundStyle(Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 18) {
+                Button(action: pair) {
+                    Text("Pair")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.black)
+                        .frame(minWidth: 88, minHeight: 44)
+                        .padding(.horizontal, 12)
+                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.accent))
+                }
+                .buttonStyle(.plain)
+                Button("Cancel", action: cancel)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Palette.accent)
+                    .frame(minHeight: 44)
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.cancelAction)
+            }
+        }
+        .accessibilityAction(.escape, cancel)
+    }
+}

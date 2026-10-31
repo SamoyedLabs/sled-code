@@ -73,6 +73,10 @@ function unwrapEnsureSshEnvironmentResult(result: unknown) {
 }
 
 contextBridge.exposeInMainWorld("desktopBridge", {
+  remoteDesktop: {
+    getState: () => ipcRenderer.invoke("desktop:remote-desktop:settings"),
+    change: (command) => ipcRenderer.invoke("desktop:remote-desktop:change", command),
+  },
   getAppBranding: () => {
     const result = ipcRenderer.sendSync(IpcChannels.GET_APP_BRANDING_CHANNEL);
     if (typeof result !== "object" || result === null) {

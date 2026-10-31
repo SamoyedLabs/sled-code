@@ -301,6 +301,9 @@ function registerAppShellCommands(router: AnyRouter, shellElement: Element): () 
     registerNavigationHistoryCommands(router),
     registerWorkspaceFocusCommands(router),
     registerPullRequestsEscapeCommand(router),
+    registerMenuAction("open-remote-desktop-settings", () => {
+      void router.navigate({ to: "/settings/devices", hash: "remote-desktop" });
+    }),
     registerMenuAction("open-settings", () => {
       if (!/^\/settings(\/|$)/.test(router.state.location.pathname))
         void router.navigate({ to: "/settings" });

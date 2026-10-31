@@ -1003,6 +1003,12 @@ export const SystemSettingsPaneSchema = Schema.Literals(["full-disk-access"]);
 export type SystemSettingsPane = typeof SystemSettingsPaneSchema.Type;
 
 export interface DesktopBridge {
+  remoteDesktop?: {
+    getState: () => Promise<import("./desktopRemoteDesktopSettings.ts").DesktopRemoteDesktopState>;
+    change: (
+      command: import("./desktopRemoteDesktopSettings.ts").DesktopRemoteDesktopCommand,
+    ) => Promise<void>;
+  };
   getAppBranding: () => DesktopAppBranding | null;
   getRelayTelemetryEnabled: () => boolean;
   getPathForFile: (file: File) => string;
