@@ -21,8 +21,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || inputs.candidate_sha || github.sha }}
-  cancel-in-progress: ${{ github.event_name != 'push' }}
+  group: ci-${{ github.event.pull_request.number || inputs.candidate_sha || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   automation:
@@ -49,8 +49,8 @@ jobs:
   # server shards, a server change does not run the mobile tests, and the macOS
   # lint (~6.7x a Linux minute) runs only for native mobile sources.
   # .github/scripts/ci-changes.cjs maps changed files to workspace packages and
-  # their dependents. Pushes to main still run every Linux job. Detection fails
-  # open: if the diff cannot be resolved, everything runs.
+  # their dependents, on both PRs and main. Detection fails open: if the diff
+  # cannot be resolved or a path has no known owner, everything runs.
   changes:
     name: Changes
     runs-on: ubuntu-24.04

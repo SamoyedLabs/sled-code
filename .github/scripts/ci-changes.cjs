@@ -13,6 +13,17 @@ const DOCS_ONLY = [
 const AUTOMATION =
   /^\.github\/(actions|scripts|workflows)\/|^scripts\/sled\/upstream(?:[_.]|$)|^config\/sled-upstream\.json$|^scripts\/prepare-webrtc-notices\.py$|^third-party\/webrtc\/|^sources\.lock\.json$|^apps\/mobile\/modules\/t3-remote-desktop\/Vendor\/(?:LiveKitWebRTC-|MODIFICATIONS\.md$|LICENSE$)/;
 
+// These files are exercised by Automation or the native compiler, not by the
+// JavaScript application suites. Keep this explicit: new CI/build files fail open.
+const SCOPED_INFRA = [
+  /^\.github\/scripts\/ci-changes\.(cjs|test\.cjs)$/,
+  /^\.github\/actions\/ci-changes\/action\.yml$/,
+  /^\.github\/workflows\/sled-upstream\.yml$/,
+  /^scripts\/sled\/upstream(?:_test)?\.py$/,
+  /^config\/sled-upstream\.json$/,
+  /^native\/remote-desktop\//,
+];
+
 const INERT = [
   /^docs\//,
   /^\.(agents|cursor|vscode|devcontainer|macroscope|repos)\//,
@@ -55,7 +66,7 @@ const TEST_ONLY_DEPS = {
 const BUILD_ONLY_DEPS = { t3: ["@t3tools/web"] };
 
 const MOBILE_NATIVE =
-  /^apps\/mobile\/.*\.(swift|kt|kts)$|^apps\/mobile\/(\.swiftlint\.yml|detekt\.yml|\.editorconfig|Brewfile)$|^scripts\/mobile-native-static-check\.ts$|^package\.json$|^\.github\/workflows\/ci\.yml$|^\.github\/scripts\/ci-changes\.cjs$|^\.github\/actions\/ci-changes\//;
+  /^apps\/mobile\/.*\.(swift|kt|kts)$|^apps\/mobile\/(\.swiftlint\.yml|detekt\.yml|\.editorconfig|Brewfile)$|^scripts\/mobile-native-static-check\.ts$|^package\.json$|^\.github\/workflows\/ci\.yml$/;
 
 const OWN_TEST_JOB = new Set(["t3", "@t3tools/web", "@t3tools/monorepo"]);
 
@@ -100,7 +111,7 @@ function readWorkspace() {
 
 // [] means inert; null means unknown and requires every job.
 function ownersOf(file, packages) {
-  if (INERT.some((pattern) => pattern.test(file))) return [];
+  if ([...INERT, ...SCOPED_INFRA].some((pattern) => pattern.test(file))) return [];
   // A manifest can change dependencies or versions other packages read.
   if (path.posix.basename(file) === "package.json") return null;
   if (RUNS_EVERYTHING.some((pattern) => pattern.test(file))) return null;
@@ -179,13 +190,13 @@ function decide(files, packages, full) {
       rust: everything || rust,
       release_smoke: scriptsChanged,
       remote_native:
-        files === null ||
+        everything ||
         files.some((file) =>
           /^native\/remote-desktop\/|^scripts\/sled\/prepare-native\.py$|^scripts\/prepare-webrtc|^sources\.lock\.json$|^\.github\/workflows\/ci\.yml$/.test(
             file,
           ),
         ),
-      mobile_native: files === null || files.some((file) => MOBILE_NATIVE.test(file)),
+      mobile_native: everything || files.some((file) => MOBILE_NATIVE.test(file)),
     },
   };
 }

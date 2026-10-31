@@ -63,18 +63,14 @@ runs:
           base=$DISPATCH_BASE_SHA
           git fetch --quiet --no-tags --depth=1 --filter=blob:none origin "$base" \
             || fail_open "Could not fetch dispatch base."
-          mode=()
         elif [[ "$EVENT_NAME" == pull_request ]]; then
           # A pull request checks out GitHub's merge commit with fetch-depth: 2,
           # so its first parent is the base branch and the diff is the PR's change.
           base=HEAD^1
-          mode=()
         else
           base=$BEFORE_SHA
           git fetch --quiet --no-tags --depth=1 --filter=blob:none origin "$base" \
             || fail_open "Could not fetch ${base}."
-          # Main keeps a full application backstop; the router exempts docs-only pushes.
-          mode=(--full)
         fi
 
         # --no-renames lists a rename as its old and new path: renaming a file out
@@ -82,4 +78,5 @@ runs:
         # git from fetching file contents to score renames.
         git diff --name-only --no-renames "$base" HEAD > "$RUNNER_TEMP/changed-paths" \
           || fail_open "Could not diff against ${base}."
-        decide --paths "$RUNNER_TEMP/changed-paths" "${mode[@]}"
+        # Apply identical affected-package routing on PRs, main, and dispatched candidates.
+        decide --paths "$RUNNER_TEMP/changed-paths"
