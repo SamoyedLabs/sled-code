@@ -5,6 +5,14 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "../..");
 
+const DOCS_ONLY = [
+  /^docs\/.*\.(md|mdx|png|jpe?g|webp|avif|gif|svg|mp4|webm)$/i,
+  /^[^/]+\.md$/,
+  /^LICENSE$/,
+];
+const AUTOMATION =
+  /^\.github\/(actions|scripts|workflows)\/|^scripts\/sled\/upstream(?:[_.]|$)|^config\/sled-upstream\.json$|^scripts\/prepare-webrtc-notices\.py$|^third-party\/webrtc\/|^sources\.lock\.json$|^apps\/mobile\/modules\/t3-remote-desktop\/Vendor\/(?:LiveKitWebRTC-|MODIFICATIONS\.md$|LICENSE$)/;
+
 const INERT = [
   /^docs\//,
   /^\.(agents|cursor|vscode|devcontainer|macroscope|repos)\//,
@@ -110,7 +118,11 @@ function ownersOf(file, packages) {
 function decide(files, packages, full) {
   const all = new Set(packages.map((pkg) => pkg.name));
   let affected = new Set();
-  let everything = full || files === null;
+  const docsOnly =
+    files !== null &&
+    files.length > 0 &&
+    files.every((file) => DOCS_ONLY.some((pattern) => pattern.test(file)));
+  let everything = (full && !docsOnly) || files === null;
   let rust = false;
 
   for (const file of files ?? []) {
@@ -153,6 +165,10 @@ function decide(files, packages, full) {
   return {
     affected: [...affected].sort(),
     outputs: {
+      docs: docsOnly,
+      docs_files: JSON.stringify(docsOnly ? files.filter((file) => /\.(md|mdx)$/i.test(file)) : []),
+      lint: !docsOnly,
+      automation: files === null || files.some((file) => AUTOMATION.test(file)),
       typecheck: affected.size > 0,
       build: has("@t3tools/desktop") || has("t3") || has("@t3tools/web"),
       test: tested.length > 0,
