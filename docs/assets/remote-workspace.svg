@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="660" viewBox="0 0 1280 660" fill="none" role="img" aria-labelledby="title description">
+  <title id="title">Your Mac workspace, within reach on iPhone</title>
+  <desc id="description">An illustrated overview of a Mac host streaming its graphical desktop to Sled's native iOS client over an encrypted connection.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1280" y2="660" gradientUnits="userSpaceOnUse"><stop stop-color="#202629"/><stop offset="1" stop-color="#101416"/></linearGradient>
+    <linearGradient id="screen" x1="90" y1="210" x2="780" y2="560" gradientUnits="userSpaceOnUse"><stop stop-color="#252D30"/><stop offset="1" stop-color="#171D20"/></linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="translate(1030 310) rotate(90) scale(420 580)" gradientUnits="userSpaceOnUse"><stop stop-color="#93C9B0" stop-opacity=".11"/><stop offset="1" stop-color="#93C9B0" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1280" height="660" rx="28" fill="url(#background)"/>
+  <rect width="1280" height="660" rx="28" fill="url(#glow)"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif">
+    <text x="64" y="70" fill="#B9C8C1" font-size="13" font-weight="600" letter-spacing="3">SLED CODE / CONNECTION OVERVIEW</text>
+    <text x="64" y="132" fill="#F7F7F2" font-size="46" font-weight="600" letter-spacing="-1.5">Your workspace. Within reach.</text>
+    <text x="64" y="169" fill="#A1ADA8" font-size="19">Keep building on your Mac. Take control from your iPhone.</text>
+    <!-- Mac: an abstract development workspace, not a product screenshot. -->
+    <rect x="64" y="215" width="750" height="333" rx="16" fill="#0D1113" stroke="#54625C"/>
+    <rect x="73" y="224" width="732" height="315" rx="10" fill="url(#screen)"/>
+    <path d="M73 263H805" stroke="#3A4540"/>
+    <circle cx="93" cy="244" r="4" fill="#CF8E85"/><circle cx="108" cy="244" r="4" fill="#D9C18A"/><circle cx="123" cy="244" r="4" fill="#9AC3A2"/>
+    <text x="146" y="249" fill="#A8B5AE" font-size="12">Mac workspace</text>
+    <rect x="90" y="281" width="136" height="239" rx="8" fill="#151C1E"/>
+    <text x="107" y="309" fill="#E2E9E3" font-size="13" font-weight="600">WORKSPACE</text>
+    <text x="107" y="341" fill="#94A49B" font-size="12">Agent sessions</text>
+    <rect x="100" y="356" width="116" height="30" rx="6" fill="#34453D"/>
+    <rect x="109" y="367" width="12" height="8" rx="2" stroke="#C4E2CF"/>
+    <text x="130" y="375" fill="#D4EAD9" font-size="12">Desktop</text>
+    <text x="107" y="412" fill="#94A49B" font-size="12">Files</text>
+    <text x="107" y="446" fill="#94A49B" font-size="12">Terminal</text>
+    <text x="107" y="480" fill="#94A49B" font-size="12">Settings</text>
+    <rect x="243" y="281" width="373" height="239" rx="8" fill="#11191B" stroke="#3A4740"/>
+    <text x="261" y="307" fill="#9CAA9F" font-size="12">editor / workspace</text>
+    <path d="M243 322H616" stroke="#2C3932"/>
+    <text x="260" y="348" fill="#53675B" font-family="monospace" font-size="10">01</text><rect x="287" y="343" width="115" height="5" rx="2.5" fill="#B9D9C0" opacity=".75"/>
+    <text x="260" y="368" fill="#53675B" font-family="monospace" font-size="10">02</text><rect x="287" y="363" width="198" height="5" rx="2.5" fill="#6E9D89" opacity=".75"/>
+    <text x="260" y="388" fill="#53675B" font-family="monospace" font-size="10">03</text><rect x="287" y="383" width="157" height="5" rx="2.5" fill="#A7C8B2" opacity=".75"/>
+    <text x="260" y="408" fill="#53675B" font-family="monospace" font-size="10">04</text><rect x="287" y="403" width="233" height="5" rx="2.5" fill="#7E9E91" opacity=".75"/>
+    <text x="260" y="428" fill="#53675B" font-family="monospace" font-size="10">05</text><rect x="287" y="423" width="171" height="5" rx="2.5" fill="#D2C8A5" opacity=".75"/>
+    <text x="260" y="448" fill="#53675B" font-family="monospace" font-size="10">06</text><rect x="287" y="443" width="207" height="5" rx="2.5" fill="#6E9D89" opacity=".75"/>
+    <text x="260" y="468" fill="#53675B" font-family="monospace" font-size="10">07</text><rect x="287" y="463" width="99" height="5" rx="2.5" fill="#B9D9C0" opacity=".75"/>
+    <text x="260" y="488" fill="#53675B" font-family="monospace" font-size="10">08</text><rect x="287" y="483" width="180" height="5" rx="2.5" fill="#7E9E91" opacity=".75"/>
+    <rect x="633" y="281" width="154" height="112" rx="8" fill="#2F3F37" stroke="#506655"/>
+    <rect x="649" y="297" width="122" height="64" rx="5" fill="#1B2822"/>
+    <circle cx="710" cy="326" r="13" stroke="#A8CEAF" stroke-width="2"/>
+    <path d="m706 320 9 6-9 6v-12Z" fill="#A8CEAF"/>
+    <text x="649" y="380" fill="#BBD2C1" font-size="11">Simulator</text>
+    <rect x="633" y="410" width="154" height="110" rx="8" fill="#11191B" stroke="#3A4740"/>
+    <text x="649" y="434" fill="#96ADA0" font-family="monospace" font-size="11">~/workspace</text>
+    <text x="649" y="459" fill="#D1E5D4" font-family="monospace" font-size="12">$ pnpm dev</text>
+    <rect x="649" y="475" width="92" height="4" rx="2" fill="#5D826B"/>
+    <rect x="649" y="488" width="69" height="4" rx="2" fill="#5D826B"/>
+    <path d="M329 548H549L574 566H304L329 548Z" fill="#444F48"/>
+    <rect x="264" y="566" width="350" height="5" rx="2.5" fill="#6B776F"/>
+    <text x="64" y="607" fill="#E2EBE4" font-size="17" font-weight="600">Mac host</text>
+    <text x="64" y="632" fill="#91A298" font-size="13">Capture, hardware encoding, desktop control</text>
+    <!-- Encrypted transport; actual path may be direct or relayed. -->
+    <path d="M831 386H942" stroke="#A5CBB2" stroke-width="2" stroke-dasharray="4 7"/>
+    <rect x="848" y="366" width="72" height="39" rx="19.5" fill="#263A2E" stroke="#4B6B56"/>
+    <rect x="877" y="383" width="14" height="11" rx="2" stroke="#C5E5CB" stroke-width="1.5"/>
+    <path d="M880 383v-4a4 4 0 0 1 8 0v4" stroke="#C5E5CB" stroke-width="1.5"/>
+    <text x="884" y="432" text-anchor="middle" fill="#A8C1AF" font-size="11">DIRECT / RELAY</text>
+    <!-- iOS: native viewing surface with a miniature desktop. -->
+    <rect x="957" y="206" width="240" height="368" rx="39" fill="#090D0F" stroke="#65736A" stroke-width="2"/>
+    <rect x="965" y="214" width="224" height="352" rx="32" fill="#1D2823"/>
+    <rect x="1033" y="223" width="88" height="18" rx="9" fill="#090D0F"/>
+    <text x="983" y="270" fill="#E9F2EA" font-size="15" font-weight="600">Remote desktop</text>
+    <circle cx="983" cy="289" r="3" fill="#B2DFB9"/>
+    <text x="993" y="293" fill="#9CB5A4" font-size="11">Paired Mac</text>
+    <rect x="978" y="310" width="198" height="138" rx="8" fill="#11191B" stroke="#4A6151"/>
+    <path d="M978 329H1176" stroke="#3D5043"/>
+    <rect x="986" y="337" width="34" height="102" rx="3" fill="#27382C"/>
+    <rect x="1030" y="343" width="96" height="3" rx="1.5" fill="#A2C5AD"/>
+    <rect x="1030" y="357" width="128" height="3" rx="1.5" fill="#6D967B"/>
+    <rect x="1030" y="371" width="91" height="3" rx="1.5" fill="#A2C5AD"/>
+    <rect x="1030" y="385" width="113" height="3" rx="1.5" fill="#6D967B"/>
+    <rect x="1030" y="399" width="72" height="3" rx="1.5" fill="#A2C5AD"/>
+    <rect x="1030" y="413" width="105" height="3" rx="1.5" fill="#6D967B"/>
+    <path d="m1105 390 1 23 7-7 7 10 5-3-7-10 10-2-23-11Z" fill="#E1EEDC" stroke="#17241B" stroke-width="2"/>
+    <text x="1077" y="484" text-anchor="middle" fill="#9CB5A4" font-size="12">Your Mac, on your phone.</text>
+    <rect x="1007" y="506" width="140" height="31" rx="15.5" fill="#2F4435" stroke="#526C59"/>
+    <text x="1077" y="526" text-anchor="middle" fill="#D2E8D5" font-size="11">Native video + input</text>
+    <rect x="1046" y="549" width="62" height="4" rx="2" fill="#839C8A"/>
+    <text x="957" y="607" fill="#E2EBE4" font-size="17" font-weight="600">iOS client</text>
+    <text x="957" y="632" fill="#91A298" font-size="13">Native decoding and interaction</text>
+  </g>
+</svg>

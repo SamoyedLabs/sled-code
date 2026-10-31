@@ -1,35 +1,114 @@
-# Sled Code
+<p align="center">
+  <img src="apps/mobile/branding/sled-icon.png" alt="Sled's Samoyed logo" width="112" height="112" />
+</p>
 
-Remote development with native Mac desktop streaming inside the mobile app, built on [T3 Code](https://github.com/pingdotgg/t3code).
+<h1 align="center">Sled Code</h1>
 
-Sled Code preserves T3's coding agents, development sessions, web, Electron desktop and Expo mobile clients. The initial custom integration targets macOS hosts and iOS clients, with Sill capture, hardware video, remote input, clipboard, audio, virtual displays, direct WebRTC and relay fallback. The Mac host can follow the desktop app lifetime or remain available in persistent mode.
+<p align="center">
+  <strong>Your development workspace, wherever you are.</strong><br />
+  AI coding sessions and native remote desktop, together on your Mac and iPhone.
+</p>
 
-## Development
+<p align="center">
+  <a href="https://github.com/SamoyedLabs/sled-code/actions/workflows/ci.yml"><img src="https://github.com/SamoyedLabs/sled-code/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status" /></a>
+  <img src="https://img.shields.io/badge/focus-macOS%20%2B%20iOS-263A2E?style=flat&amp;logo=apple&amp;logoColor=white" alt="Focused on macOS and iOS" />
+  <img src="https://img.shields.io/badge/status-private%20beta-414B43?style=flat" alt="Private beta" />
+</p>
 
-Use the Node and pnpm versions in `package.json`. Install dependencies with `pnpm install --frozen-lockfile`, then run `pnpm dev`. Upstream development guidance remains in [AGENTS.md](AGENTS.md) and [the original README](README.upstream.md).
+<p align="center">
+  <a href="#what-you-can-do">Features</a> ·
+  <a href="#platform-support">Platforms</a> ·
+  <a href="#build-sled">Build from source</a> ·
+  <a href="#keeping-up-with-t3-code">Upstream updates</a> ·
+  <a href="docs/operations/sled-maintenance.md">Maintainer guide</a>
+</p>
 
-Native streaming builds require Xcode 26 or newer, its command-line tools and CocoaPods. CI selects Xcode 26.3 for the Security framework declarations; the host deployment target remains macOS 14:
+<p align="center">
+  <img src="docs/assets/remote-workspace.svg" alt="Illustrated workflow: a Mac streams its desktop to Sled's native iOS client over an encrypted direct or relayed connection." width="100%" />
+  <br /><sub>Illustrated Mac → iPhone workflow.</sub>
+</p>
+
+Sled Code builds on [T3 Code](https://github.com/pingdotgg/t3code), bringing its coding agents and development sessions together with native graphical access to your Mac. Open your workspace on your phone, move between agent sessions and the desktop, and interact with the applications running on your development machine.
+
+> [!IMPORTANT]
+> **macOS and iOS are the focus.** Most Sled-specific development and testing happens on these platforms. Remote desktop hosting currently works **only on Macs**, with a native **iOS client**. Android development and streaming are **not currently planned**; we may explore them in the future.
+
+## What you can do
+
+- **Keep your coding sessions close.** Continue using T3's agents, projects, terminals, and development sessions.
+- **Reach the actual desktop.** Interact with Mac applications, IDEs, browsers, terminals, and simulators from the iOS app.
+- **Use a native streaming pipeline.** ScreenCaptureKit capture, hardware video encoding, and native iOS decoding and rendering keep video out of the JavaScript bridge.
+- **Connect directly, with a fallback.** WebRTC prefers a direct connection and supports relay fallback when needed, with paired and encrypted sessions.
+- **Bring the useful desktop features along.** Remote input, clipboard sharing, audio, window streaming, and virtual displays are integrated into the remote desktop experience.
+- **Choose when your Mac is available.** Tie the host to Sled's lifetime, or enable persistent hosting to keep access available after the desktop app quits.
+
+## Platform support
+
+| Platform                | Current focus                                                                        | Remote desktop                                                               |
+| ----------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| **macOS**               | Primary desktop development and testing                                              | **Host supported** — capture, encoding, remote input, and background hosting |
+| **iOS**                 | Primary mobile development and testing                                               | **Native client supported** — view and control a connected Mac               |
+| **Android**             | Upstream source retained; no active Sled development plan                            | **Unsupported** — the Swift client modules do not run on Android             |
+| **Windows, Linux, web** | Upstream T3 surfaces remain in the codebase; outside Sled's current validation focus | No Windows/Linux host or web streaming client implementation                 |
+
+The streaming integration uses Swift on macOS and iOS. Android streaming would need a separate native client integration. Broader platform support may be considered later, as the Mac and iOS experience develops; there is no committed timeline.
+
+## Build Sled
+
+Sled is currently developed and distributed as a **private beta**. The source is public; the iOS beta uses TestFlight. Build and signing instructions are for your own development environment.
+
+### Run the development workspace
+
+Use the Node and pnpm versions specified in [`package.json`](package.json).
+
+```sh
+git clone https://github.com/SamoyedLabs/sled-code.git
+cd sled-code
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+### Build the Mac streaming host and desktop app
+
+Native streaming builds require **Xcode 26 or newer**, its command-line tools, and CocoaPods. CI selects Xcode 26.3; the host deployment target is **macOS 14**.
 
 ```sh
 python3 scripts/sled/prepare-native.py
-swift build --package-path native/remote-desktop --product T3RemoteHost
 python3 scripts/build-desktop.py
 ```
 
-The native setup verifies the pinned WebRTC archive checksum and installs ignored frameworks; it does not patch application source. Sill's modified host is tracked under `native/remote-desktop`; mobile native sources are tracked under `apps/mobile/modules/t3-remote-desktop`. Dependency versions and provenance are in `sources.lock.json`.
+The preparation step verifies and installs the pinned native dependencies. The desktop build bundles the Mac host into the app. Application source is tracked directly in this repository.
 
-The iPhone app is Sled, bundle `com.samoyedlabs.sled`. Expo updates are disabled by default. TestFlight archives use `python3 scripts/testflight-ios.py archive --team <YOUR_TEAM_ID> --prepare`; export and upload are separate explicit actions. Signing material belongs in ignored `.tools/apple-credentials/`, never in the repository. See [maintenance and releases](docs/operations/sled-maintenance.md).
+### Build the iOS beta
 
-## Upstream updates
-
-This is an independent repository retaining T3's history. Configure its source remote with:
+The installed iPhone app is **Sled**, using bundle ID `com.samoyedlabs.sled`.
 
 ```sh
-git remote add upstream https://github.com/pingdotgg/t3code.git
+python3 scripts/sled/prepare-native.py
+python3 scripts/testflight-ios.py archive --team <YOUR_TEAM_ID> --prepare
 ```
 
-The Sled Upstream workflow checks published nightlies every six hours. A candidate must pass CI on its exact commit before automatic promotion. Unresolved conflicts and changes requiring review remain staged. Physical phone testing is exceptional; native changes alone do not require it. See [maintenance policy](docs/operations/sled-maintenance.md).
+Archive, export, and upload are separate actions. Apple signing and App Store Connect access must be configured for your own team; the existing beta's app record belongs to its maintainer. For another team, also pass `--bundle-id` with an identifier registered to that team. Expo OTA updates default off and require a Sled-owned project to enable.
 
-## Attribution
+See the [maintainer guide](docs/operations/sled-maintenance.md) for signing, service configuration, releases, and the current hosted-auth dependency. Upstream development guidance remains in [the mobile guide](apps/mobile/README.md), [AGENTS.md](AGENTS.md), and [T3's original README](README.upstream.md).
 
-T3 Code is MIT licensed; its original copyright and license are retained in `LICENSE`. Sill is Apache-2.0 licensed; its license and modification notice are in `native/remote-desktop/` and the mobile module's `Vendor/`. WebRTC dependency notices and provenance accompany the native components.
+## Keeping up with T3 Code
+
+Sled Code is an independent repository that preserves T3's Git history. A scheduled workflow checks published T3 nightlies **every six hours** and prepares upstream updates against Sled's source.
+
+```text
+T3 nightly → Sled integration → automated checks → eligible merge
+                         └──→ staged when review is needed
+```
+
+Candidates must pass checks on the exact commit before automatic promotion. Unresolved conflicts and changes requiring review remain staged. Automated checks and simulator testing are the default; physical phone testing is reserved for specific concerns automation cannot resolve, or an issue reported by the maintainer.
+
+The native dependencies are pinned independently in [`sources.lock.json`](sources.lock.json). Details live in the [maintenance policy](docs/operations/sled-maintenance.md).
+
+## Built on good foundations
+
+- **[T3 Code](https://github.com/pingdotgg/t3code)** — the agent and remote development foundation. Its MIT license and copyright are retained in [`LICENSE`](LICENSE).
+- **[Sill](https://github.com/Saffsanity/sill)** — native Mac hosting and iOS streaming components. Its Apache-2.0 license and modification notices are retained with the [host](native/remote-desktop/LICENSE) and [mobile module](apps/mobile/modules/t3-remote-desktop/Vendor/LICENSE).
+- **[WebRTC](https://webrtc.org/)** — connectivity and transport, with [dependency notices and provenance](third-party/webrtc/manifest.json) preserved alongside the native components.
+
+<p align="center"><sub>Built by Samoyed Labs · Focused on Mac and iOS</sub></p>
