@@ -14,6 +14,22 @@ CONFIG = json.loads((Path(__file__).resolve().parents[2] / "config/sled-upstream
 
 
 class PolicyTests(unittest.TestCase):
+    def test_candidate_and_cleanup_pushes_use_environment_credentials_without_embedding_them(self):
+        checkout = Path("/isolated/checkout")
+        for arguments in [
+            ("origin", "a" * 40 + ":refs/heads/upstream/nightly"),
+            ("--force-with-lease=refs/heads/upstream/nightly:" + "a" * 40,
+             "origin", ":refs/heads/upstream/nightly"),
+        ]:
+            with self.subTest(arguments=arguments), \
+                 patch.dict(upstream.os.environ, {"GH_TOKEN": "sentinel-secret-never-in-argv"}), \
+                 patch.object(upstream, "git") as git:
+                upstream.authenticated_push(*arguments, cwd=checkout)
+                git.assert_called_once_with("-c", "credential.helper=", "-c",
+                                            "credential.helper=!gh auth git-credential", "push",
+                                            *arguments, cwd=checkout)
+                self.assertNotIn("sentinel-secret-never-in-argv", repr(git.call_args))
+
     def test_native_edits_are_not_automatically_physical_testing(self):
         changes = [("M", "apps/mobile/modules/t3-remote-desktop/ios/T3NativeSession.swift")]
         self.assertEqual(upstream.classify(changes, CONFIG), [])
@@ -85,6 +101,27 @@ class MergeTests(unittest.TestCase):
         self.assertEqual((self.repo / "sled.txt").read_text(), "remote desktop\n")
         self.assertEqual((self.repo / "new-t3.txt").read_text(), "new upstream feature\n")
         self.assertEqual(self.git("rev-parse", "main"), base)
+
+    def test_release_merge_advances_source_pin_in_same_two_parent_commit(self):
+        lock = {"t3code": {"commit": self.initial, "tag": "v0.1.4-nightly.20261028.3824", "checkout": "."},
+                "sill": {"commit": "d" * 40, "checkout": "native/remote-desktop"}}
+        self.write("sources.lock.json", json.dumps(lock))
+        self.write("sled.txt", "remote desktop\n")
+        base = self.commit("Sled integration")
+        self.git("checkout", "-b", "upstream", self.initial)
+        self.write("new-t3.txt", "upstream improvement\n")
+        incoming = self.commit("Upstream feature")
+        tag = "v0.1.7-nightly.20261031.3991"
+        head = upstream.merge_candidate(base, incoming, self.repo, release_tag=tag)
+        updated = json.loads(self.git("show", head + ":sources.lock.json"))
+        self.assertEqual(updated["t3code"], {"commit": incoming, "tag": tag, "checkout": "."})
+        self.assertEqual(updated["sill"], lock["sill"])
+        self.assertEqual(self.git("show", "-s", "--format=%P", head).split(), [base, incoming])
+        self.assertEqual(self.git("show", "-s", "--format=%an", head), "Sled Upstream")
+        self.assertEqual((self.repo / "sled.txt").read_text(), "remote desktop\n")
+        self.assertEqual((self.repo / "new-t3.txt").read_text(), "upstream improvement\n")
+        self.assertEqual(self.git("rev-parse", "main"), base)
+        self.assertEqual(self.git("status", "--porcelain"), "")
 
     def test_conflict_aborts_without_discarding_either_side(self):
         self.write("shared.txt", "sled\n")

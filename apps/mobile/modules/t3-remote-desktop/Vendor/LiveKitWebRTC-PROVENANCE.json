@@ -113,7 +113,9 @@
     }
   },
   "coverageAliases": {
-    "llvm-build": ["compiler-rt"]
+    "llvm-build": [
+      "compiler-rt"
+    ]
   },
   "files": [
     {

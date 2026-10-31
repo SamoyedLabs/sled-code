@@ -38,6 +38,10 @@ jobs:
         run: python3 scripts/sled/upstream_test.py
       - name: Test CI routing
         run: node --test .github/scripts/ci-changes.test.cjs
+      - name: Verify pinned native dependency notices
+        run: |
+          python3 scripts/prepare-webrtc-notices.py
+          git diff --exit-code -- third-party/webrtc apps/mobile/modules/t3-remote-desktop/Vendor
 
   # Skips jobs a pull request cannot affect: a web change does not run the
   # server shards, a server change does not run the mobile tests, and the macOS
@@ -70,6 +74,7 @@ jobs:
           ref: ${{ inputs.candidate_sha || github.sha }}
           persist-credentials: false
           sparse-checkout: |
+            /.gitmodules
             /pnpm-workspace.yaml
             /.github/scripts/ci-changes.cjs
             /.github/actions/ci-changes/
@@ -606,6 +611,9 @@ jobs:
     if: ${{ !cancelled() && needs.changes.outputs.remote_native != 'false' }}
     runs-on: macos-15
     timeout-minutes: 30
+    env:
+      # SecIdentityCreate is public in the macOS 26 SDK; the runner defaults to Xcode 16.4.
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
       - uses: actions/checkout@v6
         with:
@@ -615,9 +623,14 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .tools/webrtc
-          key: webrtc-macos-${{ hashFiles('sources.lock.json') }}
+          key: webrtc-macos-${{ hashFiles('third-party/webrtc/manifest.json') }}
       - name: Prepare pinned native dependencies
         run: python3 scripts/sled/prepare-native.py
+      - name: Report native build toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
+          swift --version
       - name: Compile macOS capture, encoding, transport and input host
         run: swift build --package-path native/remote-desktop --product T3RemoteHost -c debug
 

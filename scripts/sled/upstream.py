@@ -30,6 +30,12 @@ def git(*args, cwd=ROOT, check=True):
     return command(["git", *args], cwd, check)
 
 
+def authenticated_push(*args, cwd=ROOT):
+    # Local clones do not inherit checkout's HTTP authentication configuration.
+    return git("-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential",
+               "push", *args, cwd=cwd)
+
+
 def api(endpoint, method="GET", payload=None):
     args = ["gh", "api", endpoint, "--method", method]
     if payload is not None:
@@ -81,17 +87,31 @@ def metadata(body):
     return value
 
 
-def merge_candidate(base, upstream, cwd):
+def merge_candidate(base, upstream, cwd, release_tag=None):
     """Only a detached disposable checkout is mutated; conflicts abort the attempt."""
     require_sha(base)
     require_sha(upstream)
+    if release_tag is not None and not NIGHTLY.fullmatch(release_tag):
+        raise ValueError("Invalid upstream release tag")
     git("checkout", "--detach", base, cwd=cwd)
     result = git("-c", "user.name=Sled Upstream", "-c", "user.email=sled-upstream@users.noreply.github.com",
-                 "merge", "--no-ff", "--no-edit", upstream, cwd=cwd, check=False)
+                 "merge", "--no-ff", "--no-commit", upstream, cwd=cwd, check=False)
     if result.returncode:
         paths = git("diff", "--name-only", "--diff-filter=U", cwd=cwd).stdout.strip().splitlines()
         git("merge", "--abort", cwd=cwd, check=False)
         raise RuntimeError("Upstream merge conflicts: " + ", ".join(paths))
+    try:
+        lock_path = Path(cwd) / "sources.lock.json"
+        if release_tag is not None and lock_path.exists():
+            lock = json.loads(lock_path.read_text())
+            lock["t3code"].update(commit=upstream, tag=release_tag)
+            lock_path.write_text(json.dumps(lock, indent=2) + "\n")
+            git("add", "sources.lock.json", cwd=cwd)
+        git("-c", "user.name=Sled Upstream", "-c", "user.email=sled-upstream@users.noreply.github.com",
+            "commit", "--no-edit", cwd=cwd)
+    except Exception:
+        git("merge", "--abort", cwd=cwd, check=False)
+        raise
     return require_sha(git("rev-parse", "HEAD", cwd=cwd).stdout.strip())
 
 
@@ -172,7 +192,7 @@ def prepare(repo, config):
         checkout = Path(temporary) / "checkout"
         command(["git", "clone", "--shared", "--no-checkout", str(ROOT), str(checkout)])
         try:
-            head = merge_candidate(base, upstream, checkout)
+            head = merge_candidate(base, upstream, checkout, release_tag=tag)
         except RuntimeError as error:
             blocker(repo, f"Cannot integrate `{tag}` ({upstream}) onto {base}:\n\n{error}")
             return
@@ -184,13 +204,13 @@ def prepare(repo, config):
                    else "Eligible for automatic merge after CI succeeds on this exact candidate and the base is still current.")
                 + "\n\nNative edits alone do not require physical testing. Add `sled:physical-required` only for a specific unresolved hardware concern.\n\n"
                 + MARKER + json.dumps(data, sort_keys=True) + " -->")
-        push = ["push"]
+        push = []
         if old_head:
             push.append(f"--force-with-lease=refs/heads/{branch}:{old_head}")
         push.extend(["origin", f"{head}:refs/heads/{branch}"])
         # The disposable clone uses a local origin; push through the configured repository remote.
         git("remote", "set-url", "origin", git("remote", "get-url", "origin").stdout.strip(), cwd=checkout)
-        git(*push, cwd=checkout)
+        authenticated_push(*push, cwd=checkout)
     title = "chore(upstream): integrate T3 " + tag
     if existing:
         pr = api(f"repos/{repo}/pulls/{existing['number']}", "PATCH", {"title": title, "body": body})
@@ -255,8 +275,8 @@ def finalize(repo, config):
                  {"sha": data["head"], "merge_method": "merge"})
     if not result.get("merged"):
         raise RuntimeError("GitHub refused the checked merge: " + result.get("message", "unknown"))
-    git("push", f"--force-with-lease=refs/heads/{config['candidateBranch']}:{data['head']}",
-        "origin", f":refs/heads/{config['candidateBranch']}")
+    authenticated_push(f"--force-with-lease=refs/heads/{config['candidateBranch']}:{data['head']}",
+                       "origin", f":refs/heads/{config['candidateBranch']}")
     summary(f"Merged {pr['html_url']} after exact-candidate CI success. No release was published.")
 
 

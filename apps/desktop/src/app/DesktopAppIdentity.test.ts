@@ -211,11 +211,11 @@ describe("DesktopAppIdentity", () => {
 
           const runtimeName = calls.setName[0];
           assert.isDefined(runtimeName);
-          assert.equal(runtimeName, storageName ?? `T3 Code ${stage}`);
+          assert.equal(runtimeName, storageName ?? `Sled Code ${stage}`);
           yield* identity.configure;
           assert.equal(calls.setName[1], runtimeName);
           assert.match(runtimeName.replaceAll(" ", ""), /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/);
-          assert.equal(calls.setAboutPanelOptions[0]?.applicationName, `T3 Code (${stage})`);
+          assert.equal(calls.setAboutPanelOptions[0]?.applicationName, `Sled Code (${stage})`);
         }),
         { calls, environment },
       );

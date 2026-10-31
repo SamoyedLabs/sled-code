@@ -12,6 +12,8 @@
         // CodeRabbit loads its configuration by filename.
         ".coderabbit.config.ts",
         ".github/scripts/thread-transfer-report.cjs",
+        // Retained release tooling is referenced by the archived upstream workflows.
+        ".github/scripts/mirror-play-apk.cjs",
       ],
       "vite": { "entry": [".github/**/*.test.cjs"] },
       "vitest": { "entry": [".github/**/*.test.cjs"] },
@@ -34,6 +36,13 @@
         "sign-macos.ts",
         "smoke-desktop-app.ts",
         "verify-windows-desktop-artifact.ts",
+        // Python desktop packaging invokes these directly.
+        "sign-private-desktop.cjs",
+        "verify-desktop-package.cjs",
+        // Retained CLI release tools are invoked by archived upstream workflows.
+        "build-cli-archive.ts",
+        "resolve-nightly-release.ts",
+        "smoke-cli-archive.ts",
       ],
       "ignoreDependencies": ["agent-device", "esbuild"],
       // The `t3` npm package's files: copied into the package, never imported.
@@ -67,6 +76,11 @@
       // Electron loads these bundles by filename rather than importing them.
       "entry": [
         "gnome-extension/extension.js!",
+        // Electron launches the packaged proxy; it spawns its daemon by filename.
+        "prod-resources/remote-desktop/agent/proxy.cjs!",
+        // Standalone agent protocol also exposes the diagnostic RPC interface.
+        "prod-resources/remote-desktop/agent/protocol.cjs!",
+        "prod-resources/remote-desktop/agent/daemon.cjs!",
         "src/electron/WindowsForegroundFocusWorker.ts!",
         "src/snapShot/GlobalShiftShortcutWorker.ts!",
         "src/snapShot/RegionSnapShotWorker.ts!",
@@ -102,6 +116,8 @@
       "entry": [
         "index.ts!",
         "fingerprint.config.js",
+        // Expo autolinks this local native package through its file dependency.
+        "modules/t3-remote-desktop/index.tsx!",
         "plugins/*.cjs",
         "scripts/generate-device-stream.mts",
         "src/features/devices/device-stream.browser.ts!",

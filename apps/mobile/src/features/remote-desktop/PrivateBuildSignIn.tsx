@@ -20,10 +20,9 @@ export function PrivateBuildSignIn() {
       await startHostedAuth({ redirectUrl: "com.t3tools.t3code://callback", mode: "sign-in" });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Sign-in could not complete. Try again.");
-    } finally {
-      pending.current = false;
-      setBusy(false);
     }
+    pending.current = false;
+    setBusy(false);
   }
 
   return (

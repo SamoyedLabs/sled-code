@@ -1,3 +1,7 @@
+import { vi } from "vite-plus/test";
+
+vi.mock("electron", () => ({ app: { isPackaged: false } }));
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { currentDesktopBootstrapToken } from "@t3tools/shared/desktopBootstrapToken";
