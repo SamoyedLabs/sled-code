@@ -112,6 +112,9 @@ function readWorkspace() {
 // [] means inert; null means unknown and requires every job.
 function ownersOf(file, packages) {
   if ([...INERT, ...SCOPED_INFRA].some((pattern) => pattern.test(file))) return [];
+  // Desktop metadata is consumed by desktop packaging. Dependency/lockfile changes
+  // still fan out through their own paths; desktop has no application dependents.
+  if (file === "apps/desktop/package.json") return ["@t3tools/desktop", "@t3tools/scripts"];
   // A manifest can change dependencies or versions other packages read.
   if (path.posix.basename(file) === "package.json") return null;
   if (RUNS_EVERYTHING.some((pattern) => pattern.test(file))) return null;

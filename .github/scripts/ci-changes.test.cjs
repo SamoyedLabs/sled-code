@@ -239,3 +239,26 @@ test("the action scopes main pushes like PRs and runs everything when git cannot
     }
   }
 });
+
+test("desktop branding validates packaging without unrelated application or native jobs", () => {
+  const { outputs } = decide(
+    [
+      "apps/desktop/package.json",
+      "apps/desktop/branding/sled-icon.png",
+      "apps/desktop/branding/sled-icon.ico",
+      "scripts/build-desktop-artifact.ts",
+      ".github/scripts/ci-changes.cjs",
+      ".github/scripts/ci-changes.test.cjs",
+    ],
+    packages,
+    false,
+  );
+  for (const gate of ["build", "typecheck", "test", "release_smoke", "automation"])
+    assert.equal(outputs[gate], true, gate);
+  for (const gate of ["test_server", "test_web", "mobile_native", "remote_native", "rust"])
+    assert.equal(outputs[gate], false, gate);
+  assert.equal(
+    decide(["apps/desktop/package.json", "pnpm-lock.yaml"], packages, false).outputs.test_server,
+    true,
+  );
+});
