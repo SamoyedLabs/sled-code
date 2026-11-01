@@ -65,6 +65,7 @@ jobs:
       test: ${{ steps.detect.outputs.test }}
       test_packages: ${{ steps.detect.outputs.test_packages }}
       test_web: ${{ steps.detect.outputs.test_web }}
+      test_lint_rules: ${{ steps.detect.outputs.test_lint_rules }}
       test_scripts: ${{ steps.detect.outputs.test_scripts }}
       test_mobile: ${{ steps.detect.outputs.test_mobile }}
       test_server: ${{ steps.detect.outputs.test_server }}
@@ -354,7 +355,7 @@ jobs:
         env:
           TEST_PACKAGES: ${{ needs.changes.outputs.test_packages }}
         run: |
-          filters=(--filter '!t3' --filter '!@t3tools/monorepo' --filter '!@t3tools/web' --filter '!@t3tools/mobile' --filter '!@t3tools/scripts')
+          filters=(--filter '!t3' --filter '!@t3tools/monorepo' --filter '!@t3tools/web' --filter '!@t3tools/mobile' --filter '!@t3tools/scripts' --filter '!@t3tools/oxlint-plugin-t3code')
           if [[ -n "$TEST_PACKAGES" ]]; then
             filters=()
             for package in $TEST_PACKAGES; do filters+=(--filter "$package"); done
@@ -393,6 +394,48 @@ jobs:
 
       - name: Test
         run: vp run --filter @t3tools/scripts test
+
+  test_lint_rules:
+    permissions:
+      contents: read
+    name: Test Lint Rules ${{ matrix.shard }}/2
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.test_lint_rules != 'false' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.candidate_sha || github.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            /*
+            !/.repos/
+            !/vendor/
+            !/apps/mobile/modules/t3-terminal/Vendor/**/*.a
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Vite+
+        uses: ./.github/actions/setup-ci-deps
+
+      - name: Test
+        id: tests
+        working-directory: oxlint-plugin-t3code
+        run: vp test run --config ../vite.config.ts --dir . --shard=${{ matrix.shard }}/2 --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
+
+      - name: Upload test timings
+        if: always() && steps.tests.outcome != 'skipped'
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-timings-lint-rules-${{ matrix.shard }}
+          path: ${{ runner.temp }}/test-results.json
+          retention-days: 7
+          if-no-files-found: error
 
   test_web:
     name: Test Web ${{ matrix.project }} ${{ matrix.shard }}/2
@@ -871,6 +914,7 @@ jobs:
         test_web,
         test_web_boot,
         test_scripts,
+        test_lint_rules,
         test_mobile,
         test_mobile_compiler,
         test_server,

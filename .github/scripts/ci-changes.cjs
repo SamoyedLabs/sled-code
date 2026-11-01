@@ -69,6 +69,7 @@ const MOBILE_NATIVE =
   /^apps\/mobile\/.*\.(swift|kt|kts)$|^apps\/mobile\/(\.swiftlint\.yml|detekt\.yml|\.editorconfig|Brewfile)$|^scripts\/mobile-native-static-check\.ts$|^package\.json$|^\.github\/workflows\/ci\.yml$/;
 
 const OWN_TEST_JOB = new Set([
+  "@t3tools/oxlint-plugin-t3code",
   "t3",
   "@t3tools/web",
   "@t3tools/mobile",
@@ -197,6 +198,7 @@ function decide(files, packages, full) {
       test_web: has("@t3tools/web"),
       test_mobile: has("@t3tools/mobile"),
       test_scripts: has("@t3tools/scripts"),
+      test_lint_rules: has("@t3tools/oxlint-plugin-t3code"),
       test_server: has("t3"),
       rust: everything || rust,
       release_smoke: scriptsChanged,

@@ -290,3 +290,13 @@ test("scripts run independently for direct and cross-package test dependencies",
   }
   assert.equal(decide(["README.md"], packages, false).outputs.test_scripts, false);
 });
+
+test("lint rule tests run independently without entering general package selections", () => {
+  for (const files of [null, ["oxlint-plugin-t3code/rules/example.ts"]]) {
+    const { outputs } = decide(files, packages, false);
+    assert.equal(outputs.test_lint_rules, true);
+    assert.equal(outputs.test_packages.split(" ").includes("@t3tools/oxlint-plugin-t3code"), false);
+  }
+  assert.equal(decide(["README.md"], packages, false).outputs.test_lint_rules, false);
+  assert.equal(decide(["apps/web/src/App.tsx"], packages, false).outputs.test_lint_rules, false);
+});

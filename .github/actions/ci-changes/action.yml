@@ -24,6 +24,8 @@ outputs:
     value: ${{ steps.detect.outputs.test_packages }}
   test_web:
     value: ${{ steps.detect.outputs.test_web }}
+  test_lint_rules:
+    value: ${{ steps.detect.outputs.test_lint_rules }}
   test_scripts:
     value: ${{ steps.detect.outputs.test_scripts }}
   test_mobile:

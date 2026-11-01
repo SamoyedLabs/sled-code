@@ -25,6 +25,7 @@ export function decide(
     test_web: boolean;
     test_mobile: boolean;
     test_scripts: boolean;
+    test_lint_rules: boolean;
     test_server: boolean;
     rust: boolean;
     release_smoke: boolean;

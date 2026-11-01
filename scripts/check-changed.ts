@@ -518,6 +518,7 @@ const checkChanged = Effect.fn("checkChanged")(function* (input: {
       outputs.test_web ||
       outputs.test_mobile ||
       outputs.test_scripts ||
+      outputs.test_lint_rules ||
       outputs.test_server,
     build: outputs.build,
     rust: outputs.rust,
