@@ -59,7 +59,18 @@ export default defineConfig({
         test: {
           name: "unit",
           include: ["**/*.test.{ts,tsx,mjs}"],
-          exclude: ["**/node_modules/**", ...reactTests],
+          exclude: ["**/node_modules/**", "src/reactCompilerCoverage.test.ts", ...reactTests],
+          setupFiles: [
+            "../../packages/shared/src/testing/longTempDir.ts",
+            "../../packages/shared/src/testing/providerEnv.ts",
+          ],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "compiler",
+          include: ["src/reactCompilerCoverage.test.ts"],
           setupFiles: [
             "../../packages/shared/src/testing/longTempDir.ts",
             "../../packages/shared/src/testing/providerEnv.ts",

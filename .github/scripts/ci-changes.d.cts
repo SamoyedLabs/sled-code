@@ -23,6 +23,8 @@ export function decide(
     test: boolean;
     test_packages: string;
     test_web: boolean;
+    test_mobile: boolean;
+    test_scripts: boolean;
     test_server: boolean;
     rust: boolean;
     release_smoke: boolean;
