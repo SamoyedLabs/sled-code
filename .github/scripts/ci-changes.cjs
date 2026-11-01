@@ -68,7 +68,14 @@ const BUILD_ONLY_DEPS = { t3: ["@t3tools/web"] };
 const MOBILE_NATIVE =
   /^apps\/mobile\/.*\.(swift|kt|kts)$|^apps\/mobile\/(\.swiftlint\.yml|detekt\.yml|\.editorconfig|Brewfile)$|^scripts\/mobile-native-static-check\.ts$|^package\.json$|^\.github\/workflows\/ci\.yml$/;
 
-const OWN_TEST_JOB = new Set(["t3", "@t3tools/web", "@t3tools/monorepo"]);
+const OWN_TEST_JOB = new Set([
+  "@t3tools/oxlint-plugin-t3code",
+  "t3",
+  "@t3tools/web",
+  "@t3tools/mobile",
+  "@t3tools/scripts",
+  "@t3tools/monorepo",
+]);
 
 function readWorkspace() {
   const patterns = [];
@@ -189,6 +196,9 @@ function decide(files, packages, full) {
       // Empty means every package the Test job covers.
       test_packages: everything ? "" : tested.map((pkg) => pkg.name).join(" "),
       test_web: has("@t3tools/web"),
+      test_mobile: has("@t3tools/mobile"),
+      test_scripts: has("@t3tools/scripts"),
+      test_lint_rules: has("@t3tools/oxlint-plugin-t3code"),
       test_server: has("t3"),
       rust: everything || rust,
       release_smoke: scriptsChanged,

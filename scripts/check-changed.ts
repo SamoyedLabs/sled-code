@@ -513,7 +513,13 @@ const checkChanged = Effect.fn("checkChanged")(function* (input: {
     );
   }
   const ciOnly = Object.entries({
-    "full test suites": outputs.test || outputs.test_web || outputs.test_server,
+    "full test suites":
+      outputs.test ||
+      outputs.test_web ||
+      outputs.test_mobile ||
+      outputs.test_scripts ||
+      outputs.test_lint_rules ||
+      outputs.test_server,
     build: outputs.build,
     rust: outputs.rust,
     "mobile native lint": outputs.mobile_native,

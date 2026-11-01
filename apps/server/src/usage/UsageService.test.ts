@@ -2609,6 +2609,8 @@ describe("UsageService", () => {
   it.live("reports saved usage of a removed directory only for windows it reaches", () =>
     Effect.gen(function* () {
       const { transcript, settings, home } = yield* setup;
+      // Keep the fixture inside the service's cache-retention window.
+      yield* TestClock.setTime(Date.parse("2026-08-02T12:00:00Z"));
       yield* Effect.promise(async () => {
         await NodeFSP.writeFile(transcript, claudeLine(1, 5));
         const lastWrite = Date.parse("2026-08-01T10:00:00Z") / 1000;
@@ -2618,6 +2620,7 @@ describe("UsageService", () => {
         Effect.provide(layerService({ prefix: "usage-service-saved-window-test", home, settings })),
       );
       const first = yield* service.readSummary(WINDOW);
+      assert.strictEqual(totalOutputTokens(first), 5);
       yield* Effect.promise(() =>
         NodeFSP.rm(NodePath.join(home, "claude", "projects"), { recursive: true }),
       );
@@ -2634,7 +2637,7 @@ describe("UsageService", () => {
       assert.deepStrictEqual(later.buckets, []);
       assert.strictEqual(later.sources[0]?.status, "missing");
       assert.strictEqual(later.sources[0]?.scannedFiles, 0);
-    }).pipe(Effect.scoped),
+    }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
   );
 
   it.live("does not share an in-flight scan after custom prices change", () =>
