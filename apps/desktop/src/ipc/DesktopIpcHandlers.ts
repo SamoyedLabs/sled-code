@@ -1,3 +1,4 @@
+import { installVoiceInput } from "./methods/voiceInput.ts";
 import * as Effect from "effect/Effect";
 import {
   getRemoteDesktopSettings,
@@ -86,6 +87,7 @@ import {
 export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers")(function* () {
   const ipc = yield* DesktopIpc.DesktopIpc;
   yield* installNotificationBadge();
+  yield* installVoiceInput();
   yield* PreviewIpc.installPreviewEventForwarding();
 
   yield* ipc.handle(AppActivationIpc.setReady);

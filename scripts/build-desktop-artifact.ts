@@ -974,6 +974,8 @@ export const DESKTOP_ELECTRON_LANGUAGES = ["en-US"] as const;
 export const DESKTOP_FILE_EXCLUSIONS = [
   // Cursor walks from argv[1] to platform assets; helpers and native addons need real paths outside ASAR.
   "!**/node_modules/@cursor/sdk-*/**/*",
+  "!apps/desktop/prod-resources/voice-input",
+  "!apps/desktop/prod-resources/voice-input/**/*",
   "!apps/desktop/prod-resources/remote-desktop",
   "!apps/desktop/prod-resources/remote-desktop/**/*",
   "!apps/desktop/prod-resources/cursor-sdk",
@@ -2790,7 +2792,10 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     extraResources: [
       ...DESKTOP_EXTRA_RESOURCES,
       ...(platform === "mac"
-        ? [{ from: "apps/desktop/prod-resources/remote-desktop", to: "remote-desktop" }]
+        ? [
+            { from: "apps/desktop/prod-resources/remote-desktop", to: "remote-desktop" },
+            { from: "apps/desktop/prod-resources/voice-input", to: "voice-input" },
+          ]
         : []),
       ...(platform === "linux" ? LINUX_CAPTURE_EXTRA_RESOURCES : []),
       ...(platform === "linux" ? LINUX_BROWSER_SECRET_EXTRA_RESOURCES : []),
@@ -2852,7 +2857,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
         NSCameraUsageDescription:
           "Sled Code lets commands run by terminals and coding agents use the camera.",
         NSMicrophoneUsageDescription:
-          "Sled Code lets commands run by terminals and coding agents use the microphone.",
+          "Sled Code uses the microphone for voice input and lets commands run by terminals and coding agents use it.",
         // macOS lists an app under Default web browser only when it opens web
         // pages as documents as well as http and https links (see protocols).
         CFBundleDocumentTypes: [
@@ -3814,6 +3819,20 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
   const stageProdResourcesDir = path.join(stageAppDir, "apps/desktop/prod-resources");
   yield* fs.copy(stageResourcesDir, stageProdResourcesDir);
   if (options.platform === "mac") {
+    yield* runCommand(
+      ChildProcess.make(
+        "node",
+        [
+          path.join(repoRoot, "apps/desktop/scripts/build-voice-input.mjs"),
+          "--arch",
+          options.arch,
+          "--output",
+          path.join(stageProdResourcesDir, "voice-input", "sled-voice-input"),
+        ],
+        { cwd: repoRoot },
+      ),
+      { label: "build Mac voice input helper", verbose: options.verbose },
+    );
     yield* stageRemoteDesktopBundle(
       path.join(repoRoot, "apps/desktop/prod-resources/remote-desktop"),
       path.join(stageProdResourcesDir, "remote-desktop"),

@@ -1012,6 +1012,7 @@ export const SystemSettingsPaneSchema = Schema.Literals(["full-disk-access"]);
 export type SystemSettingsPane = typeof SystemSettingsPaneSchema.Type;
 
 export interface DesktopBridge {
+  voiceInput?: import("./desktopVoiceInput.ts").DesktopVoiceInputBridge | undefined;
   remoteDesktop?: {
     getState: () => Promise<import("./desktopRemoteDesktopSettings.ts").DesktopRemoteDesktopState>;
     change: (
