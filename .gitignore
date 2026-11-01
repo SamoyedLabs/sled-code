@@ -57,3 +57,5 @@ native/remote-desktop/.build/
 native/remote-desktop/Frameworks/
 apps/mobile/modules/t3-remote-desktop/Frameworks/
 apps/desktop/prod-resources/remote-desktop/*.app/
+
+native/voice-input/build/

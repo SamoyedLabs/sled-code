@@ -174,10 +174,10 @@ Stashes containing uploaded files must be restored in their original environment
 Those files are retained for 24 hours. After an upload expires, restore the prompt
 and use **Attach again** or remove the missing file before sending.
 
-## Voice input on iPhone
+## Voice input on iPhone and Mac
 
-On supported iPhones with iOS 26 or later, use the composer's microphone to record,
-then confirm to transcribe. Text is inserted where your selection was when
+On supported iPhones with iOS 26 or later and Macs with macOS 26 or later, use the composer's microphone to record,
+then stop to transcribe. Text is inserted where your selection was when
 recording started, ready for you to review and edit before sending.
 
 The first use may download Apple's speech model and needs a network connection.
@@ -186,7 +186,9 @@ minutes long. Canceling, leaving the screen, or an audio interruption discards t
 recording and preserves your existing draft. While recording, the screen stays
 awake; it can sleep normally once recording stops.
 
-Voice input records from the first connected microphone in **Settings → Microphone**.
+On Mac, voice input uses your system input device. Choose it in **System Settings → Sound → Input**.
+
+On iPhone, voice input records from the first connected microphone in **Settings → Microphone**.
 The list mixes kinds (built-in, other wired, other Bluetooth, CarPlay) with wired and
 Bluetooth devices you have dictated with, listed by name. Drag to rank them together:
 for example, put **Other Bluetooth** above your AirPods so a new headset is preferred

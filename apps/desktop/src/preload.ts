@@ -73,6 +73,45 @@ function unwrapEnsureSshEnvironmentResult(result: unknown) {
 }
 
 contextBridge.exposeInMainWorld("desktopBridge", {
+  voiceInput:
+    clientPlatform === "darwin"
+      ? {
+          available: () => ipcRenderer.invoke("desktop:voice-input:available"),
+          record: (request) => ipcRenderer.invoke("desktop:voice-input:record", request),
+          stop: (request) => ipcRenderer.invoke("desktop:voice-input:stop", request),
+          cancel: (request) => ipcRenderer.invoke("desktop:voice-input:cancel", request),
+          onPhase: (listener) => {
+            const handler = (_event: Electron.IpcRendererEvent, raw: unknown) => {
+              if (
+                typeof raw !== "object" ||
+                raw === null ||
+                !("id" in raw) ||
+                typeof raw.id !== "string" ||
+                !("phase" in raw)
+              )
+                return;
+              if (
+                raw.phase === "preparing" ||
+                raw.phase === "recording" ||
+                raw.phase === "transcribing"
+              )
+                listener({
+                  id: raw.id,
+                  phase: raw.phase,
+                  ...("level" in raw &&
+                  typeof raw.level === "number" &&
+                  Number.isFinite(raw.level) &&
+                  raw.level >= 0 &&
+                  raw.level <= 1
+                    ? { level: raw.level }
+                    : {}),
+                });
+            };
+            ipcRenderer.on("desktop:voice-input:phase", handler);
+            return () => ipcRenderer.removeListener("desktop:voice-input:phase", handler);
+          },
+        }
+      : undefined,
   remoteDesktop: {
     getState: () => ipcRenderer.invoke("desktop:remote-desktop:settings"),
     change: (command) => ipcRenderer.invoke("desktop:remote-desktop:change", command),

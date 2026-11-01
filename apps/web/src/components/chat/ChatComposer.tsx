@@ -1,3 +1,5 @@
+import { useMacVoiceInput } from "../../voice-input/useMacVoiceInput";
+import { ComposerVoiceInputButton, ComposerVoiceInputStatus } from "./ComposerVoiceInput";
 import { useComposerTypingGuard } from "./useComposerTypingGuard";
 import { insertAttachmentReferencesForDraft } from "./composerAttachmentReferences";
 import { DESKTOP_PASTE_AS_TEXT_EVENT } from "../../lib/desktopPasteAsText";
@@ -1710,6 +1712,26 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     );
   };
   const onPromptChangeStable = useStableCallback(onPromptChange);
+  const voiceInput = useMacVoiceInput({
+    ownerKey: composerDraftTargetKey,
+    readDraft: () =>
+      activePendingProgress
+        ? null
+        : {
+            ownerKey: composerDraftTargetKey,
+            text: getComposerDraft(composerDraftTarget)?.prompt ?? "",
+            selection: composerEditorRef.current?.readSelectionRange() ?? {
+              start: prompt.length,
+              end: prompt.length,
+            },
+            revision: 0,
+          },
+    commit: (text, cursor) => {
+      const collapsedCursor = collapseExpandedComposerCursor(text, cursor, isLiteralPendingAnswer);
+      onPromptChange(text, collapsedCursor, cursor, false, collectInlineContextIds(text));
+      composerEditorRef.current?.focusAt(collapsedCursor);
+    },
+  });
 
   const applyPromptReplacement = (
     rangeStart: number,
@@ -2052,6 +2074,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   ) => {
     if (
       noProviderAvailable ||
+      voiceInput.busy ||
       isSendDisabled ||
       !readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)
     ) {
@@ -3145,6 +3168,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       <ComposerBanner.Dock>
         <ComposerBanner.Column>
           <ComposerBannerStack items={shelfItems} />
+          <ComposerVoiceInputStatus voice={voiceInput} />
           {showComposerTopDrawer ? (
             <ComposerBanner.Attachment>
               <ComposerBanner.Root data-chat-composer-top-drawer="true" variant="info">
@@ -3402,7 +3426,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       showPlanFollowUpPrompt={false}
                       promptHasText={false}
                       isSendBusy={isSendBusy}
-                      sendDisabledReason={sendDisabledReason}
+                      sendDisabledReason={
+                        voiceInput.busy
+                          ? "Finish or cancel voice input before sending."
+                          : sendDisabledReason
+                      }
                       isEnvironmentUnavailable={
                         environmentUnavailable !== null ||
                         noProviderAvailable ||
@@ -3450,6 +3478,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   >
                     {composerControls}
                   </div>
+                  <ComposerVoiceInputButton
+                    voice={voiceInput}
+                    disabled={
+                      !canOperateThread || projectSelectionRequired || !!activePendingProgress
+                    }
+                  />
                   <ComposerFooterPrimaryActions
                     compact={isComposerPrimaryActionsCompact}
                     canOperateThread={canOperateThread}
@@ -3483,7 +3517,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     }
                     promptHasText={prompt.trim().length > 0}
                     isSendBusy={isSendBusy}
-                    sendDisabledReason={sendDisabledReason}
+                    sendDisabledReason={
+                      voiceInput.busy
+                        ? "Finish or cancel voice input before sending."
+                        : sendDisabledReason
+                    }
                     isEnvironmentUnavailable={
                       environmentUnavailable !== null ||
                       noProviderAvailable ||
