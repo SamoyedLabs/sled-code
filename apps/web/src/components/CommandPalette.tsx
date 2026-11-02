@@ -16,6 +16,7 @@ import {
   getNewProjectPublishTarget,
   getNewProjectPublishTargets,
   getNewProjectRepository,
+  githubIncompleteOwnerRepositoryMessage,
   normalizePastedCloneUrl,
   addProjectRemoteSourceLabel,
   addProjectRemoteSourcePathHint,
@@ -32,6 +33,7 @@ import {
   createBrowseNavigationCoordinator,
   filterFilesystemBrowseEntries,
   getFilesystemBrowsePath,
+  getFilesystemBrowseTabCompletion,
 } from "@t3tools/client-runtime/state/filesystem";
 import {
   isAtomCommandInterrupted,
@@ -1939,6 +1941,21 @@ function OpenCommandPaletteDialog(props: {
         return;
       }
 
+      const incompleteOwnerMessage = githubIncompleteOwnerRepositoryMessage(
+        addProjectCloneFlow.source,
+        rawRepository,
+      );
+      if (incompleteOwnerMessage) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Repository name incomplete",
+            description: incompleteOwnerMessage,
+          }),
+        );
+        return;
+      }
+
       const provider = addProjectRemoteSourceProvider(addProjectCloneFlow.source);
       if (!provider) {
         const destinationPath = getCloneDestinationPath(
@@ -2492,6 +2509,30 @@ function OpenCommandPaletteDialog(props: {
     }
 
     if (event.ctrlKey || event.shiftKey || event.altKey || event.metaKey) return;
+
+    if (event.key === "Tab" && isBrowsing && !relativePathNeedsActiveProject) {
+      if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+      (event as typeof event & { preventBaseUIHandler?: () => void }).preventBaseUIHandler?.();
+      event.preventDefault();
+      if (highlightedItemValue === "browse:up") {
+        void browseUp();
+        return;
+      }
+      const highlightedEntry = visibleBrowseEntries.find(
+        (entry) => `browse:${entry.fullPath}` === highlightedItemValue,
+      );
+      const completion = highlightedEntry
+        ? { name: highlightedEntry.name, isComplete: true }
+        : getFilesystemBrowseTabCompletion(visibleBrowseEntries, browsePath.filterQuery);
+      if (completion?.isComplete) {
+        void browseTo(completion.name);
+      } else if (completion && !pinnedCloneDirectoryName) {
+        setHighlightedItemValue(null);
+        setQuery(`${getBrowseDirectoryPath(query)}${completion.name}`);
+      }
+      return;
+    }
+
     const firstItemValue = autoHighlightsFirstRow ? resultRows.itemValues[0] : undefined;
     if (
       event.key === "ArrowDown" &&

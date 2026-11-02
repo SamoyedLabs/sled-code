@@ -89,7 +89,9 @@ const WINDOW: UsageSummaryInput = {
 
 const setup = Effect.gen(function* () {
   const home = yield* Effect.promise(() =>
-    NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "usage-service-test-")),
+    NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "usage-service-test-")).then((path) =>
+      NodeFSP.realpath(path),
+    ),
   );
   yield* Effect.addFinalizer(() =>
     Effect.promise(() => NodeFSP.rm(home, { recursive: true, force: true })),
@@ -1462,6 +1464,37 @@ describe("UsageService", () => {
     }).pipe(Effect.scoped),
   );
 
+  it.effect("ignores a stale macOS Keychain login when Cursor is not installed", () =>
+    Effect.gen(function* () {
+      const { settings, home } = yield* setup;
+      const cursor = makeFakeCursor();
+      cursor.state.error = "Sign in to Cursor again to read account usage.";
+      const readCursorSource = Effect.gen(function* () {
+        const service = yield* makeWithCursor(cursor.read);
+        const summary = yield* service.readSummary({ ...WINDOW, awaitRefresh: true });
+        return cursorSource(summary);
+      }).pipe(
+        Effect.provide(
+          layerService({
+            prefix: "usage-service-cursor-keychain-uninstalled",
+            home,
+            settings: { ...settings, cursorKeychainUsageEnabled: true },
+            platform: "darwin",
+            environment: {},
+          }),
+        ),
+      );
+
+      assert.isUndefined(yield* readCursorSource);
+      assert.lengthOf(cursor.state.calls, 0);
+
+      yield* Effect.promise(() => NodeFSP.mkdir(NodePath.join(home, ".cursor")));
+      const installed = yield* readCursorSource;
+      assert.strictEqual(installed?.message, "Sign in to Cursor again to read account usage.");
+      assert.lengthOf(cursor.state.calls, 1);
+    }).pipe(Effect.scoped),
+  );
+
   it.live("ignores stale Cursor file logins when the active credential store differs", () =>
     Effect.gen(function* () {
       const { settings, home } = yield* setup;
@@ -2608,9 +2641,10 @@ describe("UsageService", () => {
 
   it.live("reports saved usage of a removed directory only for windows it reaches", () =>
     Effect.gen(function* () {
+      yield* TestClock.setTime(Date.parse("2026-08-12T00:00:00Z"));
       const { transcript, settings, home } = yield* setup;
-      // Keep the fixture inside the service's cache-retention window.
-      yield* TestClock.setTime(Date.parse("2026-08-02T12:00:00Z"));
+      // Saved usage is pruned after the retention window, so pin "now" near the write.
+      yield* TestClock.setTime(Date.parse("2026-08-15T00:00:00Z"));
       yield* Effect.promise(async () => {
         await NodeFSP.writeFile(transcript, claudeLine(1, 5));
         const lastWrite = Date.parse("2026-08-01T10:00:00Z") / 1000;
