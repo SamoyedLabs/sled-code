@@ -13,7 +13,7 @@ import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 import { vi } from "vite-plus/test";
 
-vi.mock("electron", () => ({}));
+vi.mock("electron", () => ({ app: { isPackaged: false } }));
 vi.mock("@clerk/electron", () => ({ createClerkBridge: vi.fn() }));
 vi.mock("@clerk/electron/storage", () => ({ storage: vi.fn() }));
 vi.mock("../ipc/DesktopIpcHandlers.ts", () => ({
