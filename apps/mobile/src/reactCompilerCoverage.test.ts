@@ -3,6 +3,7 @@ import * as NodeFS from "node:fs";
 import * as NodeModule from "node:module";
 import * as NodePath from "node:path";
 import { describe, expect, it } from "vite-plus/test";
+import { compilerShardFiles } from "../test/compiler-shard";
 
 const mobileRoot = NodePath.resolve(__dirname, "..");
 const requireFromMobile = NodeModule.createRequire(NodePath.join(mobileRoot, "package.json"));
@@ -165,14 +166,17 @@ describe("React Compiler coverage", () => {
     expect(transformed("false")).not.toContain("react/compiler-runtime");
   });
 
-  it.each(sourceFiles)("compiles %s", (file) => {
-    const bailouts = compilerBailouts(file);
-    if (file in KNOWN_BAILOUTS) {
-      expect(bailouts, `${file} compiles now; remove it from KNOWN_BAILOUTS`).not.toEqual([]);
-    } else {
-      expect(bailouts).toEqual([]);
-    }
-  });
+  it.each(compilerShardFiles(sourceFiles, process.env.T3_MOBILE_COMPILER_SHARD))(
+    "compiles %s",
+    (file) => {
+      const bailouts = compilerBailouts(file);
+      if (file in KNOWN_BAILOUTS) {
+        expect(bailouts, `${file} compiles now; remove it from KNOWN_BAILOUTS`).not.toEqual([]);
+      } else {
+        expect(bailouts).toEqual([]);
+      }
+    },
+  );
 
   // The compiler once silently dropped this cache, so every
   // ThreadFeed render rebuilt the feed and handed LegendList a new data array.

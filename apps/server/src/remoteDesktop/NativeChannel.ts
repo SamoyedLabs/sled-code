@@ -8,7 +8,7 @@ import {
   type RemoteDesktopNativeResult,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -51,7 +51,7 @@ const encode = Schema.encodeSync(Schema.fromJsonString(RemoteDesktopNativeReques
 
 const make = Effect.gen(function* () {
   const config = yield* ServerConfig.ServerConfig;
-  const crypto = yield* Crypto.Crypto;
+  const random = yield* SecureRandom.SecureRandom;
   const inputFd = config.desktopRemoteDesktopFd;
   const outputFd = config.desktopRemoteDesktopControlFd;
   if (inputFd === undefined || outputFd === undefined) {
@@ -118,7 +118,7 @@ const make = Effect.gen(function* () {
     request: Effect.fn("RemoteDesktopNative.request")(function* (command) {
       if (!running) return yield* new RemoteDesktopError({ reason: "unavailable" });
       if (pending.size >= 16) return yield* new RemoteDesktopError({ reason: "limit" });
-      const requestId = yield* crypto.randomUUIDv4().pipe(Effect.orDie);
+      const requestId = yield* random.uuidV4().pipe(Effect.orDie);
       const reply = yield* Deferred.make<RemoteDesktopNativeResult, RemoteDesktopError>();
       pending.set(requestId, reply);
       return yield* lock

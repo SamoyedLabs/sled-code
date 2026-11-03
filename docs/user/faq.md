@@ -77,7 +77,7 @@ Open **Settings > Storage** and turn on automatic worktree cleanup. You can also
 
 ## Is there voice input?
 
-On iPhone, yes. You need iOS 26 or later. Tap the mic in the composer, talk, check the text, then send. Web, desktop, and Android do not have it yet. [Voice input on iPhone](./composer.md#voice-input-on-iphone)
+On supported iPhones with iOS 26 or later and Macs with macOS 26 or later, yes. Use the mic in the composer, talk, stop to transcribe, check the text, then send. Web, Windows, Linux, and Android do not have built-in voice input yet. [Voice input on iPhone](./composer.md#voice-input-on-iphone)
 
 ## Does it work on Windows, Mac, and Linux?
 

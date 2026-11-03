@@ -12,6 +12,7 @@ import {
   type EnvironmentId,
   connectReachabilityHelpUrl,
   formatConnectReachable,
+  managedCapabilityDenial,
   resolveEnvironmentMachineKind,
 } from "@t3tools/contracts";
 import {
@@ -60,6 +61,7 @@ import {
   usePrimaryEnvironmentId,
 } from "~/state/environments";
 import { APP_VERSION } from "~/branding";
+import { usePrimaryManagedPolicy } from "~/state/managedPolicy";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { serverEnvironment } from "~/state/server";
 import {
@@ -531,6 +533,8 @@ function ConfiguredCloudLinkRow({ canManageRelay }: { readonly canManageRelay: b
     reconcileCloudState,
   } = useCloudLinkController();
   const { openAuthPrompt } = useT3ConnectAuthPrompt();
+  // The server unlinks and refuses relay changes under such a policy; unlinking stays possible.
+  const connectDenial = managedCapabilityDenial(usePrimaryManagedPolicy(), "connect");
   const [isUpdating, setIsUpdating] = useState(false);
   const [isUpdatingPreference, setIsUpdatingPreference] = useState(false);
 
@@ -652,21 +656,24 @@ function ConfiguredCloudLinkRow({ canManageRelay }: { readonly canManageRelay: b
         <SettingsRow
           title={searchableSetting("t3-connect").title}
           description={
-            signedOut
-              ? "Sign in to make this environment available to your other devices through Sled Connect."
-              : linkRevoked
-                ? "This environment was removed from Sled Connect. Turn it on to link it again."
-                : managedTunnelActive
-                  ? reachability?.status === "unreachable"
-                    ? "Sled Connect is on, but other devices cannot reach this environment."
-                    : reachability?.status === "reachable"
-                      ? "This environment is available to your other devices through Sled Connect."
-                      : "Sled Connect is on. Reachability has not been checked yet."
-                  : managedTunnelOutOfSync
-                    ? "Sled Connect is out of sync. This environment is linked only to publish agent activity, so other devices cannot connect. Turn Sled Connect on to repair it."
-                    : "Make this environment available to your other devices through Sled Connect."
+            connectDenial !== undefined && !managedTunnelActive
+              ? connectDenial
+              : signedOut
+                ? "Sign in to make this environment available to your other devices through Sled Connect."
+                : linkRevoked
+                  ? "This environment was removed from Sled Connect. Turn it on to link it again."
+                  : managedTunnelActive
+                    ? reachability?.status === "unreachable"
+                      ? "Sled Connect is on, but other devices cannot reach this environment."
+                      : reachability?.status === "reachable"
+                        ? "This environment is available to your other devices through Sled Connect."
+                        : "Sled Connect is on. Reachability has not been checked yet."
+                    : managedTunnelOutOfSync
+                      ? "Sled Connect is out of sync. This environment is linked only to publish agent activity, so other devices cannot connect. Turn Sled Connect on to repair it."
+                      : "Make this environment available to your other devices through Sled Connect."
           }
           status={operationError ?? primaryCloudLinkState.error ?? reachabilityStatus}
+          managed={managedTunnelActive ? undefined : connectDenial}
           control={
             signedOut ? (
               signInButton
@@ -680,7 +687,9 @@ function ConfiguredCloudLinkRow({ canManageRelay }: { readonly canManageRelay: b
             )
           }
         >
-          {signedOut ? null : <T3ConnectTunnelUsage tunnelLimit={tunnelLimit} />}
+          {signedOut || connectDenial !== undefined ? null : (
+            <T3ConnectTunnelUsage tunnelLimit={tunnelLimit} />
+          )}
         </SettingsRow>
       ) : linkRevoked ? (
         <SettingsRow
@@ -692,6 +701,7 @@ function ConfiguredCloudLinkRow({ canManageRelay }: { readonly canManageRelay: b
         <SettingsRow
           title={searchableSetting("publish-agent-activity").title}
           description="Background notifications and remote Live Activities are not available with Sled Connect yet."
+          managed={connectDenial}
           control={
             signedOut ? (
               signInButton
@@ -711,6 +721,7 @@ function ConfiguredCloudLinkRow({ canManageRelay }: { readonly canManageRelay: b
         <SettingsRow
           title={searchableSetting("hold-webhooks-while-offline").title}
           description="Keep webhook requests for up to 24 hours while this environment is offline, then deliver them. Off: Sled Connect only forwards requests and stores nothing."
+          managed={connectDenial}
           control={
             <CloudLinkSwitch
               ariaLabel="Hold webhook requests while this environment is offline"

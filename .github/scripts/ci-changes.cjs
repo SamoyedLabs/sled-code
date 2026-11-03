@@ -33,7 +33,7 @@ const INERT = [
 
 // Shared test setup and vendored mobile dependencies affect every package.
 const RUNS_EVERYTHING = [
-  /^packages\/shared\/src\/(HostProcess|testing\/longTempDir)\.ts$/,
+  /^packages\/shared\/src\/(HostProcess|testing\/(longTempDir|providerEnv))\.ts$/,
   /^apps\/mobile\/deps\//,
 ];
 
@@ -46,6 +46,8 @@ const EXTRA_OWNERS = [
   [/^native\/browser-secret\//, ["@t3tools/desktop"]],
   [/^native\/kde-snap-shot\//, ["@t3tools/desktop"]],
   [/^native\/libghostty-vt\//, ["@t3tools/web"]],
+  // apps/server/src/cloud/ConnectReachability.test.ts checks the guide's headings.
+  [/^docs\/user\/t3-connect-troubleshooting\.md$/, ["t3"]],
 ];
 const RUST = /^native\/(resource-monitor|kde-snap-shot|hyprland-snap-shot)\//;
 
@@ -68,7 +70,14 @@ const BUILD_ONLY_DEPS = { t3: ["@t3tools/web"] };
 const MOBILE_NATIVE =
   /^apps\/mobile\/.*\.(swift|kt|kts)$|^apps\/mobile\/(\.swiftlint\.yml|detekt\.yml|\.editorconfig|Brewfile)$|^scripts\/mobile-native-static-check\.ts$|^package\.json$|^\.github\/workflows\/ci\.yml$/;
 
-const OWN_TEST_JOB = new Set(["t3", "@t3tools/web", "@t3tools/monorepo"]);
+const OWN_TEST_JOB = new Set([
+  "@t3tools/oxlint-plugin-t3code",
+  "t3",
+  "@t3tools/web",
+  "@t3tools/mobile",
+  "@t3tools/scripts",
+  "@t3tools/monorepo",
+]);
 
 function readWorkspace() {
   const patterns = [];
@@ -111,14 +120,14 @@ function readWorkspace() {
 
 // [] means inert; null means unknown and requires every job.
 function ownersOf(file, packages) {
-  if ([...INERT, ...SCOPED_INFRA].some((pattern) => pattern.test(file))) return [];
+  const extra = EXTRA_OWNERS.flatMap(([pattern, names]) => (pattern.test(file) ? names : []));
+  if ([...INERT, ...SCOPED_INFRA].some((pattern) => pattern.test(file))) return extra;
   // Desktop metadata is consumed by desktop packaging. Dependency/lockfile changes
   // still fan out through their own paths; desktop has no application dependents.
   if (file === "apps/desktop/package.json") return ["@t3tools/desktop", "@t3tools/scripts"];
   // A manifest can change dependencies or versions other packages read.
   if (path.posix.basename(file) === "package.json") return null;
   if (RUNS_EVERYTHING.some((pattern) => pattern.test(file))) return null;
-  const extra = EXTRA_OWNERS.flatMap(([pattern, names]) => (pattern.test(file) ? names : []));
   // scripts/build-desktop-artifact.test.ts reads the crates' sources.
   if (RUST.test(file)) return ["@t3tools/scripts", ...extra];
 
@@ -189,6 +198,9 @@ function decide(files, packages, full) {
       // Empty means every package the Test job covers.
       test_packages: everything ? "" : tested.map((pkg) => pkg.name).join(" "),
       test_web: has("@t3tools/web"),
+      test_mobile: has("@t3tools/mobile"),
+      test_scripts: has("@t3tools/scripts"),
+      test_lint_rules: has("@t3tools/oxlint-plugin-t3code"),
       test_server: has("t3"),
       rust: everything || rust,
       release_smoke: scriptsChanged,

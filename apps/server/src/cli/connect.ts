@@ -16,7 +16,7 @@ import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
 import * as Console from "effect/Console";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -31,6 +31,8 @@ import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } fr
 import * as HttpApiClient from "effect/http-api/HttpApiClient";
 
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
+import * as ManagedLimits from "../policy/managedLimits.ts";
+import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as BootService from "../cloud/bootService.ts";
 import * as CliState from "../cloud/CliState.ts";
@@ -517,13 +519,14 @@ export const runCloudCommand = Effect.fn("cloud.cli.run_cloud_command")(function
     | RelayClient.RelayClient
     | EnvironmentAuth.EnvironmentAuth
     | BootService.BootService
-    | Crypto.Crypto
+    | SecureRandom.SecureRandom
     | FileSystem.FileSystem
     | Path.Path
     | HttpClient.HttpClient
     | Prompt.Environment
     | ServerConfig.ServerConfig
     | ServerEnvironment.ServerEnvironmentIdentity
+    | ManagedPolicy.ManagedPolicy
   >,
   options?: {
     readonly quietLogs?: boolean;
@@ -541,13 +544,21 @@ export const runCloudCommand = Effect.fn("cloud.cli.run_cloud_command")(function
     RelayClient.layerCloudflared({ baseDir: config.baseDir }),
     EnvironmentAuth.layerRuntime,
     CliService.layer(config),
-    RelayTracing.layerHeadlessRelayClient,
+    RelayTracing.layerHeadlessRelayClient.pipe(Layer.provide(ManagedPolicy.layer)),
   ).pipe(
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.provideMerge(ServerConfig.layer(config)),
     Layer.provide(Layer.succeed(References.MinimumLogLevel, minimumLogLevel)),
   );
   return yield* run.pipe(Effect.provide(layerRuntime));
+});
+
+/** Status, unlink, and logout stay available so a machine can leave Connect the policy turned off. */
+export const requireConnectAllowed = Effect.gen(function* () {
+  const policy = yield* ManagedPolicy.ManagedPolicy;
+  if (!ManagedLimits.allowsConnect(policy)) {
+    return yield* ManagedLimits.refuseConnect(policy);
+  }
 });
 
 const connectedAs = (identity: string | null): string => (identity ? ` as ${identity}` : "");
@@ -621,6 +632,7 @@ const connectLoginCommand = Command.make("login", {
     runCloudCommand(
       flags,
       Effect.gen(function* () {
+        yield* requireConnectAllowed;
         yield* Console.log("Sled Connect\n");
         const identity = yield* authorizeCli(flags);
         yield* Console.log(`✓ Signed in${connectedAs(identity)}`);
@@ -644,6 +656,7 @@ const connectLinkCommand = Command.make("link", {
     runCloudCommand(
       flags,
       Effect.gen(function* () {
+        yield* requireConnectAllowed;
         yield* Console.log("Sled Connect\n");
         const linked = yield* linkEnvironmentForConnect(flags);
         if (linked) {

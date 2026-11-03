@@ -9,7 +9,7 @@ import {
   type RemoteDesktopStatus,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -67,7 +67,7 @@ const make = Effect.gen(function* () {
   const native = yield* NativeChannel.NativeChannel;
   const authority = yield* Authority.Authority;
   const connectivity = yield* Connectivity.Connectivity;
-  const crypto = yield* Crypto.Crypto;
+  const random = yield* SecureRandom.SecureRandom;
   const scope = yield* Scope.Scope;
   const sessions = new Map<string, Session>();
   const leaseMillis = 30_000;
@@ -175,7 +175,7 @@ const make = Effect.gen(function* () {
         return yield* new RemoteDesktopError({ reason: "identity_mismatch" });
       const config = yield* connectivity.get(owner.sessionId);
       yield* authority.authorize(owner);
-      const id = yield* crypto.randomUUIDv4().pipe(Effect.orDie);
+      const id = yield* random.uuidV4().pipe(Effect.orDie);
       const now = yield* DateTime.now;
       const stopped = yield* Deferred.make<void>();
       const renewals = yield* Queue.sliding<void>(1);

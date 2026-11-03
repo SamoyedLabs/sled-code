@@ -8,7 +8,7 @@ import { parsePersistedServerObservabilitySettings } from "@t3tools/shared/serve
 import { currentDesktopBootstrapToken } from "@t3tools/shared/desktopBootstrapToken";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import {
   existingRemoteDesktopAgent,
@@ -543,6 +543,7 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       env: {
         ...backendChildEnvPatch(),
         ELECTRON_RUN_AS_NODE: "1",
+        T3CODE_DESKTOP_SHELL_DISCOVERY_PENDING: "1",
         T3CODE_CLI_PATH: Option.getOrUndefined(input.cliPath),
         T3_REMOTE_APP_BUNDLE: remoteDesktopAgentAvailable()
           ? NodePath.resolve(process.resourcesPath, "../..")
@@ -737,7 +738,7 @@ export const make = Effect.gen(function* () {
   const wslEnvironment = yield* DesktopWslEnvironment.DesktopWslEnvironment;
   const wslServerTree = yield* DesktopWslServerTree.DesktopWslServerTree;
   const settings = yield* DesktopAppSettings.DesktopAppSettings;
-  const crypto = yield* Crypto.Crypto;
+  const random = yield* SecureRandom.SecureRandom;
   // Random generation yields; serialize it so concurrent backends cannot capture distinct bootstrap secrets.
   const secretRef = yield* SynchronizedRef.make(Option.none<string>());
   const getOrCreateBootstrapSecret = SynchronizedRef.modifyEffect(secretRef, (current) =>
@@ -748,7 +749,7 @@ export const make = Effect.gen(function* () {
           Effect.flatMap((existing) =>
             existing
               ? Effect.succeed([existing.secret, Option.some(existing.secret)] as const)
-              : crypto.randomBytes(32).pipe(
+              : random.randomBytes(32).pipe(
                   Effect.map((bytes) => {
                     const secret = Hex.encode(bytes);
                     return [secret, Option.some(secret)] as const;

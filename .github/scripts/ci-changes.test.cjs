@@ -262,3 +262,41 @@ test("desktop branding validates packaging without unrelated application or nati
     true,
   );
 });
+
+test("mobile tests move out of both full and affected general test selections", () => {
+  for (const files of [
+    null,
+    ["apps/mobile/src/example.tsx"],
+    ["packages/contracts/src/example.ts"],
+  ]) {
+    const { outputs } = decide(files, packages, false);
+    assert.equal(outputs.test_mobile, true);
+    assert.equal(outputs.test_packages.split(" ").includes("@t3tools/mobile"), false);
+  }
+  assert.equal(decide(["apps/web/src/App.tsx"], packages, false).outputs.test_mobile, false);
+  assert.equal(decide(["README.md"], packages, false).outputs.test_mobile, false);
+});
+
+test("scripts run independently for direct and cross-package test dependencies", () => {
+  for (const files of [
+    null,
+    ["scripts/example.ts"],
+    ["apps/mobile/src/example.tsx"],
+    ["apps/web/src/example.tsx"],
+  ]) {
+    const { outputs } = decide(files, packages, false);
+    assert.equal(outputs.test_scripts, true);
+    assert.equal(outputs.test_packages.split(" ").includes("@t3tools/scripts"), false);
+  }
+  assert.equal(decide(["README.md"], packages, false).outputs.test_scripts, false);
+});
+
+test("lint rule tests run independently without entering general package selections", () => {
+  for (const files of [null, ["oxlint-plugin-t3code/rules/example.ts"]]) {
+    const { outputs } = decide(files, packages, false);
+    assert.equal(outputs.test_lint_rules, true);
+    assert.equal(outputs.test_packages.split(" ").includes("@t3tools/oxlint-plugin-t3code"), false);
+  }
+  assert.equal(decide(["README.md"], packages, false).outputs.test_lint_rules, false);
+  assert.equal(decide(["apps/web/src/App.tsx"], packages, false).outputs.test_lint_rules, false);
+});
