@@ -2,7 +2,8 @@
 import * as NodeCrypto from "node:crypto";
 import { RemoteDesktopConnectivity, RemoteDesktopIceServer } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as Digest from "effect/crypto/Digest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -62,7 +63,8 @@ export class Connectivity extends Context.Service<
 const make = Effect.gen(function* () {
   const secrets = yield* ServerSecretStore.ServerSecretStore;
   const http = yield* HttpClient.HttpClient;
-  const crypto = yield* Crypto.Crypto;
+  const random = yield* SecureRandom.SecureRandom;
+  const digest = yield* Digest.Digest;
   const lock = yield* Semaphore.make(1);
   // An owner gets its own TURN credentials. Cache and provider calls are bounded;
   // reading config each time makes removal/key rotation take effect immediately.
@@ -82,7 +84,7 @@ const make = Effect.gen(function* () {
       }
       if (stored.value.byteLength > 16_384) return yield* Effect.fail("configuration-limit");
       const text = new TextDecoder().decode(stored.value);
-      const markerBytes = yield* crypto.digest("SHA-256", stored.value);
+      const markerBytes = yield* digest.digest(Digest.sha256, stored.value);
       const marker = Array.from(markerBytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
       const configuration = yield* decodeConfiguration(text);
       const ttl = configuration.ttlSeconds ?? 3600;
@@ -97,7 +99,7 @@ const make = Effect.gen(function* () {
       const expiresAt = now + ttl * 1000;
       let config: RemoteDesktopConnectivity;
       if (configuration.provider === "coturn") {
-        const suffix = yield* crypto.randomUUIDv4();
+        const suffix = yield* random.uuidV4();
         const username = `${Math.floor(expiresAt / 1000)}:${suffix}`;
         const credential = NodeCrypto.createHmac("sha1", Redacted.value(configuration.sharedSecret))
           .update(username)

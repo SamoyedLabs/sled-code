@@ -1,6 +1,6 @@
 import { RemoteDesktopNativeRequest, RemoteDesktopNativeEvent } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
 import * as Layer from "effect/Layer";
@@ -34,7 +34,7 @@ export class DesktopRemoteDesktopBridge extends Context.Service<
 >()("@t3tools/desktop/remote-desktop/DesktopRemoteDesktopBridge") {}
 
 const make = Effect.gen(function* () {
-  const crypto = yield* Crypto.Crypto;
+  const random = yield* SecureRandom.SecureRandom;
   const sources = new Map<string, Source>();
   const requests = new Map<
     string,
@@ -127,7 +127,7 @@ const make = Effect.gen(function* () {
           }
           for (const sessionId of source.sessions) {
             owners.delete(sessionId);
-            const requestId = yield* crypto.randomUUIDv4().pipe(Effect.orDie);
+            const requestId = yield* random.uuidV4().pipe(Effect.orDie);
             yield* Effect.sync(() =>
               sendRemoteDesktopNative({ requestId, command: { type: "stop", sessionId } }),
             );
@@ -195,7 +195,7 @@ const make = Effect.gen(function* () {
                 if (command.type === "start" || command.type === "restart") {
                   owners.delete(command.sessionId);
                   source.sessions.delete(command.sessionId);
-                  const requestId = yield* crypto.randomUUIDv4().pipe(Effect.orDie);
+                  const requestId = yield* random.uuidV4().pipe(Effect.orDie);
                   yield* Effect.sync(() =>
                     sendRemoteDesktopNative({
                       requestId,
