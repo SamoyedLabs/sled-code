@@ -1,3 +1,4 @@
+import { PersonalRelaySettings } from "../cloud/PersonalRelaySettings";
 import { findErrorTraceId } from "@t3tools/client-runtime/errors";
 import {
   isAtomCommandInterrupted,
@@ -85,7 +86,7 @@ function T3ConnectEnvironmentRow(props: {
                 “{environment.label}” will be removed from this account.
               </p>
               <p className="mt-4 max-w-xl text-xs leading-4.5 text-muted-foreground">
-                T3 Connect access will be revoked, any managed tunnel will be removed, and a host
+                Sled Connect access will be revoked, any managed tunnel will be removed, and a host
                 space will become available. Local connections on your devices are not changed.
               </p>
               <div className="mt-4 flex justify-end gap-2">
@@ -205,7 +206,7 @@ export function T3ConnectUserProfilePage() {
       toastManager.add({
         type: "success",
         title: "Server deregistered",
-        description: "T3 Connect access was revoked and a host space is now available.",
+        description: "Sled Connect access was revoked and a host space is now available.",
       });
       return;
     }
@@ -250,7 +251,7 @@ export function T3ConnectUserProfilePage() {
 
   return (
     <ClerkUserProfilePage
-      title="T3 Connect"
+      title="Sled Connect"
       description="Environments registered to your account. Connections on this device are managed in Settings."
       action={
         <ClerkUserProfileRefreshButton
@@ -261,11 +262,12 @@ export function T3ConnectUserProfilePage() {
       }
     >
       <div>
+        <PersonalRelaySettings />
         <T3ConnectTunnelUsage />
         {environmentsState.error ? (
           <div className="mb-4 border-t border-destructive/35 py-3 text-xs" role="alert">
             <p className="font-medium text-destructive-foreground">
-              Could not load T3 Connect environments
+              Could not load Sled Connect environments
             </p>
             <p className="mt-1 text-xs text-muted-foreground">{environmentsState.error}</p>
           </div>
@@ -297,7 +299,7 @@ export function T3ConnectUserProfilePage() {
                 <ServerIcon />
               </EmptyMedia>
               <EmptyHeader>
-                <EmptyTitle>No T3 Connect environments</EmptyTitle>
+                <EmptyTitle>No Sled Connect environments</EmptyTitle>
                 <EmptyDescription>
                   Link an environment from its local Settings to make it available through T3
                   Connect.

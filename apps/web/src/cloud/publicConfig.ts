@@ -4,6 +4,7 @@ import {
 } from "@t3tools/shared/relayAuth";
 import { normalizeSecureRelayUrl } from "@t3tools/shared/relayUrl";
 import * as Schema from "effect/Schema";
+import { savedPersonalRelayUrl } from "./personalRelay";
 
 export class CloudPublicConfigMissingError extends Schema.TaggedError<CloudPublicConfigMissingError>()(
   "CloudPublicConfigMissingError",
@@ -46,9 +47,9 @@ export function resolveCloudPublicConfig(): CloudPublicConfig {
       import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined,
     ),
     clerkJwtTemplate: trimNonEmpty(import.meta.env.VITE_CLERK_JWT_TEMPLATE as string | undefined),
-    relayUrl: normalizeSecureRelayUrl(
-      (import.meta.env.VITE_T3CODE_RELAY_URL as string | undefined) ?? "",
-    ),
+    relayUrl:
+      savedPersonalRelayUrl() ??
+      normalizeSecureRelayUrl((import.meta.env.VITE_T3CODE_RELAY_URL as string | undefined) ?? ""),
     relayTracing: {
       tracesUrl: normalizeSecureUrl(
         (import.meta.env.VITE_RELAY_OTLP_TRACES_URL as string | undefined) ?? "",
@@ -78,7 +79,7 @@ export function resolveRelayTracingConfig() {
 
 export function hasCloudPublicConfig(): boolean {
   const config = resolveCloudPublicConfig();
-  if (!config.clerkPublishableKey || !config.clerkJwtTemplate || !config.relayUrl) {
+  if (!config.clerkPublishableKey || !config.clerkJwtTemplate) {
     return false;
   }
 

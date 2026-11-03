@@ -271,7 +271,7 @@ export const linkPrimaryEnvironmentToCloud: (input: {
   const configuredRelayUrl = relayUrl();
   if (!configuredRelayUrl) {
     return yield* new CloudEnvironmentLinkError({
-      message: "T3CODE_RELAY_URL is not configured.",
+      message: "Save your personal relay address in your Sled Connect account settings first.",
     });
   }
   const managedTunnelsEnabled = (input.mode ?? "managed") === "managed";
@@ -288,8 +288,8 @@ export const linkPrimaryEnvironmentToCloud: (input: {
     .createEnvironmentLinkChallenge({
       clerkToken: input.clerkToken,
       payload: {
-        notificationsEnabled: true,
-        liveActivitiesEnabled: true,
+        notificationsEnabled: false,
+        liveActivitiesEnabled: false,
         managedTunnelsEnabled,
       },
     })
@@ -320,8 +320,8 @@ export const linkPrimaryEnvironmentToCloud: (input: {
       clerkToken: input.clerkToken,
       payload: {
         proof,
-        notificationsEnabled: true,
-        liveActivitiesEnabled: true,
+        notificationsEnabled: false,
+        liveActivitiesEnabled: false,
         managedTunnelsEnabled,
       },
     })

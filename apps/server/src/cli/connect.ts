@@ -11,6 +11,7 @@ import {
 import { RelayOkResponse } from "@t3tools/contracts/relay";
 import * as RelayClient from "@t3tools/shared/relayClient";
 import { withRelayClientTracing } from "@t3tools/shared/relayTracing";
+import { personalRelayUrl, validatePersonalRelay } from "@t3tools/shared/sledConnect";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
@@ -43,7 +44,7 @@ import {
   PUBLISH_AGENT_ACTIVITY_SECRET,
   RELAY_URL_SECRET,
 } from "../cloud/config.ts";
-import { relayUrlConfig } from "../cloud/publicConfig.ts";
+import { clerkPublishableKeyConfig, relayUrlConfig } from "../cloud/publicConfig.ts";
 import * as RelayTracing from "../cloud/relayTracing.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
@@ -87,7 +88,7 @@ function formatDeviceAuthorizationPrompt(
 ): string {
   const minutes = Math.max(1, Math.round(Duration.toMinutes(prompt.expiresIn)));
   return [
-    "Sign in to T3 Connect. Open on any device:",
+    "Sign in to Sled Connect. Open on any device:",
     `  ${prompt.verificationUriComplete ?? prompt.verificationUri}`,
     `Code: ${prompt.userCode}`,
     `Waiting for approval. Expires in ${minutes} min. Ctrl+C cancels.`,
@@ -112,7 +113,7 @@ const authorizeCli = Effect.fn("cloud.cli.authorize")(function* (options: {
   const existing = yield* tokens.getExisting.pipe(
     Effect.catchTags({
       CloudCliCredentialRefreshError: () =>
-        Console.log("T3 Connect sign-in expired. Sign in again.").pipe(Effect.as(Option.none())),
+        Console.log("Sled Connect sign-in expired. Sign in again.").pipe(Effect.as(Option.none())),
     }),
   );
   if (Option.isSome(existing)) {
@@ -184,24 +185,24 @@ function formatCloudStatus(status: CloudCliStatus, options?: { readonly json?: b
   }
 
   const provisioned = status.revoked
-    ? "removed from T3 Connect"
+    ? "removed from Sled Connect"
     : status.linked
       ? "provisioned"
       : status.desired && status.authenticated
         ? "pending server startup"
         : "not provisioned";
   const nextStep = !status.authenticated
-    ? "Run `t3 connect link` to authorize and enable T3 Connect."
+    ? "Run `t3 connect link` to authorize and enable Sled Connect."
     : status.revoked
       ? "Run `t3 connect link` to link this environment again."
       : !status.desired
-        ? "Run `t3 connect link` to enable T3 Connect."
+        ? "Run `t3 connect link` to enable Sled Connect."
         : !status.linked
           ? "Start T3 to provision the environment link and launch its managed tunnel."
           : undefined;
 
   return [
-    "T3 Connect",
+    "Sled Connect",
     `  Exposure: ${status.desired ? "enabled" : "disabled"}`,
     `  Authorization: ${status.authenticated ? "stored credential" : "missing"}`,
     `  Environment link: ${provisioned}`,
@@ -230,7 +231,7 @@ const CLOUD_CLI_LIVE_SERVER_TIMEOUT = Duration.seconds(5);
 const confirmRelayClientInstall = (version: string) =>
   Prompt.run(
     Prompt.Confirm({
-      message: `The T3 relay client is required for T3 Connect. Download and install version ${version}?`,
+      message: `Cloudflare's tunnel connector is required for Sled Connect. Download and install version ${version}?`,
       initial: false,
     }),
   );
@@ -329,7 +330,7 @@ const CLOUD_CLI_REACHABILITY_TIMEOUT = Duration.seconds(30);
 const CLOUD_CLI_REACHABILITY_WAIT = Duration.seconds(60);
 const CLOUD_CLI_REACHABILITY_RETRY = Duration.seconds(5);
 
-/** Asks the running server to check T3 Connect now. `null` when no server answers. */
+/** Asks the running server to check Sled Connect now. `null` when no server answers. */
 const checkLiveReachability = Effect.fn("cloud.cli.check_live_reachability")(function* () {
   const config = yield* ServerConfig.ServerConfig;
   const runtimeState = yield* readPersistedServerRuntimeState(config.serverRuntimeStatePath);
@@ -364,14 +365,14 @@ function formatAlertBox(text: string): string {
  * can reach it, so a broken tunnel fails setup instead of looking green.
  */
 export const waitForReachability = Effect.fn("cloud.cli.wait_for_reachability")(function* () {
-  yield* Console.log("Checking T3 Connect...");
+  yield* Console.log("Checking Sled Connect...");
   const deadline =
     (yield* Clock.currentTimeMillis) + Duration.toMillis(CLOUD_CLI_REACHABILITY_WAIT);
   let last: EnvironmentConnectReachability | null = null;
   while (true) {
     last = (yield* checkLiveReachability()) ?? last;
     if (last?.status === "reachable") {
-      yield* Console.log("✓ T3 Connect is reachable.");
+      yield* Console.log("✓ Sled Connect is reachable.");
       return;
     }
     if ((yield* Clock.currentTimeMillis) >= deadline) break;
@@ -380,7 +381,7 @@ export const waitForReachability = Effect.fn("cloud.cli.wait_for_reachability")(
   yield* Console.error(
     formatAlertBox(
       last === null
-        ? "✕ Could not check T3 Connect\n  The T3 server on this machine did not answer.\n  Fix: run `t3 service status`, then `t3 connect status`."
+        ? "✕ Could not check Sled Connect\n  The T3 server on this machine did not answer.\n  Fix: run `t3 service status`, then `t3 connect status`."
         : formatReachabilityFailure(last),
     ),
   );
@@ -401,7 +402,7 @@ const logCloudDisconnectFailure = (
   clearAuthorization: boolean,
   cause: Cause.Cause<unknown>,
 ) =>
-  Effect.logWarning("T3 Connect disconnect operation failed.").pipe(
+  Effect.logWarning("Sled Connect disconnect operation failed.").pipe(
     Effect.annotateLogs({
       operation,
       clearAuthorization,
@@ -437,7 +438,7 @@ const unlinkRelayEnvironment = Effect.fn("cloud.cli.unlink_relay_environment")(f
 /**
  * Prints the local disconnect outcome, then whether the relay record was revoked.
  * A missing CLI login or a failed relay DELETE leaves that record registered, so
- * those outcomes warn to deregister it from the T3 Connect account page.
+ * those outcomes warn to deregister it from the Sled Connect account page.
  */
 const reportCloudDisconnectResults = Effect.fn("cloud.cli.report_disconnect_results")(
   function* (input: {
@@ -452,10 +453,10 @@ const reportCloudDisconnectResults = Effect.fn("cloud.cli.report_disconnect_resu
         input.liveResult.cause,
       );
       yield* Console.warn(
-        "T3 Connect is disabled, but the running server could not stop its tunnel.\nRestart that server to stop the connector.",
+        "Sled Connect is disabled, but the running server could not stop its tunnel.\nRestart that server to stop the connector.",
       );
     } else {
-      yield* Console.log("T3 Connect is disabled locally.");
+      yield* Console.log("Sled Connect is disabled locally.");
     }
 
     if (Exit.isFailure(input.relayResult)) {
@@ -467,11 +468,11 @@ const reportCloudDisconnectResults = Effect.fn("cloud.cli.report_disconnect_resu
       yield* Console.warn(
         input.clearAuthorization
           ? "Could not revoke the relay-side environment record before signing out.\nThe stored CLI authorization was still removed locally."
-          : "Could not revoke the relay-side environment record yet.\nRun `t3 connect unlink` again when the relay is reachable, or deregister it from the T3 Connect page of your T3 account.",
+          : "Could not revoke the relay-side environment record yet.\nRun `t3 connect unlink` again when the relay is reachable, or deregister it from the Sled Connect page of your Sled account.",
       );
     } else if (input.relayResult.value.status === "not-authenticated") {
       yield* Console.warn(
-        "The relay-side environment record was not revoked.\nDeregister it from the T3 Connect page of your T3 account, or run `t3 connect login` and retry.",
+        "The relay-side environment record was not revoked.\nDeregister it from the Sled Connect page of your Sled account, or run `t3 connect login` and retry.",
       );
     } else if (input.relayResult.value.status === "revoked") {
       yield* Console.log("Revoked the relay-side environment record.");
@@ -500,7 +501,7 @@ export const disconnectCloud = Effect.fn("cloud.cli.disconnect")(function* (opti
 
   if (options.clearAuthorization) {
     yield* Console.log(
-      "Signed out of T3 Connect locally.\nThe background service is managed separately with `t3 service`.",
+      "Signed out of Sled Connect locally.\nThe background service is managed separately with `t3 service`.",
     );
   }
   return liveResult;
@@ -558,10 +559,29 @@ function formatRelayClientReady(version: string): string {
 const linkEnvironmentForConnect = Effect.fn("cloud.cli.link_environment")(function* (options: {
   readonly headless: boolean;
   readonly publishOnly?: boolean;
-  /** For `t3 up`, where the user already chose T3 Connect: install it quietly, without asking. */
+  /** For `t3 up`, where the user already chose Sled Connect: install it quietly, without asking. */
   readonly installRelayClient?: boolean;
 }) {
   const publishOnly = options.publishOnly ?? false;
+  if (publishOnly) {
+    yield* Console.error(
+      "Publish-only connections are not available with Sled Connect. Link a managed tunnel instead.",
+    );
+    yield* Effect.sync(() => {
+      process.exitCode = 1;
+    });
+    return null;
+  }
+  const configuredRelay = yield* relayUrlConfig.pipe(Effect.option);
+  if (Option.isNone(configuredRelay)) {
+    yield* Console.error(
+      "Set up your personal relay first, then run `t3 connect relay --url https://your-relay.workers.dev`.",
+    );
+    yield* Effect.sync(() => {
+      process.exitCode = 1;
+    });
+    return null;
+  }
   if (!publishOnly) {
     const relayClient = yield* RelayClient.RelayClient;
     const installed = yield* acquireRelayClientForLink(
@@ -570,12 +590,12 @@ const linkEnvironmentForConnect = Effect.fn("cloud.cli.link_environment")(functi
       options.installRelayClient === true
         ? (event) =>
             event.type === "progress" && event.stage === "downloading"
-              ? Console.log("Installing the T3 Connect relay client...")
+              ? Console.log("Installing the Sled Connect relay client...")
               : Effect.void
         : reportRelayClientInstallProgress,
     );
     if (Option.isNone(installed)) {
-      yield* Console.log("T3 Connect setup cancelled. The relay client was not installed.");
+      yield* Console.log("Sled Connect setup cancelled. The relay client was not installed.");
       return null;
     }
     if (options.installRelayClient !== true) {
@@ -584,13 +604,9 @@ const linkEnvironmentForConnect = Effect.fn("cloud.cli.link_environment")(functi
   }
 
   const identity = yield* authorizeCli(options);
-  yield* CliState.setCliDesiredCloudLink(true, publishOnly ? "publish_only" : "managed");
+  yield* CliState.setCliDesiredCloudLink(true, "managed");
   if (yield* CliState.dropRevokedCloudLink) {
-    yield* Console.log("Replacing the link T3 Connect revoked.");
-  }
-  if (publishOnly) {
-    const secrets = yield* ServerSecretStore.ServerSecretStore;
-    yield* secrets.set(PUBLISH_AGENT_ACTIVITY_SECRET, stringToBytes("true"));
+    yield* Console.log("Replacing the link Sled Connect revoked.");
   }
   return { identity } as const;
 });
@@ -600,12 +616,12 @@ const connectLoginCommand = Command.make("login", {
   ...projectLocationFlags,
   headless: headlessFlag,
 }).pipe(
-  Command.withDescription("Authorize the T3 Connect CLI without enabling remote access."),
+  Command.withDescription("Authorize the Sled Connect CLI without enabling remote access."),
   Command.withHandler((flags) =>
     runCloudCommand(
       flags,
       Effect.gen(function* () {
-        yield* Console.log("T3 Connect\n");
+        yield* Console.log("Sled Connect\n");
         const identity = yield* authorizeCli(flags);
         yield* Console.log(`✓ Signed in${connectedAs(identity)}`);
       }),
@@ -623,12 +639,12 @@ const connectLinkCommand = Command.make("link", {
     Flag.withDefault(false),
   ),
 }).pipe(
-  Command.withDescription("Authorize this environment for T3 Connect on next start."),
+  Command.withDescription("Authorize this environment for Sled Connect on next start."),
   Command.withHandler((flags) =>
     runCloudCommand(
       flags,
       Effect.gen(function* () {
-        yield* Console.log("T3 Connect\n");
+        yield* Console.log("Sled Connect\n");
         const linked = yield* linkEnvironmentForConnect(flags);
         if (linked) {
           const serveCommand = yield* resolveCliCommand("serve");
@@ -648,7 +664,7 @@ const connectStatusCommand = Command.make("status", {
   json: jsonFlag,
 }).pipe(
   Command.withDescription(
-    "Show T3 Connect setup and check that other devices can reach this machine.",
+    "Show Sled Connect setup and check that other devices can reach this machine.",
   ),
   Command.withHandler((flags) =>
     runCloudCommand(
@@ -713,63 +729,41 @@ const connectPublishCommand = Command.make("publish", {
   ),
 }).pipe(
   Command.withDescription(
-    "Toggle publishing agent activity (push notifications and Live Activities) to your mobile clients.",
+    "Disable legacy activity publishing. Personal relays do not support push notifications or Live Activities yet.",
   ),
   Command.withHandler((flags) =>
-    runCloudCommand(
-      flags,
-      Effect.gen(function* () {
-        const secrets = yield* ServerSecretStore.ServerSecretStore;
-        const tokens = yield* CliTokenManager.CloudCliTokenManager;
-        const enabled = !flags.disable;
-        yield* secrets.set(
-          PUBLISH_AGENT_ACTIVITY_SECRET,
-          stringToBytes(enabled ? "true" : "false"),
-        );
-        if (!enabled) {
-          // Cancel unprovisioned publish-only links too, or the next start will recreate them.
-          // Managed links also serve the tunnel and must survive.
-          const linkedNow = Option.isSome(yield* secrets.get(CLOUD_LINKED_USER_ID));
-          if (!linkedNow && (yield* CliState.readCliDesiredLinkMode) === "publish_only") {
-            yield* CliState.setCliDesiredCloudLink(false);
-            yield* Console.log("Cancelled the pending publish-only T3 Connect link.");
-          }
-          yield* Console.log("Publishing agent activity disabled.");
-          return;
-        }
-
-        yield* Console.log("Publishing agent activity enabled.");
-        const linked = Option.isSome(yield* secrets.get(CLOUD_LINKED_USER_ID));
-        if (linked) {
-          return;
-        }
-
-        if (!(yield* tokens.hasCredential)) {
-          yield* Console.log(
-            "Run `t3 connect login` first so this environment can be authorized to publish.",
-          );
-          return;
-        }
-        // A desired managed link already covers publishing and must not be downgraded.
-        if (yield* CliState.readCliDesiredCloudLink) {
-          yield* Console.log(
-            "A T3 Connect link is already pending. Start T3 to finish provisioning it; publishing starts once it links.",
-          );
-          return;
-        }
-        yield* CliState.setCliDesiredCloudLink(true, "publish_only");
-        yield* Console.log(
-          "Restart T3 to finish authorizing this environment to publish (no managed tunnel is created).",
-        );
-      }),
-    ),
+    !flags.disable
+      ? Console.error(
+          "Background push notifications and remote Live Activities are not available with Sled Connect yet.",
+        ).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              process.exitCode = 1;
+            }),
+          ),
+        )
+      : runCloudCommand(
+          flags,
+          Effect.gen(function* () {
+            const secrets = yield* ServerSecretStore.ServerSecretStore;
+            yield* secrets.set(PUBLISH_AGENT_ACTIVITY_SECRET, stringToBytes("false"));
+            // Cancel unprovisioned publish-only links too, or the next start will recreate them.
+            // Managed links also serve the tunnel and must survive.
+            const linkedNow = Option.isSome(yield* secrets.get(CLOUD_LINKED_USER_ID));
+            if (!linkedNow && (yield* CliState.readCliDesiredLinkMode) === "publish_only") {
+              yield* CliState.setCliDesiredCloudLink(false);
+              yield* Console.log("Cancelled the pending publish-only Sled Connect link.");
+            }
+            yield* Console.log("Publishing agent activity disabled.");
+          }),
+        ),
   ),
 );
 
 const connectUnlinkCommand = Command.make("unlink", {
   ...projectLocationFlags,
 }).pipe(
-  Command.withDescription("Disable T3 Connect while retaining the stored authorization."),
+  Command.withDescription("Disable Sled Connect while retaining the stored authorization."),
   Command.withHandler((flags) =>
     runCloudCommand(flags, disconnectCloud({ clearAuthorization: false })),
   ),
@@ -778,14 +772,49 @@ const connectUnlinkCommand = Command.make("unlink", {
 const connectLogoutCommand = Command.make("logout", {
   ...projectLocationFlags,
 }).pipe(
-  Command.withDescription("Disable T3 Connect and clear the stored CLI authorization."),
+  Command.withDescription("Disable Sled Connect and clear the stored CLI authorization."),
   Command.withHandler((flags) =>
     runCloudCommand(flags, disconnectCloud({ clearAuthorization: true })),
   ),
 );
 
 // `t3 connect` itself is `t3 up --connect`, in up.ts.
+const connectRelayCommand = Command.make("relay", {
+  ...projectLocationFlags,
+  url: Flag.String("url").pipe(
+    Flag.withDescription("HTTPS address of your personal Sled Connect relay."),
+  ),
+}).pipe(
+  Command.withDescription("Validate and save this machine's personal Sled Connect relay."),
+  Command.withHandler((flags) =>
+    runCloudCommand(
+      flags,
+      Effect.gen(function* () {
+        const secrets = yield* ServerSecretStore.ServerSecretStore;
+        const saved = yield* secrets.get(RELAY_URL_SECRET);
+        const linked = yield* secrets.get(CLOUD_LINKED_USER_ID);
+        const url = yield* Effect.try(() => personalRelayUrl(flags.url));
+        if (Option.isSome(linked) && Option.isSome(saved) && bytesToString(saved.value) !== url) {
+          yield* Console.error(
+            "Unlink the existing connection with `t3 connect unlink` before changing relays.",
+          );
+          return yield* Effect.sync(() => {
+            process.exitCode = 1;
+          });
+        }
+        const publishableKey = yield* clerkPublishableKeyConfig;
+        yield* Effect.tryPromise(() => validatePersonalRelay(url, publishableKey));
+        yield* secrets.set(RELAY_URL_SECRET, stringToBytes(url));
+        yield* Console.log(
+          `Sled Connect relay saved: ${url}\nRun \`t3 connect\` to sign in and connect this machine.`,
+        );
+      }),
+    ),
+  ),
+);
+
 export const connectSubcommands = [
+  connectRelayCommand,
   connectLoginCommand,
   connectLinkCommand,
   connectPublishCommand,

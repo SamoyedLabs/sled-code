@@ -50,7 +50,7 @@ const boldTerminalText = (value: string): string => `\u001b[1m${value}\u001b[22m
 
 function formatLoopbackAuthorizationPrompt(authorizationUrl: string): string {
   return [
-    "Open this URL to authorize T3 Connect:",
+    "Open this URL to authorize Sled Connect:",
     `  ${authorizationUrl}`,
     "",
     `Press ${boldTerminalText("Enter")} to open it in your browser.`,
@@ -197,7 +197,7 @@ export class CloudCliCredentialRemovalError extends Schema.TaggedError<CloudCliC
   { cause: Schema.Defect() },
 ) {
   override get message(): string {
-    return "Could not remove the stored T3 Connect CLI credential.";
+    return "Could not remove the stored Sled Connect CLI credential.";
   }
 }
 
@@ -215,10 +215,10 @@ export class CloudCliCredentialRefreshError extends Schema.TaggedError<CloudCliC
 
   override get message(): string {
     return this.requiresLogin
-      ? `Could not refresh the T3 Connect CLI credential${
+      ? `Could not refresh the Sled Connect CLI credential${
           this.oauthErrorCode === undefined ? "" : ` (OAuth error: ${this.oauthErrorCode})`
         }. Run \`t3 connect login\` to authorize again.`
-      : "Could not refresh the T3 Connect CLI credential.";
+      : "Could not refresh the Sled Connect CLI credential.";
   }
 }
 
@@ -229,7 +229,7 @@ export class CloudCliCredentialReadError extends Schema.TaggedError<CloudCliCred
   { cause: Schema.Defect() },
 ) {
   override get message(): string {
-    return "Could not read the stored T3 Connect CLI credential.";
+    return "Could not read the stored Sled Connect CLI credential.";
   }
 }
 
@@ -238,7 +238,7 @@ export class CloudCliAuthorizationError extends Schema.TaggedError<CloudCliAutho
   { cause: Schema.Defect() },
 ) {
   override get message(): string {
-    return "Could not authorize the T3 Connect CLI.";
+    return "Could not authorize the Sled Connect CLI.";
   }
 }
 
@@ -247,7 +247,7 @@ export class CloudCliAuthorizationTimeoutError extends Schema.TaggedError<CloudC
   { cause: Schema.Defect() },
 ) {
   override get message(): string {
-    return "Timed out waiting for T3 Connect authorization.";
+    return "Timed out waiting for Sled Connect authorization.";
   }
 }
 
@@ -256,7 +256,7 @@ export class CloudCliAuthorizationDeniedError extends Schema.TaggedError<CloudCl
   {},
 ) {
   override get message(): string {
-    return "T3 Connect authorization was denied in the browser.";
+    return "Sled Connect authorization was denied in the browser.";
   }
 }
 
@@ -518,7 +518,7 @@ export const make = Effect.gen(function* () {
         const url = new URL(request.originalUrl, metadata.redirectUri);
         const code = url.searchParams.get("code");
         if (url.searchParams.get("state") !== state || !code) {
-          return HttpServerResponse.text("Invalid T3 Connect authorization callback.", {
+          return HttpServerResponse.text("Invalid Sled Connect authorization callback.", {
             status: 400,
           });
         }
