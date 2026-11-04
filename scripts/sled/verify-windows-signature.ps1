@@ -18,7 +18,7 @@ if ($s.SignerCertificate) {
     $chain = [System.Security.Cryptography.X509Certificates.X509Chain]::new()
     try {
         $chain.ChainPolicy.VerificationFlags = [System.Security.Cryptography.X509Certificates.X509VerificationFlags]::NoFlag
-        $chain.ChainPolicy.ApplicationPolicy.Add([System.Security.Cryptography.Oid]::new('1.3.6.1.5.5.7.3.3'))
+        [void]$chain.ChainPolicy.ApplicationPolicy.Add([System.Security.Cryptography.Oid]::new('1.3.6.1.5.5.7.3.3'))
         $chainValid = $chain.Build($s.SignerCertificate)
         $chainStatus = @($chain.ChainStatus | ForEach-Object { @{ status = $_.Status.ToString(); message = $_.StatusInformation.Trim() } })
         $chainElements = @($chain.ChainElements | ForEach-Object { CertificateInfo $_.Certificate })

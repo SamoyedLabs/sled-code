@@ -22,10 +22,16 @@ def retain_errors(native, environment, credentials):
         text = re.sub(r'[A-Za-z0-9+/=_-]{120,}', '[REDACTED BLOB]', text)
         lines = text.splitlines()
         selected = set()
+        errors = set()
         for index, line in enumerate(lines):
+            context = range(max(0, index - 2), min(len(lines), index + 4))
+            if re.search(r'(?:^|\S:\d+(?::\d+)?:\s+)(?:fatal\s+)?error:\s|^fatal\b', line, re.I):
+                errors.update(context)
             if re.search(r'error\b|failed\b|fatal\b|codesign|provisioning|signing certificate', line, re.I):
-                selected.update(range(max(0, index - 2), min(len(lines), index + 4)))
-        indices = sorted(selected)[-240:]
+                selected.update(context)
+        # Compiler errors can precede thousands of warning/command lines in parallel builds.
+        priority = set(sorted(errors)[:160])
+        indices = sorted(priority | set(sorted(selected - priority)[-(240 - len(priority)):]))
         report = dict(stage=log.stem, totalLines=len(lines),
                       excerpts=[dict(line=i + 1, text=lines[i][:2000]) for i in indices])
         target = log.with_name(log.stem + '-diagnostics.json')

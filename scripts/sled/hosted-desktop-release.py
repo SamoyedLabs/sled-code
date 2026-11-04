@@ -55,15 +55,25 @@ def credentials(platform):
     if platform != 'mac':
         trust = os.environ.get('SLED_WINDOWS_TRUST_CERT')
         if trust:
+            if os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('RUNNER_ENVIRONMENT') != 'github-hosted':
+                raise ValueError('Machine certificate trust is restricted to disposable GitHub-hosted runners')
             if not re.fullmatch(r'[A-Fa-f0-9]{40}', os.environ.get('SLED_WINDOWS_SIGNER_THUMBPRINT', '')):
                 raise ValueError('Dedicated private Windows trust requires the owner-approved certificate thumbprint')
             certificate = Path(os.environ['RUNNER_TEMP']) / 'sled-private-signing.cer'
             certificate.write_bytes(base64.b64decode(''.join(trust.split()), validate=True))
             subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command',
+                "$ErrorActionPreference='Stop'; "
                 '$c=New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($env:SLED_TRUST_FILE); '
+                # CurrentUser Root import requires an interactive trust dialog on hosted Windows.
                 'if($c.Thumbprint -ine $env:SLED_WINDOWS_SIGNER_THUMBPRINT){throw "Private certificate fingerprint mismatch"}; '
-                'Import-Certificate -FilePath $env:SLED_TRUST_FILE -CertStoreLocation Cert:\CurrentUser\Root | Out-Null; '
-                'Import-Certificate -FilePath $env:SLED_TRUST_FILE -CertStoreLocation Cert:\CurrentUser\TrustedPublisher | Out-Null'],
+                'Import-Certificate -FilePath $env:SLED_TRUST_FILE -CertStoreLocation Cert:\LocalMachine\Root | Out-Null; '
+                'Import-Certificate -FilePath $env:SLED_TRUST_FILE -CertStoreLocation Cert:\LocalMachine\TrustedPublisher | Out-Null; '
+                '$chain=New-Object System.Security.Cryptography.X509Certificates.X509Chain; '
+                'try { '
+                '$chain.ChainPolicy.VerificationFlags=[System.Security.Cryptography.X509Certificates.X509VerificationFlags]::NoFlag; '
+                '$chain.ChainPolicy.ApplicationPolicy.Add([System.Security.Cryptography.Oid]::new("1.3.6.1.5.5.7.3.3")); '
+                'if(!$chain.Build($c)){throw ("Private code-signing chain is not trusted: " + ($chain.ChainStatus.Status -join ", "))} '
+                '} finally {$chain.Dispose()}'],
                 env={**os.environ, 'SLED_TRUST_FILE': str(certificate)}, check=True)
         return
     temporary = Path(os.environ['RUNNER_TEMP'])

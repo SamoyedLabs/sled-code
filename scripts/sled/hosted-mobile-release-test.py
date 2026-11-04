@@ -36,13 +36,14 @@ class MobileReleaseTest(unittest.TestCase):
                 'normal build output\n' * 1000 +
                 'error: signing failed with secret-fixture and generated-keychain-secret\n'
                 '-----BEGIN PRIVATE KEY-----\nprivate-material\n-----END PRIVATE KEY-----\n'
-                'Authorization: Bearer bearer-fixture\n' + 'A' * 200 + '\n')
+                'Authorization: Bearer bearer-fixture\n' + 'A' * 200 + '\n' +
+                ('clang -Werror=return-type source.m\ninternal class GenericError {}\n' * 400))
             m.retain_errors(folder, {'SLED_EXPO_TOKEN': 'secret-fixture'}, credentials)
             text = (folder / 'archive-diagnostics.json').read_text()
             for secret in ('secret-fixture', 'generated-keychain-secret', 'private-material', 'bearer-fixture', 'A' * 120):
                 self.assertNotIn(secret, text)
             self.assertIn('signing failed', text)
-            self.assertLess(len(json.loads(text)['excerpts']), 20)
+            self.assertLessEqual(len(json.loads(text)['excerpts']), 240)
 
     def test_eas_environment_cannot_change_validated_runtime_or_identity(self):
         with tempfile.TemporaryDirectory() as temp:
