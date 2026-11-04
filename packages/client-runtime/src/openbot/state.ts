@@ -207,6 +207,11 @@ export function createOpenbotAtoms<R, E>(
       tag: WS_METHODS.openbotWrite,
       concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
     }),
+    writeToHost: createEnvironmentRpcCommand(runtime, {
+      label: "Update bot conversation or task",
+      tag: WS_METHODS.openbotWriteToHost,
+      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
+    }),
     admin: createEnvironmentRpcCommand(runtime, {
       label: "Update bot",
       tag: WS_METHODS.openbotAdmin,

@@ -1,3 +1,5 @@
+import { useNavigation } from "@react-navigation/native";
+import { Button } from "../../components/ui/Button";
 import { useActiveNewTask } from "../../state/active-new-task";
 import { ThreadUndoNotice } from "../home/ThreadUndoNotice";
 import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
@@ -437,6 +439,7 @@ function ThreadNavigationSidebarPane(
     }
   };
   // Destructure callback props; capturing all props would invalidate these row-closing handlers on unrelated changes.
+  const navigation = useNavigation();
   const { onSelectThread, onOpenThreadPullRequests } = props;
   // A row listed for a message match opens the thread at that message, by
   // tap or by shortcut.
@@ -765,6 +768,16 @@ function ThreadNavigationSidebarPane(
                 scrollEventThrottle={16}
                 showsVerticalScrollIndicator={false}
                 style={styles.threadList}
+                ListHeaderComponent={
+                  <View className="px-4 py-2">
+                    <Button
+                      label="Bots"
+                      tone="secondary"
+                      size="compact"
+                      onPress={() => navigation.navigate("Bots")}
+                    />
+                  </View>
+                }
                 ListEmptyComponent={listEmpty}
               />
             </GestureDetector>
@@ -882,6 +895,14 @@ function ThreadNavigationSidebarPane(
             </View>
           </View>
 
+          <View className="mx-4 mt-2">
+            <Button
+              label="Bots"
+              tone="secondary"
+              size="compact"
+              onPress={() => navigation.navigate("Bots")}
+            />
+          </View>
           <View className="mx-4 mt-[9px] h-[38px] flex-row items-center gap-1.5 rounded-xl bg-sidebar-search pr-2.5 pl-[11px]">
             <SymbolView
               name="magnifyingglass"

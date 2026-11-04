@@ -2,6 +2,7 @@ import * as NodeModule from "node:module";
 import { describe, expect, it } from "vite-plus/test";
 import {
   androidWorkspaceTabNavigationState,
+  androidWorkspaceSettingsOpen,
   type AndroidWorkspaceNavigationTab,
 } from "../features/workspace/android-workspace-tabs";
 import {
@@ -36,6 +37,8 @@ const options = {
     "PullRequestFile",
     "PullRequestReviewers",
     "Settings",
+    "Bots",
+    "SettingsBots",
     "SettingsEnvironments",
     "SettingsAppearance",
     "SettingsOpenSourceLicenses",
@@ -249,10 +252,16 @@ describe("Android Settings tab", () => {
     expect(back.routes[0]?.key).toBe(previous.routes[0]?.key);
   });
 
-  it("stays selected under a settings page until a list tab returns to Home", () => {
+  it("stays selected under Settings pages but not the bot workspace or list tabs", () => {
     const previous = legacyHistory();
     const usage = apply(openTab(previous, "settings"), StackActions.push("SettingsUsage"));
-    const list = openTab(usage, "pullRequests");
+    expect(androidWorkspaceSettingsOpen(usage)).toBe(true);
+    const botSettings = apply(usage, StackActions.push("SettingsBots"));
+    const bots = apply(botSettings, StackActions.push("Bots"));
+    expect(androidWorkspaceSettingsOpen(bots)).toBe(false);
+    expect(androidWorkspaceSettingsOpen(apply(bots, StackActions.pop()))).toBe(true);
+    const list = openTab(bots, "pullRequests");
+    expect(androidWorkspaceSettingsOpen(list)).toBe(false);
     expect(names(list)).toEqual(["Home"]);
     expect(list.routes[0]?.key).toBe(previous.routes[0]?.key);
   });

@@ -1,6 +1,6 @@
 # Openbot engine development
 
-The Openbot integration is under development. It provides an opt-in managed host, bot controls in web and mobile Settings, and a bridge from bot assignments to actual Sled coding threads on configured local or linked environments. Full upstream feature coverage and packaged cross-platform verification remain incomplete.
+The Openbot integration is under development. It provides an opt-in managed host, a bot workspace on web, desktop and mobile, and a bridge from bot assignments to actual Sled coding threads on configured local or linked environments. Full upstream feature coverage and packaged cross-platform verification remain incomplete.
 
 ## Enable a development host
 
@@ -21,6 +21,8 @@ Sled installs its MCP endpoint into the managed Openbot profile using a private,
 Bots reach the `openbot` and `openbot_coding` MCP tools through that connection. Use each tool's `describe` action for its request schema. A coding assignment needs a stable origin and operation ID; repeat those identifiers after an uncertain response to recover the existing thread. Result delivery reports uncertainty separately from coding completion when upstream acceptance cannot be established.
 
 The bot screens use live updates and expose pending questions and approvals. Approval responses are bound to the engine that issued the request. An incomplete attention snapshot is a partial list, not confirmation that no other requests exist. Browser help can still require interaction on the host; push notifications are not integrated yet.
+
+Open **Bots** from the sidebar or command palette for daily work. Select the connected environments to see their bots, conversations, tasks, channels, workflows and requests needing attention. Open a bot's coding assignment to continue in its real Sled thread. Engine setup, provider connections and upstream maintenance remain in Settings → Bots.
 
 Open a bot's Browser panel to manage profiles and tabs. Take control before interacting with its page and return control when finished so the bot can continue. Browser management and viewing require settings write and preview operate access. The live viewer uses Sled's authenticated media connection; no upstream endpoint or credential is sent to the client. OS consent and host-level browser permission prompts must still be handled on the host.
 

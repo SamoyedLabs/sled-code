@@ -1,3 +1,8 @@
+import {
+  OpenbotConversationReadRequest,
+  OpenbotConversationCommand,
+  OpenbotQueueCommand,
+} from "./openbotConversation.ts";
 import { OpenbotBrowserReadRequest, OpenbotBrowserAdminRequest } from "./openbotBrowser.ts";
 import * as Schema from "effect/Schema";
 import { OpenbotChannelReadRequest, OpenbotChannelAdminRequest } from "./openbotChannels.ts";
@@ -158,6 +163,7 @@ export const OpenbotMessagingOrchestratorRequest = Schema.Union([
 ]);
 
 export const OpenbotReadRequest = Schema.Union([
+  OpenbotConversationReadRequest,
   OpenbotWorkflowReadRequest,
   Schema.Struct({ operation: Schema.Literal("compatibility.read") }),
   OpenbotChannelReadRequest,
@@ -177,8 +183,12 @@ export const OpenbotReadRequest = Schema.Union([
 export type OpenbotReadRequest = typeof OpenbotReadRequest.Type;
 
 export const OpenbotWriteRequest = Schema.Union([
+  OpenbotConversationCommand,
+  OpenbotQueueCommand,
   Schema.Struct({
     operation: Schema.Literal("conversation.send"),
+    replyToMessageId: Schema.optional(Schema.NullOr(Id)),
+    attachmentDraftIds: Schema.optional(Schema.Array(Id).check(Schema.isMaxLength(10))),
     agentId: Id,
     text: Text,
     clientMessageId: Id,
@@ -206,6 +216,12 @@ export const OpenbotWriteRequest = Schema.Union([
 ]);
 export type OpenbotWriteRequest = typeof OpenbotWriteRequest.Type;
 
+export const OpenbotHostWriteInput = Schema.Struct({
+  hostId: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)),
+  request: OpenbotWriteRequest,
+});
+export type OpenbotHostWriteInput = typeof OpenbotHostWriteInput.Type;
+
 const AttentionResponse = Schema.Union([
   Schema.Struct({
     operation: Schema.Literal("approval.respond"),
@@ -230,6 +246,7 @@ export const OpenbotAttentionResponseInput = Schema.Struct({
 export type OpenbotAttentionResponseInput = typeof OpenbotAttentionResponseInput.Type;
 
 export const OpenbotAdminRequest = Schema.Union([
+  OpenbotWriteRequest,
   OpenbotBrowserReadRequest,
   OpenbotBrowserAdminRequest,
   OpenbotChannelAdminRequest,

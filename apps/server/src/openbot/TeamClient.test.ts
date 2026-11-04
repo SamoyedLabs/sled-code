@@ -644,6 +644,8 @@ it.live("routes typed bot work through fixed endpoints with source-compatible bo
           JSON.stringify({
             botId: "bot1",
             threadId: null,
+            activeTurnId: null,
+            revision: 0,
             messages: [],
             references: { botId: { text: "literal reference key" } },
           }),
@@ -661,6 +663,15 @@ it.live("routes typed bot work through fixed endpoints with source-compatible bo
             botId: "bot1",
             deliveries: [
               {
+                id: "delivery",
+                messageId: "message",
+                status: "queued",
+                position: 1,
+                turnId: null,
+                error: null,
+                createdAt: "now",
+                attachments: [],
+                replyToMessageId: null,
                 recipientBotId: "bot1",
                 sender: { kind: "bot", botId: "sender" },
                 text: "botId is literal text",
@@ -688,8 +699,9 @@ it.live("routes typed bot work through fixed endpoints with source-compatible bo
     expect(yield* session.apiRead({ operation: "conversation.read", agentId: "bot1" })).toEqual({
       agentId: "bot1",
       threadId: null,
+      activeTurnId: null,
+      revision: 0,
       messages: [],
-      references: { botId: { text: "literal reference key" } },
     });
     expect(
       yield* session.apiWrite({
@@ -706,6 +718,15 @@ it.live("routes typed bot work through fixed endpoints with source-compatible bo
       agentId: "bot1",
       deliveries: [
         {
+          id: "delivery",
+          messageId: "message",
+          status: "queued",
+          position: 1,
+          turnId: null,
+          error: null,
+          createdAt: "now",
+          attachments: [],
+          replyToMessageId: null,
           recipientAgentId: "bot1",
           sender: { kind: "agent", agentId: "sender" },
           text: "botId is literal text",
@@ -1353,4 +1374,112 @@ it.live("renames browser profiles without rewriting their assignments or unknown
     Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
     Effect.scoped,
   ),
+);
+
+it.live(
+  "dispatches history, host edit ownership, stale steer conflicts and retry-stable branches",
+  () =>
+    Effect.gen(function* () {
+      const bodies: unknown[] = [];
+      const apiUrl = yield* fixture(async (request, response) => {
+        let text = "";
+        for await (const chunk of request) text += chunk.toString();
+        response.setHeader("content-type", "application/json");
+        if (request.url === "/v1/auth/login") {
+          response.end(JSON.stringify({ sessionToken: "private", sessionExpiresAt: "2027-01-01" }));
+          return;
+        }
+        if (request.url === "/v1/auth/logout") {
+          response.writeHead(204).end();
+          return;
+        }
+        const body: unknown = text ? JSON.parse(text) : {};
+        bodies.push(body);
+        if (request.url?.startsWith("/v1/agents/a/conversation-page?")) {
+          expect(request.url).toContain("before=opaque%2B");
+          response.end(
+            JSON.stringify({
+              botId: "a",
+              threadId: null,
+              activeTurnId: "running",
+              revision: 3,
+              messages: [],
+              references: {},
+              pageInfo: { hasOlder: false, olderCursor: null },
+            }),
+          );
+          return;
+        }
+        if (request.url === "/v1/agents/a/queue/edit") {
+          response.end(JSON.stringify({ botId: "a", deliveries: [] }));
+          return;
+        }
+        if (request.url === "/v1/agents/a/queue/steer") {
+          response.writeHead(409).end("{}");
+          return;
+        }
+        if (request.url === "/v1/agent-threads/branch") {
+          response.end(
+            JSON.stringify({
+              id: "branch",
+              branch: {
+                sourceTaskId: null,
+                sourceMessageId: "m",
+                throughMessageId: "m",
+                sourceTitle: null,
+              },
+            }),
+          );
+          return;
+        }
+        response.writeHead(404).end("{}");
+      });
+      const session = yield* (yield* TeamClient.TeamClient).connect({
+        apiUrl,
+        ownerSecret: "fixture",
+      });
+      expect(
+        yield* session.apiRead({
+          operation: "conversation.page",
+          agentId: "a",
+          anchor: { type: "before", cursor: "opaque+" },
+          limit: 20,
+        }),
+      ).toMatchObject({ agentId: "a", revision: 3 });
+      expect(
+        yield* session.apiWrite({
+          operation: "queue.edit",
+          agentId: "a",
+          deliveryId: "d",
+          editId: "editor",
+          action: "begin",
+        }),
+      ).toMatchObject({ agentId: "a" });
+      const conflict = yield* Effect.flip(
+        session.apiWrite({
+          operation: "queue.steer",
+          agentId: "a",
+          deliveryId: "d",
+          expectedTurnId: "old",
+        }),
+      );
+      expect(conflict.status).toBe(409);
+      const branch = {
+        operation: "thread.branch" as const,
+        agentId: "a",
+        taskId: null,
+        messageId: "m",
+        requestId: "retry-id",
+      };
+      yield* session.apiWrite(branch);
+      yield* session.apiWrite(branch);
+      expect(bodies.slice(-2)).toEqual([
+        { agentId: "a", taskId: null, messageId: "m", requestId: "retry-id" },
+        { agentId: "a", taskId: null, messageId: "m", requestId: "retry-id" },
+      ]);
+      yield* session.close;
+    }).pipe(
+      Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+      Effect.scoped,
+    ),
 );

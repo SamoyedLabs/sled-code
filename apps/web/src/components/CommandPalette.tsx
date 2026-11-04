@@ -1572,6 +1572,25 @@ function OpenCommandPaletteDialog(props: {
 
   actionItems.push({
     kind: "action",
+    value: "action:bots",
+    searchTerms: [
+      "bots",
+      "openbot",
+      "persistent",
+      "conversations",
+      "approvals",
+      "channels",
+      "workflows",
+    ],
+    title: "Open bot workspace",
+    icon: <MonitorIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/bots" });
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
     value: "action:usage",
     searchTerms: ["usage", "use", "tokens", "cost", "spend", "limits", "stats", "analytics"],
     title: "Open usage",

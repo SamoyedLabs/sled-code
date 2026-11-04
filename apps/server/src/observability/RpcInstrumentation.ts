@@ -113,6 +113,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.openbotCodingPolicyEnable]: "openbot",
   [WS_METHODS.openbotCodingPolicyDisable]: "openbot",
   [WS_METHODS.openbotWrite]: "openbot",
+  [WS_METHODS.openbotWriteToHost]: "openbot",
   [WS_METHODS.openbotAdmin]: "openbot",
   [WS_METHODS.openbotAdminToHost]: "openbot",
   [WS_METHODS.openbotCodingLaunch]: "openbot",

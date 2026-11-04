@@ -14,9 +14,23 @@ function reference(value: ObjectValue, wire: string, current: string): ObjectVal
   return { ...rest, [current]: id };
 }
 
+function message(value: Json): Json {
+  if (!isObject(value)) return value;
+  return reference(value, "senderBotId", "senderAgentId");
+}
+
 function row(value: Json): Json {
   if (!isObject(value)) return value;
-  const result = reference(value, "botId", "agentId");
+  let result = reference(value, "botId", "agentId");
+  if (Array.isArray(result.messages))
+    result = { ...result, messages: result.messages.map(message) };
+  if (isObject(result.references))
+    result = {
+      ...result,
+      references: Object.fromEntries(
+        Object.entries(result.references).map(([id, value]) => [id, message(value)]),
+      ),
+    };
   if (!Array.isArray(result.deliveries)) return result;
   return {
     ...result,
@@ -32,7 +46,7 @@ function row(value: Json): Json {
 // Frozen core routes use bot vocabulary; optional capability routes already use agent vocabulary.
 export function normalize(path: string, value: Json): Json {
   if (
-    !/^\/v1\/agents\/[^/]+\/(?:conversation(?:-page)?|queue|messages|memories(?:\/[^/]+)?|routines(?:\/[^/]+)?(?:\/(?:runs|test))?)$/.test(
+    !/^\/v1\/agents\/[^/]+\/(?:conversation(?:-page)?|queue(?:\/edit)?|messages|memories(?:\/[^/]+)?|routines(?:\/[^/]+)?(?:\/(?:runs|test))?)$/.test(
       new URL(path).pathname,
     )
   )

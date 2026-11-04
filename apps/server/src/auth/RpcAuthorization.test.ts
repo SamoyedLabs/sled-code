@@ -19,12 +19,14 @@ import {
   AuthTerminalOperateScope,
   WS_METHODS,
   WsRpcGroup,
+  OpenbotHostWriteInput,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as RpcTest from "effect/rpc/RpcTest";
+import * as Schema from "effect/Schema";
 
 import {
   RPC_REQUIRED_SCOPES,
@@ -34,6 +36,21 @@ import {
 import * as RpcAuthorization from "./RpcAuthorization.ts";
 
 describe("RPC authorization scopes", () => {
+  it("allows ordinary host-bound conversation commands with execution permission alone", () => {
+    expect(
+      clientRpcRequiredScopes(WS_METHODS.openbotWriteToHost, {
+        hostId: "host",
+        request: { operation: "conversation.markUnread", agentId: "bot" },
+      }),
+    ).toEqual([AuthOrchestrationOperateScope]);
+    const decode = Schema.decodeUnknownSync(OpenbotHostWriteInput);
+    expect(() =>
+      decode({ hostId: "host", request: { operation: "provider.runtimes.check" } }),
+    ).toThrow();
+    expect(() =>
+      decode({ hostId: "", request: { operation: "conversation.markUnread", agentId: "bot" } }),
+    ).toThrow();
+  });
   it("declares exactly one scope for every RPC in the server group", () => {
     expect(new Set(Object.keys(RPC_REQUIRED_SCOPES))).toEqual(new Set(WsRpcGroup.requests.keys()));
   });
@@ -156,6 +173,15 @@ describe("RPC authorization scopes", () => {
         "workflow.stopStep",
         "workflow.retryStep",
         "workflow.decide",
+        "conversation.send",
+        "conversation.markRead",
+        "conversation.react",
+        "thread.branch",
+        "thread.delete",
+        "queue.edit",
+        "queue.steer",
+        "queue.reorder",
+        "task.send",
         "channel.send",
         "channel.stop",
         "channel.resume",
@@ -217,6 +243,53 @@ describe("RPC authorization scopes", () => {
     }
   });
 });
+
+it.effect.each([AuthOrchestrationReadScope, AuthOrchestrationOperateScope])(
+  "guards ordinary host writes with operate permission while retaining admin settings protection (%s)",
+  (scope) =>
+    Effect.gen(function* () {
+      const tested = [WS_METHODS.openbotWriteToHost, WS_METHODS.openbotAdminToHost] as const;
+      const group = WsRpcGroup.omit(
+        ...[...WsRpcGroup.requests.keys()].filter(
+          (tag): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, (typeof tested)[number]> =>
+            !(tested as ReadonlyArray<string>).includes(tag),
+        ),
+      );
+      const handled: string[] = [];
+      const client = yield* RpcTest.makeClient(group).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            group.toLayerHandler(WS_METHODS.openbotWriteToHost, (input) =>
+              Effect.sync(() => {
+                handled.push(`${input.hostId}:${input.request.operation}`);
+                return null;
+              }),
+            ),
+            group.toLayerHandler(WS_METHODS.openbotAdminToHost, () =>
+              Effect.die("admin handler must stay protected"),
+            ),
+            RpcAuthorization.layer([scope]),
+          ),
+        ),
+      );
+      const input = {
+        hostId: "chosen-host",
+        request: { operation: "conversation.markUnread" as const, agentId: "bot" },
+      };
+      if (scope === AuthOrchestrationOperateScope) {
+        expect(yield* client[WS_METHODS.openbotWriteToHost](input)).toBe(null);
+        expect(handled).toEqual(["chosen-host:conversation.markUnread"]);
+      } else {
+        expect(yield* client[WS_METHODS.openbotWriteToHost](input).pipe(Effect.flip)).toMatchObject(
+          { requiredPermission: AuthOrchestrationOperateScope },
+        );
+        expect(handled).toEqual([]);
+      }
+      expect(yield* client[WS_METHODS.openbotAdminToHost](input).pipe(Effect.flip)).toMatchObject({
+        requiredPermission: AuthSettingsWriteScope,
+      });
+    }).pipe(Effect.scoped),
+);
 
 it("requires operate permission for host retry while preserving read-only listing", () => {
   expect(requiredScopeForDeviceList({})).toBe(AuthOrchestrationReadScope);

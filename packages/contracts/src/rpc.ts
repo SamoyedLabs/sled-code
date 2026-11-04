@@ -43,6 +43,7 @@ import {
 import {
   OpenbotReadRequest,
   OpenbotWriteRequest,
+  OpenbotHostWriteInput,
   OpenbotAdminRequest,
   OpenbotApiResponse,
   OpenbotAttentionResponseInput,
@@ -632,6 +633,7 @@ export const WS_METHODS = {
   openbotCodingPolicyEnable: "openbot.codingPolicy.enable",
   openbotCodingPolicyDisable: "openbot.codingPolicy.disable",
   openbotWrite: "openbot.write",
+  openbotWriteToHost: "openbot.writeToHost",
   openbotAdmin: "openbot.admin",
   openbotAdminToHost: "openbot.adminToHost",
   openbotReadToHost: "openbot.readToHost",
@@ -2155,6 +2157,11 @@ const WsOpenbotWriteRpc = Rpc.make(WS_METHODS.openbotWrite, {
   success: OpenbotApiResponse,
   error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
 });
+const WsOpenbotWriteToHostRpc = Rpc.make(WS_METHODS.openbotWriteToHost, {
+  payload: OpenbotHostWriteInput,
+  success: OpenbotApiResponse,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
 const WsOpenbotAdminRpc = Rpc.make(WS_METHODS.openbotAdmin, {
   payload: OpenbotAdminRequest,
   success: OpenbotApiResponse,
@@ -2403,6 +2410,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOpenbotCodingPolicyEnableRpc,
   WsOpenbotCodingPolicyDisableRpc,
   WsOpenbotWriteRpc,
+  WsOpenbotWriteToHostRpc,
   WsOpenbotAdminRpc,
   WsOpenbotAdminToHostRpc,
   WsOpenbotReadToHostRpc,

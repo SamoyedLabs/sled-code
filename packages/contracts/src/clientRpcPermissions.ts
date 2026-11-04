@@ -37,6 +37,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.openbotCodingPolicyEnable]: AuthSettingsWriteScope,
   [WS_METHODS.openbotCodingPolicyDisable]: AuthSettingsWriteScope,
   [WS_METHODS.openbotWrite]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotWriteToHost]: AuthOrchestrationOperateScope,
   [WS_METHODS.openbotAdmin]: AuthSettingsWriteScope,
   [WS_METHODS.openbotAdminToHost]: AuthSettingsWriteScope,
   [WS_METHODS.openbotCodingLaunch]: AuthOrchestrationOperateScope,
@@ -148,6 +149,10 @@ export function clientRpcRequiredScopes(
       if (request.operation.startsWith("browser."))
         return [AuthSettingsWriteScope, AuthPreviewOperateScope];
       if (
+        request.operation.startsWith("conversation.") ||
+        request.operation.startsWith("queue.") ||
+        request.operation.startsWith("thread.") ||
+        request.operation.startsWith("task.") ||
         request.operation === "agent.create" ||
         request.operation === "workflow.startRun" ||
         request.operation === "workflow.runStep" ||

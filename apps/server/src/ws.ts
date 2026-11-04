@@ -2412,6 +2412,12 @@ export const layerWsRpc = (
                 .apiWrite(input)
                 .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
             : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
+        [WS_METHODS.openbotWriteToHost]: (input) =>
+          Option.isSome(openbot)
+            ? openbot.value
+                .apiWriteToHost(input.hostId, input.request)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
         [WS_METHODS.openbotAdminToHost]: (input) =>
           Option.isSome(openbot)
             ? openbot.value

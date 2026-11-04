@@ -1,3 +1,5 @@
+import * as ConversationProtocol from "./ConversationProtocol.ts";
+import * as QueueProtocol from "./QueueProtocol.ts";
 import * as BrowserProtocol from "./BrowserProtocol.ts";
 import {
   OpenbotReadRequest,
@@ -283,10 +285,14 @@ interface Route {
   readonly projection?: "mcp-list" | "mcp-test" | "mcp-status" | "messaging-orchestrator";
   readonly providerProjection?: keyof typeof providerDecoders;
   readonly workflowProjection?: Parameters<typeof WorkflowProtocol.project>[0];
+  readonly conversationProjection?: Parameters<typeof ConversationProtocol.project>[0];
+  readonly queueProjection?: string;
   readonly channelProjection?: Parameters<typeof ChannelProtocol.project>[0];
 }
 // Only these source-backed operations can spend the private host-owner session.
 function apiRoute(request: Exclude<ApiRequest, SavedMcpRequest>): Route {
+  if (ConversationProtocol.isRequest(request)) return ConversationProtocol.route(request);
+  if (QueueProtocol.isRequest(request)) return QueueProtocol.route(request);
   if (WorkflowProtocol.isRequest(request)) return WorkflowProtocol.route(request);
   if (ChannelProtocol.isRequest(request)) return ChannelProtocol.route(request);
   const agentPath =
@@ -748,7 +754,11 @@ function apiRoute(request: Exclude<ApiRequest, SavedMcpRequest>): Route {
     case "agent.delete":
       return { method: "DELETE", path: agentPath };
     case "conversation.read":
-      return { method: "GET", path: `${agentPath}/conversation` };
+      return {
+        method: "GET",
+        path: `${agentPath}/conversation`,
+        conversationProjection: "conversation.read",
+      };
     case "conversation.send":
       return {
         method: "POST",
@@ -756,14 +766,14 @@ function apiRoute(request: Exclude<ApiRequest, SavedMcpRequest>): Route {
         body: {
           text: request.text,
           clientMessageId: request.clientMessageId,
-          attachmentDraftIds: [],
-          replyToMessageId: null,
+          attachmentDraftIds: request.attachmentDraftIds ?? [],
+          replyToMessageId: request.replyToMessageId ?? null,
         },
       };
     case "conversation.stop":
       return { method: "POST", path: `${agentPath}/interrupt`, body: { turnId: request.turnId } };
     case "queue.read":
-      return { method: "GET", path: `${agentPath}/queue` };
+      return { method: "GET", path: `${agentPath}/queue`, queueProjection: "queue.read" };
     case "task.list":
     case "task.read":
     case "task.start":
@@ -772,7 +782,12 @@ function apiRoute(request: Exclude<ApiRequest, SavedMcpRequest>): Route {
     case "task.close":
     case "task.reopen": {
       const { operation, ...body } = request;
-      return { method: "POST", path: `/v1/agent-tasks/${operation.slice(5)}`, body };
+      return {
+        method: "POST",
+        path: `/v1/agent-tasks/${operation.slice(5)}`,
+        body,
+        ...(operation === "task.read" ? { conversationProjection: operation } : {}),
+      };
     }
     case "memory.list":
       return { method: "GET", path: `${agentPath}/memories` };
@@ -861,7 +876,7 @@ const make = Effect.gen(function* () {
             "OpenBot-Protocol-Version": "9",
             "OpenBot-App-Version": "0.60.0",
             "OpenBot-Capabilities":
-              "agent-tasks-v1,agent-create-model,agent-admin-v1,agent-instructions-v1,skills-admin-v1,mcp-servers-v1,mcp-sign-in-v1,browser-navigation,browser-user-control,browser-page-state,browser-profiles-v1,connectors-v1,channel-chats-v1,providers-v8,provider-accounts-v1,provider-default-v1,provider-host-sign-in-v1,provider-sign-out-v1,custom-provider-harness-v1,custom-agents-v1,model-visibility-v1,claude-api-key-v1,sign-in-relay-v1,provider-account-relay-v1,provider-account-relay-v2,workspace-directory-v1,conversation-file-search-v1,agent-thread-files-v1,message-client-id-v1,workflows-v1,channel-delete-v1,channel-task-cancel-v1,channel-attention-v1",
+              "subagents-v1,queue-edit-v1,queue-window-v1,conversation-unread,agent-threads-v1,agent-thread-reads-v1,agent-thread-branches-v1,agent-thread-replies-v1,agent-tasks-v1,agent-create-model,agent-admin-v1,agent-instructions-v1,skills-admin-v1,mcp-servers-v1,mcp-sign-in-v1,browser-navigation,browser-user-control,browser-page-state,browser-profiles-v1,connectors-v1,channel-chats-v1,providers-v8,provider-accounts-v1,provider-default-v1,provider-host-sign-in-v1,provider-sign-out-v1,custom-provider-harness-v1,custom-agents-v1,model-visibility-v1,claude-api-key-v1,sign-in-relay-v1,provider-account-relay-v1,provider-account-relay-v2,workspace-directory-v1,conversation-file-search-v1,agent-thread-files-v1,message-client-id-v1,workflows-v1,channel-delete-v1,channel-task-cancel-v1,channel-attention-v1",
           }),
         ),
       )
@@ -1003,6 +1018,14 @@ const make = Effect.gen(function* () {
       const response = yield* send(request);
       if (response.status === 204) return null;
       const result = yield* readJson(response);
+      if (route.conversationProjection)
+        return yield* ConversationProtocol.project(route.conversationProjection, result).pipe(
+          Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+        );
+      if (route.queueProjection)
+        return yield* QueueProtocol.project(result).pipe(
+          Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+        );
       if (route.channelProjection)
         return yield* ChannelProtocol.project(route.channelProjection, result).pipe(
           Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),

@@ -1,4 +1,5 @@
 import {
+  BotWorkspaceRouteScreen,
   SettingsBotsRouteScreen,
   SettingsBotNewRouteScreen,
   SettingsBotDetailRouteScreen,
@@ -387,6 +388,11 @@ const SETTINGS_SCREENS = {
       title: "Chat",
     },
   }),
+  Bots: createNativeStackScreen({
+    screen: BotWorkspaceRouteScreen,
+    linking: "bots",
+    options: { ...DETAIL_HEADER_OPTIONS, title: "Bots" },
+  }),
   SettingsBots: createNativeStackScreen({
     screen: SettingsBotsRouteScreen,
     linking: "settings/bots",
@@ -552,7 +558,14 @@ function RootStackLayout(props: {
     >
       <HardwareKeyboardCommandProvider pathname={pathname}>
         <ShowcaseReadyMarker />
-        <SettingsEnvironmentFilterProvider open={settingsOpen}>
+        <SettingsEnvironmentFilterProvider
+          open={
+            settingsOpen ||
+            props.state.routes
+              .slice(0, props.state.index + 1)
+              .some((route) => route.name === "Bots")
+          }
+        >
           <WorkspaceConnectionStatusProvider>
             <AndroidWorkspaceTabsProvider state={props.state}>
               <AdaptiveWorkspaceLayout

@@ -141,3 +141,6 @@ export {
 } from "./browser.ts";
 export { browserViewerConnection } from "./browserViewer.ts";
 export { BrowserKeyboard } from "./browserKeyboard.ts";
+
+export * from "./conversation.ts";
+export { BotQueueEditSession, type BotQueueEdit } from "./queueEdit.ts";

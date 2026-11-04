@@ -28,12 +28,14 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as HttpClient from "effect/http/HttpClient";
 import { Atom, AtomRegistry, AsyncResult } from "effect/reactivity";
 import { EnvironmentRegistry } from "../connection/registry.ts";
 import { createCommandPermissions } from "./commandPermissions.ts";
 import { createEnvironmentRpcCommand } from "./runtime.ts";
 import { AVAILABLE_CONNECTION_STATE } from "../connection/model.ts";
 import { createPeerLinkEnvironmentAtoms } from "./peerLinks.ts";
+import { createOpenbotAtoms } from "../openbot/state.ts";
 
 vi.mock("./session.ts", () => ({
   createEnvironmentSessionAtoms: () => ({ sessionStateAtom: sessions }),
@@ -68,6 +70,67 @@ const setup = Effect.gen(function* () {
 });
 
 describe("command permissions", () => {
+  it.effect(
+    "runs host-bound bot writes through the protected destination command and rechecks revocation",
+    () =>
+      Effect.gen(function* () {
+        const registry = yield* setup;
+        const calls: unknown[] = [];
+        const client = {
+          [WS_METHODS.openbotWriteToHost]: (input: unknown) =>
+            Effect.sync(() => {
+              calls.push(input);
+              return null;
+            }),
+        };
+        const supervisor = {
+          target: { environmentId: env },
+          session: yield* SubscriptionRef.make(Option.some({ client } as unknown as RpcSession)),
+          state: yield* SubscriptionRef.make({
+            ...AVAILABLE_CONNECTION_STATE,
+            phase: "connected" as const,
+          }),
+        } as EnvironmentSupervisor["Service"];
+        const botRuntime = Atom.runtime(
+          Layer.merge(
+            Layer.succeed(
+              HttpClient.HttpClient,
+              HttpClient.make(() => Effect.die("Unexpected HTTP request")),
+            ),
+            Layer.succeed(EnvironmentRegistry, {
+              run: (id, effect) => {
+                expect(id).toBe(env);
+                return Effect.provideService(effect, EnvironmentSupervisor, supervisor);
+              },
+            } as EnvironmentRegistry["Service"]),
+          ),
+        );
+        const command = createOpenbotAtoms(botRuntime).writeToHost;
+        const input = {
+          hostId: "chosen-host",
+          request: { operation: "conversation.markUnread" as const, agentId: "bot" },
+        };
+        registry.set(sessions(env), AsyncResult.success(grant(true)));
+        expect(
+          (yield* Effect.promise(() => command.run(registry, { environmentId: env, input })))._tag,
+        ).toBe("Success");
+        expect(calls).toEqual([input]);
+        registry.set(
+          sessions(env),
+          AsyncResult.success({ ...grant(false), permissions: [AuthOrchestrationReadScope] }),
+        );
+        expect(
+          (yield* Effect.promise(() => command.run(registry, { environmentId: env, input })))._tag,
+        ).toBe("Failure");
+        expect(
+          yield* requestGuarded(WS_METHODS.openbotWriteToHost, input).pipe(
+            Effect.provideService(EnvironmentSupervisor, supervisor),
+            Effect.flip,
+          ),
+        ).toMatchObject({ requiredPermission: AuthOrchestrationOperateScope });
+        expect(calls).toEqual([input]);
+      }).pipe(Effect.scoped),
+  );
   it.effect.each([
     WS_METHODS.remoteDesktopStatus,
     WS_METHODS.remoteDesktopStart,

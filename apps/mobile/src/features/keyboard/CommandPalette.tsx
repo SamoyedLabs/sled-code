@@ -330,7 +330,7 @@ export function CommandPalette(props: {
         kind: "action",
         title: "Bots",
         searchTerms: ["openbot", "persistent", "teammates"],
-        run: () => openSettings(navigation, "SettingsBots"),
+        run: () => navigation.navigate("Bots"),
       },
       {
         key: "scheduledTasks",
