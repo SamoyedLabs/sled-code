@@ -817,13 +817,10 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@v1
+        uses: ./.github/actions/setup-ci-deps
         with:
-          node-version-file: package.json
-          cache: true
-          run-install: |
-            args:
-              - --filter=@t3tools/scripts...
+          install-args: --filter=@t3tools/scripts...
+          restore-full-store: "false"
 
       - name: Install mobile native static analysis tools
         run: brew bundle install --file apps/mobile/Brewfile
