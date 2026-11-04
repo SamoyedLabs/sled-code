@@ -3,8 +3,8 @@
   "t3code": {
     "repository": "https://github.com/pingdotgg/t3code.git",
     "channel": "nightly",
-    "tag": "v0.1.8-nightly.20261104.4165",
-    "commit": "8b44f42b14c8e273156474a924ccf29680dd7857",
+    "tag": "v0.1.8-nightly.20261104.4179",
+    "commit": "9e85538535c8553901351112ab02dd1dd62db5ee",
     "checkout": ".",
     "desktopPath": "apps/desktop",
     "mobilePath": "apps/mobile",
