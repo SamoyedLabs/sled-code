@@ -89,20 +89,109 @@ class HostedReleaseTest(unittest.TestCase):
             self.assertFalse((Path(temp) / 'sled-signing.p12').exists())
 
     def test_publish_refuses_changed_artifacts_before_creating_draft(self):
+        for changed in ['mac', 'win']:
+            with self.subTest(changed=changed), tempfile.TemporaryDirectory() as temp:
+                folder = Path(temp) / 'release-desktop'
+                folder.mkdir()
+                for platform in ['mac', 'win']:
+                    artifact = folder / f'{platform}.zip'
+                    artifact.write_bytes(b'certified')
+                    (folder / f'verified-{platform}.json').write_text(json.dumps({
+                        'platform': platform, 'version': '0.2.42',
+                        'hashes': {artifact.name: hosted.sha256(artifact)},
+                    }))
+                (folder / f'{changed}.zip').write_bytes(b'changed')
+                old = os.getcwd()
+                try:
+                    os.chdir(temp)
+                    with patch.dict(os.environ, {'SLED_RELEASE_VERSION': '0.2.42', 'SLED_RELEASE_SHA': 'a' * 40}), patch.object(hosted, 'run') as run:
+                        with self.assertRaisesRegex(ValueError, 'modified certified artifact'):
+                            hosted.publish()
+                        run.assert_not_called()
+                finally:
+                    os.chdir(old)
+
+    def test_publish_uses_draft_id_and_requires_every_certified_digest(self):
+        cases = [(None, 0), ('missing', 0), ('extra', 0)] + [
+            (corruption, index) for corruption in ['digest', 'no-digest'] for index in range(4)]
+        for corruption, index in cases:
+            with self.subTest(corruption=corruption, index=index), tempfile.TemporaryDirectory() as temp:
+                folder = Path(temp) / 'release-desktop'
+                folder.mkdir()
+                assets = {}
+                for platform, name in [('mac', 'test.zip'), ('win', 'test.exe')]:
+                    artifact = folder / name
+                    artifact.write_bytes(platform.encode())
+                    manifest = folder / f'verified-{platform}.json'
+                    manifest.write_text(json.dumps({'platform': platform, 'version': '0.2.42',
+                                                    'hashes': {name: hosted.sha256(artifact)}}))
+                    for path in [artifact, manifest]:
+                        assets[path.name] = hosted.sha256(path)
+                remote = [{'name': name, 'digest': 'sha256:' + digest} for name, digest in assets.items()]
+                if corruption == 'missing':
+                    remote.pop()
+                elif corruption == 'extra':
+                    remote.append({'name': 'uncertified.exe', 'digest': 'sha256:extra'})
+                elif corruption == 'digest':
+                    remote[index]['digest'] = 'sha256:changed'
+                elif corruption == 'no-digest':
+                    remote[index].pop('digest')
+                commands = []
+                def command(*args):
+                    commands.append(args)
+                    if args[:3] == ('gh', 'release', 'view'):
+                        self.assertIn('databaseId', args)
+                        return '{"databaseId": 123}'
+                    return ''
+                def api(endpoint):
+                    # GitHub cannot resolve an untagged draft via releases/tags/v*.
+                    self.assertEqual(endpoint, 'releases/123')
+                    return {'assets': remote}
+                old = os.getcwd()
+                try:
+                    os.chdir(temp)
+                    with patch.dict(os.environ, {'SLED_RELEASE_VERSION': '0.2.42', 'SLED_RELEASE_SHA': 'a' * 40}), patch.object(
+                        hosted, 'run', side_effect=command), patch.object(hosted, 'api', side_effect=api):
+                        if corruption:
+                            with self.assertRaisesRegex(ValueError, 'Remote asset digest mismatch'):
+                                hosted.publish()
+                        else:
+                            hosted.publish()
+                    create = commands[0]
+                    self.assertEqual(create[:4], ('gh', 'release', 'create', 'v0.2.42'))
+                    self.assertEqual(create[create.index('--target') + 1], 'a' * 40)
+                    self.assertEqual(create[create.index('--notes') + 1], 'Sled source: ' + 'a' * 40)
+                    self.assertIn('--draft', create)
+                    uploads = [c for c in commands if c[:3] == ('gh', 'release', 'upload')]
+                    self.assertEqual(len(uploads), 1)
+                    self.assertEqual(set(uploads[0][6:]), {str(Path('release-desktop') / name) for name in assets})
+                    finalizes = [c for c in commands if c[:2] == ('gh', 'api')]
+                    self.assertEqual(len(finalizes), 0 if corruption else 1)
+                    if finalizes:
+                        self.assertIn('repos/' + hosted.REPO + '/releases/123', finalizes[0])
+                        for field in ['draft=false', 'prerelease=false', 'make_latest=true']:
+                            self.assertIn(field, finalizes[0])
+                finally:
+                    os.chdir(old)
+
+    def test_publish_never_reuses_existing_release_or_draft(self):
         with tempfile.TemporaryDirectory() as temp:
             folder = Path(temp) / 'release-desktop'
             folder.mkdir()
-            (folder / 'test.zip').write_bytes(b'changed')
-            (folder / 'verified-mac.json').write_text(json.dumps({
-                'platform': 'mac', 'version': '0.2.42', 'hashes': {'test.zip': 'wrong'},
-            }))
+            for platform in ['mac', 'win']:
+                (folder / f'verified-{platform}.json').write_text(json.dumps({
+                    'platform': platform, 'version': '0.2.42', 'hashes': {},
+                }))
             old = os.getcwd()
             try:
                 os.chdir(temp)
-                with patch.dict(os.environ, {'SLED_RELEASE_VERSION': '0.2.42', 'SLED_RELEASE_SHA': 'a' * 40}), patch.object(hosted, 'run') as run:
-                    with self.assertRaisesRegex(ValueError, 'modified certified artifact'):
+                with patch.dict(os.environ, {'SLED_RELEASE_VERSION': '0.2.42', 'SLED_RELEASE_SHA': 'a' * 40}), patch.object(
+                    hosted, 'run', side_effect=hosted.subprocess.CalledProcessError(1, 'gh')) as run, patch.object(hosted, 'api') as api:
+                    with self.assertRaises(hosted.subprocess.CalledProcessError):
                         hosted.publish()
-                    run.assert_not_called()
+                    self.assertEqual(run.call_count, 1)
+                    self.assertEqual(run.call_args.args[:3], ('gh', 'release', 'create'))
+                    api.assert_not_called()
             finally:
                 os.chdir(old)
 
