@@ -1,4 +1,5 @@
-import { OrchestrationDispatchCommandError } from "@t3tools/contracts";
+import * as Openbot from "./openbot/Integration.ts";
+import { OrchestrationDispatchCommandError, OpenbotError } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
@@ -1366,6 +1367,7 @@ export const layerWsRpc = (
       const commandOutputHub = yield* CommandOutputHub.CommandOutputHub;
       const providerSessionManager = yield* ProviderSessionManager.ProviderSessionManagerV2;
       const scheduledTasks = yield* ScheduledTasks.ScheduledTaskService;
+      const openbot = yield* Effect.serviceOption(Openbot.Integration);
       const secretRequests = yield* SecretRequests.SecretRequests;
       const guestShares = yield* GuestShareService.GuestShareService;
       const pullRequests = yield* PullRequestService.PullRequestService;
@@ -2242,6 +2244,28 @@ export const layerWsRpc = (
               Effect.as(commandOutputHub.subscribe(input)),
             ),
           ),
+        [WS_METHODS.openbotStatus]: () =>
+          Option.isSome(openbot)
+            ? openbot.value.status
+            : Effect.succeed({ state: "disabled" as const }),
+        [WS_METHODS.openbotStart]: () =>
+          Option.isSome(openbot)
+            ? openbot.value.start.pipe(
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
+        [WS_METHODS.openbotStop]: () =>
+          Option.isSome(openbot)
+            ? openbot.value.stop.pipe(
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
+        [WS_METHODS.openbotListAgents]: () =>
+          Option.isSome(openbot)
+            ? openbot.value.listAgents.pipe(
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
         [WS_METHODS.scheduledTasksSubscribe]: (_input) =>
           scheduledTasks.subscribeList().pipe(Stream.map(withVisibleWebhookUrls)),
         [WS_METHODS.scheduledTasksUpsert]: (input) => scheduledTasks.upsert(input),

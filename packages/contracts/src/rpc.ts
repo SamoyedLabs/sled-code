@@ -1,3 +1,4 @@
+import { OpenbotHostStatus, OpenbotAgentList, OpenbotError } from "./openbot.ts";
 import {
   OrchestrationV2SearchThreadError,
   OrchestrationV2SearchThreadInput,
@@ -552,6 +553,10 @@ export const WS_METHODS = {
   serverGetUsageSummary: "server.getUsageSummary",
   serverRefreshUsageRates: "server.refreshUsageRates",
 
+  openbotStatus: "openbot.status",
+  openbotStart: "openbot.start",
+  openbotStop: "openbot.stop",
+  openbotListAgents: "openbot.listAgents",
   scheduledTasksSubscribe: "scheduledTasks.subscribe",
   scheduledTasksUpsert: "scheduledTasks.upsert",
   scheduledTasksSetEnabled: "scheduledTasks.setEnabled",
@@ -1938,6 +1943,27 @@ const WsSubscribeServerLifecycleRpc = Rpc.make(WS_METHODS.subscribeServerLifecyc
   stream: true,
 });
 
+const WsOpenbotStatusRpc = Rpc.make(WS_METHODS.openbotStatus, {
+  payload: Schema.Struct({}),
+  success: OpenbotHostStatus,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotStartRpc = Rpc.make(WS_METHODS.openbotStart, {
+  payload: Schema.Struct({}),
+  success: OpenbotHostStatus,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotStopRpc = Rpc.make(WS_METHODS.openbotStop, {
+  payload: Schema.Struct({}),
+  success: OpenbotHostStatus,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotListAgentsRpc = Rpc.make(WS_METHODS.openbotListAgents, {
+  payload: Schema.Struct({}),
+  success: OpenbotAgentList,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+
 const WsScheduledTasksSubscribeRpc = Rpc.make(WS_METHODS.scheduledTasksSubscribe, {
   payload: ScheduledTaskListInput,
   success: ScheduledTaskListResult,
@@ -2083,6 +2109,10 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetUsageSummaryRpc,
   WsServerRefreshUsageRatesRpc,
   WsServerSignalProcessRpc,
+  WsOpenbotStatusRpc,
+  WsOpenbotStartRpc,
+  WsOpenbotStopRpc,
+  WsOpenbotListAgentsRpc,
   WsScheduledTasksSubscribeRpc,
   WsScheduledTasksUpsertRpc,
   WsScheduledTasksSetEnabledRpc,

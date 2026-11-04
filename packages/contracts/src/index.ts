@@ -76,3 +76,5 @@ export * from "./clientRpcPermissions.ts";
 export * from "./desktopRemoteDesktopSettings.ts";
 
 export * from "./desktopVoiceInput.ts";
+
+export * from "./openbot.ts";
