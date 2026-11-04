@@ -71,7 +71,7 @@ export function classifyReachability(
     // A running server reads the link `t3 connect` stores only at startup.
     return fail(
       "not_linked",
-      "The server has not set up a T3 Connect tunnel.",
+      "The server has not set up a Sled Connect tunnel.",
       "Run `t3 connect`, then restart T3 Code so it applies the link.",
     );
   }
@@ -133,20 +133,20 @@ export function classifyReachability(
   if (status !== null) {
     return fail(
       "unexpected_response",
-      `The T3 Connect address answered with HTTP ${status}.`,
+      `The Sled Connect address answered with HTTP ${status}.`,
       restart,
     );
   }
   return endpoint.kind === "dns_failed"
     ? fail(
         "dns_failed",
-        "The T3 Connect address does not resolve from this machine.",
+        "The Sled Connect address does not resolve from this machine.",
         "Check the DNS settings on this machine or its VPN.",
         exitNodeHint(exitNode),
       )
     : fail(
         "timeout",
-        "The T3 Connect address did not answer from this machine.",
+        "The Sled Connect address did not answer from this machine.",
         "Check the network, VPN, or proxy on this machine.",
         exitNodeHint(exitNode),
       );
@@ -155,7 +155,7 @@ export function classifyReachability(
 /** The loud diagnosis the CLI prints and the server logs. */
 export function formatReachabilityFailure(result: Unreachable): string {
   return [
-    "✕ T3 Connect is NOT reachable from other devices",
+    "✕ Sled Connect is NOT reachable from other devices",
     `  ${result.reason}`,
     ...(result.hint ? [`  ${result.hint}`] : []),
     `  Fix: ${result.fix}`,
@@ -287,7 +287,7 @@ const make = Effect.gen(function* () {
       );
     } else {
       yield* Effect.logInfo(
-        `T3 Connect is reachable from other devices. ${formatConnectReachable(result)}`,
+        `Sled Connect is reachable from other devices. ${formatConnectReachable(result)}`,
       );
     }
     return result;

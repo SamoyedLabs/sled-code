@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { hasCloudPublicConfig } from "./publicConfig.ts";
+import { hasCloudPublicConfig, resolveCloudPublicConfig } from "./publicConfig.ts";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -8,12 +8,13 @@ afterEach(() => {
 });
 
 describe("hasCloudPublicConfig", () => {
-  it("rejects an insecure relay URL", () => {
+  it("allows sign-in before a valid personal relay has been configured", () => {
     vi.stubEnv("VITE_CLERK_PUBLISHABLE_KEY", "pk_test_example");
     vi.stubEnv("VITE_CLERK_JWT_TEMPLATE", "t3-relay");
     vi.stubEnv("VITE_T3CODE_RELAY_URL", "http://relay.example.test");
 
-    expect(hasCloudPublicConfig()).toBe(false);
+    expect(hasCloudPublicConfig()).toBe(true);
+    expect(resolveCloudPublicConfig().relayUrl).toBeNull();
   });
 
   describe("browser origins", () => {

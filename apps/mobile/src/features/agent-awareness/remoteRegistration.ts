@@ -42,7 +42,7 @@ import {
   startAgentLiveActivity,
 } from "./agentLiveActivity";
 import { resolveCloudPublicConfig } from "../cloud/publicConfig";
-import { supportsAgentAwarenessPush } from "./capabilities";
+import { isAgentAwarenessEnabled, supportsAgentAwarenessPush } from "./capabilities";
 import { makeRelayDeviceRegistrationRequest, resolveApsEnvironment } from "./registrationPayload";
 
 const REMOTE_ACTIVITY_REGISTRATION_RETRY_MS = 15_000;
@@ -140,6 +140,7 @@ function mergeAgentAwarenessRegistrationPreferences(
 }
 
 function readRelayConfig(): { readonly url: string } | null {
+  if (!isAgentAwarenessEnabled()) return null;
   const relayUrl = resolveCloudPublicConfig().relay.url;
   if (!relayUrl) {
     return null;
@@ -149,11 +150,11 @@ function readRelayConfig(): { readonly url: string } | null {
 }
 
 function canRegisterRemoteLiveActivities(): boolean {
-  return Platform.OS === "ios";
+  return isAgentAwarenessEnabled() && Platform.OS === "ios";
 }
 
 function canRegisterPushNotifications(): boolean {
-  return Platform.OS === "ios" || Platform.OS === "android";
+  return isAgentAwarenessEnabled() && (Platform.OS === "ios" || Platform.OS === "android");
 }
 
 function shouldRegisterAgentAwarenessDeviceForProvider(
@@ -183,7 +184,7 @@ export function setAgentAwarenessRelayTokenProvider(
   }
   relayTokenProvider = provider;
   relayTokenProviderIdentity = provider ? (identity ?? null) : null;
-  if (!provider) {
+  if (!provider || !isAgentAwarenessEnabled()) {
     clearAndroidAgentNotifications();
     pushTokenSubscription?.remove();
     pushTokenSubscription = null;

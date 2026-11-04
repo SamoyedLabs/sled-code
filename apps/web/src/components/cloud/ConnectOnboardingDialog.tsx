@@ -88,7 +88,7 @@ function ConfiguredConnectOnboardingDialog() {
   const [openForAccount, setOpenForAccount] = useState<string | null>(null);
   const [step, setStep] = useState<OnboardingStep>("devices");
   const [exposeEnvironment, setExposeEnvironment] = useState(true);
-  const [publishAgentActivity, setPublishAgentActivity] = useState(true);
+  const [publishAgentActivity, setPublishAgentActivity] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [prefilledFromLinkState, setPrefilledFromLinkState] = useState(false);
@@ -146,7 +146,7 @@ function ConfiguredConnectOnboardingDialog() {
       linkStateData.cloudUserId === openForAccount
     ) {
       setExposeEnvironment(linkStateData.managedTunnelActive ?? linkStateData.linked);
-      setPublishAgentActivity(linkStateData.publishAgentActivity);
+      setPublishAgentActivity(false);
     }
   }
 
@@ -188,9 +188,9 @@ function ConfiguredConnectOnboardingDialog() {
     if (!ok) return;
     toastManager.add({
       type: "success",
-      title: "T3 Connect enabled",
+      title: "Sled Connect enabled",
       description: exposeEnvironment
-        ? "This environment is available to your other devices through T3 Connect."
+        ? "This environment is available to your other devices through Sled Connect."
         : "This environment publishes agent activity to your mobile clients.",
     });
     setStep("devices");
@@ -214,7 +214,7 @@ function ConfiguredConnectOnboardingDialog() {
     >
       <WizardPopup>
         <WizardHeader
-          title="Set up T3 Connect"
+          title="Set up Sled Connect"
           description={
             <>
               Mesh your devices together. Publish this environment and connect the rest, all in one
@@ -336,16 +336,16 @@ function PublishStep({
       <div className="rounded-lg border">
         <OnboardingToggleRow
           title="Publish this environment"
-          description="Make this environment available to your other devices through T3 Connect."
+          description="Make this environment available to your other devices through Sled Connect."
           checked={exposeEnvironment}
           disabled={disabled}
           onCheckedChange={onExposeEnvironmentChange}
         />
         <OnboardingToggleRow
           title="Publish agent activity"
-          description="Send activity from this environment to your mobile clients for push notifications and Live Activities."
+          description="Background notifications and remote Live Activities are not available with Sled Connect yet."
           checked={publishAgentActivity}
-          disabled={disabled}
+          disabled
           onCheckedChange={onPublishAgentActivityChange}
         />
       </div>

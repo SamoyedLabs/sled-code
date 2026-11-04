@@ -237,6 +237,16 @@ describe("MessagesTimeline work rows", () => {
     );
     const heading = screen.getByRole("button", { name: /^Worked for/ });
     await expect.element(heading).toBeVisible();
+    await act(() => heading.element().scrollIntoView({ block: "nearest" }));
+    await vi.waitFor(() => {
+      const button = heading.element();
+      const rect = button.getBoundingClientRect();
+      expect(
+        button.contains(
+          document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2),
+        ),
+      ).toBe(true);
+    });
     const viewport = props.listRef.current!.getScrollableNode()!;
     await vi.waitFor(() =>
       expect(viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThan(2),

@@ -15,6 +15,20 @@ afterEach(() => {
 });
 
 describe("loadRepoEnv", () => {
+  it("includes Sled authentication in a fresh build without choosing a personal relay", () => {
+    const env = loadRepoEnv({ baseEnv: {}, repoRoot: makeTemporaryDirectory() });
+
+    expect(env).toMatchObject({
+      T3CODE_CLERK_PUBLISHABLE_KEY: "pk_live_Y2xlcmsuc2Ftb3llZGxhYnMuY29tJA",
+      VITE_CLERK_PUBLISHABLE_KEY: "pk_live_Y2xlcmsuc2Ftb3llZGxhYnMuY29tJA",
+      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_live_Y2xlcmsuc2Ftb3llZGxhYnMuY29tJA",
+      T3CODE_CLERK_JWT_TEMPLATE: "sled-connect",
+      T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: "u0RgFUiYWBBtqKEu",
+    });
+    expect(env.T3CODE_RELAY_URL).toBeUndefined();
+    expect(env.VITE_T3CODE_RELAY_URL).toBeUndefined();
+  });
+
   it("applies process, root local, and root precedence in that order", () => {
     const repoRoot = makeTemporaryDirectory();
     NodeFS.writeFileSync(

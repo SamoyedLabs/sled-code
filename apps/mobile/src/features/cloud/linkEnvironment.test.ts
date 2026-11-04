@@ -255,7 +255,7 @@ describe("mobile cloud link environment client", () => {
       });
       expect(bodies[2]).toMatchObject({
         deviceId: "device-1",
-        notificationsEnabled: true,
+        notificationsEnabled: false,
         liveActivitiesEnabled: false,
         managedTunnelsEnabled: true,
       });

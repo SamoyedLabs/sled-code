@@ -2,6 +2,7 @@ import Constants from "expo-constants";
 import { relayClerkTokenOptions } from "@t3tools/shared/relayAuth";
 import { normalizeSecureRelayUrl } from "@t3tools/shared/relayUrl";
 import * as Schema from "effect/Schema";
+import { savedPersonalRelayUrl } from "./personalRelay";
 
 export class CloudPublicConfigMissingError extends Schema.TaggedError<CloudPublicConfigMissingError>()(
   "CloudPublicConfigMissingError",
@@ -63,7 +64,8 @@ export function resolveCloudPublicConfig(extra: ExpoExtra = Constants.expoConfig
       jwtTemplate: trimNonEmpty(extra?.clerk?.jwtTemplate),
     },
     relay: {
-      url: normalizeSecureRelayUrl(trimNonEmpty(extra?.relay?.url) ?? ""),
+      url:
+        savedPersonalRelayUrl() ?? normalizeSecureRelayUrl(trimNonEmpty(extra?.relay?.url) ?? ""),
     },
     observability: {
       tracesUrl: normalizeSecureUrl(extra?.observability?.tracesUrl),
@@ -75,7 +77,7 @@ export function resolveCloudPublicConfig(extra: ExpoExtra = Constants.expoConfig
 
 export function hasCloudPublicConfig(): boolean {
   const config = resolveCloudPublicConfig();
-  return Boolean(config.clerk.publishableKey && config.clerk.jwtTemplate && config.relay.url);
+  return Boolean(config.clerk.publishableKey && config.clerk.jwtTemplate);
 }
 
 type Configured<T> = {

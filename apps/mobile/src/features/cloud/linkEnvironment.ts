@@ -170,12 +170,12 @@ export const linkEnvironmentToCloudWithPreference = Effect.fn(
   const deviceId = yield* storage.loadOrCreateAgentAwarenessDeviceId.pipe(
     Effect.mapError(cloudEnvironmentLinkError("Could not load the mobile device id.")),
   );
-  const liveActivitiesEnabled = input.liveActivitiesEnabled;
+  const liveActivitiesEnabled = false;
   const challenge = yield* relayClient
     .createEnvironmentLinkChallenge({
       clerkToken: input.clerkToken,
       payload: {
-        notificationsEnabled: true,
+        notificationsEnabled: false,
         liveActivitiesEnabled,
         managedTunnelsEnabled: true,
       },
@@ -207,7 +207,7 @@ export const linkEnvironmentToCloudWithPreference = Effect.fn(
       payload: {
         deviceId,
         proof,
-        notificationsEnabled: true,
+        notificationsEnabled: false,
         liveActivitiesEnabled,
         managedTunnelsEnabled: true,
       },

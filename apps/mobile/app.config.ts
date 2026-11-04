@@ -100,7 +100,7 @@ const VARIANT_CONFIG = {
     scheme: "sled-dev",
     iosBundleIdentifier: "com.samoyedlabs.sled.dev",
     androidPackage: "com.samoyedlabs.sled.dev",
-    relyingParty: "clerk.t3.codes",
+    relyingParty: repoEnv.SLED_CLERK_RELYING_PARTY ?? "clerk.samoyedlabs.com",
     assets: DEVELOPMENT_ASSETS,
   },
   preview: {
@@ -108,7 +108,7 @@ const VARIANT_CONFIG = {
     scheme: "sled-preview",
     iosBundleIdentifier: "com.samoyedlabs.sled.preview",
     androidPackage: "com.samoyedlabs.sled.preview",
-    relyingParty: "clerk.t3.codes",
+    relyingParty: repoEnv.SLED_CLERK_RELYING_PARTY ?? "clerk.samoyedlabs.com",
     assets: PREVIEW_ASSETS,
   },
   production: {
@@ -116,7 +116,7 @@ const VARIANT_CONFIG = {
     scheme: SLED_BRANDING.scheme,
     iosBundleIdentifier: SLED_BRANDING.bundleIdentifier,
     androidPackage: SLED_BRANDING.bundleIdentifier,
-    relyingParty: "clerk.t3.codes",
+    relyingParty: repoEnv.SLED_CLERK_RELYING_PARTY ?? "clerk.samoyedlabs.com",
     assets: RELEASE_ASSETS,
   },
 } as const;
@@ -469,6 +469,7 @@ const config: ExpoConfig = {
     ...(isIosPersonalTeamBuild ? ["./plugins/withoutIosPersonalTeamCapabilities.cjs"] : []),
   ],
   extra: {
+    sledConnectNotifications: false,
     appVariant: APP_VARIANT,
     iosPersonalTeamBuild: isIosPersonalTeamBuild,
     relay: {

@@ -11,6 +11,10 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
+import * as Option from "effect/Option";
+import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
+import { RELAY_URL_SECRET } from "./config.ts";
+import { SLED_CONNECT_AUTH } from "@t3tools/shared/sledConnectConfig";
 
 declare const __T3CODE_BUILD_RELAY_URL__: string | undefined;
 declare const __T3CODE_BUILD_CLERK_PUBLISHABLE_KEY__: string | undefined;
@@ -54,16 +58,18 @@ const buildTimeRelayUrl =
   typeof __T3CODE_BUILD_RELAY_URL__ === "undefined"
     ? ""
     : (normalizeSecureRelayUrl(__T3CODE_BUILD_RELAY_URL__) ?? "");
-const buildTimeClerkPublishableKey = readBuildTimeValue(
-  typeof __T3CODE_BUILD_CLERK_PUBLISHABLE_KEY__ === "undefined"
-    ? undefined
-    : __T3CODE_BUILD_CLERK_PUBLISHABLE_KEY__,
-);
-const buildTimeClerkCliOAuthClientId = readBuildTimeValue(
-  typeof __T3CODE_BUILD_CLERK_CLI_OAUTH_CLIENT_ID__ === "undefined"
-    ? undefined
-    : __T3CODE_BUILD_CLERK_CLI_OAUTH_CLIENT_ID__,
-);
+const buildTimeClerkPublishableKey =
+  readBuildTimeValue(
+    typeof __T3CODE_BUILD_CLERK_PUBLISHABLE_KEY__ === "undefined"
+      ? undefined
+      : __T3CODE_BUILD_CLERK_PUBLISHABLE_KEY__,
+  ) || SLED_CONNECT_AUTH.publishableKey;
+const buildTimeClerkCliOAuthClientId =
+  readBuildTimeValue(
+    typeof __T3CODE_BUILD_CLERK_CLI_OAUTH_CLIENT_ID__ === "undefined"
+      ? undefined
+      : __T3CODE_BUILD_CLERK_CLI_OAUTH_CLIENT_ID__,
+  ) || SLED_CONNECT_AUTH.cliOAuthClientId;
 const buildTimeRelayClientTracing = {
   tracesUrl: readBuildTimeValue(
     typeof __T3CODE_BUILD_RELAY_CLIENT_OTLP_TRACES_URL__ === "undefined"
@@ -107,7 +113,13 @@ export function makeRelayUrlConfig(fallback = buildTimeRelayUrl) {
   );
 }
 
-export const relayUrlConfig = makeRelayUrlConfig();
+export const relayUrlConfig = Effect.gen(function* () {
+  const secrets = yield* ServerSecretStore.ServerSecretStore;
+  const saved = yield* secrets.get(RELAY_URL_SECRET);
+  return Option.isSome(saved)
+    ? yield* validateRelayUrl(new TextDecoder().decode(saved.value))
+    : yield* makeRelayUrlConfig();
+});
 
 export const hostedAppUrlConfig = makePublicValueConfig(
   "T3CODE_HOSTED_APP_URL",
@@ -203,9 +215,12 @@ export function makeCloudCliOAuthConfig({
 }
 
 export const cloudCliOAuthConfig = makeCloudCliOAuthConfig();
+export const clerkPublishableKeyConfig = makePublicValueConfig(
+  "T3CODE_CLERK_PUBLISHABLE_KEY",
+  buildTimeClerkPublishableKey,
+);
 
 export const hasCloudPublicConfig = Boolean(
-  (normalizeSecureRelayUrl(process.env.T3CODE_RELAY_URL ?? "") ?? buildTimeRelayUrl) &&
   (process.env.T3CODE_CLERK_PUBLISHABLE_KEY?.trim() || buildTimeClerkPublishableKey) &&
   (process.env.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID?.trim() || buildTimeClerkCliOAuthClientId),
 );

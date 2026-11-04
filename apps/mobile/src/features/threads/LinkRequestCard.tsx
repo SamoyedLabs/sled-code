@@ -475,7 +475,7 @@ function MachineRow(props: {
     : machine.connected
       ? null
       : machine.connectOnly
-        ? "T3 Connect"
+        ? "Sled Connect"
         : "Not connected";
   return (
     <Pressable

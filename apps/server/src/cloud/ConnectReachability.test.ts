@@ -74,7 +74,7 @@ describe("classifyReachability", () => {
   });
 });
 
-describe("T3 Connect troubleshooting links", () => {
+describe("Sled Connect troubleshooting links", () => {
   it("each section names a heading in the user guide", () => {
     const guide = NodeFS.readFileSync(
       new URL("../../../../docs/user/t3-connect-troubleshooting.md", import.meta.url),

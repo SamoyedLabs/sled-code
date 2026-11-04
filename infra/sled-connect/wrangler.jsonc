@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sled-connect",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "vars": {
+    "RELAY_URL": "https://replace-with-your-worker.workers.dev",
+    "CLERK_ISSUER": "https://clerk.samoyedlabs.com",
+    "CLERK_AUDIENCE": "sled-connect",
+    "CLERK_CLI_CLIENT_ID": "u0RgFUiYWBBtqKEu",
+    "OWNER_USER_ID": "replace-with-your-sled-user-id",
+    "TUNNEL_DOMAIN": "example.com",
+    "CLOUDFLARE_ACCOUNT_ID": "replace-with-your-account-id",
+    "CLOUDFLARE_ZONE_ID": "replace-with-your-zone-id",
+    "ALLOWED_ORIGINS": "https://auth.samoyedlabs.com,https://app.samoyedlabs.com",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sled-connect",
+      "database_id": "replace-with-your-database-id",
+      "migrations_dir": "migrations",
+    },
+  ],
+}
