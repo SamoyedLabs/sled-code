@@ -1,4 +1,4 @@
-// Modified for T3 Code remote desktop; based on Sill 6c5b5d249602ad60ebda79d384698909f2c5e7d7 (Apache-2.0). See MODIFICATIONS.md.
+// Modified for Sled Code remote desktop; based on Sill 6c5b5d249602ad60ebda79d384698909f2c5e7d7 (Apache-2.0). See MODIFICATIONS.md.
 import SwiftUI
 import UIKit
 
@@ -326,7 +326,7 @@ struct HostSettingsPanel: View {
                     .disabled(send == nil)
                     .accessibilityLabel("Send Audio, beta")
                     .accessibilityInputLabels(["Send Audio"])
-                    .accessibilityHint(send == nil ? "Update T3 Code on \(mac) to use this." : "")
+                    .accessibilityHint(send == nil ? "Update Sled Code on \(mac) to use this." : "")
                     .rowFrame()
                     // Mute, right under Send Audio (Noah, 2026-10-27): this device's own (`soundMuted`,
                     // off by default, remembered, never sent), the only control of the Mac's sound on the
@@ -375,7 +375,7 @@ struct HostSettingsPanel: View {
                 }
                 awayFromHome
             } else if olderMac {
-                Label("Update T3 Code on \(mac) to change these from here.", systemImage: "arrow.down.circle")
+                Label("Update Sled Code on \(mac) to change these from here.", systemImage: "arrow.down.circle")
                     .font(.body)
                     .foregroundStyle(Palette.text)
                     .fixedSize(horizontal: false, vertical: true)
@@ -518,7 +518,7 @@ struct HostSettingsPanel: View {
 
     /// With Remote Access off on the Mac: how to reach it away from home.
     static func turnOnRemoteAccess(_ mac: String) -> String {
-        "To reach \(mac) away from home, turn on Remote Access in T3 Code’s Remote Desktop menu on the Mac."
+        "To reach \(mac) away from home, turn on Remote Access in Sled Code’s Remote Desktop menu on the Mac."
     }
 
     // MARK: This device
@@ -608,7 +608,7 @@ struct HostSettingsPanel: View {
         case false?:
             return "Beta. Turn this on to hear what streams on every connected device; \(mac) keeps playing it too." + mute
         case nil:
-            return "Beta. Update T3 Code on \(mac) to hear its sound on this \(device)."
+            return "Beta. Update Sled Code on \(mac) to hear its sound on this \(device)."
         }
     }
 
@@ -647,7 +647,7 @@ struct HostSettingsPanel: View {
     /// Under the switch: where the gestures go and what they do, or why nothing happens.
     private var gesturesFooter: String {
         guard gesturesOn else { return "Three-finger strokes do nothing while this is off." }
-        guard macTakesGestures else { return "Update T3 Code on \(mac) to use these." }
+        guard macTakesGestures else { return "Update Sled Code on \(mac) to use these." }
         // VoiceOver keeps three-finger swipes and taps for itself, and no touch of them reaches Sill.
         var text = voiceOver ? "VoiceOver keeps three-finger gestures for itself, so the rows above do them on \(mac) instead."
             : "Three fingers on the trackpad or over the stream."

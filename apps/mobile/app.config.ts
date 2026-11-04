@@ -20,7 +20,7 @@ const sledExpoProjectId = repoEnv.SLED_EXPO_PROJECT_ID?.trim();
 const sledExpoOwner = repoEnv.SLED_EXPO_OWNER?.trim();
 const wantsOtaUpdates = repoEnv.T3CODE_MOBILE_UPDATES_ENABLED === "1";
 if (sledExpoProjectId?.toLowerCase() === "d763fcb8-d37c-41ea-a773-b54a0ab4a454") {
-  throw new Error("Sled must use its own Expo project, not T3 Code's upstream project.");
+  throw new Error("Sled must use its own Expo project instead of the upstream project.");
 }
 if (
   sledExpoProjectId &&
@@ -145,6 +145,8 @@ const variant = {
     appIcon: SLED_BRANDING.icon,
     iosIcon: SLED_BRANDING.icon,
     splashIcon: SLED_BRANDING.icon,
+    androidAdaptiveForeground: SLED_BRANDING.icon,
+    androidSplashIcon: SLED_BRANDING.icon,
   },
 };
 const iosBundleIdentifier = isIosPersonalTeamBuild
@@ -170,7 +172,7 @@ const widgetsPlugin: NonNullable<ExpoConfig["plugins"]>[number] = [
       {
         name: "SubscriptionUsage",
         displayName: "Subscription usage",
-        description: "Subscription quotas from your connected T3 Code environments.",
+        description: "Subscription quotas from your connected Sled Code environments.",
         ios: {
           configuration: {
             title: "Subscription usage",
@@ -220,7 +222,7 @@ const widgetsPlugin: NonNullable<ExpoConfig["plugins"]>[number] = [
       {
         name: "AgentActivity",
         displayName: "Agent Activity",
-        description: "Shows the current state of active T3 Code agents.",
+        description: "Shows the current state of active Sled Code agents.",
         android: null,
         ios: { supportedFamilies: ["systemSmall", "systemMedium", "accessoryRectangular"] },
       },
@@ -302,7 +304,7 @@ const config: ExpoConfig = {
         NSAllowsArbitraryLoads: true,
       },
       NSBonjourServices: ["_t3desktop._tcp"],
-      NSLocalNetworkUsageDescription: `Allow ${variant.appName} to connect to T3 Code servers on your local network or tailnet.`,
+      NSLocalNetworkUsageDescription: `Allow ${variant.appName} to connect to Sled Code servers on your local network or tailnet.`,
       NSPhotoLibraryAddUsageDescription: `Allow ${variant.appName} to save images to your photo library.`,
       // System picture in picture needs background audio to start and survive outside the app.
       UIBackgroundModes: ["audio"],

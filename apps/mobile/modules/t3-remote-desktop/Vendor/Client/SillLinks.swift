@@ -1,4 +1,4 @@
-// Modified for T3 Code remote desktop; based on Sill 6c5b5d249602ad60ebda79d384698909f2c5e7d7 (Apache-2.0). See MODIFICATIONS.md.
+// Modified for Sled Code remote desktop; based on Sill 6c5b5d249602ad60ebda79d384698909f2c5e7d7 (Apache-2.0). See MODIFICATIONS.md.
 import Foundation
 
 /// Where Sill sends people outside the app: Sill's addresses on the web, written once, and its App
@@ -6,7 +6,7 @@ import Foundation
 /// download, support and privacy links and the connect screen's "Get it at …" all follow.
 enum SillLinks {
     /// The site. Its host is what the connect screen prints.
-    static let site = URL(string: "https://t3.codes")!
+    static let site = URL(string: "https://app.samoyedlabs.com")!
     /// Where the free Sill for Mac is downloaded (the connect screen's footer).
     static let download = site.appending(path: "download")
     /// Help, and how to reach the developer, which guideline 1.5 wants inside the app as well as

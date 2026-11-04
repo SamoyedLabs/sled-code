@@ -167,7 +167,7 @@ function persist() {
   void savePreferences?.(preferences).catch(() => {
     dialog.showErrorBox(
       "Remote desktop settings",
-      "The change applies to this session, but T3 Code could not save it. Check that its settings directory is writable.",
+      "The change applies to this session, but Sled Code could not save it. Check that its settings directory is writable.",
     );
   });
 }
@@ -322,7 +322,7 @@ function launch() {
           title: "Pair remote desktop",
           message: `Pairing code: ${event.code}`,
           detail:
-            "In T3 Code on your iPhone, open Remote Desktop, select this Mac, and enter this temporary code.",
+            "In Sled Code on your iPhone, open Remote Desktop, select this Mac, and enter this temporary code.",
         });
       }
       if (event.type === "error" && typeof event.message === "string") {

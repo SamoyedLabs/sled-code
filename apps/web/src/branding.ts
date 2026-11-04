@@ -1,5 +1,4 @@
-import sledDevIcon from "../../desktop/branding/sled-icon-dev.png";
-import sledIcon from "../../desktop/branding/sled-icon.png";
+import samoyedMark from "../../../assets/branding/samoyed-mark.png";
 import type { DesktopAppBranding } from "@t3tools/contracts";
 import { formatAppDisplayName } from "./branding.logic";
 
@@ -27,6 +26,6 @@ export const APP_DISPLAY_NAME =
   injectedDesktopAppBranding?.displayName ??
   formatAppDisplayName({ baseName: APP_BASE_NAME, stageLabel: APP_STAGE_LABEL });
 export const APP_VERSION = import.meta.env.APP_VERSION || "0.0.0";
-export const DESKTOP_DOWNLOAD_URL = "https://t3.codes/download";
+export const DESKTOP_DOWNLOAD_URL = "https://app.samoyedlabs.com/download";
 
-export const APP_ICON_URL = APP_STAGE_LABEL === "Dev" ? sledDevIcon : sledIcon;
+export const APP_MARK_URL = samoyedMark;

@@ -11,9 +11,9 @@ final class RemoteDesktopStatusItem: NSObject {
 
     override init() {
         super.init()
-        item.button?.image = NSImage(systemSymbolName: "desktopcomputer", accessibilityDescription: "T3 Remote Desktop")
+        item.button?.image = NSImage(systemSymbolName: "desktopcomputer", accessibilityDescription: "Sled Remote Desktop")
         item.button?.image?.isTemplate = true
-        item.button?.toolTip = "T3 Code Remote Desktop"
+        item.button?.toolTip = "Sled Code Remote Desktop"
         rebuild()
     }
     func update(setting: String, enabled: Bool) { sharing[setting] = enabled; rebuild() }
@@ -34,14 +34,14 @@ final class RemoteDesktopStatusItem: NSObject {
     }
     private func rebuild() {
         let menu = NSMenu()
-        let title = NSMenuItem(title: "T3 Code · Remote Desktop", action: nil, keyEquivalent: "")
+        let title = NSMenuItem(title: "Sled Code · Remote Desktop", action: nil, keyEquivalent: "")
         title.isEnabled = false; menu.addItem(title)
         let status = NSMenuItem(title: online ? "● Ready to connect" : "Starting…", action: nil, keyEquivalent: "")
         status.isEnabled = false; menu.addItem(status)
-        let mode = NSMenuItem(title: lifecycle == "persistent" ? "Persistent · available after T3 quits" : "Available while T3 Code is running", action: nil, keyEquivalent: "")
+        let mode = NSMenuItem(title: lifecycle == "persistent" ? "Persistent · available after Sled quits" : "Available while Sled Code is running", action: nil, keyEquivalent: "")
         mode.isEnabled = false; menu.addItem(mode)
         menu.addItem(.separator())
-        menu.addItem(action("Open T3 Code", "open"))
+        menu.addItem(action("Open Sled Code", "open"))
         let pair = action("Pair iPhone or iPad…", "pair"); pair.isEnabled = online; menu.addItem(pair)
         menu.addItem(action("Cancel pairing", "cancel-pairing"))
         menu.addItem(.separator())
@@ -58,7 +58,7 @@ final class RemoteDesktopStatusItem: NSObject {
         menu.addItem(action("Settings & permissions…", "settings"))
         menu.addItem(.separator())
         menu.addItem(action("Stop Remote Desktop", "disable"))
-        if guiActive { menu.addItem(action("Quit T3 Code", "quit-ui")) }
+        if guiActive { menu.addItem(action("Quit Sled Code", "quit-ui")) }
         item.menu = menu
     }
     @objc private func invoke(_ sender: NSMenuItem) {
@@ -72,7 +72,7 @@ final class RemoteDesktopStatusItem: NSObject {
     func showPairing(code: String) {
         let alert = NSAlert()
         alert.messageText = "Pair iPhone or iPad"
-        alert.informativeText = "Pairing code: \(code)\n\nEnter this temporary code in T3 Code on your device."
+        alert.informativeText = "Pairing code: \(code)\n\nEnter this temporary code in Sled Code on your device."
         alert.addButton(withTitle: "Done")
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()

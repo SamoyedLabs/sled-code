@@ -2768,11 +2768,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     appId: (yield* Config.Boolean("T3CODE_DESKTOP_PRIVATE_BUILD").pipe(Config.withDefault(false)))
       ? "com.t3tools.t3code.remote-dev"
       : DESKTOP_APP_ID,
-    productName: (yield* Config.Boolean("T3CODE_DESKTOP_PRIVATE_BUILD").pipe(
-      Config.withDefault(false),
-    ))
-      ? "Sled Code"
-      : resolveDesktopProductName(version),
+    productName: resolveDesktopProductName(version),
     artifactName: "T3-Code-${version}-${arch}.${ext}",
     electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],
     files: [
@@ -2939,7 +2935,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       icon: "icons",
       category: "Development",
       synopsis: "Desktop GUI for coding agents",
-      maintainer: "T3 Tools <hello@t3.codes>",
+      maintainer: "Samoyed Labs <raajtarun951@gmail.com>",
       protocols: [
         {
           name: "Sled Code",
@@ -3936,8 +3932,8 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     description:
       "Sled Code is an open-source desktop app for coding agents. Work with your existing agent subscriptions, review code changes, and run commands in your projects. Connect from desktop, web, or mobile to continue working remotely.",
     license: "MIT",
-    homepage: "https://t3.codes",
-    author: "T3 Tools",
+    homepage: "https://app.samoyedlabs.com",
+    author: "Samoyed Labs",
     main: "apps/desktop/dist-electron/boot.cjs",
     build: yield* createBuildConfig(
       options.platform,

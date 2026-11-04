@@ -1,4 +1,4 @@
-// Modified for T3 Code remote desktop; based on Sill 6c5b5d249602ad60ebda79d384698909f2c5e7d7 (Apache-2.0). See MODIFICATIONS.md.
+// Modified for Sled Code remote desktop; based on Sill 6c5b5d249602ad60ebda79d384698909f2c5e7d7 (Apache-2.0). See MODIFICATIONS.md.
 import Foundation
 
 /// When the device also looks for Macs over peer-to-peer Wi-Fi (AWDL), how a nearby result is told
@@ -882,7 +882,7 @@ enum DiscoveryPolicy {
     /// Noah's iPad, 2026-10-27, on the connect screen with the USB cable in: the Mac was listed on
     /// anpi0, en2 and en0 with its record (p=1); with the cable pulled the same result came back on
     /// en2 and en0, then on en0 alone, with no record at all, so its row was taken by its name
-    /// alone and read as a plain door, "Update T3 Code" by the no-downgrade rule (`rowWord`), and a
+    /// alone and read as a plain door, "Update Sled Code" by the no-downgrade rule (`rowWord`), and a
     /// tap dialed nothing, and it stayed so. A record that comes replaces the kept one, whatever it
     /// says: it is the Mac's own word (a new tag, Require pairing turned off, `p` gone). A browser
     /// made again is a break: its own results are read with what it delivers itself, which a fresh
@@ -895,7 +895,7 @@ enum DiscoveryPolicy {
     /// review of #232). So a row never gains a door that no record gave it: what is kept is a
     /// record this very browser delivered for that result, and a tap dials as that record says
     /// (`homeDial`: pinned to the saved Mac's key over TLS, never plain). A Mac that really went
-    /// back to a plain door reads "Update T3 Code" again once its name is listed afresh: the browser's
+    /// back to a plain door reads "Update Sled Code" again once its name is listed afresh: the browser's
     /// removal of the name (about a second after its Sill's goodbye) is the break, with no timer,
     /// and another Sill's registration comes after it. While one browser keeps listing a result
     /// without a break, though, a removal it never reported (a lost goodbye, a removal and a
@@ -992,7 +992,7 @@ enum DiscoveryPolicy {
             case .method(let m): return m?.word
             case .notPaired, .openDoor: return "Not paired"
             case .pairsOverCable: return Method.wired.word
-            case .updateSill: return "Update T3 Code"
+            case .updateSill: return "Update Sled Code"
             }
         }
 
@@ -1094,7 +1094,7 @@ enum DiscoveryPolicy {
 
     /// The status line after a tap that dialed nothing because the Mac's Sill is too old.
     static func updateSillStatus(mac: String) -> String {
-        "\(mac) runs an older Sill. Update T3 Code on the Mac to connect."
+        "\(mac) runs an older Sill. Update Sled Code on the Mac to connect."
     }
 
     /// Whether this device's connection runs over the USB cable to the Mac, as this device sees it
@@ -1491,13 +1491,13 @@ enum DiscoveryPolicy {
         static func overlayAsking(mac: String) -> String { "Asking \(mac) for a code\u{2026}" }
         static func overlayShowing(mac: String) -> String { "\(mac) is showing a code now." }
         static func overlayOpenOnMac(mac: String) -> String {
-            "\(mac) didn\u{2019}t show a code by itself. On the Mac, choose Pair iPhone or iPad\u{2026} in T3 Code’s Remote Desktop menu."
+            "\(mac) didn\u{2019}t show a code by itself. On the Mac, choose Pair iPhone or iPad\u{2026} in Sled Code’s Remote Desktop menu."
         }
         static func overlayLocked(mac: String, device: String) -> String {
             "Unlock \(mac), then choose Pair This \(device)\u{2026} again."
         }
         static func openOnMac(mac: String) -> String {
-            "\(mac) didn\u{2019}t show a code. On the Mac, choose Pair iPhone or iPad\u{2026} in T3 Code’s Remote Desktop menu, then tap \(mac) again."
+            "\(mac) didn\u{2019}t show a code. On the Mac, choose Pair iPhone or iPad\u{2026} in Sled Code’s Remote Desktop menu, then tap \(mac) again."
         }
         static func locked(mac: String) -> String { "Unlock \(mac), then tap it again." }
         static func removed(mac: String, device: String) -> String { "\(mac) removed this \(device). Tap it to pair again." }
@@ -1512,16 +1512,16 @@ enum DiscoveryPolicy {
         /// or a closed code the Mac keeps this device quiet (a cancel on the Mac, a stop), so the
         /// words send the person to its menu first; after an expiry a tap is enough.
         static func stopped(mac: String) -> String {
-            "\(mac) stopped pairing after too many wrong codes. On the Mac, choose Pair iPhone or iPad\u{2026} in T3 Code’s Remote Desktop menu, then tap \(mac) again."
+            "\(mac) stopped pairing after too many wrong codes. On the Mac, choose Pair iPhone or iPad\u{2026} in Sled Code’s Remote Desktop menu, then tap \(mac) again."
         }
         static func expired(mac: String) -> String { "That code expired. Tap \(mac) for a new one." }
         static func closed(mac: String) -> String {
-            "That code no longer works. On the Mac, choose Pair iPhone or iPad\u{2026} in T3 Code’s Remote Desktop menu, then tap \(mac) again."
+            "That code no longer works. On the Mac, choose Pair iPhone or iPad\u{2026} in Sled Code’s Remote Desktop menu, then tap \(mac) again."
         }
         static func proofFailed(mac: String) -> String {
             "Pairing didn\u{2019}t finish: \(mac) couldn\u{2019}t show it knows the code. Tap it to try again."
         }
         /// Nothing answered the ask or a proof at the row (it went, or Sill quit meanwhile).
-        static func noAnswer(mac: String) -> String { "\(mac) didn\u{2019}t answer. Check that T3 Code Remote Desktop is enabled on it, then tap it again." }
+        static func noAnswer(mac: String) -> String { "\(mac) didn\u{2019}t answer. Check that Sled Code Remote Desktop is enabled on it, then tap it again." }
     }
 }
