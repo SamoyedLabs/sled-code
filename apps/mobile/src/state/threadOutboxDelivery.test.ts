@@ -336,7 +336,7 @@ describe("thread outbox attachment preparation", () => {
 });
 
 describe("thread outbox drain delivery cleanup", () => {
-  it("drops caught-up acknowledged rows at the next delivery without subscribing to the thread", async () => {
+  it("permanently drops acknowledged rows when the thread catches up", async () => {
     const first = queuedMessage({ messageId: "awaiting-echo", text: "Delivered" });
     const second = queuedMessage({ messageId: "next-delivery", text: "Also delivered" });
     await harness.manager.enqueue(first);
@@ -354,7 +354,10 @@ describe("thread outbox drain delivery cleanup", () => {
       data: Option.some({ messages: [{ id: "unrelated" }] }),
       sequence: 7,
     });
-    expect(appAtomRegistry.get(acknowledgedThreadMessagesAtom)).toHaveLength(1);
+    expect(appAtomRegistry.get(acknowledgedThreadMessagesAtom)).toEqual([]);
+
+    appAtomRegistry.set(harness.threadState, { data: Option.none(), sequence: 0 });
+    expect(appAtomRegistry.get(acknowledgedThreadMessagesAtom)).toEqual([]);
 
     await expect(
       completeQueuedMessageDelivery(second, harness.manager.revisionOf(second.messageId), 9),
@@ -362,6 +365,27 @@ describe("thread outbox drain delivery cleanup", () => {
     expect(appAtomRegistry.get(acknowledgedThreadMessagesAtom)).toEqual([
       { ...second, sequence: 9 },
     ]);
+  });
+
+  it("does not resurrect an echoed message from a server without receipt sequences", async () => {
+    const message = queuedMessage({ messageId: "legacy-echo", text: "Delivered" });
+    await harness.manager.enqueue(message);
+    await completeQueuedMessageDelivery(
+      message,
+      harness.manager.revisionOf(message.messageId),
+      undefined,
+    );
+    expect(appAtomRegistry.get(acknowledgedThreadMessagesAtom)).toEqual([message]);
+    appAtomRegistry.set(harness.threadState, {
+      data: Option.some({ messages: [{ id: message.messageId }] }),
+      sequence: 7,
+    });
+    expect(appAtomRegistry.get(acknowledgedThreadMessagesAtom)).toEqual([]);
+    appAtomRegistry.set(harness.threadState, {
+      data: Option.some({ messages: [{ id: "newer-message" }] }),
+      sequence: 8,
+    });
+    expect(appAtomRegistry.get(acknowledgedThreadMessagesAtom)).toEqual([]);
   });
 
   it("removes an acknowledged outbox item even when the sign-out archive write fails", async () => {

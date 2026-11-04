@@ -56,6 +56,7 @@ const EMPTY_THREAD_SHELL_ATOM = Atom.make<EnvironmentThreadShell | null>(null).p
 const EMPTY_THREAD_PROJECTION_ATOM = Atom.make<EnvironmentThread | null>(null).pipe(
   Atom.withLabel("web-thread-projection:empty"),
 );
+const EMPTY_THREAD_SEQUENCE_ATOM = Atom.make(0);
 const EMPTY_THREAD_STATUS_ATOM = Atom.make<EnvironmentThreadStatus>("empty").pipe(
   Atom.withLabel("web-thread-status:empty"),
 );
@@ -197,6 +198,12 @@ export function useThreadLastVisitedAt(ref: ScopedThreadRef | null): DateTime.Ut
 export function useThreadUpdatedAt(ref: ScopedThreadRef | null): DateTime.Utc | null {
   return useAtomValue(
     ref === null ? EMPTY_UPDATED_AT_ATOM : environmentThreadDetails.updatedAtAtom(ref),
+  );
+}
+
+export function useThreadSequence(ref: ScopedThreadRef | null): number {
+  return useAtomValue(
+    ref === null ? EMPTY_THREAD_SEQUENCE_ATOM : environmentThreadDetails.sequenceAtom(ref),
   );
 }
 
