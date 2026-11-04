@@ -307,6 +307,10 @@
       "types": "./src/state/terminal.ts",
       "default": "./src/state/terminal.ts"
     },
+    "./state/mascot-activity": {
+      "types": "./src/state/mascotActivity.ts",
+      "default": "./src/state/mascotActivity.ts"
+    },
     "./state/threads": {
       "types": "./src/state/threads.ts",
       "default": "./src/state/threads.ts"
