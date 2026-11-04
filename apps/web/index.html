@@ -429,33 +429,14 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 96px;
-        height: 96px;
+        width: 200px;
+        height: 200px;
       }
 
       #boot-shell-logo {
-        width: 64px;
-        height: 64px;
+        width: 200px;
+        height: 200px;
         object-fit: contain;
-        animation: sled-loading 1.6s ease-in-out infinite;
-      }
-
-      @keyframes sled-loading {
-        0%,
-        100% {
-          opacity: 0.65;
-          transform: scale(0.98);
-        }
-        50% {
-          opacity: 1;
-          transform: scale(1.02);
-        }
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        #boot-shell-logo {
-          animation: none;
-        }
       }
 
       /* App CSS locks body and #root scrolling once main loads, so the error screen scrolls itself. */
@@ -693,7 +674,21 @@
     <div id="root">
       <div id="boot-shell">
         <div id="boot-shell-card" aria-label="Sled splash screen">
-          <img id="boot-shell-logo" src="/sled-mark.png" alt="Sled Code" />
+          <img id="boot-shell-logo" alt="Sled Code" />
+          <script>
+            (() => {
+              let desktopBranding = null;
+              try {
+                desktopBranding = window.desktopBridge?.getAppBranding() ?? null;
+              } catch {}
+              const development = desktopBranding
+                ? desktopBranding.stageLabel === "Dev" || desktopBranding.stageLabel === "Nightly"
+                : "%VITE_MASCOT_VARIANT%" === "development";
+              document.getElementById("boot-shell-logo").src = development
+                ? "/sled-startup-dev.png"
+                : "/sled-startup.png";
+            })();
+          </script>
         </div>
       </div>
     </div>
