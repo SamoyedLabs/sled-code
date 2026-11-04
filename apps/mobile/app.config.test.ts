@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 
+import { resolveMobileStageLabel, usesDarkMobileMascot } from "./src/lib/mobileBranding";
+
 // Keep config parsing independent of local env files and build credentials.
 vi.mock("../../scripts/lib/public-config.ts", () => ({
   loadRepoEnv: () =>
@@ -10,6 +12,8 @@ vi.mock("../../scripts/lib/public-config.ts", () => ({
         "SLED_EXPO_PROJECT_ID",
         "SLED_EXPO_OWNER",
         "SLED_EXPO_CHANNEL",
+        "T3CODE_IOS_PERSONAL_TEAM",
+        "T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID",
       ]
         .filter((key) => process.env[key] !== undefined)
         .map((key) => [key, process.env[key]]),
@@ -17,6 +21,8 @@ vi.mock("../../scripts/lib/public-config.ts", () => ({
 }));
 
 beforeEach(() => {
+  vi.stubEnv("T3CODE_IOS_PERSONAL_TEAM", undefined);
+  vi.stubEnv("T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID", undefined);
   vi.stubEnv("T3CODE_MOBILE_UPDATES_ENABLED", undefined);
   vi.stubEnv("SLED_EXPO_PROJECT_ID", undefined);
   vi.stubEnv("SLED_EXPO_OWNER", undefined);
@@ -40,15 +46,29 @@ it.each(["prod", ""])("rejects APP_VARIANT=%j before selecting production IDs", 
 });
 
 it.each([
-  [undefined, "com.samoyedlabs.sled"],
-  ["development", "com.samoyedlabs.sled.dev"],
-  ["preview", "com.samoyedlabs.sled.preview"],
-  ["production", "com.samoyedlabs.sled"],
-])("keeps the iOS and Android identifiers for APP_VARIANT=%j", async (value, identifier) => {
-  const config = await loadConfig(value);
-  expect(config.ios?.bundleIdentifier).toBe(identifier);
-  expect(config.android?.package).toBe(identifier);
-});
+  [undefined, "com.samoyedlabs.sled", "Beta", "startup"],
+  ["development", "com.samoyedlabs.sled.dev", "Dev", "startup-dev"],
+  ["preview", "com.samoyedlabs.sled.preview", "Nightly", "startup"],
+  ["production", "com.samoyedlabs.sled", "Beta", "startup"],
+])(
+  "keeps identifiers and stage branding for APP_VARIANT=%j",
+  async (value, identifier, stage, assets) => {
+    const config = await loadConfig(value);
+    expect(config.ios?.bundleIdentifier).toBe(identifier);
+    expect(config.android?.package).toBe(identifier);
+    expect(resolveMobileStageLabel(config.extra?.appVariant)).toBe(stage);
+    expect(usesDarkMobileMascot(config.extra?.appVariant)).toBe(assets === "startup-dev");
+    expect(config.plugins).toContainEqual([
+      "expo-splash-screen",
+      expect.objectContaining({
+        image: `../../assets/branding/${assets}/rest.png`,
+        android: expect.objectContaining({
+          image: `../../assets/branding/${assets}/android-rest.png`,
+        }),
+      }),
+    ]);
+  },
+);
 
 it("disables OTA updates without inheriting upstream Expo ownership", async () => {
   const config = await loadConfig("production");
@@ -84,6 +104,13 @@ it("enables OTA updates for an explicitly configured independent project", async
   expect(config.owner).toBe("samoyedlabs");
   expect(config.updates?.requestHeaders).toEqual({ "expo-channel-name": "production" });
   vi.stubEnv("SLED_EXPO_CHANNEL", "sled-private");
-  const privateConfig = await loadConfig("development");
+  vi.stubEnv("T3CODE_IOS_PERSONAL_TEAM", "1");
+  vi.stubEnv("T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID", "com.samoyedlabs.sled");
+  const privateConfig = await loadConfig("preview");
+  expect(privateConfig.name).toBe("Sled");
+  expect(privateConfig.scheme).toBe("sled");
+  expect(privateConfig.ios?.bundleIdentifier).toBe("com.samoyedlabs.sled");
+  expect(privateConfig.extra?.appVariant).toBe("preview");
+  expect(resolveMobileStageLabel(privateConfig.extra?.appVariant)).toBe("Nightly");
   expect(privateConfig.updates?.requestHeaders).toEqual({ "expo-channel-name": "sled-private" });
 });

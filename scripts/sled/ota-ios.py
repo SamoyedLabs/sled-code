@@ -46,7 +46,7 @@ def main():
     # Overrides could hide native changes from the compatibility check.
     for key in ('EXPO_UPDATES_FINGERPRINT_OVERRIDE', 'EXPO_UPDATES_WORKFLOW_OVERRIDE'):
         env.pop(key, None)
-    env.update(APP_VARIANT='development', MOBILE_VERSION_POLICY='fingerprint',
+    env.update(APP_VARIANT='preview', MOBILE_VERSION_POLICY='fingerprint',
                T3CODE_MOBILE_UPDATES_ENABLED='1', T3CODE_IOS_TEAM_ID='WYW7983W9W',
                T3CODE_IOS_PERSONAL_TEAM='1', T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID='com.samoyedlabs.sled',
                SLED_EXPO_PROJECT_ID=PROJECT, SLED_EXPO_OWNER='samoyed-labs',

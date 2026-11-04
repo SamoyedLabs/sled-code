@@ -1,5 +1,6 @@
 import type { ExpoConfig } from "expo/config";
 import { SLED_BRANDING } from "./branding/sled.ts";
+import { usesDarkMobileMascot } from "./src/lib/mobileBranding.ts";
 
 import { BRAND_ASSET_PATHS } from "../../scripts/lib/brand-assets.ts";
 import { loadRepoEnv } from "../../scripts/lib/public-config.ts";
@@ -145,11 +146,11 @@ const variant = {
     appIcon: SLED_BRANDING.icon,
     iosIcon: SLED_BRANDING.icon,
     splashIcon: fromRepoRoot(
-      `assets/branding/${APP_VARIANT === "production" ? "startup" : "startup-dev"}/rest.png`,
+      `assets/branding/${usesDarkMobileMascot(APP_VARIANT) ? "startup-dev" : "startup"}/rest.png`,
     ),
     androidAdaptiveForeground: SLED_BRANDING.icon,
     androidSplashIcon: fromRepoRoot(
-      `assets/branding/${APP_VARIANT === "production" ? "startup" : "startup-dev"}/android-rest.png`,
+      `assets/branding/${usesDarkMobileMascot(APP_VARIANT) ? "startup-dev" : "startup"}/android-rest.png`,
     ),
   },
 };

@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText as Text } from "../../components/ui/AppText";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { useDeadlinePassed } from "../../lib/clock";
+import { resolveMobileStageLabel } from "../../lib/mobileBranding";
 import {
   type AppUpdateCheckState,
   isAppUpdateCheckAvailable,
@@ -50,10 +51,8 @@ function AppSettingsSection() {
   const hiddenUpdateTapCount = useRef(0);
 
   const version = Constants.expoConfig?.version ?? "0.0.0";
-  // Match app.config.ts's production fallback to avoid mislabeling builds as development.
-  const variant = (Constants.expoConfig?.extra?.appVariant as string | undefined) ?? "production";
-  const variantLabel = variant === "production" ? "" : capitalize(variant);
-  const versionLabel = variantLabel ? `${version} · ${variantLabel}` : version;
+  const stageLabel = resolveMobileStageLabel(Constants.expoConfig?.extra?.appVariant);
+  const versionLabel = `${version} · ${stageLabel}`;
   const updateCheckAvailable = isAppUpdateCheckAvailable();
   const busy =
     updateState === "checking" || updateState === "downloading" || updateState === "restarting";
@@ -142,8 +141,4 @@ function AppSettingsSection() {
       )}
     </SettingsSection>
   );
-}
-
-function capitalize(value: string): string {
-  return value.length > 0 ? value.charAt(0).toUpperCase() + value.slice(1) : value;
 }

@@ -9,6 +9,10 @@ inputs:
     description: Arguments for `vp install`, such as filters. Empty installs the whole workspace.
     required: false
     default: ""
+  restore-full-store:
+    description: Allow filtered installs to restore the larger repository-wide store
+    required: false
+    default: "true"
 runs:
   using: composite
   steps:
@@ -87,8 +91,8 @@ runs:
           echo "namespace=filtered-$(printf '%s' "$INSTALL_ARGS" | cksum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
         fi
 
-    # Filtered installs prefer the current full store, which holds every package,
-    # over an older store of their own.
+    # Most filtered installs prefer the current full store. Latency-sensitive
+    # releases opt out so they only extract their smaller dependency closure.
     # The pnpm store stays a cache tarball on the runner's own disk. A store on a
     # Blacksmith sticky disk mounts in under a second, but pnpm then copies every
     # package across filesystems instead of hard-linking it: install took 28-49s
@@ -101,9 +105,9 @@ runs:
         path: ${{ steps.pnpm_store.outputs.path }}
         key: pnpm-${{ steps.pnpm_store.outputs.namespace }}-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
         restore-keys: |
-          pnpm-full-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
+          ${{ inputs.restore-full-store == 'true' && format('pnpm-full-v1-{0}-{1}-{2}', runner.os, runner.arch, hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json')) || '' }}
           pnpm-${{ steps.pnpm_store.outputs.namespace }}-v1-${{ runner.os }}-${{ runner.arch }}-
-          pnpm-full-v1-${{ runner.os }}-${{ runner.arch }}-
+          ${{ inputs.restore-full-store == 'true' && format('pnpm-full-v1-{0}-{1}-', runner.os, runner.arch) || '' }}
 
     # pnpm accepts an earlier pass for the same lockfile and policy at any age, so
     # a cached record skips fetching registry metadata for every package.
