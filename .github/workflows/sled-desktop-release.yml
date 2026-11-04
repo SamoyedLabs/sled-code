@@ -298,6 +298,43 @@ jobs:
         if: runner.os != 'Linux'
         run: |
           python3 scripts/sled/ci_progress.py run --phase "Package desktop" -- vp run dist:desktop:artifact --platform '${{ runner.os == 'macOS' && 'mac' || 'win' }}' --target '${{ runner.os == 'macOS' && 'zip' || 'nsis' }}' --arch '${{ runner.os == 'macOS' && 'arm64' || 'x64' }}' --build-version 0.2.999 --skip-build --verbose --output-dir "$RUNNER_TEMP/desktop-verify"
+      - name: Identify the resource monitor cache
+        if: runner.os == 'Windows'
+        id: verify-resource-context
+        run: |
+          rustc -vV > "$RUNNER_TEMP/rust-toolchain.txt"
+          echo "rust=$(git hash-object "$RUNNER_TEMP/rust-toolchain.txt")" >> "$GITHUB_OUTPUT"
+      - name: Save the exact resource monitor binary
+        if: runner.os == 'Windows'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: native/resource-monitor/target/x86_64-pc-windows-msvc/release/t3-resource-monitor.exe
+          key: sled-resource-monitor-binary-v2-x86_64-pc-windows-msvc-${{ steps.verify-resource-context.outputs.rust }}-${{ hashFiles('native/resource-monitor/Cargo.lock', 'native/resource-monitor/Cargo.toml', 'native/resource-monitor/src/**') }}
+      - name: Remove the local helper before testing cache restoration
+        if: runner.os == 'Windows'
+        run: rm native/resource-monitor/target/x86_64-pc-windows-msvc/release/t3-resource-monitor.exe
+      - name: Restore the exact helper from GitHub
+        if: runner.os == 'Windows'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: native/resource-monitor/target/x86_64-pc-windows-msvc/release/t3-resource-monitor.exe
+          key: sled-resource-monitor-binary-v2-x86_64-pc-windows-msvc-${{ steps.verify-resource-context.outputs.rust }}-${{ hashFiles('native/resource-monitor/Cargo.lock', 'native/resource-monitor/Cargo.toml', 'native/resource-monitor/src/**') }}
+          fail-on-cache-miss: true
+      - name: Verify packaging with the restored helper
+        if: runner.os == 'Windows'
+        env:
+          T3CODE_DESKTOP_REUSE_RESOURCE_MONITOR: "true"
+        run: |
+          python3 scripts/sled/ci_progress.py run --phase "Package desktop with cached helper" -- vp run dist:desktop:artifact --platform win --target nsis --arch x64 --build-version 0.2.999 --skip-build --verbose --output-dir "$RUNNER_TEMP/desktop-reuse-verify"
+          python3 - <<'PYTHON'
+          import json, os
+          from pathlib import Path
+          records = [json.loads(line) for line in (Path(os.environ['RUNNER_TEMP']) / 'ci-timings.jsonl').read_text().splitlines()]
+          start = next(i for i, row in enumerate(records) if row['phase'] == 'Package desktop with cached helper' and row['event'] == 'start')
+          if any(row['phase'].startswith('cargo build resource monitor') for row in records[start:]):
+              raise SystemExit('Cached helper unexpectedly rebuilt')
+          print('PASS: real NSIS installer packaged with a GitHub-restored helper and no resource-monitor compilation')
+          PYTHON
       - name: Retain phase timing records
         if: always()
         uses: actions/upload-artifact@v7
