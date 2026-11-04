@@ -61,6 +61,7 @@ jobs:
           name: sled-mobile-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: ignore
           path: |
+            release-mobile/native/*-diagnostics.json
             release-mobile/plan.json
             release-mobile/baseline.json
             release-mobile/archive-validation.json

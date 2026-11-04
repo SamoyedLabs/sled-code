@@ -118,6 +118,16 @@ jobs:
         env:
           SLED_RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
         run: node scripts/sled/verify-hosted-desktop.cjs '${{ matrix.platform }}' release-desktop
+      - name: Retain uncertified Windows packages for diagnosis only
+        if: failure() && matrix.platform == 'win'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sled-diagnostics-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            release-desktop/*.exe
+            release-desktop/windows-signatures.json
       - uses: actions/upload-artifact@v4
         with:
           name: sled-desktop-${{ matrix.platform }}

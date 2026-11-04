@@ -32,6 +32,8 @@ import subprocess
 import sys
 import tempfile
 
+from native_build_diagnostics import retain_errors
+
 ROOT = Path(__file__).resolve().parents[2]
 REPO = 'SamoyedLabs/sled-code'
 PROJECT = '707658f3-e37c-410c-b0fd-74aadb09e855'
@@ -309,8 +311,11 @@ def release():
                    '--repo', REPO, '--target', sha, '--prerelease', '--title', 'Sled iOS native ' + build,
                    '--notes', 'Signed archive and IPA verified; TestFlight upload accepted. Native artifacts in ' + tag)
             finally:
-                if keychain:
-                    run(['security', 'delete-keychain', str(keychain)], private=True)
+                try:
+                    retain_errors(native, os.environ, credentials)
+                finally:
+                    if keychain:
+                        run(['security', 'delete-keychain', str(keychain)], private=True)
     gh('release', 'upload', tag, str(output / 'plan.json'), '--repo', REPO)
     gh('release', 'edit', tag, '--repo', REPO, '--draft=false', '--prerelease',
        '--notes', 'Completed ' + mode + ' release from checked main ' + sha + '. TestFlight installation remains user controlled.')

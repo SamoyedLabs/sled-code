@@ -105,19 +105,29 @@ async function main() {
       run("7z", ["x", "-y", "-o" + payload, inner]);
       const executable = find(payload, "Sled Code.exe");
       assert(executable, "Expected private Sled executable");
+      const signatures = [];
+      let signaturesValid = true;
       for (const file of [artifact, executable]) {
-        const result = cp.execFileSync(
+        const result = cp.spawnSync(
           "pwsh",
-          [
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            '$s=Get-AuthenticodeSignature -LiteralPath $env:SLED_VERIFY_FILE; if($s.Status -ne "Valid") {throw "Invalid Authenticode signature"}; if($s.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName,$false) -cne $env:SLED_WINDOWS_PUBLISHER_NAME) {throw "Unexpected Authenticode publisher"}; if($env:SLED_WINDOWS_SIGNER_THUMBPRINT -and $s.SignerCertificate.Thumbprint -ine $env:SLED_WINDOWS_SIGNER_THUMBPRINT) {throw "Unexpected Authenticode certificate"}',
-          ],
+          ["-NoProfile", "-NonInteractive", "-File", "scripts/sled/verify-windows-signature.ps1"],
           { env: { ...process.env, SLED_VERIFY_FILE: file }, encoding: "utf8" },
         );
-        assert.equal(result.trim(), "");
+        console.log(result.stdout);
+        signatures.push({
+          file: path.basename(file),
+          exitCode: result.status,
+          output: result.stdout,
+          error: result.stderr,
+          launchError: result.error?.message,
+        });
+        signaturesValid &&= result.status === 0;
       }
+      fs.writeFileSync(
+        path.join(folder, "windows-signatures.json"),
+        JSON.stringify(signatures, null, 2) + "\n",
+      );
+      assert(signaturesValid, "Windows signature verification failed; see windows-signatures.json");
       resources = path.join(path.dirname(executable), "resources");
     }
     const packaged = JSON.parse(asar.extractFile(path.join(resources, "app.asar"), "package.json"));
