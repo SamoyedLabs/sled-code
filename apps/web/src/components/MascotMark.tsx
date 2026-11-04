@@ -3,19 +3,40 @@ import { MASCOT_ACTIVITY_LABELS } from "@t3tools/client-runtime/state/mascot-act
 import { useEffect, useRef, useSyncExternalStore, type CSSProperties } from "react";
 
 import speechBubble from "../../../../assets/branding/mascot/speech-bubble.png";
-import fur from "../../../../assets/branding/mascot/fur.png";
-import leftEye from "../../../../assets/branding/mascot/eye-left.png";
-import rightEye from "../../../../assets/branding/mascot/eye-right.png";
-import closed from "../../../../assets/branding/mascot/closed.png";
-import tongue from "../../../../assets/branding/mascot/tongue.png";
-import leftEar from "../../../../assets/branding/mascot/ear-left.png";
-import rightEar from "../../../../assets/branding/mascot/ear-right.png";
-import closedMouth from "../../../../assets/branding/mascot/closed-mouth.png";
-import pantMouth from "../../../../assets/branding/mascot/pant-mouth.png";
+import productionFur from "../../../../assets/branding/mascot/fur.png";
+import productionLeftEye from "../../../../assets/branding/mascot/eye-left.png";
+import productionRightEye from "../../../../assets/branding/mascot/eye-right.png";
+import productionClosed from "../../../../assets/branding/mascot/closed.png";
+import productionTongue from "../../../../assets/branding/mascot/tongue.png";
+import productionLeftEar from "../../../../assets/branding/mascot/ear-left.png";
+import productionRightEar from "../../../../assets/branding/mascot/ear-right.png";
+import productionClosedMouth from "../../../../assets/branding/mascot/closed-mouth.png";
+import productionPantMouth from "../../../../assets/branding/mascot/pant-mouth.png";
+import developmentFur from "../../../../assets/branding/mascot-dev/fur.png";
+import developmentLeftEye from "../../../../assets/branding/mascot-dev/eye-left.png";
+import developmentRightEye from "../../../../assets/branding/mascot-dev/eye-right.png";
+import developmentClosed from "../../../../assets/branding/mascot-dev/closed.png";
+import developmentTongue from "../../../../assets/branding/mascot-dev/tongue.png";
+import developmentLeftEar from "../../../../assets/branding/mascot-dev/ear-left.png";
+import developmentRightEar from "../../../../assets/branding/mascot-dev/ear-right.png";
+import developmentClosedMouth from "../../../../assets/branding/mascot-dev/closed-mouth.png";
+import developmentPantMouth from "../../../../assets/branding/mascot-dev/pant-mouth.png";
+import { APP_MASCOT_VARIANT } from "../branding";
 import geometry from "../../../../assets/branding/mascot/geometry.json";
 import { mascotActivityAtom } from "../state/mascot";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import styles from "./MascotMark.module.css";
+
+const fur = APP_MASCOT_VARIANT === "development" ? developmentFur : productionFur;
+const leftEye = APP_MASCOT_VARIANT === "development" ? developmentLeftEye : productionLeftEye;
+const rightEye = APP_MASCOT_VARIANT === "development" ? developmentRightEye : productionRightEye;
+const closed = APP_MASCOT_VARIANT === "development" ? developmentClosed : productionClosed;
+const tongue = APP_MASCOT_VARIANT === "development" ? developmentTongue : productionTongue;
+const leftEar = APP_MASCOT_VARIANT === "development" ? developmentLeftEar : productionLeftEar;
+const rightEar = APP_MASCOT_VARIANT === "development" ? developmentRightEar : productionRightEar;
+const closedMouth =
+  APP_MASCOT_VARIANT === "development" ? developmentClosedMouth : productionClosedMouth;
+const pantMouth = APP_MASCOT_VARIANT === "development" ? developmentPantMouth : productionPantMouth;
 
 function subscribeVisibility(notify: () => void) {
   document.addEventListener("visibilitychange", notify);

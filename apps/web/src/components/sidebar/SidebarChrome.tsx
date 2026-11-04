@@ -4,6 +4,7 @@ import { memo } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
 import { useAtomValue } from "@effect/atom-react";
+import { MASCOT_ACTIVITY_LABELS } from "@t3tools/client-runtime/state/mascot-activity";
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { shortcutLabelForCommand } from "../../keybindings";
 import {
@@ -15,6 +16,7 @@ import { primaryServerKeybindingsAtom } from "../../state/server";
 import { cn } from "../../lib/utils";
 import { usePullRequestsSupported } from "../../state/environments";
 import { APP_BASE_NAME } from "../../branding";
+import { mascotActivityAtom } from "../../state/mascot";
 import { MascotMark } from "../MascotMark";
 import {
   resolveEnvironmentIdentificationPillLabel,
@@ -164,11 +166,12 @@ function HistoryNavigationButton({
 }
 
 function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
+  const activity = useAtomValue(mascotActivityAtom);
   return (
     <Link
-      aria-label={`${APP_BASE_NAME} home`}
+      aria-label={`${APP_BASE_NAME} home. ${MASCOT_ACTIVITY_LABELS[activity.state]}`}
       className={cn(
-        "relative z-10 ml-[var(--workspace-titlebar-content-left)] hidden h-7 w-fit min-w-0 shrink-0 items-center overflow-hidden rounded-md outline-hidden ring-ring focus-visible:ring-2 focus-visible:ring-inset md:flex",
+        "relative z-10 ml-[var(--workspace-titlebar-content-left)] flex h-7 w-fit min-w-0 shrink-0 items-center overflow-hidden rounded-md outline-hidden ring-ring focus-visible:ring-2 focus-visible:ring-inset",
         onBackdrop ? "text-white" : "text-foreground",
       )}
       to="/"
