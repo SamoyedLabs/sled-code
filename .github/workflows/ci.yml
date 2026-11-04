@@ -16,6 +16,7 @@ on:
   push:
     branches:
       - main
+      - t3/optimize-ci-runtime
 
 permissions:
   contents: read
