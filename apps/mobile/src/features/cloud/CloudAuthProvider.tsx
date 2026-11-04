@@ -6,8 +6,8 @@ import { cloudAccountService, deactivateCloudRelayAccount } from "./cloudAccount
 import { resolveCloudPublicConfig } from "./publicConfig";
 
 const cloudConfig = resolveCloudPublicConfig();
-// Build-time constant: null when this build has no cloud config.
-const publishableKey = cloudConfig.relay.url ? cloudConfig.clerk.publishableKey : null;
+// Sign-in is available before the user configures their personal relay.
+const publishableKey = cloudConfig.clerk.publishableKey;
 
 if (publishableKey) {
   // The same native singleton ClerkProvider renders with, so the service

@@ -94,8 +94,8 @@ function EmptyMobileClients() {
       <EmptyHeader>
         <EmptyTitle>No mobile clients</EmptyTitle>
         <EmptyDescription>
-          Install T3 Code on your phone and sign in to T3 Connect to get push notifications and Live
-          Activities.
+          Background push notifications and remote Live Activity updates are not available with Sled
+          Connect yet.
         </EmptyDescription>
       </EmptyHeader>
     </Empty>

@@ -1,0 +1,175 @@
+<!doctype html>
+<!-- Adapted from apps/marketing/src/pages/privacy-policy.astro.
+MIT License
+
+Copyright (c) 2026 T3 Tools Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sled | Samoyed Labs</title>
+    <meta
+      name="description"
+      content="Sled lets you work with coding agents on your own computers from desktop, web, and mobile."
+    />
+    <link rel="icon" href="/favicon.ico" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, sans-serif;
+        background: #fafafa;
+        color: #202020;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      main {
+        width: min(100% - 40px, 780px);
+        margin: 48px auto 80px;
+      }
+      nav {
+        display: flex;
+        gap: 24px;
+        margin-bottom: 52px;
+      }
+      a {
+        color: #2858a5;
+        text-underline-offset: 3px;
+        overflow-wrap: anywhere;
+      }
+      a:focus-visible {
+        outline: 2px solid currentColor;
+        outline-offset: 4px;
+      }
+      h1 {
+        font-size: clamp(2.4rem, 8vw, 3.8rem);
+        line-height: 1.1;
+        letter-spacing: -0.04em;
+        margin: 12px 0 20px;
+      }
+      h2 {
+        font-size: 1.65rem;
+        line-height: 1.25;
+        margin: 8px 0 22px;
+      }
+      h3 {
+        font-size: 1.1rem;
+        line-height: 1.4;
+        margin: 28px 0 10px;
+      }
+      p,
+      li,
+      address {
+        font-size: 1rem;
+        line-height: 1.75;
+        font-style: normal;
+      }
+      li + li {
+        margin-top: 12px;
+      }
+      ul {
+        padding-left: 24px;
+      }
+      section {
+        margin-top: 48px;
+        padding-top: 32px;
+        border-top: 1px solid #d4d4d4;
+        scroll-margin-top: 24px;
+      }
+      .section-number,
+      .eyebrow,
+      .dates {
+        font-size: 0.85rem;
+        color: #555;
+      }
+      .section-number {
+        margin-bottom: 8px;
+      }
+      code {
+        overflow-wrap: anywhere;
+      }
+      footer {
+        margin-top: 48px;
+        padding-top: 24px;
+        border-top: 1px solid #d4d4d4;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          background: #151515;
+          color: #ededed;
+        }
+        a {
+          color: #9fc4ff;
+        }
+        .section-number,
+        .eyebrow,
+        .dates {
+          color: #b1b1b1;
+        }
+        section,
+        footer {
+          border-color: #444;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <nav aria-label="Main navigation">
+        <a href="/">Open Sled</a><a href="/privacy-policy">Privacy policy</a>
+      </nav>
+      <header>
+        <p class="eyebrow">Samoyed Labs</p>
+        <h1>Your coding agents.<br />Your computers.</h1>
+        <p>
+          Sled is an application for working with coding agents on your own computers from desktop,
+          web, and mobile.
+        </p>
+      </header>
+      <section>
+        <h2>Connect from wherever you work</h2>
+        <p>
+          Sled Connect provides shared sign-in and lets you run your own connection relay, database,
+          and Cloudflare tunnels. Sign in with Google, Apple, or email, then connect to the servers
+          you choose.
+        </p>
+        <p>
+          Your agent accounts and project data stay with your configured servers and providers. Read
+          our <a href="/privacy-policy">privacy policy</a> for details about authentication,
+          connection traffic, analytics, and storage.
+        </p>
+        <p><a href="/">Open the Sled app</a></p>
+      </section>
+      <section>
+        <h2>Contact</h2>
+        <p>
+          For support or privacy requests, email
+          <a href="mailto:raajtarun951@gmail.com">raajtarun951@gmail.com</a>.
+        </p>
+      </section>
+      <footer><a href="/privacy-policy">Privacy policy</a></footer>
+    </main>
+  </body>
+</html>

@@ -2047,8 +2047,8 @@ export function AboutSettingsPanel() {
           {...searchableSetting("privacy-policy")}
           description={
             telemetryOff === undefined
-              ? "How we handle your data, including the anonymous usage data T3 Code collects."
-              : `How we handle your data. ${telemetryOff}`
+              ? "How Sled handles your data, authentication, connections, and usage reporting."
+              : `How Sled handles your data. ${telemetryOff}`
           }
           control={
             <Button
