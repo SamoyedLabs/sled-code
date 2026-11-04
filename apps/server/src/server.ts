@@ -1,3 +1,6 @@
+import * as OpenbotSledTools from "./openbot/SledTools.ts";
+import * as OpenbotUpstream from "./openbot/UpstreamRuntime.ts";
+import * as OpenbotCodingDelivery from "./openbot/CodingDelivery.ts";
 import * as Openbot from "./openbot/Integration.ts";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import type { RelayManagedEndpointRuntimeConfig } from "@t3tools/contracts/relay";
@@ -766,6 +769,23 @@ const layerCommandReadiness = HttpRouter.middleware(
 );
 
 const layerMakeRoutes = Layer.mergeAll(
+  Layer.effectDiscard(
+    Effect.gen(function* () {
+      const integration = yield* Openbot.Integration;
+      const tools = yield* OpenbotSledTools.SledTools;
+      yield* integration.readyChanges.pipe(
+        Stream.runForEach(() =>
+          tools.reconcile.pipe(
+            Effect.catch(() => Effect.logWarning("Openbot Sled tools cleanup remains pending")),
+          ),
+        ),
+        Effect.forkScoped,
+      );
+    }),
+  ),
+  Layer.effectDiscard(
+    OpenbotCodingDelivery.CodingDelivery.pipe(Effect.flatMap((delivery) => delivery.start)),
+  ),
   Layer.mergeAll(
     HttpApiBuilder.layer(EnvironmentHttpApi).pipe(
       Layer.provide(AuthHttp.layer),
@@ -803,6 +823,15 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.provide(RemoteDelegation.layer.pipe(Layer.provide(ProjectionStoreV2.layer))),
   // Links agents ask for: shown in a thread from /mcp, answered over WebSocket.
   Layer.provide(PeerLinkRequests.layer),
+  Layer.provide(OpenbotCodingDelivery.layer.pipe(Layer.provide(ProjectionStoreV2.layer))),
+  Layer.provide(OpenbotSledTools.layer.pipe(Layer.provide(ServerSecretStore.layer))),
+  Layer.provide(
+    Layer.unwrap(
+      ServerConfig.ServerConfig.pipe(
+        Effect.map((config) => OpenbotUpstream.layer({ stateDirectory: config.stateDir })),
+      ),
+    ),
+  ),
   Layer.provide(Openbot.layer.pipe(Layer.provide(ServerSecretStore.layer))),
   // Share the service so HTTP/WS clients single-flight reads and invalidate each other's cached patches.
   Layer.provide(layerPullRequestService),

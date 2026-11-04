@@ -1,3 +1,7 @@
+import * as OpenbotSledTools from "./openbot/SledTools.ts";
+import * as OpenbotUpstream from "./openbot/UpstreamRuntime.ts";
+import * as OpenbotCoding from "./openbot/CodingBridge.ts";
+import * as OpenbotDelivery from "./openbot/CodingDelivery.ts";
 import * as Openbot from "./openbot/Integration.ts";
 import { OrchestrationDispatchCommandError, OpenbotError } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -1367,7 +1371,11 @@ export const layerWsRpc = (
       const commandOutputHub = yield* CommandOutputHub.CommandOutputHub;
       const providerSessionManager = yield* ProviderSessionManager.ProviderSessionManagerV2;
       const scheduledTasks = yield* ScheduledTasks.ScheduledTaskService;
+      const sledTools = yield* Effect.serviceOption(OpenbotSledTools.SledTools);
       const openbot = yield* Effect.serviceOption(Openbot.Integration);
+      const openbotUpstream = yield* Effect.serviceOption(OpenbotUpstream.UpstreamRuntime);
+      const openbotCoding = yield* Effect.serviceOption(OpenbotCoding.CodingBridge);
+      const openbotDelivery = yield* Effect.serviceOption(OpenbotDelivery.CodingDelivery);
       const secretRequests = yield* SecretRequests.SecretRequests;
       const guestShares = yield* GuestShareService.GuestShareService;
       const pullRequests = yield* PullRequestService.PullRequestService;
@@ -2244,6 +2252,119 @@ export const layerWsRpc = (
               Effect.as(commandOutputHub.subscribe(input)),
             ),
           ),
+        [WS_METHODS.openbotAttention]: () =>
+          Option.isSome(openbot)
+            ? openbot.value.attentionSnapshot
+            : Effect.succeed({
+                hostId: null,
+                state: "disconnected" as const,
+                complete: false,
+                requests: [],
+              }),
+        [WS_METHODS.openbotAttentionRespond]: (input) =>
+          Option.isSome(openbot)
+            ? openbot.value
+                .apiAdminToHost(input.hostId, input.request)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
+        [WS_METHODS.openbotSubscribeChanges]: () =>
+          Stream.merge(
+            Option.isSome(openbot)
+              ? openbot.value.subscribeChanges
+              : Stream.make({ hostId: null, resource: "all" as const }),
+            Option.isSome(openbotDelivery) ? openbotDelivery.value.changes : Stream.empty,
+          ),
+        [WS_METHODS.openbotUpstreamStatus]: () =>
+          Option.isSome(openbotUpstream)
+            ? openbotUpstream.value.getStatus.pipe(
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(new OpenbotError({ message: "Openbot release staging is unavailable." })),
+        [WS_METHODS.openbotUpstreamCheck]: (input) =>
+          Option.isSome(openbotUpstream)
+            ? (input.version === undefined
+                ? openbotUpstream.value.checkLatest
+                : openbotUpstream.value.checkVersion(input.version)
+              ).pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot release staging is unavailable." })),
+        [WS_METHODS.openbotUpstreamStage]: (input) =>
+          Option.isSome(openbotUpstream)
+            ? openbotUpstream.value
+                .stage(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot release staging is unavailable." })),
+        [WS_METHODS.openbotRead]: (input) =>
+          Option.isSome(openbot)
+            ? openbot.value
+                .apiRead(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
+        [WS_METHODS.openbotWrite]: (input) =>
+          Option.isSome(openbot)
+            ? openbot.value
+                .apiWrite(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
+        [WS_METHODS.openbotAdmin]: (input) =>
+          Option.isSome(openbot)
+            ? openbot.value
+                .apiAdmin(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
+        [WS_METHODS.openbotCodingLaunch]: (input) =>
+          Option.isSome(openbotCoding)
+            ? openbotCoding.value
+                .launch(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot coding bridge is unavailable." })),
+        [WS_METHODS.openbotCodingGet]: (input) =>
+          Option.isSome(openbotCoding)
+            ? openbotCoding.value
+                .get(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot coding bridge is unavailable." })),
+        [WS_METHODS.openbotCodingList]: (input) =>
+          Option.isSome(openbotCoding)
+            ? openbotCoding.value
+                .list(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot coding bridge is unavailable." })),
+        [WS_METHODS.openbotCodingSend]: (input) =>
+          Option.isSome(openbotCoding)
+            ? openbotCoding.value
+                .send(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot coding bridge is unavailable." })),
+        [WS_METHODS.openbotCodingCancel]: (input) =>
+          Option.isSome(openbotCoding)
+            ? openbotCoding.value
+                .cancel(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot coding bridge is unavailable." })),
+        [WS_METHODS.openbotSledToolsStatus]: (_input) =>
+          Option.isSome(sledTools)
+            ? sledTools.value.status.pipe(
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(
+                new OpenbotError({ message: "The Sled tools connection is unavailable." }),
+              ),
+        [WS_METHODS.openbotSledToolsConnect]: (input) =>
+          Option.isSome(sledTools)
+            ? sledTools.value
+                .connect(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(
+                new OpenbotError({ message: "The Sled tools connection is unavailable." }),
+              ),
+        [WS_METHODS.openbotSledToolsDisconnect]: (_input) =>
+          Option.isSome(sledTools)
+            ? sledTools.value.disconnect.pipe(
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(
+                new OpenbotError({ message: "The Sled tools connection is unavailable." }),
+              ),
         [WS_METHODS.openbotStatus]: () =>
           Option.isSome(openbot)
             ? openbot.value.status
@@ -3419,6 +3540,11 @@ export const WS_RPC_SERVER_OPTIONS = {
 
 export const layer = Layer.unwrap(
   Effect.gen(function* () {
+    const openbot = yield* Effect.serviceOption(Openbot.Integration);
+    const openbotCoding = yield* Effect.serviceOption(OpenbotCoding.CodingBridge);
+    const openbotDelivery = yield* Effect.serviceOption(OpenbotDelivery.CodingDelivery);
+    const sledTools = yield* Effect.serviceOption(OpenbotSledTools.SledTools);
+    const upstream = yield* Effect.serviceOption(OpenbotUpstream.UpstreamRuntime);
     const remoteDesktop = yield* RemoteDesktop.Service;
     const serverBrowser = yield* ServerBrowser.ServerBrowser;
     const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
@@ -3491,6 +3617,36 @@ export const layer = Layer.unwrap(
         }).pipe(
           Effect.provide(
             layerWsRpc(session, clientAnalyticsProps, serverBrowser, reportProfiles).pipe(
+              Layer.provide(
+                Option.match(openbotDelivery, {
+                  onNone: () => Layer.empty,
+                  onSome: (service) => Layer.succeed(OpenbotDelivery.CodingDelivery, service),
+                }),
+              ),
+              Layer.provide(
+                Option.match(openbot, {
+                  onNone: () => Layer.empty,
+                  onSome: (service) => Layer.succeed(Openbot.Integration, service),
+                }),
+              ),
+              Layer.provide(
+                Option.match(openbotCoding, {
+                  onNone: () => Layer.empty,
+                  onSome: (service) => Layer.succeed(OpenbotCoding.CodingBridge, service),
+                }),
+              ),
+              Layer.provide(
+                Option.match(sledTools, {
+                  onNone: () => Layer.empty,
+                  onSome: (service) => Layer.succeed(OpenbotSledTools.SledTools, service),
+                }),
+              ),
+              Layer.provide(
+                Option.match(upstream, {
+                  onNone: () => Layer.empty,
+                  onSome: (service) => Layer.succeed(OpenbotUpstream.UpstreamRuntime, service),
+                }),
+              ),
               Layer.provideMerge(RpcSerialization.layerJson),
               // Handler-context reporters see only request defects, not server-wide defects.
               Layer.provide(DefectReporter.layer),

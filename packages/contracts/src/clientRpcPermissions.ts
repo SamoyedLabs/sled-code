@@ -1,4 +1,6 @@
 import * as Schema from "effect/Schema";
+import { OpenbotSledToolsConnectInput } from "./openbotSledTools.ts";
+import { mcpClientScopes } from "./auth.ts";
 import { GitPreparePullRequestThreadInput, GitRunStackedActionInput } from "./git.ts";
 import {
   AuthAccessWriteScope,
@@ -16,8 +18,16 @@ import { WS_METHODS } from "./rpc.ts";
 
 /** Incremental client enforcement; the server still authorizes every request. */
 export const CLIENT_GUARDED_RPC_SCOPES = {
-  [WS_METHODS.openbotStatus]: AuthOrchestrationReadScope,
-  [WS_METHODS.openbotListAgents]: AuthOrchestrationReadScope,
+  [WS_METHODS.openbotAttentionRespond]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotUpstreamCheck]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotUpstreamStage]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotWrite]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotAdmin]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotCodingLaunch]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotCodingSend]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotCodingCancel]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotSledToolsConnect]: AuthAccessWriteScope,
+  [WS_METHODS.openbotSledToolsDisconnect]: AuthAccessWriteScope,
   [WS_METHODS.openbotStart]: AuthSettingsWriteScope,
   [WS_METHODS.openbotStop]: AuthSettingsWriteScope,
   [WS_METHODS.remoteDesktopStatus]: AuthDesktopOperateScope,
@@ -83,6 +93,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 
+const decodeSledToolsConnect = Schema.decodeUnknownSync(OpenbotSledToolsConnectInput);
 const decodePrepareThread = Schema.decodeUnknownSync(GitPreparePullRequestThreadInput);
 const decodeStackedAction = Schema.decodeUnknownSync(GitRunStackedActionInput);
 
@@ -90,6 +101,19 @@ export function clientRpcRequiredScopes(
   method: string,
   input: unknown,
 ): readonly AuthEnvironmentScope[] {
+  if (
+    method === WS_METHODS.openbotSledToolsConnect ||
+    method === WS_METHODS.openbotSledToolsDisconnect
+  )
+    return [
+      ...new Set([
+        AuthAccessWriteScope,
+        AuthSettingsWriteScope,
+        ...(method === WS_METHODS.openbotSledToolsConnect && input !== undefined
+          ? mcpClientScopes(decodeSledToolsConnect(input).access)
+          : []),
+      ]),
+    ];
   if (method === WS_METHODS.gitPreparePullRequestThread && input !== undefined) {
     const payload = decodePrepareThread(input);
     if (payload.mode === "worktree" && payload.threadId !== undefined)

@@ -117,6 +117,8 @@ const parseReady = (line: string): HostReady => {
   if (Object.values(ready).some((value) => !value || value.length > 4_096))
     throw new Error("Invalid readiness");
   const endpoint = new URL(ready.apiUrl);
+  // Released hosts advertise localhost; pin it numerically before any authenticated request.
+  if (endpoint.hostname === "localhost") endpoint.hostname = "127.0.0.1";
   if (
     endpoint.protocol !== "http:" ||
     !["127.0.0.1", "[::1]"].includes(endpoint.hostname) ||
@@ -128,7 +130,7 @@ const parseReady = (line: string): HostReady => {
     endpoint.pathname !== "/"
   )
     throw new Error("Invalid readiness endpoint");
-  return ready;
+  return { ...ready, apiUrl: endpoint.origin };
 };
 
 const make = Effect.fn("ManagedHost.make")(function* (config: ManagedHostConfig | undefined) {

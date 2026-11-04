@@ -1,3 +1,8 @@
+import {
+  SettingsBotsRouteScreen,
+  SettingsBotNewRouteScreen,
+  SettingsBotDetailRouteScreen,
+} from "./features/settings/SettingsBotsRouteScreen";
 import { isDraftThreadRoute } from "./features/threads/thread-route-state";
 import { ComponentCatalogScreen } from "./features/development/ComponentCatalogScreen";
 import { PullRequestGuideStopScreen } from "./features/pull-requests/guide/PullRequestGuideScreen";
@@ -380,6 +385,19 @@ const SETTINGS_SCREENS = {
       ...SETTINGS_PAGE_OPTIONS,
       title: "Chat",
     },
+  }),
+  SettingsBots: createNativeStackScreen({
+    screen: SettingsBotsRouteScreen,
+    linking: "settings/bots",
+    options: { ...SETTINGS_PAGE_OPTIONS, title: "Bots" },
+  }),
+  SettingsBotNew: createNativeStackScreen({
+    screen: SettingsBotNewRouteScreen,
+    options: { ...SETTINGS_PAGE_OPTIONS, title: "Create bot" },
+  }),
+  SettingsBotDetail: createNativeStackScreen({
+    screen: SettingsBotDetailRouteScreen,
+    options: { ...SETTINGS_PAGE_OPTIONS, title: "Bot" },
   }),
   SettingsScheduledTasks: createNativeStackScreen({
     screen: SettingsScheduledTasksRouteScreen,

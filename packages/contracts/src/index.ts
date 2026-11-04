@@ -78,3 +78,13 @@ export * from "./desktopRemoteDesktopSettings.ts";
 export * from "./desktopVoiceInput.ts";
 
 export * from "./openbot.ts";
+
+export * from "./openbotApi.ts";
+
+export * from "./openbotCoding.ts";
+
+export * from "./openbotSledTools.ts";
+
+export * from "./openbotEvents.ts";
+
+export * from "./openbotUpstream.ts";

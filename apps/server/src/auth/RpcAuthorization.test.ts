@@ -4,6 +4,8 @@ import {
   AuthFilesystemReadScope,
   AuthProvidersManageScope,
   AuthSettingsWriteScope,
+  AuthAccessWriteScope,
+  clientRpcRequiredScopes,
   DEFAULT_SERVER_SETTINGS,
   ProviderDriverKind,
   ProviderInstanceId,
@@ -36,12 +38,46 @@ describe("RPC authorization scopes", () => {
   });
 
   it("separates bot observation from starting and stopping its host", () => {
-    for (const method of [WS_METHODS.openbotStatus, WS_METHODS.openbotListAgents]) {
+    for (const method of [
+      WS_METHODS.openbotStatus,
+      WS_METHODS.openbotListAgents,
+      WS_METHODS.openbotRead,
+      WS_METHODS.openbotAttention,
+      WS_METHODS.openbotSubscribeChanges,
+    ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationReadScope);
     }
-    for (const method of [WS_METHODS.openbotStart, WS_METHODS.openbotStop]) {
+    expect(requiredScopeForRpcMethod(WS_METHODS.openbotWrite)).toBe(AuthOrchestrationOperateScope);
+    for (const method of [
+      WS_METHODS.openbotStart,
+      WS_METHODS.openbotStop,
+      WS_METHODS.openbotAdmin,
+      WS_METHODS.openbotAttentionRespond,
+      WS_METHODS.openbotUpstreamStatus,
+      WS_METHODS.openbotUpstreamCheck,
+      WS_METHODS.openbotUpstreamStage,
+    ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthSettingsWriteScope);
     }
+  });
+
+  it("requires access administration and every scope delegated to bots", () => {
+    expect(clientRpcRequiredScopes(WS_METHODS.openbotSledToolsDisconnect, {})).toEqual([
+      AuthAccessWriteScope,
+      AuthSettingsWriteScope,
+    ]);
+    expect(
+      clientRpcRequiredScopes(WS_METHODS.openbotSledToolsConnect, { access: "read-only" }),
+    ).toEqual([AuthAccessWriteScope, AuthSettingsWriteScope, AuthOrchestrationReadScope]);
+    expect(
+      clientRpcRequiredScopes(WS_METHODS.openbotSledToolsConnect, { access: "full-access" }),
+    ).toEqual([
+      AuthAccessWriteScope,
+      AuthSettingsWriteScope,
+      AuthOrchestrationReadScope,
+      AuthOrchestrationOperateScope,
+      AuthSourceControlWriteScope,
+    ]);
   });
 
   it("keeps webhook delivery logs, which hold request bodies, behind operate scope", () => {

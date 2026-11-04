@@ -24,6 +24,7 @@ export type SettingsPath =
   | "/settings/diffs"
   | "/settings/keybindings"
   | "/settings/snap-shot"
+  | "/settings/bots"
   | "/settings/providers"
   | "/settings/threads"
   | "/settings/browser"
@@ -94,6 +95,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/diffs": "Diffs & pull requests",
   "/settings/keybindings": "Keybindings",
   "/settings/snap-shot": "SnapShots",
+  "/settings/bots": "Bots",
   "/settings/providers": "Providers",
   "/settings/threads": "Threads",
   "/settings/browser": "Browser",
@@ -129,6 +131,7 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
   {
     heading: "Agents",
     paths: [
+      "/settings/bots",
       "/settings/providers",
       "/settings/threads",
       "/settings/browser",
@@ -216,6 +219,13 @@ const SOURCE_CONTROL_HOST_TERMS = sourceControlClients.definitions
   .join(" ");
 
 export const SETTINGS_SEARCH_ITEMS = [
+  {
+    id: "bots",
+    title: "Bots",
+    to: "/settings/bots",
+    scope: "environment",
+    searchTerms: ["openbot persistent teammates tasks memory routines"],
+  },
   {
     id: "storage-worktree-keep-when",
     targetId: "storage-worktrees",
@@ -1200,6 +1210,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/diffs": null,
   "/settings/snap-shot": null,
   "/settings/keybindings": null,
+  "/settings/bots": null,
   "/settings/providers": null,
   "/settings/threads": null,
   "/settings/browser": null,

@@ -1,3 +1,4 @@
+import * as OpenbotCoding from "../openbot/CodingBridge.ts";
 import * as GuestShareService from "../guest/GuestShareService.ts";
 import * as UsageLimitRecoveryWorker from "./UsageLimitRecoveryWorker.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
@@ -368,6 +369,15 @@ export const layer = Layer.mergeAll(
 );
 
 export const layerProduction = Layer.mergeAll(
+  OpenbotCoding.layer.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        layerThreadLaunchProvided,
+        layerThreadManagementProvided,
+        ProjectionStore.layer,
+      ),
+    ),
+  ),
   layer.pipe(Layer.provide(layerProjectService)),
   layerProjectService,
   layerManagedProjectFoldersProvided,

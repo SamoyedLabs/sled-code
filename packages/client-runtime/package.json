@@ -518,6 +518,14 @@
     "./provider-clients": {
       "types": "./src/providerClients.ts",
       "default": "./src/providerClients.ts"
+    },
+    "./openbot": {
+      "types": "./src/openbot/state.ts",
+      "default": "./src/openbot/state.ts"
+    },
+    "./openbot/presentation": {
+      "types": "./src/openbot/presentation.ts",
+      "default": "./src/openbot/presentation.ts"
     }
   },
   "scripts": {

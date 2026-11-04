@@ -14,7 +14,7 @@ if (
 const ready = {
   serverId: `fixture-server-${process.pid}`,
   serverName: process.env.OPENBOT_LOCAL_SERVER_NAME,
-  apiUrl: mode === "remote" ? "http://example.com:9090" : "http://127.0.0.1:9090",
+  apiUrl: mode === "remote" ? "http://example.com:9090" : "http://localhost:9090",
   fingerprint: "fixture-fingerprint",
   publicKey: "fixture-public-key",
   ownerMemberId: "fixture-owner",

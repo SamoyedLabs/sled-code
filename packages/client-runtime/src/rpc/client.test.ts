@@ -26,7 +26,7 @@ import {
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as RpcSession from "../rpc/session.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
-import { runStream, subscribe, subscribeDynamicWithSession } from "./client.ts";
+import { requestGuarded, runStream, subscribe, subscribeDynamicWithSession } from "./client.ts";
 
 const TARGET = new PrimaryConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
@@ -80,6 +80,23 @@ const makeHarness = Effect.fn("TestEnvironmentRpc.makeHarness")(function* () {
 });
 
 describe("environment RPC", () => {
+  it.effect("reads bot status without a command boundary while refusing a host mutation", () =>
+    Effect.gen(function* () {
+      const { activeSession, supervisor } = yield* makeHarness();
+      const client = {
+        [WS_METHODS.openbotStatus]: () => Effect.succeed({ state: "stopped" as const }),
+        [WS_METHODS.openbotStart]: () => Effect.die("An unguarded mutation reached the server"),
+      } as unknown as WsRpcProtocolClient;
+      yield* SubscriptionRef.set(activeSession, Option.some(session(client)));
+      yield* Effect.gen(function* () {
+        expect(yield* requestGuarded(WS_METHODS.openbotStatus, {})).toEqual({ state: "stopped" });
+        expect((yield* Effect.flip(requestGuarded(WS_METHODS.openbotStart, {}))).message).toContain(
+          "settings:write",
+        );
+      }).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+    }),
+  );
+
   it.effect("binds finite streaming commands to one active session", () =>
     Effect.gen(function* () {
       const firstEvents = yield* Queue.unbounded<RelayClientInstallProgressEvent>();

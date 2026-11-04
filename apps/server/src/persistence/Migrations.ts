@@ -82,6 +82,9 @@ import Migration0076 from "./Migrations/076_ProjectionProjectsPinArchive.ts";
 import Migration0077 from "./Migrations/077_RepairBooleanSettledOverride.ts";
 import Migration0078 from "./Migrations/078_DropOrchestrationEventCorrelationIndex.ts";
 
+import Migration0079 from "./Migrations/079_OpenbotCodingTasks.ts";
+import Migration0080 from "./Migrations/080_OpenbotCodingDeliveryRecovery.ts";
+
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
   [2, "OrchestrationCommandReceipts", Migration0002],
@@ -162,6 +165,8 @@ const migrationEntries = [
   [76, "ProjectionProjectsPinArchive", Migration0076],
   [77, "RepairBooleanSettledOverride", Migration0077],
   [78, "DropOrchestrationEventCorrelationIndex", Migration0078],
+  [79, "OpenbotCodingTasks", Migration0079],
+  [80, "OpenbotCodingDeliveryRecovery", Migration0080],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

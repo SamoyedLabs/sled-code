@@ -1,3 +1,28 @@
+import { OpenbotSledToolsStatus, OpenbotSledToolsConnectInput } from "./openbotSledTools.ts";
+import { OpenbotAttentionSnapshot, OpenbotChange } from "./openbotEvents.ts";
+import {
+  OpenbotRuntimeVersion,
+  OpenbotUpstreamStatus,
+  OpenbotUpstreamRelease,
+  OpenbotStagedRuntime,
+  OpenbotUpstreamStageInput,
+} from "./openbotUpstream.ts";
+import {
+  OpenbotCodingLaunchInput,
+  OpenbotCodingReference,
+  OpenbotCodingListInput,
+  OpenbotCodingSendInput,
+  OpenbotCodingCancelInput,
+  OpenbotCodingTask,
+  OpenbotCodingTaskList,
+} from "./openbotCoding.ts";
+import {
+  OpenbotReadRequest,
+  OpenbotWriteRequest,
+  OpenbotAdminRequest,
+  OpenbotApiResponse,
+  OpenbotAttentionResponseInput,
+} from "./openbotApi.ts";
 import { OpenbotHostStatus, OpenbotAgentList, OpenbotError } from "./openbot.ts";
 import {
   OrchestrationV2SearchThreadError,
@@ -553,6 +578,23 @@ export const WS_METHODS = {
   serverGetUsageSummary: "server.getUsageSummary",
   serverRefreshUsageRates: "server.refreshUsageRates",
 
+  openbotRead: "openbot.read",
+  openbotAttention: "openbot.attention",
+  openbotAttentionRespond: "openbot.attention.respond",
+  openbotSubscribeChanges: "openbot.subscribeChanges",
+  openbotUpstreamStatus: "openbot.upstream.status",
+  openbotUpstreamCheck: "openbot.upstream.check",
+  openbotUpstreamStage: "openbot.upstream.stage",
+  openbotWrite: "openbot.write",
+  openbotAdmin: "openbot.admin",
+  openbotCodingLaunch: "openbot.coding.launch",
+  openbotCodingGet: "openbot.coding.get",
+  openbotCodingList: "openbot.coding.list",
+  openbotCodingSend: "openbot.coding.send",
+  openbotCodingCancel: "openbot.coding.cancel",
+  openbotSledToolsStatus: "openbot.sledTools.status",
+  openbotSledToolsConnect: "openbot.sledTools.connect",
+  openbotSledToolsDisconnect: "openbot.sledTools.disconnect",
   openbotStatus: "openbot.status",
   openbotStart: "openbot.start",
   openbotStop: "openbot.stop",
@@ -1943,6 +1985,96 @@ const WsSubscribeServerLifecycleRpc = Rpc.make(WS_METHODS.subscribeServerLifecyc
   stream: true,
 });
 
+const WsOpenbotAttentionRpc = Rpc.make(WS_METHODS.openbotAttention, {
+  payload: Schema.Struct({}),
+  success: OpenbotAttentionSnapshot,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotAttentionRespondRpc = Rpc.make(WS_METHODS.openbotAttentionRespond, {
+  payload: OpenbotAttentionResponseInput,
+  success: OpenbotApiResponse,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotSubscribeChangesRpc = Rpc.make(WS_METHODS.openbotSubscribeChanges, {
+  payload: Schema.Struct({}),
+  success: OpenbotChange,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+  stream: true,
+});
+const WsOpenbotUpstreamStatusRpc = Rpc.make(WS_METHODS.openbotUpstreamStatus, {
+  payload: Schema.Struct({}),
+  success: OpenbotUpstreamStatus,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotUpstreamCheckRpc = Rpc.make(WS_METHODS.openbotUpstreamCheck, {
+  payload: Schema.Struct({ version: Schema.optional(OpenbotRuntimeVersion) }),
+  success: OpenbotUpstreamRelease,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotUpstreamStageRpc = Rpc.make(WS_METHODS.openbotUpstreamStage, {
+  payload: OpenbotUpstreamStageInput,
+  success: OpenbotStagedRuntime,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+
+const WsOpenbotReadRpc = Rpc.make(WS_METHODS.openbotRead, {
+  payload: OpenbotReadRequest,
+  success: OpenbotApiResponse,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotWriteRpc = Rpc.make(WS_METHODS.openbotWrite, {
+  payload: OpenbotWriteRequest,
+  success: OpenbotApiResponse,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotAdminRpc = Rpc.make(WS_METHODS.openbotAdmin, {
+  payload: OpenbotAdminRequest,
+  success: OpenbotApiResponse,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+
+const WsOpenbotCodingLaunchRpc = Rpc.make(WS_METHODS.openbotCodingLaunch, {
+  payload: OpenbotCodingLaunchInput,
+  success: OpenbotCodingTask,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotCodingGetRpc = Rpc.make(WS_METHODS.openbotCodingGet, {
+  payload: OpenbotCodingReference,
+  success: OpenbotCodingTask,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotCodingListRpc = Rpc.make(WS_METHODS.openbotCodingList, {
+  payload: OpenbotCodingListInput,
+  success: OpenbotCodingTaskList,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotCodingSendRpc = Rpc.make(WS_METHODS.openbotCodingSend, {
+  payload: OpenbotCodingSendInput,
+  success: OpenbotCodingTask,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotCodingCancelRpc = Rpc.make(WS_METHODS.openbotCodingCancel, {
+  payload: OpenbotCodingCancelInput,
+  success: OpenbotCodingTask,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+
+const WsOpenbotSledToolsStatusRpc = Rpc.make(WS_METHODS.openbotSledToolsStatus, {
+  payload: Schema.Struct({}),
+  success: OpenbotSledToolsStatus,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotSledToolsConnectRpc = Rpc.make(WS_METHODS.openbotSledToolsConnect, {
+  payload: OpenbotSledToolsConnectInput,
+  success: OpenbotSledToolsStatus,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotSledToolsDisconnectRpc = Rpc.make(WS_METHODS.openbotSledToolsDisconnect, {
+  payload: Schema.Struct({}),
+  success: OpenbotSledToolsStatus,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+
 const WsOpenbotStatusRpc = Rpc.make(WS_METHODS.openbotStatus, {
   payload: Schema.Struct({}),
   success: OpenbotHostStatus,
@@ -2109,6 +2241,23 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetUsageSummaryRpc,
   WsServerRefreshUsageRatesRpc,
   WsServerSignalProcessRpc,
+  WsOpenbotReadRpc,
+  WsOpenbotAttentionRpc,
+  WsOpenbotAttentionRespondRpc,
+  WsOpenbotSubscribeChangesRpc,
+  WsOpenbotUpstreamStatusRpc,
+  WsOpenbotUpstreamCheckRpc,
+  WsOpenbotUpstreamStageRpc,
+  WsOpenbotWriteRpc,
+  WsOpenbotAdminRpc,
+  WsOpenbotCodingLaunchRpc,
+  WsOpenbotCodingGetRpc,
+  WsOpenbotCodingListRpc,
+  WsOpenbotCodingSendRpc,
+  WsOpenbotCodingCancelRpc,
+  WsOpenbotSledToolsStatusRpc,
+  WsOpenbotSledToolsConnectRpc,
+  WsOpenbotSledToolsDisconnectRpc,
   WsOpenbotStatusRpc,
   WsOpenbotStartRpc,
   WsOpenbotStopRpc,

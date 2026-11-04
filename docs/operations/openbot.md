@@ -1,24 +1,31 @@
 # Openbot engine development
 
-The Openbot integration currently provides an opt-in managed host and bot roster through Sled's authenticated RPC connection. Bot screens, coding delegation, automatic installation and upstream updates are still being implemented.
+The Openbot integration is under development. It provides an opt-in managed host, bot controls in web and mobile Settings, and a bridge from bot assignments to actual Sled coding threads. Automatic installation, remote coding destinations and full upstream feature coverage remain incomplete.
 
 ## Enable a development host
 
 Use an isolated Sled development home, following [development setup](development.md). Set `T3CODE_OPENBOT_EXECUTABLE` in the backend environment to the absolute path of an Openbot executable. On macOS this is the executable inside the app bundle, rather than the `.app` directory. No executable is downloaded automatically.
 
-The launch and local Team API contracts target Openbot v0.60.0, commit `0c7753fa622c38419939cd230657f40e5883d098`. Fixture tests exercise these contracts; launching a packaged upstream release and its platform prerequisites still requires validation. Linux hosting retains upstream's Electron/display requirements.
+The launch and local Team API contracts target Openbot v0.60.0, commit `0c7753fa622c38419939cd230657f40e5883d098`. The packaged macOS arm64 release has been exercised with an isolated development profile. Other runtime platforms still require verification; Linux hosting retains upstream's Electron/display requirements.
 
 Sled places the engine profile and agent workspace beneath its own state directory at `openbot/profile` and `openbot/agents`. The owner credential is generated once in Sled's server secret store. Keep the profile and that credential together when moving or backing up development state. Do not point the engine at an existing Openbot profile.
 
-## Operate through RPC
+## Connect bots to Sled
 
-The existing authenticated Sled RPC client exposes these methods, each with an empty `{}` input:
+Open Settings → Bots in the connected environment and start its engine. Start and stop require settings write access. The engine does not start automatically on Sled launch. Removing the executable setting disables it after a Sled restart.
 
-- `openbot.status`: inspect disabled, stopped, starting, ready or failed state. Failed state includes a bounded reason category.
-- `openbot.start`: start the configured engine and wait for its readiness signal.
-- `openbot.listAgents`: list bot IDs, names and providers from a ready engine.
-- `openbot.stop`: stop the child owned by this Sled server.
+Use **Connect Sled tools** to grant the engine access to this environment. This requires access administration, settings write access and every scope being delegated. The selected authority is a ceiling; bots retain their own permissions. Read-only access permits inspection; actions such as launching coding work require the appropriate writable grant.
 
-Status and listing require orchestration read access; start and stop require settings write access. These methods are developer integration interfaces; there is no built-in settings control yet. The engine does not start automatically on Sled launch. Removing the executable setting disables it after a Sled restart.
+Sled installs its MCP endpoint into the managed Openbot profile using a private, expiring credential. Reconnect to rotate or renew it. Disconnect revokes access and removes its stored MCP configuration. If revocation is pending, access has not yet been confirmed revoked; retry disconnect. If only upstream cleanup remains, that cleanup resumes when the engine becomes available. Keep development Sled listener ports stable while a connection is configured, or reconnect after changing them.
 
-The Team API stays on loopback. Sled performs login and logout server-side; upstream passwords and session tokens are never returned to its clients. Shutting down the owning Sled server also disposes its engine process. This foundation does not provide always-on execution after that host shuts down.
+Bots reach the `openbot` and `openbot_coding` MCP tools through that connection. Use each tool's `describe` action for its request schema. A coding assignment needs a stable origin and operation ID; repeat those identifiers after an uncertain response to recover the existing thread. Result delivery reports uncertainty separately from coding completion when upstream acceptance cannot be established.
+
+The bot screens use live updates and expose pending questions and approvals. Approval responses are bound to the engine that issued the request. An incomplete attention snapshot is a partial list, not confirmation that no other requests exist. Browser help can still require interaction on the host; push notifications are not integrated yet.
+
+## Stage upstream releases
+
+The authenticated RPC methods `openbot.upstream.status`, `openbot.upstream.check` and `openbot.upstream.stage` require settings write access. Check accepts an optional version such as `v0.60.0`; stage takes a version and platform, for example `{ "version": "v0.60.0", "platform": "darwin-arm64" }`. The `openbot` MCP tool exposes corresponding `upstream.status`, `upstream.check` and `upstream.stage` actions; mutations require full-access/default authority.
+
+Staging resolves the official release and immutable commit, verifies archive size and SHA-256, and records an audit beneath the Sled state directory at `openbot/upstream`. It does not extract, activate or execute the archive, migrate a profile, or change the configured executable. A version other than the pinned baseline remains marked as requiring validation. Staging is not an automatic update or a maintenance-agent workflow.
+
+The Team API stays on loopback. Sled performs login and logout server-side; owner credentials and upstream session tokens are never returned to its clients. Shutting down the owning Sled server also disposes its engine process. Persistent execution therefore requires that host and Sled server to remain running.

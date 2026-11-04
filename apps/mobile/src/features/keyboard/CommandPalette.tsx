@@ -326,6 +326,13 @@ export function CommandPalette(props: {
         run: () => openSettings(navigation, "SettingsEnvironments"),
       },
       {
+        key: "bots",
+        kind: "action",
+        title: "Bots",
+        searchTerms: ["openbot", "persistent", "teammates"],
+        run: () => openSettings(navigation, "SettingsBots"),
+      },
+      {
         key: "scheduledTasks",
         kind: "action",
         title: "Scheduled tasks",

@@ -45,6 +45,7 @@ describe("ManagedHost", () => {
         expect(yield* host.getStatus).toEqual({ status: "stopped" });
         const [first, second] = yield* Effect.all([host.start, host.start], { concurrency: 2 });
         expect(first).toEqual(second);
+        expect(first.apiUrl).toBe("http://127.0.0.1:9090");
         expect(first.serverId).toMatch(/^fixture-server-\d+$/);
         expect(yield* host.getStatus).toEqual({ status: "ready", ready: first });
         expect(JSON.stringify(yield* host.getStatus)).not.toContain(options.ownerSecret);

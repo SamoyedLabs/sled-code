@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 
 export const OpenbotHostStatus = Schema.Struct({
+  hostId: Schema.optional(Schema.String),
   state: Schema.Literals(["disabled", "stopped", "starting", "ready", "failed"]),
   reason: Schema.optional(
     Schema.Literals([
