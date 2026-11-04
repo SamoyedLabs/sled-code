@@ -12,11 +12,51 @@ import subprocess
 import threading
 import time
 
+from sled.native_build_diagnostics import publish_progress
+
+
+def build_activity(log):
+    progress = dict(activity='waiting-for-output', target=None, compileEvents=0,
+                    cacheHits=0, cacheMisses=0)
+    activities = {'CompileC': 'compile', 'SwiftCompile': 'compile',
+                  'SwiftEmitModule': 'compile', 'SwiftDriver': 'compile',
+                  'Ld': 'link', 'Libtool': 'link', 'CodeSign': 'sign',
+                  'PhaseScriptExecution': 'script', 'Copy': 'package',
+                  'CopySwiftLibs': 'package', 'Validate': 'validate'}
+    with log.open(errors='replace') as stream:
+        for line in stream:
+            operation = line.split(' ', 1)[0]
+            if operation in activities:
+                progress['activity'] = activities[operation]
+                if operation in ('CompileC', 'SwiftCompile'):
+                    progress['compileEvents'] += 1
+                match = re.search(r"\(in target '([A-Za-z0-9_.+ -]{1,80})'", line)
+                progress['target'] = match[1] if match else None
+            if line.strip() == 'Cache hit':
+                progress['cacheHits'] += 1
+            elif line.strip() == 'Cache miss':
+                progress['cacheMisses'] += 1
+    return progress
+
 
 def run_logged(command, *, cwd, env, log, check=False):
     stage = log.stem
     started = time.monotonic()
     stopped = threading.Event()
+    progress_file = log.with_name('native-progress.json')
+
+    def report(status, exit_code=None):
+        stat = log.stat()
+        quiet = max(0, int(time.time() - stat.st_mtime))
+        progress = dict(stage=stage, status=status, exitCode=exit_code,
+                        updatedAt=datetime.now(timezone.utc).isoformat(),
+                        elapsedSeconds=int(time.monotonic() - started),
+                        logBytes=stat.st_size, quietSeconds=quiet,
+                        quietWarning=status == 'running' and quiet >= 180,
+                        **build_activity(log))
+        print(f"[native] {stage} progress: activity={progress['activity']} "
+              + json.dumps(progress), flush=True)
+        publish_progress(progress, progress_file, env)
 
     def report_progress():
         while not stopped.wait(60):
@@ -24,9 +64,11 @@ def run_logged(command, *, cwd, env, log, check=False):
             print(f'[native] {stage} running: elapsed={int(time.monotonic() - started)}s '
                   f'log_bytes={status.st_size} quiet_for={max(0, int(time.time() - status.st_mtime))}s',
                   flush=True)
+            report('running')
 
     print(f'[native] {stage} started', flush=True)
     with log.open('w') as stream:
+        report('running')
         reporter = threading.Thread(target=report_progress, daemon=True)
         reporter.start()
         exit_code = 'interrupted'
@@ -41,6 +83,7 @@ def run_logged(command, *, cwd, env, log, check=False):
         finally:
             stopped.set()
             reporter.join()
+            report('completed' if exit_code == 0 else 'failed', exit_code)
             print(f'[native] {stage} finished: exit={exit_code} '
                   f'elapsed={int(time.monotonic() - started)}s', flush=True)
 

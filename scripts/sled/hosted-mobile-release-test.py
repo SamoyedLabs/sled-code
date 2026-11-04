@@ -59,12 +59,15 @@ class MobileReleaseTest(unittest.TestCase):
                     m.check_environment(manifest)
 
     def test_manual_signing_is_opt_in_and_does_not_apply_profiles_to_pods(self):
-        for manual, exit_code, prepared in ((False, 0, False), (True, 0, False), (True, 65, True)):
-            with self.subTest(manual=manual, exit_code=exit_code, prepared=prepared), tempfile.TemporaryDirectory() as temp:
+        for manual, exit_code, prepared, publication_failed in ((False, 0, False, False), (True, 0, False, False), (True, 65, True, False), (True, 0, True, True)):
+            with self.subTest(manual=manual, exit_code=exit_code, prepared=prepared, publication_failed=publication_failed), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
                 script = root / 'scripts/testflight-ios.py'
                 script.parent.mkdir()
                 shutil.copyfile(m.ROOT / 'scripts/testflight-ios.py', script)
+                (script.parent / 'sled').mkdir()
+                shutil.copyfile(m.ROOT / 'scripts/sled/native_build_diagnostics.py',
+                                script.parent / 'sled/native_build_diagnostics.py')
                 ios = root / 'apps/mobile/ios'
                 (ios / 'App.xcodeproj').mkdir(parents=True)
                 (ios / 'App.xcworkspace').mkdir()
@@ -90,7 +93,19 @@ class MobileReleaseTest(unittest.TestCase):
                     argv.append('--manual-signing')
                 if prepared:
                     argv.extend(['--prepare', '--skip-prebuild'])
-                with patch.object(sys, 'argv', argv), patch.object(subprocess, 'run', side_effect=lambda command, **kwargs: subprocess.CompletedProcess(command, exit_code if command[:2] == ['xcodebuild', 'archive'] else 0)) as commands, \
+                def fake_run(command, **kwargs):
+                    if publication_failed and command[:3] == ['gh', 'release', 'upload']:
+                        raise subprocess.TimeoutExpired(command, 10)
+                    if command[:2] == ['xcodebuild', 'archive']:
+                        kwargs['stdout'].write("CompileC object.o source.m (in target 'RNReanimated' from project 'Pods')\n"
+                                               "Cache miss\nAuthorization: Bearer signing-secret\n"
+                                               "profile-fixture " + 'C' * 40 + "\n")
+                        kwargs['stdout'].flush()
+                    return subprocess.CompletedProcess(command, exit_code if command[:2] == ['xcodebuild', 'archive'] else 0)
+
+                with patch.dict(os.environ, SLED_MOBILE_PROGRESS_TAG='sled-mobile-' + 'd' * 40), \
+                        patch.object(sys, 'path', [str(script.parent), *sys.path]), \
+                        patch.object(sys, 'argv', argv), patch.object(subprocess, 'run', side_effect=fake_run) as commands, \
                         patch.object(subprocess, 'check_output', return_value=''), patch('builtins.print') as printed, \
                         patch('threading.Thread') as reporter, patch('threading.Event.wait', side_effect=[False, True] * 3):
                     reporter.return_value.start.side_effect = lambda: reporter.call_args.kwargs['target']()
@@ -100,6 +115,24 @@ class MobileReleaseTest(unittest.TestCase):
                 console = '\n'.join(' '.join(map(str, call.args)) for call in printed.call_args_list)
                 self.assertIn('[native] archive started', console)
                 self.assertIn('[native] archive running:', console)
+                self.assertIn('activity=', console)
+                progress_text = (output / 'native-progress.json').read_text()
+                progress = json.loads(progress_text)
+                self.assertEqual(progress['stage'], 'archive')
+                self.assertEqual(progress['status'], 'failed' if exit_code else 'completed')
+                self.assertEqual(progress['activity'], 'compile')
+                self.assertEqual(progress['target'], 'RNReanimated')
+                self.assertEqual(progress['compileEvents'], 1)
+                self.assertEqual(progress['cacheMisses'], 1)
+                for secret in ('signing-secret', 'profile-fixture', 'C' * 40):
+                    self.assertNotIn(secret, progress_text + console)
+                published = [call for call in commands.call_args_list
+                             if call.args[0][:3] == ['gh', 'release', 'upload']]
+                self.assertTrue(published)
+                if publication_failed:
+                    self.assertIn('Live progress upload unavailable; build continues', console)
+                self.assertTrue(all(str(output.resolve() / 'native-progress.json') in call.args[0]
+                                    and '--clobber' in call.args[0] for call in published))
                 self.assertIn(f'[native] archive finished: exit={exit_code}', console)
                 if exit_code:
                     self.assertFalse((output / 'status.json').exists())
