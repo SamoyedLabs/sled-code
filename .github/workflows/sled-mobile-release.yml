@@ -25,6 +25,12 @@ jobs:
     timeout-minutes: 90
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      APP_VARIANT: preview
+      SLED_APPLE_TEAM_ID: ${{ vars.SLED_APPLE_TEAM_ID }}
+      T3CODE_RELAY_URL: ${{ vars.T3CODE_RELAY_URL }}
+      T3CODE_CLERK_PUBLISHABLE_KEY: ${{ vars.T3CODE_CLERK_PUBLISHABLE_KEY }}
+      T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ vars.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID }}
+      T3CODE_CLERK_JWT_TEMPLATE: ${{ vars.T3CODE_CLERK_JWT_TEMPLATE }}
     permissions:
       contents: write
       checks: read
@@ -33,12 +39,62 @@ jobs:
         with:
           ref: main
           persist-credentials: false
+      - name: Select release cache directories
+        run: |
+          echo "SLED_METRO_CACHE_DIR=$RUNNER_TEMP/sled-mobile-metro" >> "$GITHUB_ENV"
+          echo "npm_config_cache=$RUNNER_TEMP/sled-release-cli" >> "$GITHUB_ENV"
       - name: Test mobile release decisions
         run: python3 scripts/sled/hosted-mobile-release-test.py
       - uses: ./.github/actions/setup-ci-deps
+        with:
+          install-args: --filter @t3tools/mobile... --filter @t3tools/scripts...
+          restore-full-store: "false"
+      - name: Plan a fingerprint-compatible update
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/sled/hosted-mobile-release.py plan
+      - name: Identify the bundler cache configuration
+        if: steps.plan.outputs.mode != 'skip'
+        id: metro-context
+        run: |
+          python3 - <<'PYTHON'
+          import hashlib, json, os
+          names = ['APP_VARIANT', 'T3CODE_RELAY_URL', 'T3CODE_CLERK_PUBLISHABLE_KEY',
+                   'T3CODE_CLERK_CLI_OAUTH_CLIENT_ID', 'T3CODE_CLERK_JWT_TEMPLATE']
+          value = json.dumps({name: os.environ[name] for name in names}, sort_keys=True)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+              stream.write('key=' + hashlib.sha256(value.encode()).hexdigest() + '\n')
+          PYTHON
+      - name: Reuse Metro transforms and file map
+        if: steps.plan.outputs.mode != 'skip'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ env.SLED_METRO_CACHE_DIR }}
+          key: sled-metro-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'apps/mobile/metro.config.js', 'apps/mobile/babel.config.js', 'apps/mobile/app.config.ts') }}-${{ steps.metro-context.outputs.key }}-${{ github.sha }}
+          restore-keys: |
+            sled-metro-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'apps/mobile/metro.config.js', 'apps/mobile/babel.config.js', 'apps/mobile/app.config.ts') }}-${{ steps.metro-context.outputs.key }}-
+      - name: Reuse the pinned Expo release CLI
+        if: steps.plan.outputs.mode == 'ota'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ${{ env.npm_config_cache }}/_cacache
+            ${{ env.npm_config_cache }}/_npx
+          key: sled-release-cli-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}-eas27.4.1
+      - name: Prepare the pinned Expo release CLI
+        if: steps.plan.outputs.mode == 'ota'
+        run: npx --yes eas-cli@27.4.1 --version
+      - name: Restore native compiler and dependency caches
+        if: steps.plan.outputs.mode == 'native'
+        uses: ./.github/actions/setup-ios-native-cache
+        with:
+          mode: restore
       - name: Install the app-target signing editor
+        if: steps.plan.outputs.mode == 'native'
         run: gem install xcodeproj --version 1.27.0 --no-document
       - name: Release checked main to the private Sled phone channel
+        if: steps.plan.outputs.mode != 'skip'
         env:
           GH_TOKEN: ${{ github.token }}
           SLED_APPLE_TEAM_ID: ${{ vars.SLED_APPLE_TEAM_ID }}
@@ -54,6 +110,11 @@ jobs:
           SLED_APPLE_API_ISSUER: ${{ secrets.SLED_APPLE_API_ISSUER }}
           SLED_EXPO_TOKEN: ${{ secrets.SLED_EXPO_TOKEN }}
         run: python3 scripts/sled/hosted-mobile-release.py release
+      - name: Preserve native compiler and dependency caches
+        if: always() && steps.plan.outputs.mode == 'native'
+        uses: ./.github/actions/setup-ios-native-cache
+        with:
+          mode: save
       - name: Retain nonsecret validation evidence on failure
         if: always()
         uses: actions/upload-artifact@v4
@@ -62,6 +123,7 @@ jobs:
           if-no-files-found: ignore
           path: |
             release-mobile/native/*-diagnostics.json
+            release-mobile/native/compilation-cache-statistics.json
             release-mobile/plan.json
             release-mobile/baseline.json
             release-mobile/archive-validation.json

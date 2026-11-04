@@ -59,8 +59,8 @@ class MobileReleaseTest(unittest.TestCase):
                     m.check_environment(manifest)
 
     def test_manual_signing_is_opt_in_and_does_not_apply_profiles_to_pods(self):
-        for manual, exit_code in ((False, 0), (True, 0), (True, 65)):
-            with self.subTest(manual=manual, exit_code=exit_code), tempfile.TemporaryDirectory() as temp:
+        for manual, exit_code, prepared in ((False, 0, False), (True, 0, False), (True, 65, True)):
+            with self.subTest(manual=manual, exit_code=exit_code, prepared=prepared), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
                 script = root / 'scripts/testflight-ios.py'
                 script.parent.mkdir()
@@ -88,9 +88,11 @@ class MobileReleaseTest(unittest.TestCase):
                         '--output-dir', str(output), '--credentials-dir', str(credentials), '--public-config', str(public)]
                 if manual:
                     argv.append('--manual-signing')
-                with patch.object(sys, 'argv', argv), patch.object(subprocess, 'run', side_effect=lambda command, **kwargs: subprocess.CompletedProcess(command, exit_code if command[0] == 'xcodebuild' else 0)) as commands, \
+                if prepared:
+                    argv.extend(['--prepare', '--skip-prebuild'])
+                with patch.object(sys, 'argv', argv), patch.object(subprocess, 'run', side_effect=lambda command, **kwargs: subprocess.CompletedProcess(command, exit_code if command[:2] == ['xcodebuild', 'archive'] else 0)) as commands, \
                         patch.object(subprocess, 'check_output', return_value=''), patch('builtins.print') as printed, \
-                        patch('threading.Thread') as reporter, patch('threading.Event.wait', side_effect=[False, True]):
+                        patch('threading.Thread') as reporter, patch('threading.Event.wait', side_effect=[False, True] * 3):
                     reporter.return_value.start.side_effect = lambda: reporter.call_args.kwargs['target']()
                     with self.assertRaises(SystemExit) as result:
                         runpy.run_path(str(script), run_name='__main__')
@@ -105,11 +107,18 @@ class MobileReleaseTest(unittest.TestCase):
                 self.assertNotIn('profile-fixture', console)
                 self.assertNotIn('C' * 40, console)
                 actual = [call.args[0] for call in commands.call_args_list]
-                build = next(command for command in actual if command[:2] == ['xcodebuild', 'archive'])
+                build_call = next(call for call in commands.call_args_list if call.args[0][:2] == ['xcodebuild', 'archive'])
+                self.assertEqual(build_call.kwargs['env']['APP_VARIANT'], 'preview')
+                build = build_call.args[0]
                 self.assertEqual('CODE_SIGN_STYLE=Automatic' in build, not manual)
                 self.assertFalse(any(part.startswith('PROVISIONING_PROFILE_SPECIFIER=') for part in build))
                 self.assertEqual(any(command[0] == 'ruby' for command in actual), manual)
                 self.assertEqual(any(command[:2] == ['security', 'unlock-keychain'] for command in actual), manual)
+                if prepared:
+                    self.assertTrue(any(command[:2] == ['pod', 'install'] for command in actual))
+                    self.assertTrue(any(command[:2] == ['xcodebuild', '-resolvePackageDependencies'] for command in actual))
+                    self.assertFalse(any('prebuild' in command for command in actual))
+                    self.assertFalse(any('scripts/sled/prepare-native.py' in command for command in actual))
 
     def test_released_commit_is_skipped_and_interrupted_draft_blocks_retry(self):
         sha = 'd' * 40
@@ -135,6 +144,47 @@ class MobileReleaseTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'dedicated SLED_EXPO_TOKEN'):
                 m.release()
             gh.assert_not_called()
+
+    def test_plan_selects_cache_path_without_reserving_or_signing_a_release(self):
+        for runtime, expected in [('a' * 40, 'ota'), ('c' * 40, 'native')]:
+            with self.subTest(mode=expected), tempfile.TemporaryDirectory() as temp, \
+                    patch.object(m, 'ROOT', Path(temp)), patch.object(m, 'checked_main', return_value='d' * 40), \
+                    patch.object(m, 'configure') as configure, patch.object(m, 'releases', return_value=[]), \
+                    patch.object(m, 'baseline_from_releases', return_value=baseline()), \
+                    patch.object(m, 'run'), patch.object(m, 'runtime', return_value=runtime), \
+                    patch.object(m, 'gh') as gh, patch.object(m, 'signing') as signing:
+                self.assertEqual(m.plan(), expected)
+                recorded = json.loads((Path(temp) / 'release-mobile/plan.json').read_text())
+                self.assertEqual(recorded['sourceSha'], 'd' * 40)
+                self.assertEqual(recorded['runtimeVersion'], runtime)
+                configure.assert_called_once_with(require_signing=False)
+                gh.assert_not_called()
+                signing.assert_not_called()
+
+    def test_prepared_runtime_is_recomputed_before_reuse(self):
+        for actual in ['a' * 40, 'c' * 40]:
+            with self.subTest(runtime=actual), tempfile.TemporaryDirectory() as temp, \
+                    patch.object(m, 'run') as run, patch.object(m, 'runtime', return_value=actual) as runtime:
+                output = Path(temp)
+                (output / 'plan.json').write_text(json.dumps(dict(sourceSha='d' * 40, runtimeVersion='a' * 40)))
+                if actual == 'a' * 40:
+                    self.assertEqual(m.prepare_runtime('d' * 40, output, reuse=True), actual)
+                else:
+                    with self.assertRaisesRegex(ValueError, 'runtime changed'):
+                        m.prepare_runtime('d' * 40, output, reuse=True)
+                runtime.assert_called_once()
+                run.assert_not_called()
+                with self.assertRaisesRegex(ValueError, 'another commit'):
+                    m.prepare_runtime('e' * 40, output, reuse=True)
+
+    def test_planning_does_not_need_native_signing_credentials(self):
+        settings = {key: 'fixture' for key in m.PUBLIC}
+        settings['SLED_APPLE_TEAM_ID'] = m.TEAM
+        with patch.dict(os.environ, settings, clear=True):
+            m.configure(require_signing=False)
+            self.assertEqual(os.environ['APP_VARIANT'], 'preview')
+            with self.assertRaisesRegex(ValueError, 'Missing release settings'):
+                m.configure()
 
     def test_matching_runtime_uses_ota(self):
         self.assertEqual(m.decide('a' * 40, baseline()), 'ota')
@@ -208,6 +258,7 @@ class MobileReleaseTest(unittest.TestCase):
             m.configure()
             self.assertEqual(os.environ['SLED_EXPO_PROJECT_ID'], m.PROJECT)
             self.assertEqual(os.environ['MOBILE_VERSION_POLICY'], 'fingerprint')
+            self.assertEqual(os.environ['APP_VARIANT'], 'preview')
             self.assertNotIn('EXPO_UPDATES_FINGERPRINT_OVERRIDE', os.environ)
             self.assertNotIn('EXPO_TOKEN', os.environ)
 

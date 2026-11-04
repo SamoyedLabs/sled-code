@@ -6,7 +6,15 @@ const { withUniwindConfig } = require("uniwind/metro");
 const extraThemes = require("./generated-uniwind-theme-names.json");
 
 /** @type {import("expo/metro-config").MetroConfig} */
+const releaseCache = process.env.SLED_METRO_CACHE_DIR;
+if (releaseCache) {
+  process.env.EXPO_METRO_CACHE_OUTPUT_DIR = path.join(releaseCache, "transforms");
+  fs.mkdirSync(path.join(releaseCache, "file-map"), { recursive: true });
+}
 const config = getDefaultConfig(__dirname);
+if (releaseCache) {
+  config.fileMapCacheDirectory = path.join(releaseCache, "file-map");
+}
 const workspaceRoot = path.resolve(__dirname, "../..");
 const generatedLicenseModuleRoot = path.join(__dirname, ".generated", "third-party-licenses");
 const licenseGeneratorSource = path.join(
@@ -111,10 +119,14 @@ async function prepareStreamScripts() {
 }
 
 module.exports = Promise.all([generateMobileThirdPartyLicenses(), prepareStreamScripts()]).then(
-  () =>
-    withUniwindConfig(config, {
+  () => {
+    const configured = withUniwindConfig(config, {
       cssEntryFile: "./global.css",
       extraThemes,
       polyfills: { rem: 14 },
-    }),
+    });
+    // Uniwind replaces cacheStores; Expo's persistent store also honors non-cacheable CSS.
+    if (releaseCache) configured.cacheStores = config.cacheStores;
+    return configured;
+  },
 );
