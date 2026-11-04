@@ -70,6 +70,45 @@ const setup = Effect.gen(function* () {
 });
 
 describe("command permissions", () => {
+  it.effect("separates event configuration from event actions that can start bot work", () =>
+    Effect.gen(function* () {
+      const registry = yield* setup;
+      const command = createCommandPermissions(runtime, WS_METHODS.openbotAdminToHost);
+      const input = {
+        hostId: "event-host",
+        request: { operation: "events.test", owner: { kind: "agent", id: "bot" }, id: "routine" },
+      };
+      const session = {
+        ...grant(false),
+        scopes: [AuthSettingsWriteScope],
+        permissions: [AuthSettingsWriteScope],
+      };
+      registry.set(sessions(env), AsyncResult.success(session));
+      expect(registry.get(command.permissionAtom(env, input))).toBe(false);
+      expect(yield* command.authorize(registry, env, input).pipe(Effect.flip)).toMatchObject({
+        requiredScope: AuthOrchestrationOperateScope,
+      });
+      yield* command.authorize(registry, env, {
+        hostId: "event-host",
+        request: {
+          operation: "events.rotateSecret",
+          owner: { kind: "agent", id: "bot" },
+          id: "routine",
+        },
+      });
+      registry.set(
+        sessions(env),
+        AsyncResult.success({
+          ...session,
+          scopes: [AuthSettingsWriteScope, AuthOrchestrationOperateScope],
+          permissions: [AuthSettingsWriteScope, AuthOrchestrationOperateScope],
+        }),
+      );
+      yield* command.authorize(registry, env, input);
+      registry.set(sessions(env), AsyncResult.success(session));
+      expect(registry.get(command.permissionAtom(env, input))).toBe(false);
+    }).pipe(Effect.scoped),
+  );
   it.effect(
     "runs host-bound bot writes through the protected destination command and rechecks revocation",
     () =>

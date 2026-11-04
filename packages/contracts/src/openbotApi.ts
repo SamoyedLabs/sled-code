@@ -1,3 +1,6 @@
+import { OpenbotRoutineSchedule, OpenbotEventAdminRequest } from "./openbotEvents.ts";
+export { OpenbotRoutineSchedule } from "./openbotEvents.ts";
+import { OpenbotRoutineFlowReadRequest, OpenbotRoutineFlowCommand } from "./openbotRoutineFlows.ts";
 import {
   OpenbotConversationReadRequest,
   OpenbotConversationCommand,
@@ -28,62 +31,9 @@ const ReasoningEffort = Schema.Literals([
   "ultra",
 ]);
 const Timezone = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128));
-const Timestamp = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(64));
 const Name = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(80));
 const Description = Schema.String.check(Schema.isMaxLength(2_000));
 const MemoryText = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(500));
-const Time = Schema.String.check(Schema.isPattern(/^([01]\d|2[0-3]):[0-5]\d$/));
-const Positive = Schema.Int.check(
-  Schema.isGreaterThanOrEqualTo(1),
-  Schema.isLessThanOrEqualTo(100_000),
-);
-const Weekday = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(6));
-const MonthDay = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(31));
-const Month = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(12));
-const Unit = Schema.Literals(["minutes", "hours", "days"]);
-const Days = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal("every-day") }),
-  Schema.Struct({
-    kind: Schema.Literal("days-of-week"),
-    days: Schema.Array(Weekday).check(Schema.isMinLength(1), Schema.isMaxLength(7)),
-  }),
-  Schema.Struct({
-    kind: Schema.Literal("days-of-month"),
-    days: Schema.Array(MonthDay).check(Schema.isMinLength(1), Schema.isMaxLength(31)),
-  }),
-]);
-export const OpenbotRoutineSchedule = Schema.Union([
-  Schema.Struct({
-    kind: Schema.Literal("hourly"),
-    minute: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(59)),
-  }),
-  Schema.Struct({ kind: Schema.Literals(["daily", "weekdays"]), time: Time }),
-  Schema.Struct({ kind: Schema.Literal("weekly"), weekday: Weekday, time: Time }),
-  Schema.Struct({ kind: Schema.Literal("monthly"), day: MonthDay, time: Time }),
-  Schema.Struct({
-    kind: Schema.Literal("interval"),
-    amount: Positive,
-    unit: Unit,
-    anchorAt: Timestamp,
-  }),
-  Schema.Struct({
-    kind: Schema.Literal("custom"),
-    expression: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(255)),
-  }),
-  Schema.Struct({
-    kind: Schema.Literal("advanced"),
-    months: Schema.Array(Month).check(Schema.isMinLength(1), Schema.isMaxLength(12)),
-    days: Days,
-    time: Schema.Union([
-      Schema.Struct({ kind: Schema.Literal("at-time"), time: Time }),
-      Schema.Struct({
-        kind: Schema.Literal("every"),
-        amount: Positive,
-        unit: Schema.Literals(["minutes", "hours"]),
-      }),
-    ]),
-  }),
-]);
 const RoutineInput = Schema.Struct({
   name: Name,
   instruction: Text,
@@ -163,6 +113,7 @@ export const OpenbotMessagingOrchestratorRequest = Schema.Union([
 ]);
 
 export const OpenbotReadRequest = Schema.Union([
+  OpenbotRoutineFlowReadRequest,
   OpenbotConversationReadRequest,
   OpenbotWorkflowReadRequest,
   Schema.Struct({ operation: Schema.Literal("compatibility.read") }),
@@ -183,6 +134,7 @@ export const OpenbotReadRequest = Schema.Union([
 export type OpenbotReadRequest = typeof OpenbotReadRequest.Type;
 
 export const OpenbotWriteRequest = Schema.Union([
+  OpenbotRoutineFlowCommand,
   OpenbotConversationCommand,
   OpenbotQueueCommand,
   Schema.Struct({
@@ -246,6 +198,7 @@ export const OpenbotAttentionResponseInput = Schema.Struct({
 export type OpenbotAttentionResponseInput = typeof OpenbotAttentionResponseInput.Type;
 
 export const OpenbotAdminRequest = Schema.Union([
+  OpenbotEventAdminRequest,
   OpenbotWriteRequest,
   OpenbotBrowserReadRequest,
   OpenbotBrowserAdminRequest,

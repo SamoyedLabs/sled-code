@@ -1,3 +1,5 @@
+import * as EventProtocol from "./EventProtocol.ts";
+import * as RoutineFlowProtocol from "./RoutineFlowProtocol.ts";
 import * as ConversationProtocol from "./ConversationProtocol.ts";
 import * as QueueProtocol from "./QueueProtocol.ts";
 import * as BrowserProtocol from "./BrowserProtocol.ts";
@@ -284,6 +286,8 @@ interface Route {
   readonly body?: unknown;
   readonly projection?: "mcp-list" | "mcp-test" | "mcp-status" | "messaging-orchestrator";
   readonly providerProjection?: keyof typeof providerDecoders;
+  readonly eventProjection?: Parameters<typeof EventProtocol.project>[0];
+  readonly routineFlowProjection?: Parameters<typeof RoutineFlowProtocol.project>[0];
   readonly workflowProjection?: Parameters<typeof WorkflowProtocol.project>[0];
   readonly conversationProjection?: Parameters<typeof ConversationProtocol.project>[0];
   readonly queueProjection?: string;
@@ -291,6 +295,8 @@ interface Route {
 }
 // Only these source-backed operations can spend the private host-owner session.
 function apiRoute(request: Exclude<ApiRequest, SavedMcpRequest>): Route {
+  if (EventProtocol.isRequest(request)) return EventProtocol.route(request);
+  if (RoutineFlowProtocol.isRequest(request)) return RoutineFlowProtocol.route(request);
   if (ConversationProtocol.isRequest(request)) return ConversationProtocol.route(request);
   if (QueueProtocol.isRequest(request)) return QueueProtocol.route(request);
   if (WorkflowProtocol.isRequest(request)) return WorkflowProtocol.route(request);
@@ -876,7 +882,7 @@ const make = Effect.gen(function* () {
             "OpenBot-Protocol-Version": "9",
             "OpenBot-App-Version": "0.60.0",
             "OpenBot-Capabilities":
-              "subagents-v1,queue-edit-v1,queue-window-v1,conversation-unread,agent-threads-v1,agent-thread-reads-v1,agent-thread-branches-v1,agent-thread-replies-v1,agent-tasks-v1,agent-create-model,agent-admin-v1,agent-instructions-v1,skills-admin-v1,mcp-servers-v1,mcp-sign-in-v1,browser-navigation,browser-user-control,browser-page-state,browser-profiles-v1,connectors-v1,channel-chats-v1,providers-v8,provider-accounts-v1,provider-default-v1,provider-host-sign-in-v1,provider-sign-out-v1,custom-provider-harness-v1,custom-agents-v1,model-visibility-v1,claude-api-key-v1,sign-in-relay-v1,provider-account-relay-v1,provider-account-relay-v2,workspace-directory-v1,conversation-file-search-v1,agent-thread-files-v1,message-client-id-v1,workflows-v1,channel-delete-v1,channel-task-cancel-v1,channel-attention-v1",
+              "subagents-v1,queue-edit-v1,queue-window-v1,conversation-unread,agent-threads-v1,agent-thread-reads-v1,agent-thread-branches-v1,agent-thread-replies-v1,agent-tasks-v1,agent-create-model,agent-admin-v1,agent-instructions-v1,skills-admin-v1,mcp-servers-v1,mcp-sign-in-v1,browser-navigation,browser-user-control,browser-page-state,browser-profiles-v1,connectors-v1,channel-chats-v1,providers-v8,provider-accounts-v1,provider-default-v1,provider-host-sign-in-v1,provider-sign-out-v1,custom-provider-harness-v1,custom-agents-v1,model-visibility-v1,claude-api-key-v1,sign-in-relay-v1,provider-account-relay-v1,provider-account-relay-v2,workspace-directory-v1,conversation-file-search-v1,agent-thread-files-v1,message-client-id-v1,workflows-v1,events-v1,routine-recovery-v1,webhook-tests-v1,routine-flows-v1,channel-delete-v1,channel-task-cancel-v1,channel-attention-v1",
           }),
         ),
       )
@@ -1018,6 +1024,14 @@ const make = Effect.gen(function* () {
       const response = yield* send(request);
       if (response.status === 204) return null;
       const result = yield* readJson(response);
+      if (route.eventProjection)
+        return yield* EventProtocol.project(route.eventProjection, result).pipe(
+          Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+        );
+      if (route.routineFlowProjection)
+        return yield* RoutineFlowProtocol.project(route.routineFlowProjection, result).pipe(
+          Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+        );
       if (route.conversationProjection)
         return yield* ConversationProtocol.project(route.conversationProjection, result).pipe(
           Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),

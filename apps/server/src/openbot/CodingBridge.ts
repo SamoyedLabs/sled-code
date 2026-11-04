@@ -34,7 +34,14 @@ export class CodingBridgeError extends Schema.TaggedError<CodingBridgeError>()(
   "OpenbotCodingBridgeError",
   {
     operation: Schema.Literals(["launch", "read", "list", "send", "cancel"]),
-    reason: Schema.Literals(["storage", "not-found", "conflict", "cancelled", "execution"]),
+    reason: Schema.Literals([
+      "storage",
+      "not-found",
+      "conflict",
+      "cancelled",
+      "execution",
+      "unsupported-channel",
+    ]),
     cause: Schema.optional(Schema.Defect()),
   },
 ) {
@@ -105,6 +112,8 @@ const make = Effect.gen(function* () {
   );
 
   const find = Effect.fn("CodingBridge.find")(function* (input: OpenbotCodingReference) {
+    if (input.origin.channelId !== undefined)
+      return yield* new CodingBridgeError({ operation: "read", reason: "unsupported-channel" });
     const rows = yield* sql<Row>`SELECT * FROM openbot_coding_tasks
       WHERE host_id = ${input.origin.hostId} AND agent_id = ${input.origin.agentId}
       AND task_id = ${input.origin.taskId ?? ""} AND operation_id = ${input.operationId}`.pipe(
@@ -184,6 +193,10 @@ const make = Effect.gen(function* () {
   });
 
   const launch = Effect.fn("CodingBridge.launch")(function* (input: OpenbotCodingLaunchInput) {
+    // Released TeamAPI cannot return a result to an existing channel assignment. Refuse
+    // before creating a receipt or changing the original approval owner's execution authority.
+    if (input.origin.channelId !== undefined)
+      return yield* new CodingBridgeError({ operation: "launch", reason: "unsupported-channel" });
     const inputJson = yield* encodeLaunch(input).pipe(
       Effect.mapError(
         (cause) => new CodingBridgeError({ operation: "launch", reason: "conflict", cause }),

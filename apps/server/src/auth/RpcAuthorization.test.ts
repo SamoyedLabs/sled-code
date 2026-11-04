@@ -173,6 +173,13 @@ describe("RPC authorization scopes", () => {
         "workflow.stopStep",
         "workflow.retryStep",
         "workflow.decide",
+        "events.save",
+        "events.delete",
+        "events.test",
+        "events.sendTest",
+        "routineFlow.connect",
+        "routineFlow.updateLink",
+        "routineFlow.disconnect",
         "conversation.send",
         "conversation.markRead",
         "conversation.react",
@@ -183,6 +190,13 @@ describe("RPC authorization scopes", () => {
         "queue.reorder",
         "task.send",
         "channel.send",
+        "channel.routine.test",
+        "channel.routine.create",
+        "channel.routine.update",
+        "channel.routine.delete",
+        "routine.create",
+        "routine.update",
+        "routine.delete",
         "channel.stop",
         "channel.resume",
         "channel.reassign",
@@ -199,6 +213,10 @@ describe("RPC authorization scopes", () => {
       expect(clientRpcRequiredScopes(method, payload({ operation: "memory.create" }))).toEqual([
         AuthSettingsWriteScope,
       ]);
+      for (const operation of ["events.status", "events.list", "events.rotateSecret"])
+        expect(clientRpcRequiredScopes(method, payload({ operation }))).toEqual([
+          AuthSettingsWriteScope,
+        ]);
     }
   });
 

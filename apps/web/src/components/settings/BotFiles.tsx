@@ -12,7 +12,7 @@ import {
   deletePendingAttachmentUpload,
 } from "@t3tools/client-runtime/state/attachments";
 import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
-import { taskViews } from "@t3tools/client-runtime/openbot/presentation";
+import { channelPage, channelList, taskViews } from "@t3tools/client-runtime/openbot/presentation";
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { useRef, useState } from "react";
 import { appAtomRegistry } from "../../rpc/atomRegistry";
@@ -57,6 +57,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
   const [submitted, setSubmitted] = useState<string | null>(null);
   const [cursors, setCursors] = useState<string[]>([]);
   const [text, setText] = useState("");
+  const [channelBefore, setChannelBefore] = useState<number | undefined>(undefined);
   const [target, setTarget] = useState<OpenbotFileTarget>({ kind: "main" });
   const [preview, setPreview] = useState<OpenbotMaterializedFile | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -86,26 +87,63 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
       input: { hostId, request: { operation: "task.list", agentId } },
     }),
   );
+  const channelQuery = useEnvironmentQuery(
+    openbot.readFromHost({
+      environmentId,
+      input: { hostId, request: { operation: "channel.list" } },
+    }),
+  );
+  const channelFilesQuery = useEnvironmentQuery(
+    target.kind === "channel"
+      ? openbot.readFromHost({
+          environmentId,
+          input: {
+            hostId,
+            request: {
+              operation: "channel.read",
+              channelId: target.channelId,
+              ...(channelBefore === undefined ? {} : { beforeSequence: channelBefore }),
+            },
+          },
+        })
+      : null,
+  );
+  const channelFiles = channelPage(channelFilesQuery.data);
+  const channels = channelList(channelQuery.data)?.filter(
+    (channel) => !channel.archived && channel.members.some((member) => member.agentId === agentId),
+  );
   const tasks = taskViews(taskQuery.data);
   const targetClosed =
     target.kind === "task" &&
     tasks?.some((task) => task.id === target.taskId && task.state === "closed") === true;
-  const targetValue = target.kind === "task" ? `task:${target.taskId}` : target.kind;
+  const targetValue =
+    target.kind === "channel"
+      ? `channel:${target.channelId}`
+      : target.kind === "task"
+        ? `task:${target.taskId}`
+        : target.kind;
   const targetLabel =
     target.kind === "main"
       ? "Main conversation"
       : target.kind === "new-task"
         ? "New task"
-        : (tasks?.find((task) => task.id === target.taskId)?.title ?? target.taskId);
+        : target.kind === "channel"
+          ? (channels?.find((channel) => channel.id === target.channelId)?.name ?? target.channelId)
+          : (tasks?.find((task) => task.id === target.taskId)?.title ?? target.taskId);
   const selectTarget = (value: string) => {
     if (value === "main" || value === "new-task") setTarget({ kind: value });
-    else {
+    else if (value.startsWith("channel:")) {
+      const channelId = value.slice("channel:".length);
+      if (!channels?.some((channel) => channel.id === channelId)) return;
+      setTarget({ kind: "channel", channelId });
+    } else {
       const taskId = value.slice("task:".length);
       if (!value.startsWith("task:") || !tasks?.some((task) => task.id === taskId)) return;
       setTarget({ kind: "task", taskId });
     }
     setSubmitted(null);
     setCursors([]);
+    setChannelBefore(undefined);
   };
   const canRead = useAtomValue(openbot.fileMaterialize.permissionAtom(environmentId));
   const canUpload = useAtomValue(openbot.fileUploadDraft.permissionAtom(environmentId));
@@ -330,6 +368,11 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
           <SelectContent>
             <SelectItem value="main">Main conversation</SelectItem>
             <SelectItem value="new-task">Start a new task</SelectItem>
+            {channels?.map((channel) => (
+              <SelectItem key={channel.id} value={`channel:${channel.id}`}>
+                Channel: {channel.name}
+              </SelectItem>
+            ))}
             {tasks?.map((task) => (
               <SelectItem key={task.id} value={`task:${task.id}`}>
                 {(task.title || task.id) + (task.state === "closed" ? " (closed)" : "")}
@@ -364,6 +407,47 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
           </Button>
         </div>
       </form>
+      {target.kind === "channel" && (
+        <div className="space-y-2" aria-label="Channel message files">
+          <p>Recent channel attachments</p>
+          {channelFiles?.messages.flatMap((message) =>
+            (message.message.attachments ?? []).map((attachment) => (
+              <Button
+                key={`${message.id}:${attachment.id}`}
+                disabled={busy || !canRead}
+                variant="outline"
+                onClick={() =>
+                  void open(
+                    {
+                      kind: "attachment",
+                      channelId: channelFiles.channel.id,
+                      ...(channelBefore === undefined ? {} : { beforeSequence: channelBefore }),
+                      messageId: message.id,
+                      attachmentId: attachment.id,
+                    },
+                    agentId,
+                    true,
+                  )
+                }
+              >
+                Download {attachment.name}
+              </Button>
+            )),
+          )}
+          <Button
+            disabled={busy || channelFiles?.olderCursor == null}
+            onClick={() => setChannelBefore(channelFiles?.olderCursor ?? undefined)}
+          >
+            Older channel files
+          </Button>
+          <Button
+            disabled={busy || channelBefore === undefined}
+            onClick={() => setChannelBefore(undefined)}
+          >
+            Latest channel files
+          </Button>
+        </div>
+      )}
       {search.isPending && submitted !== null && <p role="status">Searching files…</p>}
       {search.data?.results.length === 0 && (
         <p className="text-sm text-muted-foreground">No matching conversation files.</p>
@@ -502,9 +586,11 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
           )}
           {draft.state === "sent" && (
             <p className="text-xs text-muted-foreground">
-              {draft.taskId
-                ? `Delivered to task ${draft.taskId}.`
-                : "Delivered to the main conversation."}
+              {draft.target?.kind === "channel"
+                ? `Delivered to channel ${draft.target.channelId}.`
+                : draft.taskId
+                  ? `Delivered to task ${draft.taskId}.`
+                  : "Delivered to the main conversation."}
             </p>
           )}
           {draft.state === "sent" &&

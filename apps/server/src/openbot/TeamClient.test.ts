@@ -1,3 +1,5 @@
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 // @effect-diagnostics nodeBuiltinImport:off - Local HTTP fixtures exercise the upstream transport contract.
 import * as NodeHttp from "node:http";
 import { expect, it } from "@effect/vitest";
@@ -1482,4 +1484,65 @@ it.live(
       Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
       Effect.scoped,
     ),
+);
+
+it.effect(
+  "dispatches event recovery and flow commands through the pinned capability boundary",
+  () => {
+    const paths: string[] = [];
+    const http = HttpClient.make((request) =>
+      Effect.sync(() => {
+        const path = new URL(request.url).pathname;
+        paths.push(path);
+        if (path === "/v1/auth/login")
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({ sessionToken: "fixture", sessionExpiresAt: "2027-01-01" }),
+          );
+        expect(request.headers["openbot-capabilities"]).toContain("routine-recovery-v1");
+        expect(request.headers["openbot-capabilities"]).toContain("routine-flows-v1");
+        if (path === "/v1/admin/events/status")
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({ supported: true, connected: true }),
+          );
+        if (path === "/v1/admin/routine-recovery/runs")
+          return HttpClientResponse.fromWeb(request, Response.json([]));
+        if (path === "/v1/routine-flows/positions/save")
+          return HttpClientResponse.fromWeb(request, Response.json({}));
+        return HttpClientResponse.fromWeb(request, new Response("{}", { status: 404 }));
+      }),
+    );
+    return Effect.gen(function* () {
+      const client = yield* TeamClient.TeamClient;
+      const session = yield* client.connect({
+        apiUrl: "http://127.0.0.1:12345",
+        ownerSecret: "fixture",
+      });
+      expect(yield* session.apiAdmin({ operation: "events.status" })).toEqual({
+        supported: true,
+        connected: true,
+      });
+      expect(
+        yield* session.apiAdmin({
+          operation: "events.runs",
+          owner: { kind: "channel", id: "channel" },
+          routineId: "routine",
+        }),
+      ).toEqual([]);
+      yield* session.apiWrite({
+        operation: "routineFlow.savePosition",
+        agentId: "a",
+        nodeKey: "agent:b",
+        x: 10,
+        y: 20,
+      });
+      expect(paths).toEqual([
+        "/v1/auth/login",
+        "/v1/admin/events/status",
+        "/v1/admin/routine-recovery/runs",
+        "/v1/routine-flows/positions/save",
+      ]);
+    }).pipe(Effect.provide(TeamClient.layer), Effect.provideService(HttpClient.HttpClient, http));
+  },
 );

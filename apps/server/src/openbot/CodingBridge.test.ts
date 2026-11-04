@@ -237,3 +237,22 @@ it.effect(
     );
   },
 );
+
+it.effect("refuses a channel origin before persisting or launching side-task work", () => {
+  const h = harness();
+  return Effect.gen(function* () {
+    const bridge = yield* CodingBridge.CodingBridge;
+    const channelInput = { ...input, origin: { ...input.origin, channelId: "channel-1" } };
+    expect((yield* Effect.flip(bridge.launch(channelInput))).reason).toBe("unsupported-channel");
+    expect(h.commands).toEqual([]);
+    expect(
+      yield* bridge.list({ hostId: input.origin.hostId, agentId: input.origin.agentId }),
+    ).toEqual([]);
+  }).pipe(
+    Effect.provide(
+      CodingBridge.layer.pipe(
+        Layer.provide(Layer.mergeAll(h.layer, SqlitePersistence.layerMemory, NodeCrypto.layer)),
+      ),
+    ),
+  );
+});

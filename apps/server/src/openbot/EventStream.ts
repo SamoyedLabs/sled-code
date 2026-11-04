@@ -116,6 +116,10 @@ const capabilities = [
   "browser-page-state",
   "prompt-multi-select-v1",
   "workflows-v1",
+  "routine-flows-v1",
+  "events-v1",
+  "routine-recovery-v1",
+  "webhook-tests-v1",
 ];
 
 // The released wire uses botId even though the current host's in-process events use agentId.

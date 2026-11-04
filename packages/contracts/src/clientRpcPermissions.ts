@@ -153,6 +153,11 @@ export function clientRpcRequiredScopes(
         request.operation.startsWith("queue.") ||
         request.operation.startsWith("thread.") ||
         request.operation.startsWith("task.") ||
+        request.operation === "events.save" ||
+        request.operation === "events.delete" ||
+        request.operation === "events.test" ||
+        request.operation === "events.sendTest" ||
+        request.operation.startsWith("routineFlow.") ||
         request.operation === "agent.create" ||
         request.operation === "workflow.startRun" ||
         request.operation === "workflow.runStep" ||
@@ -160,6 +165,11 @@ export function clientRpcRequiredScopes(
         request.operation === "workflow.stopStep" ||
         request.operation === "workflow.retryStep" ||
         request.operation === "workflow.decide" ||
+        request.operation === "channel.routine.test" ||
+        request.operation === "channel.routine.create" ||
+        request.operation === "channel.routine.update" ||
+        request.operation === "channel.routine.delete" ||
+        request.operation.startsWith("routine.") ||
         request.operation === "channel.send" ||
         request.operation === "channel.stop" ||
         request.operation === "channel.resume" ||

@@ -1,6 +1,9 @@
 import * as Schema from "effect/Schema";
 import * as Result from "effect/Result";
 import {
+  OpenbotChannelMemory,
+  OpenbotChannelRoutine,
+  OpenbotChannelRoutineRun,
   OpenbotChannelPage,
   OpenbotChannelSummary,
   OpenbotChannelAdminRequest,
@@ -126,4 +129,122 @@ export function channelTaskActions(
   return state === "paused" || state === "failed"
     ? ["resume", "reassign", "cancel"]
     : ["stop", "reassign"];
+}
+
+export function channelExtras(
+  value: unknown,
+  kind: "memories",
+): readonly import("@t3tools/contracts").OpenbotChannelMemory[] | null;
+export function channelExtras(
+  value: unknown,
+  kind: "routines",
+): readonly import("@t3tools/contracts").OpenbotChannelRoutine[] | null;
+export function channelExtras(
+  value: unknown,
+  kind: "runs",
+): readonly import("@t3tools/contracts").OpenbotChannelRoutineRun[] | null;
+export function channelExtras(value: unknown, kind: "memories" | "routines" | "runs") {
+  const schemas = {
+    memories: Schema.Array(OpenbotChannelMemory),
+    routines: Schema.Array(OpenbotChannelRoutine),
+    runs: Schema.Array(OpenbotChannelRoutineRun),
+  };
+  const schema: Schema.Codec<unknown> = schemas[kind];
+  const result = Schema.decodeUnknownResult(schema)(value);
+  return Result.isSuccess(result) ? result.success : null;
+}
+
+export type ChannelSchedule = OpenbotChannelRoutine["trigger"]["schedule"];
+export type ChannelScheduleDraft = {
+  kind: ChannelSchedule["kind"];
+  time: string;
+  minute: string;
+  weekday: string;
+  day: string;
+  amount: string;
+  unit: "minutes" | "hours" | "days";
+  anchorAt: string;
+  expression: string;
+  months: string;
+  dayKind: "every-day" | "days-of-week" | "days-of-month";
+  days: string;
+  timeKind: "at-time" | "every";
+};
+export function channelScheduleDraft(schedule?: ChannelSchedule): ChannelScheduleDraft {
+  const draft: ChannelScheduleDraft = {
+    kind: schedule?.kind ?? "daily",
+    time: "09:00",
+    minute: "0",
+    weekday: "1",
+    day: "1",
+    amount: "1",
+    unit: "hours",
+    anchorAt: "",
+    expression: "",
+    months: "1,2,3,4,5,6,7,8,9,10,11,12",
+    dayKind: "every-day",
+    days: "1",
+    timeKind: "at-time",
+  };
+  if (!schedule) return draft;
+  if ("time" in schedule && typeof schedule.time === "string") draft.time = schedule.time;
+  if (schedule.kind === "hourly") draft.minute = String(schedule.minute);
+  if (schedule.kind === "weekly") draft.weekday = String(schedule.weekday);
+  if (schedule.kind === "monthly") draft.day = String(schedule.day);
+  if (schedule.kind === "custom") draft.expression = schedule.expression;
+  if (schedule.kind === "interval")
+    Object.assign(draft, {
+      amount: String(schedule.amount),
+      unit: schedule.unit,
+      anchorAt: schedule.anchorAt,
+    });
+  if (schedule.kind === "advanced") {
+    draft.months = schedule.months.join(",");
+    draft.dayKind = schedule.days.kind;
+    if (schedule.days.kind !== "every-day") draft.days = schedule.days.days.join(",");
+    draft.timeKind = schedule.time.kind;
+    if (schedule.time.kind === "at-time") draft.time = schedule.time.time;
+    else Object.assign(draft, { amount: String(schedule.time.amount), unit: schedule.time.unit });
+  }
+  return draft;
+}
+const decodeSchedule = Schema.decodeUnknownResult(
+  OpenbotChannelRoutine.fields.trigger.fields.schedule,
+);
+export function channelScheduleValue(draft: ChannelScheduleDraft): ChannelSchedule | null {
+  const number = (value: string) => (value.trim() === "" ? NaN : Number(value));
+  const numbers = (value: string) =>
+    value.split(",").map((part) => (part.trim() === "" ? NaN : Number(part)));
+  const candidate =
+    draft.kind === "hourly"
+      ? { kind: draft.kind, minute: number(draft.minute) }
+      : draft.kind === "weekly"
+        ? { kind: draft.kind, weekday: number(draft.weekday), time: draft.time }
+        : draft.kind === "monthly"
+          ? { kind: draft.kind, day: number(draft.day), time: draft.time }
+          : draft.kind === "interval"
+            ? {
+                kind: draft.kind,
+                amount: number(draft.amount),
+                unit: draft.unit,
+                anchorAt: draft.anchorAt,
+              }
+            : draft.kind === "custom"
+              ? { kind: draft.kind, expression: draft.expression }
+              : draft.kind === "advanced"
+                ? {
+                    kind: draft.kind,
+                    months: numbers(draft.months),
+                    days:
+                      draft.dayKind === "every-day"
+                        ? { kind: draft.dayKind }
+                        : { kind: draft.dayKind, days: numbers(draft.days) },
+                    time:
+                      draft.timeKind === "at-time"
+                        ? { kind: draft.timeKind, time: draft.time }
+                        : { kind: draft.timeKind, amount: number(draft.amount), unit: draft.unit },
+                  }
+                : { kind: draft.kind, time: draft.time };
+  const result = decodeSchedule(candidate);
+  return Result.isSuccess(result) ? result.success : null;
 }

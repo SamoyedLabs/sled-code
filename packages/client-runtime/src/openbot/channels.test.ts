@@ -1,5 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import {
+  channelScheduleDraft,
+  channelScheduleValue,
   channelEditDraft,
   channelSetVisibleMembers,
   channelSaveRequest,
@@ -97,4 +99,17 @@ it("merges live channel messages over loaded history and follows released paused
   expect(channelTaskActions("failed", false)).toEqual(["resume", "reassign", "cancel"]);
   expect(channelTaskActions("paused", true)).toEqual([]);
   expect(channelTaskActions("completed", false)).toEqual([]);
+});
+
+it("retains an advanced channel schedule on edit and rejects incomplete numeric fields", () => {
+  const schedule = {
+    kind: "advanced" as const,
+    months: [1, 6],
+    days: { kind: "days-of-week" as const, days: [1, 5] },
+    time: { kind: "every" as const, amount: 3, unit: "hours" as const },
+  };
+  expect(channelScheduleValue(channelScheduleDraft(schedule))).toEqual(schedule);
+  expect(
+    channelScheduleValue({ ...channelScheduleDraft(), kind: "hourly", minute: "" }),
+  ).toBeNull();
 });

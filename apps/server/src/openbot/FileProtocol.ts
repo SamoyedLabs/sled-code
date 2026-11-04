@@ -1,4 +1,6 @@
 import {
+  OpenbotChannel,
+  OpenbotChannelPage,
   OpenbotFileSummary,
   OpenbotWorkspaceDirectory,
   OpenbotConversationFilePage,
@@ -88,6 +90,8 @@ const Sent = Schema.Struct({
     }),
   ).check(Schema.isMaxLength(100)),
 });
+const decodeChannel = Schema.decodeUnknownEffect(OpenbotChannel);
+const decodeChannelPage = Schema.decodeUnknownEffect(OpenbotChannelPage);
 const decodeWorkspace = Schema.decodeUnknownEffect(OpenbotWorkspaceDirectory);
 const decodeSearch = Schema.decodeUnknownEffect(OpenbotConversationFilePage);
 const decodeAttachment = Schema.decodeUnknownEffect(OpenbotFileSummary);
@@ -268,7 +272,32 @@ export function createFileSession<E>(transport: {
       };
     }),
     attachment: Effect.fn("OpenbotFiles.protocol.attachment")(function* (agentId, source) {
-      const message = yield* conversationMessage(agentId, source.messageId, source.taskId);
+      if (source.channelId !== undefined && source.taskId !== undefined)
+        return yield* Effect.fail(transport.error("decode"));
+      const message =
+        source.channelId === undefined
+          ? yield* conversationMessage(agentId, source.messageId, source.taskId)
+          : yield* post("/v1/channels/read", {
+              channelId: source.channelId,
+              ...(source.beforeSequence === undefined
+                ? {}
+                : { beforeSequence: source.beforeSequence }),
+            }).pipe(
+              Effect.flatMap(decodeChannelPage),
+              Effect.flatMap((page) => {
+                const entry = page.messages.find(
+                  (entry) => entry.id === source.messageId && entry.channelId === source.channelId,
+                );
+                return page.channel.id === source.channelId &&
+                  page.channel.members.some((member) => member.agentId === agentId) &&
+                  entry
+                  ? Effect.succeed(entry.message)
+                  : Effect.fail(transport.error("decode"));
+              }),
+              Effect.mapError((cause) =>
+                transport.isError(cause) ? cause : transport.error("decode", cause),
+              ),
+            );
       const summary = message.attachments?.find((entry) => entry.id === source.attachmentId);
       if (!summary) return yield* Effect.fail(transport.error("decode"));
       return projectAttachment(summary);
@@ -335,6 +364,39 @@ export function createFileSession<E>(transport: {
     }),
     send: Effect.fn("OpenbotFiles.protocol.send")(
       function* (agentId, attachmentId, text, clientMessageId, target, reconcile) {
+        if (target.kind === "channel") {
+          const page = yield* post("/v1/channels/read", { channelId: target.channelId }).pipe(
+            Effect.flatMap(decodeChannelPage),
+            Effect.mapError((cause) =>
+              transport.isError(cause) ? cause : transport.error("decode", cause),
+            ),
+          );
+          if (
+            page.channel.id !== target.channelId ||
+            page.channel.archived ||
+            !page.channel.members.some((member) => member.agentId === agentId)
+          )
+            return yield* Effect.fail(transport.error("decode"));
+          // The authenticated member is the sender. A channel command receipt is keyed by this
+          // stable operation id; sending an ordinary message is intentionally new channel work.
+          const accepted = yield* post("/v1/channels/commands", {
+            type: "send",
+            channelId: target.channelId,
+            operationId: clientMessageId,
+            text,
+            recipientAgentId: agentId,
+            replyToMessageId: null,
+            attachmentDraftIds: [attachmentId],
+          }).pipe(
+            Effect.flatMap(decodeChannel),
+            Effect.mapError((cause) =>
+              transport.isError(cause) ? cause : transport.error("decode", cause),
+            ),
+          );
+          if (accepted.id !== target.channelId)
+            return yield* Effect.fail(transport.error("decode"));
+          return { messageId: null, conversationMessageId: null, taskId: null };
+        }
         if (target.kind === "new-task") {
           if (reconcile) {
             // Start creates a task before deduplication, and commit assigns new attachment IDs.

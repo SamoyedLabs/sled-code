@@ -359,7 +359,10 @@ const make = Effect.gen(function* () {
             (storedTarget.kind !== target.kind ||
               (storedTarget.kind === "task" &&
                 target.kind === "task" &&
-                storedTarget.taskId !== target.taskId))
+                storedTarget.taskId !== target.taskId) ||
+              (storedTarget.kind === "channel" &&
+                target.kind === "channel" &&
+                storedTarget.channelId !== target.channelId))
           )
             return yield* new OpenbotFilesError({ operation: "send", reason: "conflict" });
           if (row.send_text !== null && row.send_text !== input.text)

@@ -1,3 +1,4 @@
+import { OpenbotRoutineSchedule as ChannelRoutineSchedule } from "./openbotEvents.ts";
 import * as Schema from "effect/Schema";
 
 const Id = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128));
@@ -126,7 +127,77 @@ export const OpenbotChannelPage = Schema.Struct({
   throughSequence: Count,
 });
 export type OpenbotChannelPage = typeof OpenbotChannelPage.Type;
+const DateText = Schema.String.check(Schema.isMaxLength(80));
+export const OpenbotChannelMemory = Schema.Struct({
+  id: Id,
+  channelId: Id,
+  text: Schema.String.check(Schema.isMaxLength(500)),
+  origin: Schema.Literals(["automatic", "manual"]),
+  sourceTurnId: Schema.NullOr(Id),
+  createdAt: DateText,
+  updatedAt: DateText,
+});
+export type OpenbotChannelMemory = typeof OpenbotChannelMemory.Type;
+const RoutineDraft = {
+  name: Name,
+  instruction: Text,
+  active: Schema.Boolean,
+  timezone: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
+  schedule: ChannelRoutineSchedule,
+};
+export const OpenbotChannelRoutine = Schema.Struct({
+  id: Id,
+  channelId: Id,
+  name: Name,
+  instruction: Text,
+  active: Schema.Boolean,
+  timezone: RoutineDraft.timezone,
+  trigger: Schema.Struct({
+    id: Id,
+    routineId: Id,
+    schedule: ChannelRoutineSchedule,
+    nextRunAt: DateText,
+    createdAt: DateText,
+    updatedAt: DateText,
+  }),
+  createdAt: DateText,
+  updatedAt: DateText,
+});
+export type OpenbotChannelRoutine = typeof OpenbotChannelRoutine.Type;
+export const OpenbotChannelRoutineRun = Schema.Struct({
+  id: Id,
+  channelId: Id,
+  routineId: Id,
+  triggerId: Schema.NullOr(Id),
+  kind: Schema.Literals(["scheduled", "manual"]),
+  scheduledFor: DateText,
+  routineName: Name,
+  instruction: Text,
+  requestMessageId: Schema.NullOr(Id),
+  status: Schema.Literals([
+    "queued",
+    "running",
+    "needs-attention",
+    "succeeded",
+    "failed",
+    "cancelled",
+  ]),
+  error: Schema.NullOr(Text),
+  createdAt: DateText,
+  updatedAt: DateText,
+});
+export type OpenbotChannelRoutineRun = typeof OpenbotChannelRoutineRun.Type;
 export const OpenbotChannelReadRequest = Schema.Union([
+  Schema.Struct({
+    operation: Schema.Literals(["channel.memories", "channel.routines"]),
+    channelId: Id,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("channel.routine.runs"),
+    channelId: Id,
+    routineId: Id,
+    limit: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 })),
+  }),
   Schema.Struct({ operation: Schema.Literal("channel.list") }),
   Schema.Struct({
     operation: Schema.Literal("channel.read"),
@@ -137,6 +208,50 @@ export const OpenbotChannelReadRequest = Schema.Union([
 export type OpenbotChannelReadRequest = typeof OpenbotChannelReadRequest.Type;
 const Command = { channelId: Id, operationId: Id };
 export const OpenbotChannelAdminRequest = Schema.Union([
+  Schema.Struct({
+    operation: Schema.Literal("channel.memory.create"),
+    channelId: Id,
+    text: OpenbotChannelMemory.fields.text,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("channel.memory.update"),
+    channelId: Id,
+    memoryId: Id,
+    text: OpenbotChannelMemory.fields.text,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("channel.memory.delete"),
+    channelId: Id,
+    memoryId: Id,
+  }),
+  Schema.Struct({ operation: Schema.Literal("channel.memory.clear"), channelId: Id }),
+  Schema.Struct({
+    operation: Schema.Literal("channel.routine.create"),
+    channelId: Id,
+    ...RoutineDraft,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("channel.routine.update"),
+    channelId: Id,
+    routineId: Id,
+    name: Schema.optional(Name),
+    instruction: Schema.optional(Text),
+    active: Schema.optional(Schema.Boolean),
+    schedule: Schema.optional(ChannelRoutineSchedule),
+  }).check(
+    Schema.makeFilter(
+      (value) =>
+        value.name !== undefined ||
+        value.instruction !== undefined ||
+        value.active !== undefined ||
+        value.schedule !== undefined,
+    ),
+  ),
+  Schema.Struct({
+    operation: Schema.Literals(["channel.routine.delete", "channel.routine.test"]),
+    channelId: Id,
+    routineId: Id,
+  }),
   Schema.Struct({
     operation: Schema.Literal("channel.save"),
     ...Command,

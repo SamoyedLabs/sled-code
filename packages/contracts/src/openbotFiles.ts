@@ -20,6 +20,7 @@ const Mime = Schema.String.check(
 export const OpenbotFileScope = Schema.Struct({ hostId: Id, agentId: Id });
 export type OpenbotFileScope = typeof OpenbotFileScope.Type;
 export const OpenbotFileTarget = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("channel"), channelId: Id }),
   Schema.Struct({ kind: Schema.Literal("main") }),
   Schema.Struct({ kind: Schema.Literal("task"), taskId: Id }),
   Schema.Struct({ kind: Schema.Literal("new-task") }),
@@ -82,6 +83,8 @@ export const OpenbotFileMaterializeInput = Schema.Struct({
       attachmentId: Id,
       messageId: Id,
       taskId: Schema.optional(Id),
+      channelId: Schema.optional(Id),
+      beforeSequence: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
     }),
   ]),
 });

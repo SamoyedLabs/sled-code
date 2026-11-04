@@ -1,3 +1,5 @@
+import { BotEvents } from "./BotEvents";
+import { BotRoutineFlows } from "./BotRoutineFlows";
 import { BotConversationPanel } from "../settings/BotConversationPanel";
 import { botHostRecoveryDescription } from "@t3tools/client-runtime/openbot/presentation";
 import { BotProviderChoice } from "../settings/BotProviderChoice";
@@ -13,6 +15,7 @@ import { BotBrowser } from "../settings/BotBrowser";
 import { BotCodingPolicy } from "../settings/BotCodingPolicy";
 import { BotWorkflows } from "../settings/BotWorkflows";
 import { BotChannels } from "../settings/BotChannels";
+import { BotChannelExtras } from "../settings/BotChannelExtras";
 import { requestConfirmDialog } from "../../confirmDialog";
 import { Link } from "@tanstack/react-router";
 import { randomUUID } from "../../lib/utils";
@@ -273,6 +276,20 @@ export function BotEnvironment({
           <BotAttention environmentId={environmentId} />
         )}
         {workspace && view === "workflows" && state === "ready" && host.data?.hostId && (
+          <>
+            <BotEvents
+              key={`events:${host.data.hostId}`}
+              environmentId={environmentId}
+              hostId={host.data.hostId}
+            />
+            <BotRoutineFlows
+              key={`flows:${host.data.hostId}`}
+              environmentId={environmentId}
+              hostId={host.data.hostId}
+            />
+          </>
+        )}
+        {workspace && view === "workflows" && state === "ready" && host.data?.hostId && (
           <BotWorkflows
             key={`workflows:${host.data.hostId}`}
             environmentId={environmentId}
@@ -280,11 +297,18 @@ export function BotEnvironment({
           />
         )}
         {workspace && view === "channels" && state === "ready" && host.data?.hostId && (
-          <BotChannels
-            key={`channels:${host.data.hostId}`}
-            environmentId={environmentId}
-            hostId={host.data.hostId}
-          />
+          <>
+            <BotChannels
+              key={`channels:${host.data.hostId}`}
+              environmentId={environmentId}
+              hostId={host.data.hostId}
+            />
+            <BotChannelExtras
+              key={`channel-extras:${host.data.hostId}`}
+              environmentId={environmentId}
+              hostId={host.data.hostId}
+            />
+          </>
         )}
         {workspace && view === "bots" && state === "ready" && (
           <>
@@ -659,7 +683,7 @@ function BotDetail({
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={busy || !canAdmin}
+                  disabled={busy || !canAdmin || !canWrite}
                   onClick={() =>
                     void send(
                       {
@@ -844,6 +868,7 @@ function DailyRoutineForm({
   onCreated: () => void;
 }) {
   const canAdmin = useAtomValue(openbot.admin.permissionAtom(environmentId));
+  const canOperate = useAtomValue(openbot.writeToHost.permissionAtom(environmentId));
   const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
   const [name, setName] = useState("");
   const [instruction, setInstruction] = useState("");
@@ -935,7 +960,14 @@ function DailyRoutineForm({
       <Button
         size="sm"
         type="submit"
-        disabled={busy || !canAdmin || !name.trim() || !instruction.trim() || !timezone.trim()}
+        disabled={
+          busy ||
+          !canAdmin ||
+          !canOperate ||
+          !name.trim() ||
+          !instruction.trim() ||
+          !timezone.trim()
+        }
       >
         {busy ? "Creating…" : "Create routine"}
       </Button>

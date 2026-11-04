@@ -24,6 +24,8 @@ const ExternalId = TrimmedNonEmptyString.check(
 export const OpenbotCodingOrigin = Schema.Struct({
   hostId: ExternalId,
   agentId: ExternalId,
+  /** Present only for channel tasks; never reinterpret this taskId as an agent side task. */
+  channelId: Schema.optional(ExternalId),
   taskId: Schema.NullOr(ExternalId),
 });
 export type OpenbotCodingOrigin = typeof OpenbotCodingOrigin.Type;
