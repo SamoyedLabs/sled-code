@@ -47,7 +47,7 @@ jobs:
         run: python3 scripts/sled/hosted-mobile-release-test.py
       - uses: ./.github/actions/setup-ci-deps
         with:
-          install-args: --filter @t3tools/mobile...
+          install-args: --filter @t3tools/mobile... --filter @t3tools/scripts...
           restore-full-store: "false"
       - name: Plan a fingerprint-compatible update
         id: plan
