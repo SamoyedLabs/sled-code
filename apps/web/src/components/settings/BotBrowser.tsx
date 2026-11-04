@@ -43,13 +43,15 @@ function Viewer({
   environmentId,
   hostId,
   tabId,
+  interactive,
 }: {
   environmentId: EnvironmentId;
   hostId: string;
   tabId: string;
+  interactive: boolean;
 }) {
   const connect = useBotBrowserViewer(environmentId, hostId, tabId);
-  return <BotBrowserView connect={connect} />;
+  return <BotBrowserView connect={connect} interactive={interactive} />;
 }
 function BrowserPanel({
   environmentId,
@@ -152,6 +154,9 @@ function BrowserPanel({
           environmentId={environmentId}
           hostId={hostId}
           tabId={viewTab}
+          interactive={
+            browser.display?.tabs.find((tab) => tab.id === viewTab)?.userControl === true
+          }
         />
       )}
       {browser.profiles && (

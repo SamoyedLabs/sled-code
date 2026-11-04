@@ -534,6 +534,14 @@
     "./openbot/rich-conversation": {
       "types": "./src/openbot/richConversation.ts",
       "import": "./src/openbot/richConversation.ts"
+    },
+    "./openbot/templates": {
+      "types": "./src/openbot/templates.ts",
+      "default": "./src/openbot/templates.ts"
+    },
+    "./openbot/template-atoms": {
+      "types": "./src/openbot/TemplateAtoms.ts",
+      "default": "./src/openbot/TemplateAtoms.ts"
     }
   },
   "scripts": {

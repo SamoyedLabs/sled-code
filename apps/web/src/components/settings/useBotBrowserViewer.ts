@@ -26,7 +26,7 @@ export function useBotBrowserViewer(environmentId: EnvironmentId, hostId: string
     const opened = await runAtomCommand(
       registry,
       openbot.browserViewCommand,
-      { environmentId, input: { operation: "open", hostId, tabId } },
+      { environmentId, input: { operation: "open", hostId, tabId, ackFrames: true } },
       options,
     );
     if (opened._tag === "Failure" || !opened.value)

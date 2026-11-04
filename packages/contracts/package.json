@@ -30,6 +30,10 @@
     "./openbot-ui-block-answer": {
       "types": "./src/openbotUiBlockAnswer.ts",
       "import": "./src/openbotUiBlockAnswer.ts"
+    },
+    "./openbot-templates": {
+      "types": "./src/openbotTemplates.ts",
+      "import": "./src/openbotTemplates.ts"
     }
   },
   "scripts": {

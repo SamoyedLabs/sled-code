@@ -1,6 +1,31 @@
 import type { OpenbotBrowserViewerGrant } from "@t3tools/contracts";
 import { withDeviceHubQuery, type DeviceHubAccess } from "../device/hubAccess.ts";
 
+type DrawFrame = { readonly uri: string; readonly sequence: number };
+export class BrowserFrameDraw {
+  #drawn: DrawFrame | undefined;
+  #pending: DrawFrame | undefined;
+  offer(frame: DrawFrame): boolean {
+    if (this.#drawn?.uri === frame.uri) {
+      this.#drawn = frame;
+      this.#pending = undefined;
+      return true;
+    }
+    this.#pending = frame;
+    return false;
+  }
+  loaded(sequence: number): number | undefined {
+    if (this.#pending?.sequence !== sequence) return;
+    this.#drawn = this.#pending;
+    this.#pending = undefined;
+    return sequence;
+  }
+  reset() {
+    this.#drawn = undefined;
+    this.#pending = undefined;
+  }
+}
+
 export function browserViewerConnection(
   access: DeviceHubAccess,
   grant: OpenbotBrowserViewerGrant,

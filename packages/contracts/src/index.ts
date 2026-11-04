@@ -114,3 +114,4 @@ export * from "./openbotVault.ts";
 export * from "./openbotData.ts";
 
 export * from "./openbotCatalog.ts";
+export * from "./openbotTemplates.ts";

@@ -5,7 +5,6 @@ import {
   type OpenbotBrowserViewCommand,
   type OpenbotBrowserViewerGrant,
   decodeBrowserViewFrame,
-  decodeBrowserViewInput,
   browserViewInputForHost,
 } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
@@ -24,6 +23,8 @@ import * as SessionStore from "../auth/SessionStore.ts";
 import * as AuthSessions from "../persistence/AuthSessions.ts";
 import * as Integration from "./Integration.ts";
 import * as TeamClient from "./TeamClient.ts";
+import { decodeOpenbotBrowserViewerInput } from "@t3tools/contracts";
+import { BrowserFrameDelivery, BrowserHeldInput } from "./BrowserProtocol.ts";
 import { BrowserViews } from "./BrowserViews.ts";
 
 const isTeamClientError = Schema.is(TeamClient.TeamClientError);
@@ -123,7 +124,7 @@ const make = Effect.gen(function* () {
     return yield* Effect.tryPromise({
       try: () =>
         input.operation === "open"
-          ? views.open(sessionId, input.hostId, input.tabId)
+          ? views.open(sessionId, input.hostId, input.tabId, input.ackFrames)
           : views.close(sessionId, input.hostId, input.id).then(() => null),
       catch: requestError,
     });
@@ -144,15 +145,39 @@ const make = Effect.gen(function* () {
           catch: requestError,
         }).pipe(Effect.ignore),
     );
+    const delivery = new BrowserFrameDelivery(
+      yield* Effect.tryPromise({
+        try: () => views.acknowledgesFrames(sessionId, input.hostId, input.id),
+        catch: requestError,
+      }),
+    );
+    const held = new BrowserHeldInput();
+    const release = () => {
+      const inputs = held.release();
+      if (upstream.readyState === WebSocket.OPEN && upstream.bufferedAmount < 64 * 1024)
+        for (const message of inputs) {
+          try {
+            upstream.send(JSON.stringify(message));
+          } catch {
+            break;
+          }
+        }
+    };
+    yield* Effect.tryPromise({
+      try: () => views.beforeClose(sessionId, input.hostId, input.id, release),
+      catch: requestError,
+    });
     type Output =
       | { readonly _tag: "frame"; readonly bytes: Uint8Array }
       | { readonly _tag: "closed" };
     const output = yield* Queue.sliding<Output>(1);
+    let endedStream = false;
     const ended = () => {
+      endedStream = true;
       Queue.offerUnsafe(output, { _tag: "closed" });
     };
     const frame = (bytes: import("@effect/platform-node/NodeWS").RawData, binary: boolean) => {
-      if (!binary) return;
+      if (endedStream || !binary) return;
       try {
         const data = new Uint8Array(
           Array.isArray(bytes)
@@ -161,8 +186,9 @@ const make = Effect.gen(function* () {
               ? bytes
               : new Uint8Array(bytes),
         );
-        decodeBrowserViewFrame(data);
-        Queue.offerUnsafe(output, { _tag: "frame", bytes: data });
+        const frame = decodeBrowserViewFrame(data);
+        const offered = delivery.offer(frame.sequence, data);
+        if (offered) Queue.offerUnsafe(output, { _tag: "frame", bytes: offered });
       } catch {
         ended();
       }
@@ -172,6 +198,7 @@ const make = Effect.gen(function* () {
     upstream.once("error", ended);
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
+        release();
         upstream.off("message", frame);
         upstream.off("close", ended);
         upstream.off("error", ended);
@@ -205,12 +232,26 @@ const make = Effect.gen(function* () {
             if (typeof chunk !== "string" || Buffer.byteLength(chunk) > 8192)
               return yield* new BrowserViewGatewayError({ reason: "transport" });
             const message = yield* Effect.try({
-              try: () => browserViewInputForHost(decodeBrowserViewInput(chunk), false, false),
+              try: () => decodeOpenbotBrowserViewerInput(chunk),
               catch: (cause) => new BrowserViewGatewayError({ reason: "transport", cause }),
             });
             yield* check;
-            if (message && upstream.readyState === WebSocket.OPEN && upstream.bufferedAmount < 8192)
-              upstream.send(yield* encodeInput(message));
+            if (message.type === "release") {
+              release();
+              return;
+            }
+            if (message.type === "ack") {
+              const bytes = delivery.acknowledge(message.sequence);
+              if (bytes) Queue.offerUnsafe(output, { _tag: "frame", bytes });
+              return;
+            }
+            const wire = browserViewInputForHost(message, false, false);
+            if (!wire) return;
+            if (upstream.readyState !== WebSocket.OPEN || upstream.bufferedAmount >= 8192)
+              return yield* new BrowserViewGatewayError({ reason: "transport" });
+            yield* Effect.try({ try: () => held.record(wire), catch: requestError });
+            const packet = yield* encodeInput(wire);
+            yield* Effect.try({ try: () => upstream.send(packet), catch: requestError });
           });
           const receiveInput = reader.pull.pipe(
             Effect.flatMap((chunks) => Effect.forEach(chunks, receive, { discard: true })),

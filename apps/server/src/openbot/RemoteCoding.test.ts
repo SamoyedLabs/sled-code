@@ -26,6 +26,7 @@ import * as PeerLinks from "../peer/PeerLinks.ts";
 import * as PeerMcpClient from "../peer/PeerMcpClient.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as RemoteCoding from "./RemoteCoding.ts";
+import { liveThreadShell } from "../mcp/McpToolAccess.testkit.ts";
 import type { CodingRow } from "./RemoteCodingLedger.ts";
 
 const encodeLaunch = Schema.encodeEffect(Schema.fromJsonString(OpenbotCodingLaunchInput));
@@ -527,6 +528,85 @@ it.effect(
       Effect.provide(RemoteCoding.layer),
       Effect.provideService(RemoteCoding.Caller, caller),
       Effect.provide(h.dependencies),
+    );
+  },
+);
+
+it.effect(
+  "reuses original authority validation locally with current policy and captured ceilings",
+  () => {
+    const h = harness();
+    return Effect.gen(function* () {
+      const broad: RemoteCoding.Authority = {
+        ...caller,
+        limits: { runtimeMode: "full-access", interactionMode: "default" },
+      };
+      expect(
+        yield* RemoteCoding.validateOriginalAuthority(broad).pipe(
+          Effect.provide(
+            ManagedPolicy.layerTest({
+              schemaVersion: 1,
+              organization: "fixture",
+              limits: { maxRuntimeMode: "approval-required" },
+            }),
+          ),
+        ),
+      ).toEqual({ runtimeMode: "approval-required", interactionMode: "default" });
+      expect(
+        yield* RemoteCoding.validateOriginalAuthority({
+          ...caller,
+          limits: { runtimeMode: "approval-required", interactionMode: "plan" },
+        }),
+      ).toEqual({ runtimeMode: "approval-required", interactionMode: "plan" });
+      h.state.active = false;
+      expect(
+        yield* RemoteCoding.validateOriginalAuthority(broad).pipe(Effect.result),
+      ).toHaveProperty("_tag", "Failure");
+    }).pipe(Effect.provide(h.dependencies));
+  },
+);
+
+it.effect(
+  "local original-thread revalidation narrows modes and rejects provider replacement, archive, deletion and idle context",
+  () => {
+    const h = harness();
+    const threadId = ThreadId.make("original-thread");
+    let shell = liveThreadShell(threadId, {
+      runtimeMode: "approval-required",
+      interactionMode: "plan",
+    });
+    const original: RemoteCoding.Authority = {
+      kind: "thread",
+      threadId,
+      providerInstanceId: ProviderInstanceId.make("codex"),
+      limits: { runtimeMode: "full-access", interactionMode: "default" },
+    };
+    return Effect.gen(function* () {
+      expect(yield* RemoteCoding.validateOriginalAuthority(original)).toEqual({
+        runtimeMode: "approval-required",
+        interactionMode: "plan",
+      });
+      const initial = shell;
+      for (const changed of [
+        { ...initial, providerInstanceId: ProviderInstanceId.make("replacement") },
+        { ...initial, archivedAt: DateTime.makeUnsafe(stamp) },
+        { ...initial, deletedAt: DateTime.makeUnsafe(stamp) },
+        { ...initial, activeRunId: null, pendingBackgroundTasks: [] },
+      ]) {
+        shell = changed;
+        expect(
+          yield* RemoteCoding.validateOriginalAuthority(original).pipe(Effect.result),
+        ).toHaveProperty("_tag", "Failure");
+      }
+    }).pipe(
+      Effect.provide(
+        Layer.merge(
+          h.dependencies,
+          Layer.mock(ThreadManagement.ThreadManagementService)({
+            getThreadShell: () => Effect.sync(() => shell),
+          }),
+        ),
+      ),
     );
   },
 );

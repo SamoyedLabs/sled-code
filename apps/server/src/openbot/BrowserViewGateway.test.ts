@@ -364,7 +364,48 @@ it.effect(
           modifiers: 0,
         });
       }
+      const held = Promise.withResolvers<string>();
+      upstream.once("message", (bytes) => held.resolve(bytes.toString()));
+      peer.send(
+        JSON.stringify({
+          type: "key",
+          action: "down",
+          key: "Shift",
+          code: "ShiftLeft",
+          text: "",
+          modifiers: 8,
+        }),
+      );
+      yield* Effect.promise(() => held.promise);
+      const released = Promise.withResolvers<string>();
+      upstream.once("message", (bytes) => released.resolve(bytes.toString()));
+      peer.once("close", () => released.resolve("closed without releasing held key"));
+      peer.send('{"type":"release"}');
+      expect(yield* Effect.promise(() => released.promise)).toBe(
+        JSON.stringify({
+          type: "key",
+          action: "up",
+          key: "Shift",
+          code: "ShiftLeft",
+          text: "",
+          modifiers: 0,
+        }),
+      );
+      const drag = Promise.withResolvers<string>();
+      upstream.once("message", (bytes) => drag.resolve(bytes.toString()));
+      peer.send(
+        JSON.stringify({ type: "pointer", action: "down", x: 0.2, y: 0.3, button: "middle" }),
+      );
+      yield* Effect.promise(() => drag.promise);
+      const cleanup = Promise.withResolvers<string>();
+      upstream.once("message", (bytes) => cleanup.resolve(bytes.toString()));
       yield* sessions.revoke(alice.sessionId);
+      expect(yield* decodeJson(yield* Effect.promise(() => cleanup.promise))).toMatchObject({
+        type: "pointer",
+        action: "up",
+        button: "middle",
+        modifiers: 0,
+      });
       yield* Effect.promise(() => ended.promise);
       expect(closed).toEqual(["owned-1"]);
       const expired = yield* gateway.command(bob.sessionId, {

@@ -2430,15 +2430,25 @@ export const layerWsRpc = (
             : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
         [WS_METHODS.openbotAdminToHost]: (input) =>
           Option.isSome(openbot)
-            ? openbot.value
-                .apiAdminToHost(input.hostId, input.request)
-                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            ? openbot.value.apiAdminToHost(input.hostId, input.request).pipe(
+                Effect.provideService(OpenbotRemoteCoding.Caller, {
+                  kind: "session",
+                  sessionId: currentSessionId,
+                  limits: { runtimeMode: "full-access", interactionMode: "default" },
+                }),
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
             : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
         [WS_METHODS.openbotAdmin]: (input) =>
           Option.isSome(openbot)
-            ? openbot.value
-                .apiAdmin(input)
-                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            ? openbot.value.apiAdmin(input).pipe(
+                Effect.provideService(OpenbotRemoteCoding.Caller, {
+                  kind: "session",
+                  sessionId: currentSessionId,
+                  limits: { runtimeMode: "full-access", interactionMode: "default" },
+                }),
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
             : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
         [WS_METHODS.openbotCodingLaunch]: (input) =>
           Option.isSome(openbotCoding)

@@ -12,7 +12,9 @@ type Entry = {
   upstreamId: string;
   path: string;
   connected: boolean;
+  ackFrames: boolean;
   stop?: () => void;
+  beforeClose?: () => void;
   timer?: ReturnType<typeof setTimeout>;
 };
 // Call authorize on every operation using current Sled authority, never a cached owner role.
@@ -34,7 +36,12 @@ export class BrowserViews {
   constructor(options: BrowserViews["options"]) {
     this.options = options;
   }
-  async open(principal: string, hostId: string, tabId: string): Promise<OpenbotBrowserViewerGrant> {
+  async open(
+    principal: string,
+    hostId: string,
+    tabId: string,
+    ackFrames = false,
+  ): Promise<OpenbotBrowserViewerGrant> {
     await this.options.authorize(principal, hostId);
     if (
       this.#stopped ||
@@ -66,6 +73,7 @@ export class BrowserViews {
         upstreamId: upstream.id,
         path: upstream.streamPath,
         connected: false,
+        ackFrames,
       });
       const timer = setTimeout(() => {
         void this.#remove(id).catch(() => {});
@@ -82,6 +90,7 @@ export class BrowserViews {
     if (!entry) return;
     this.#entries.delete(id);
     clearTimeout(entry.timer);
+    entry.beforeClose?.();
     entry.stop?.();
     await entry.session.close(entry.upstreamId);
   }
@@ -123,6 +132,12 @@ export class BrowserViews {
       await this.#remove(id);
       throw error;
     }
+  }
+  async beforeClose(principal: string, hostId: string, id: string, release: () => void) {
+    (await this.#owned(principal, hostId, id)).beforeClose = release;
+  }
+  async acknowledgesFrames(principal: string, hostId: string, id: string) {
+    return (await this.#owned(principal, hostId, id)).ackFrames;
   }
   async check(principal: string, hostId: string, id: string) {
     await this.#owned(principal, hostId, id);

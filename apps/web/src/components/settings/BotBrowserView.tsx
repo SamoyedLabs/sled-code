@@ -5,23 +5,51 @@ import { Button } from "../ui/button";
 
 // connect must create an authenticated Sled viewer grant and socket for this host/tab.
 // No upstream endpoint or credential is accepted by this component.
-export function BotBrowserView({ connect }: { connect: () => Promise<WebSocket> }) {
+export function BotBrowserView({
+  connect,
+  interactive,
+}: {
+  connect: () => Promise<WebSocket>;
+  interactive: boolean;
+}) {
   const [attempt, setAttempt] = useState(0);
   return (
     <section aria-label="Live bot browser">
       <Button variant="outline" onClick={() => setAttempt((value) => value + 1)}>
         Reconnect viewer
       </Button>
-      <BrowserStream key={attempt} connect={connect} />
+      <BrowserStream key={attempt} connect={connect} interactive={interactive} />
     </section>
   );
 }
-function BrowserStream({ connect }: { connect: () => Promise<WebSocket> }) {
+function BrowserStream({
+  connect,
+  interactive,
+}: {
+  connect: () => Promise<WebSocket>;
+  interactive: boolean;
+}) {
   const [status, setStatus] = useState("Connecting browser view…");
   const image = useRef<HTMLImageElement>(null);
   const socket = useRef<WebSocket | null>(null);
+  const capture = useRef<number | null>(null);
   const pressed = useRef<"left" | "middle" | "right" | null>(null);
   const keyboard = useRef(new BrowserKeyboard());
+  const control = useRef(interactive);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Control loss releases remote capture without replacing the viewer socket.
+  useEffect(() => {
+    control.current = interactive;
+    if (!interactive) {
+      keyboard.current.release();
+      pressed.current = null;
+      const pointerId = capture.current;
+      capture.current = null;
+      const surface = image.current;
+      if (pointerId !== null && surface?.hasPointerCapture(pointerId))
+        surface.releasePointerCapture(pointerId);
+      if (socket.current?.readyState === WebSocket.OPEN) socket.current.send('{"type":"release"}');
+    }
+  }, [interactive]);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Owns the authenticated browser socket and image object URLs for this mounted viewer.
   useEffect(() => {
     let disposed = false;
@@ -30,11 +58,33 @@ function BrowserStream({ connect }: { connect: () => Promise<WebSocket> }) {
     const surface = image.current;
     const keys = keyboard.current;
     const releaseKeys = () => {
-      for (const input of keys.release())
-        if (peer?.readyState === WebSocket.OPEN) peer.send(JSON.stringify(input));
+      keys.release();
+      pressed.current = null;
+      const pointerId = capture.current;
+      capture.current = null;
+      if (pointerId !== null && surface?.hasPointerCapture(pointerId))
+        surface.releasePointerCapture(pointerId);
+      if (peer?.readyState === WebSocket.OPEN) peer.send('{"type":"release"}');
     };
+    const hidden = () => {
+      if (document.hidden) releaseKeys();
+    };
+    const lostCapture = (event: PointerEvent) => {
+      if (capture.current === event.pointerId) releaseKeys();
+    };
+    const drawn = () => {
+      if (peer?.readyState === WebSocket.OPEN && sequence !== null)
+        peer.send(JSON.stringify({ type: "ack", sequence }));
+    };
+    let sequence: number | null = null;
+    const failed = () => peer?.close();
+    surface?.addEventListener("load", drawn);
+    surface?.addEventListener("error", failed);
+    surface?.addEventListener("blur", releaseKeys);
+    surface?.addEventListener("lostpointercapture", lostCapture);
+    document.addEventListener("visibilitychange", hidden);
     const wheel = (event: WheelEvent) => {
-      if (!surface || peer?.readyState !== WebSocket.OPEN) return;
+      if (!surface || !control.current || peer?.readyState !== WebSocket.OPEN) return;
       event.preventDefault();
       const rect = surface.getBoundingClientRect();
       peer.send(
@@ -73,6 +123,7 @@ function BrowserStream({ connect }: { connect: () => Promise<WebSocket> }) {
           if (disposed || !(event.data instanceof ArrayBuffer)) return;
           try {
             const frame = decodeBrowserViewFrame(new Uint8Array(event.data));
+            sequence = frame.sequence;
             const url = URL.createObjectURL(
               new Blob([new Uint8Array(frame.image)], { type: "image/jpeg" }),
             );
@@ -99,13 +150,24 @@ function BrowserStream({ connect }: { connect: () => Promise<WebSocket> }) {
       peer?.close();
       socket.current = null;
       surface?.removeEventListener("wheel", wheel);
+      surface?.removeEventListener("load", drawn);
+      surface?.removeEventListener("error", failed);
+      surface?.removeEventListener("blur", releaseKeys);
+      surface?.removeEventListener("lostpointercapture", lostCapture);
+      document.removeEventListener("visibilitychange", hidden);
       window.removeEventListener("blur", releaseKeys);
       surface?.removeAttribute("src");
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [connect]);
   const send = (input: BrowserViewInput) => {
-    if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify(input));
+    if (interactive && socket.current?.readyState === WebSocket.OPEN) {
+      if (socket.current.bufferedAmount >= 8192) {
+        socket.current.close();
+        return;
+      }
+      socket.current.send(JSON.stringify(input));
+    }
   };
   return (
     <section aria-label="Browser page" className="space-y-2">
@@ -118,6 +180,7 @@ function BrowserStream({ connect }: { connect: () => Promise<WebSocket> }) {
       <Button
         variant="outline"
         size="sm"
+        disabled={!interactive}
         onClick={() => {
           send({ type: "key", action: "down", key: "Tab", code: "Tab", text: "", modifiers: 0 });
           send({ type: "key", action: "up", key: "Tab", code: "Tab", text: "", modifiers: 0 });
@@ -131,12 +194,16 @@ function BrowserStream({ connect }: { connect: () => Promise<WebSocket> }) {
         tabIndex={0}
         className="max-w-full focus:outline -outline-offset-2"
         draggable={false}
+        style={{ touchAction: "none" }}
+        onAuxClick={(event) => event.preventDefault()}
         onContextMenu={(event) => event.preventDefault()}
         onBlur={() => {
           for (const input of keyboard.current.release()) send(input);
         }}
         onPointerDown={(event) => {
-          if (event.button > 2) return;
+          if (!interactive || event.button > 2) return;
+          event.preventDefault();
+          capture.current = event.pointerId;
           event.currentTarget.focus();
           event.currentTarget.setPointerCapture(event.pointerId);
           pressed.current = event.button === 1 ? "middle" : event.button === 2 ? "right" : "left";
@@ -147,10 +214,14 @@ function BrowserStream({ connect }: { connect: () => Promise<WebSocket> }) {
             x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
             y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)),
             button: pressed.current,
-            clickCount: 1,
+            clickCount: Math.max(1, Math.min(3, event.detail)),
             deltaX: 0,
             deltaY: 0,
-            modifiers: 0,
+            modifiers:
+              (event.altKey ? 1 : 0) |
+              (event.ctrlKey ? 2 : 0) |
+              (event.metaKey ? 4 : 0) |
+              (event.shiftKey ? 8 : 0),
           });
         }}
         onPointerUp={(event) => {
@@ -162,12 +233,17 @@ function BrowserStream({ connect }: { connect: () => Promise<WebSocket> }) {
             x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
             y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)),
             button: pressed.current,
-            clickCount: 1,
+            clickCount: Math.max(1, Math.min(3, event.detail)),
             deltaX: 0,
             deltaY: 0,
-            modifiers: 0,
+            modifiers:
+              (event.altKey ? 1 : 0) |
+              (event.ctrlKey ? 2 : 0) |
+              (event.metaKey ? 4 : 0) |
+              (event.shiftKey ? 8 : 0),
           });
           pressed.current = null;
+          capture.current = null;
           if (event.currentTarget.hasPointerCapture(event.pointerId))
             event.currentTarget.releasePointerCapture(event.pointerId);
         }}
@@ -180,10 +256,14 @@ function BrowserStream({ connect }: { connect: () => Promise<WebSocket> }) {
             x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
             y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)),
             button: pressed.current,
-            clickCount: 1,
+            clickCount: Math.max(1, Math.min(3, event.detail)),
             deltaX: 0,
             deltaY: 0,
-            modifiers: 0,
+            modifiers:
+              (event.altKey ? 1 : 0) |
+              (event.ctrlKey ? 2 : 0) |
+              (event.metaKey ? 4 : 0) |
+              (event.shiftKey ? 8 : 0),
           });
         }}
         onPointerCancel={(event) => {
@@ -195,15 +275,19 @@ function BrowserStream({ connect }: { connect: () => Promise<WebSocket> }) {
             x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
             y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)),
             button: pressed.current,
-            clickCount: 1,
+            clickCount: Math.max(1, Math.min(3, event.detail)),
             deltaX: 0,
             deltaY: 0,
-            modifiers: 0,
+            modifiers:
+              (event.altKey ? 1 : 0) |
+              (event.ctrlKey ? 2 : 0) |
+              (event.metaKey ? 4 : 0) |
+              (event.shiftKey ? 8 : 0),
           });
           pressed.current = null;
         }}
         onKeyDown={(event) => {
-          if (event.key === "Tab") return;
+          if (!interactive || event.key === "Tab") return;
           event.preventDefault();
           const modifiers =
             (event.altKey ? 1 : 0) |

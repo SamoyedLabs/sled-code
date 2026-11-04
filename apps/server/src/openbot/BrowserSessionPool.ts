@@ -2,6 +2,7 @@
 import * as NodeEvents from "node:events";
 import * as NodeCrypto from "node:crypto";
 import { WebSocket, type RawData } from "@effect/platform-node/NodeWS";
+import { decodeBrowserViewInput, type BrowserViewInput } from "@t3tools/contracts";
 import type { BrowserSession } from "./BrowserProtocol.ts";
 
 export interface BrowserPeer extends NodeJS.EventEmitter {
@@ -20,6 +21,7 @@ type Pool = {
   leases: Set<Lease>;
   socket?: WebSocket;
   frame?: { bytes: Buffer; version: number };
+  inputOwner?: LeasePeer;
   closing: boolean;
   closingPromise?: Promise<void>;
 };
@@ -27,6 +29,8 @@ type Pool = {
 class LeasePeer extends NodeEvents.EventEmitter implements BrowserPeer {
   #closed = false;
   #seen = 0;
+  readonly #keys = new Map<string, Extract<BrowserViewInput, { type: "key" }>>();
+  #button: Extract<BrowserViewInput, { type: "pointer" }> | undefined;
   readonly pool: Pool;
   readonly release: () => void;
   constructor(pool: Pool, release: () => void) {
@@ -47,7 +51,56 @@ class LeasePeer extends NodeEvents.EventEmitter implements BrowserPeer {
   }
   send(data: string) {
     if (this.readyState !== WebSocket.OPEN) throw new Error("Browser view closed");
+    const input = decodeBrowserViewInput(data);
+    // The host has one held pointer button; one lease owns input until all its holds end.
+    if (input.type !== "ack" && this.pool.inputOwner && this.pool.inputOwner !== this)
+      throw new Error("Browser input is held by another viewer");
+    if (input.type === "key") {
+      const id = input.code || input.key;
+      if (input.action === "up" && !this.#keys.has(id)) return;
+      if (input.action === "down" && !this.#keys.has(id) && this.#keys.size >= 64)
+        throw new Error("Too many held browser keys");
+    }
+    if (input.type === "pointer") {
+      if (input.action === "down" && this.#button && this.#button.button !== input.button)
+        throw new Error("Release the current browser button before pressing another");
+      if (input.action === "up" && this.#button?.button !== input.button) return;
+    }
     this.pool.socket!.send(data);
+    if (input.type === "key") {
+      const id = input.code || input.key;
+      if (input.action === "down") this.#keys.set(id, input);
+      else if (input.action === "up") this.#keys.delete(id);
+    } else if (input.type === "pointer") {
+      if (input.action === "down") this.#button = input;
+      else if (input.action === "up") this.#button = undefined;
+      else if (input.action === "move" && this.#button)
+        this.#button = { ...this.#button, x: input.x, y: input.y };
+    }
+    if (this.#keys.size > 0 || this.#button) this.pool.inputOwner = this;
+    else if (this.pool.inputOwner === this) delete this.pool.inputOwner;
+  }
+  releaseInput() {
+    const inputs = [
+      ...(this.#button ? [{ ...this.#button, action: "up", modifiers: 0 }] : []),
+      ...[...this.#keys.values()].map((input) => ({
+        ...input,
+        action: "up",
+        text: "",
+        modifiers: 0,
+      })),
+    ];
+    this.#button = undefined;
+    this.#keys.clear();
+    if (this.pool.inputOwner === this) delete this.pool.inputOwner;
+    for (const input of inputs) {
+      const packet = JSON.stringify(input);
+      const socket = this.pool.socket;
+      if (socket?.readyState !== WebSocket.OPEN) return;
+      if (socket.bufferedAmount + Buffer.byteLength(packet) > 64 * 1024)
+        throw new Error("Browser input release is congested");
+      socket.send(packet);
+    }
   }
   close() {
     if (!this.#closed) this.release();
@@ -101,10 +154,16 @@ export function createBrowserSessionPool(options: {
     const promise = Promise.resolve().then(async () => {
       const owned = [...pool.leases];
       pool.leases.clear();
+      let failure = error;
       for (const lease of owned) {
         leases.delete(lease.id);
         releasing.set(lease.id, promise);
-        lease.peer?.ended(error);
+        try {
+          lease.peer?.releaseInput();
+        } catch (cause) {
+          failure ??= cause instanceof Error ? cause : new Error("Browser input release failed");
+        }
+        lease.peer?.ended(failure);
       }
       try {
         // DELETE awaits upstream's stopView; socket-first close loses that cleanup barrier.
@@ -128,6 +187,16 @@ export function createBrowserSessionPool(options: {
     const existing = releasing.get(lease.id);
     if (existing) return existing;
     if (!leases.delete(lease.id)) return Promise.resolve();
+    try {
+      lease.peer?.releaseInput();
+    } catch (cause) {
+      const closing = closePool(
+        lease.pool,
+        cause instanceof Error ? cause : new Error("Browser input release failed"),
+      );
+      releasing.set(lease.id, closing);
+      return closing;
+    }
     lease.pool.leases.delete(lease);
     const promise = lease.pool.leases.size === 0 ? closePool(lease.pool) : Promise.resolve();
     releasing.set(lease.id, promise);

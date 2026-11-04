@@ -1,3 +1,4 @@
+import { createOpenbotTemplateAtoms } from "./TemplateAtoms.ts";
 import { createOpenbotCatalogAtoms } from "./CatalogAtoms.ts";
 import { createOpenbotDataAtoms } from "./DataAtoms.ts";
 import {
@@ -87,6 +88,7 @@ export function createOpenbotAtoms<R, E>(
     ...createOpenbotComputerAtoms(runtime),
     ...createOpenbotDataAtoms(runtime),
     ...createOpenbotCatalogAtoms(runtime),
+    ...createOpenbotTemplateAtoms(runtime),
     codingPolicy,
     codingPolicyEnable: createEnvironmentRpcCommand(runtime, {
       label: "Enable bot coding delegation",

@@ -124,27 +124,11 @@ const LaunchResult = Schema.Struct({
 const storageError = (cause: unknown) => new RemoteCodingError({ reason: "storage", cause });
 const authorityError = () => new RemoteCodingError({ reason: "authorization" });
 
-const make = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
-  const peers = yield* PeerMcpClient.PeerMcpClient;
-  const links = yield* PeerLinks.PeerLinks;
-  const auth = yield* EnvironmentAuth.EnvironmentAuth;
-  const threads = yield* ThreadManagement.ThreadManagementService;
-  const policy = yield* ManagedPolicy.ManagedPolicy;
-  const digest = yield* Digest.Digest;
-  const changes = yield* PubSub.unbounded<ThreadId>();
-  const gate = yield* Semaphore.make(1);
-  let started = false;
-
-  const load = Effect.fn("RemoteCoding.load")(function* (receiptId: string) {
-    const rows =
-      yield* sql<CodingRow>`SELECT * FROM openbot_coding_tasks WHERE thread_id = ${receiptId}`.pipe(
-        Effect.mapError(storageError),
-      );
-    if (!rows[0]) return yield* new RemoteCodingError({ reason: "storage" });
-    return rows[0];
-  });
-  const limits = Effect.fn("RemoteCoding.limits")(function* (authority: Authority) {
+export const validateOriginalAuthority = Effect.fn("RemoteCoding.validateOriginalAuthority")(
+  function* (authority: Authority) {
+    const auth = yield* EnvironmentAuth.EnvironmentAuth;
+    const threads = yield* ThreadManagement.ThreadManagementService;
+    const policy = yield* ManagedPolicy.ManagedPolicy;
     let current = authority.limits;
     if (authority.kind === "session") {
       if (authority.linked) return yield* authorityError();
@@ -182,7 +166,34 @@ const make = Effect.gen(function* () {
           ? current.interactionMode
           : authority.limits.interactionMode,
     };
+  },
+);
+
+const make = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const peers = yield* PeerMcpClient.PeerMcpClient;
+  const links = yield* PeerLinks.PeerLinks;
+  const digest = yield* Digest.Digest;
+  const changes = yield* PubSub.unbounded<ThreadId>();
+  const gate = yield* Semaphore.make(1);
+  let started = false;
+
+  const load = Effect.fn("RemoteCoding.load")(function* (receiptId: string) {
+    const rows =
+      yield* sql<CodingRow>`SELECT * FROM openbot_coding_tasks WHERE thread_id = ${receiptId}`.pipe(
+        Effect.mapError(storageError),
+      );
+    if (!rows[0]) return yield* new RemoteCodingError({ reason: "storage" });
+    return rows[0];
   });
+  const authorityContext = yield* Effect.context<
+    | EnvironmentAuth.EnvironmentAuth
+    | ThreadManagement.ThreadManagementService
+    | ManagedPolicy.ManagedPolicy
+  >();
+  const limits = Effect.fn("RemoteCoding.limits")((authority: Authority) =>
+    validateOriginalAuthority(authority).pipe(Effect.provide(authorityContext)),
+  );
   const authorityFor = Effect.fn("RemoteCoding.authorityFor")(function* (row: CodingRow) {
     if (!row.remote_authority_json) return yield* authorityError();
     return yield* decodeAuthority(row.remote_authority_json).pipe(

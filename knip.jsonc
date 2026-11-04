@@ -70,7 +70,11 @@
         "graphql.config.ts",
       ],
       // Copied into the upstream engine; its imports resolve only in that source tree.
-      "ignore": ["src/openbot/upstream/channel-coding/idle-deadline.e2e.mjs"],
+      "ignore": [
+        "src/openbot/upstream/channel-coding/idle-deadline.e2e.mjs",
+        "src/openbot/upstream/channel-coding/origin.e2e.mjs",
+        "src/openbot/upstream/channel-coding/origin.ts",
+      ],
       // The generated operations export every selection's class.
       "ignoreIssues": { "**/*.graphql.ts": ["exports", "types", "namespaceMembers"] },
       // Keep the transitive Effect runtime pinned for standalone npm installs.

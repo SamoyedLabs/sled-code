@@ -1,5 +1,20 @@
 import { expect, it } from "vite-plus/test";
-import { browserViewerConnection } from "./browserViewer.ts";
+import { BrowserFrameDraw, browserViewerConnection } from "./browserViewer.ts";
+
+it("acknowledges already drawn identical pixels without waiting for another native image load", () => {
+  const draw = new BrowserFrameDraw();
+  expect(draw.offer({ uri: "image-a", sequence: 1 })).toBe(false);
+  expect(draw.loaded(99)).toBeUndefined();
+  expect(draw.loaded(1)).toBe(1);
+  expect(draw.offer({ uri: "image-a", sequence: 2 })).toBe(true);
+  expect(draw.loaded(1)).toBeUndefined();
+  expect(draw.offer({ uri: "image-b", sequence: 3 })).toBe(false);
+  expect(draw.loaded(2)).toBeUndefined();
+  expect(draw.loaded(3)).toBe(3);
+  expect(draw.loaded(3)).toBeUndefined();
+  draw.reset();
+  expect(draw.offer({ uri: "image-b", sequence: 4 })).toBe(false);
+});
 
 it("keeps the selected relay prefix and media ticket while confining the viewer grant to its subprotocol", () => {
   const grant = {

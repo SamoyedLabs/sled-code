@@ -1,3 +1,4 @@
+import * as TemplateProtocol from "./TemplateProtocol.ts";
 import * as UiBlocks from "./UiBlocks.ts";
 import { OpenbotConversationSnapshot } from "@t3tools/contracts";
 import * as CatalogProtocol from "./CatalogProtocol.ts";
@@ -289,6 +290,7 @@ function isSavedMcpRequest(request: ApiRequest): request is SavedMcpRequest {
   );
 }
 interface Route {
+  readonly templateProjection?: Parameters<typeof TemplateProtocol.project>[0];
   readonly catalogProjection?: Parameters<typeof CatalogProtocol.project>[0];
   readonly dataProjection?: Parameters<typeof DataProtocol.project>[0];
   readonly vaultProjection?: Parameters<typeof VaultProtocol.project>[0];
@@ -308,6 +310,7 @@ interface Route {
 }
 // Only these source-backed operations can spend the private host-owner session.
 function apiRoute(request: Exclude<ApiRequest, SavedMcpRequest>): Route {
+  if (TemplateProtocol.isRequest(request)) return TemplateProtocol.route(request);
   if (CatalogProtocol.isRequest(request)) return CatalogProtocol.route(request);
   if (DataProtocol.isRequest(request)) return DataProtocol.route(request);
   if (VaultProtocol.isRequest(request)) return VaultProtocol.route(request);
@@ -900,7 +903,7 @@ const make = Effect.gen(function* () {
             "OpenBot-Protocol-Version": "9",
             "OpenBot-App-Version": "0.60.0",
             "OpenBot-Capabilities":
-              "ui-blocks-v1,agent-task-ui-blocks-v1,subagents-v1,queue-edit-v1,queue-window-v1,conversation-unread,agent-threads-v1,agent-thread-reads-v1,agent-thread-branches-v1,agent-thread-replies-v1,agent-tasks-v1,agent-create-model,agent-admin-v1,agent-instructions-v1,skills-admin-v1,mcp-servers-v1,mcp-sign-in-v1,browser-navigation,browser-user-control,browser-page-state,browser-profiles-v1,connectors-v1,channel-chats-v1,providers-v8,provider-accounts-v1,provider-default-v1,provider-host-sign-in-v1,provider-sign-out-v1,custom-provider-harness-v1,custom-agents-v1,model-visibility-v1,claude-api-key-v1,sign-in-relay-v1,provider-account-relay-v1,provider-account-relay-v2,workspace-directory-v1,conversation-file-search-v1,agent-thread-files-v1,message-client-id-v1,workflows-v1,events-v1,routine-recovery-v1,webhook-tests-v1,routine-flows-v1,channel-delete-v1,channel-task-cancel-v1,channel-attention-v1,vault-v1,vault-v2,vault-import-v1,onepassword-connector-v1,bitwarden-connector-v1,remote-desktop-setup,shared-tables-v1,hosted-sites-v1,acp-registry-v1",
+              "ui-blocks-v1,agent-task-ui-blocks-v1,subagents-v1,queue-edit-v1,queue-window-v1,conversation-unread,agent-threads-v1,agent-thread-reads-v1,agent-thread-branches-v1,agent-thread-replies-v1,agent-tasks-v1,agent-create-model,agent-admin-v1,agent-instructions-v1,skills-admin-v1,mcp-servers-v1,mcp-sign-in-v1,browser-navigation,browser-user-control,browser-page-state,browser-profiles-v1,connectors-v1,channel-chats-v1,providers-v8,provider-accounts-v1,provider-default-v1,provider-host-sign-in-v1,provider-sign-out-v1,custom-provider-harness-v1,custom-agents-v1,model-visibility-v1,claude-api-key-v1,sign-in-relay-v1,provider-account-relay-v1,provider-account-relay-v2,workspace-directory-v1,conversation-file-search-v1,agent-thread-files-v1,message-client-id-v1,workflows-v1,events-v1,routine-recovery-v1,webhook-tests-v1,routine-flows-v1,channel-delete-v1,channel-task-cancel-v1,channel-attention-v1,vault-v1,vault-v2,vault-import-v1,onepassword-connector-v1,bitwarden-connector-v1,remote-desktop-setup,shared-tables-v1,hosted-sites-v1,acp-registry-v1,agent-install-v1,agent-update-v1,agent-publish-v1",
           }),
         ),
       )
@@ -1097,6 +1100,10 @@ const make = Effect.gen(function* () {
       const response = responseResult.success;
       if (response.status === 204) return null;
       const result = yield* readJson(response);
+      if (route.templateProjection)
+        return yield* TemplateProtocol.project(route.templateProjection, result).pipe(
+          Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+        );
       if (route.catalogProjection)
         return yield* CatalogProtocol.project(route.catalogProjection, result).pipe(
           Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),

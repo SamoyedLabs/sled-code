@@ -1,3 +1,4 @@
+import { BrowserFrameDelivery, BrowserHeldInput } from "./BrowserProtocol.ts";
 // @effect-diagnostics nodeBuiltinImport:off - Local socket fixture exercises the released binary protocol.
 import * as NodeEvents from "node:events";
 import { WebSocketServer } from "@effect/platform-node/NodeWS";
@@ -52,18 +53,81 @@ it("shares a static tab stream between independent viewer leases and replays its
     const second = session.dial(b.streamPath);
     const [bytesB] = await NodeEvents.EventEmitter.once(second, "message");
     expect([...bytesB]).toEqual([...frame]);
+    const upstream = await physical.promise;
+    const forwarded: unknown[] = [];
+    const cleaned = Promise.withResolvers<void>();
+    upstream.on("message", (bytes) => {
+      forwarded.push(JSON.parse(bytes.toString()));
+      if (forwarded.length === 10) cleaned.resolve();
+    });
+    const key = (action: "down" | "up" | "char", value = "Shift") => ({
+      type: "key",
+      action,
+      key: value,
+      code: value === "Shift" ? "ShiftLeft" : "KeyS",
+      text: action === "char" ? value : "",
+      modifiers: action === "up" ? 0 : 8,
+    });
+    const pointer = (action: "down" | "up" | "move", button: "left" | "middle", x = 0.2) => ({
+      type: "pointer",
+      action,
+      button,
+      x,
+      y: 0.3,
+      clickCount: 1,
+      deltaX: 0,
+      deltaY: 0,
+      modifiers: 0,
+    });
+    const send = async (peer: typeof first, input: unknown) => {
+      const received = NodeEvents.EventEmitter.once(upstream, "message");
+      peer.send(JSON.stringify(input));
+      expect(JSON.parse((await received)[0].toString())).toEqual(input);
+    };
+    await send(first, key("down"));
+    await send(first, pointer("down", "left"));
+    expect(() => second.send(JSON.stringify(key("down")))).toThrow("another viewer");
+    expect(() => second.send(JSON.stringify(pointer("down", "middle")))).toThrow("another viewer");
+    expect(second.readyState).toBe(1);
+    await send(first, key("up"));
+    expect(() => second.send(JSON.stringify(key("char", "s")))).toThrow("another viewer");
+    await send(first, pointer("up", "left"));
+    await send(second, key("down"));
+    await send(second, pointer("down", "middle"));
+    await send(second, pointer("move", "middle", 0.8));
     await session.close(a.id);
     expect(deleted).toEqual([]);
-    const upstream = await physical.promise;
-    const typed = NodeEvents.EventEmitter.once(upstream, "message");
-    second.send("still-alive");
-    expect((await typed)[0].toString()).toBe("still-alive");
+    await send(second, key("char", "s"));
+    expect(forwarded).toHaveLength(8);
     const changed = Buffer.from([79, 66, 86, 49, 0, 0, 0, 8, 2, 128, 1, 224, 255, 216, 255, 217]);
     const changedB = NodeEvents.EventEmitter.once(second, "message");
     upstream.send(changed);
     expect([...(await changedB)[0]]).toEqual([...changed]);
     await session.close(b.id);
+    await cleaned.promise;
+    expect(forwarded.slice(8)).toEqual([
+      pointer("up", "middle", 0.8),
+      { ...key("up"), modifiers: 0 },
+    ]);
     expect(deleted).toEqual(["/v1/browser/view/sessions/physical-1"]);
+    expect(peers.size).toBe(0);
+    const after = await session.create("tab");
+    leases.push(after.id);
+    const connected = NodeEvents.EventEmitter.once(server, "connection");
+    const final = session.dial(after.streamPath);
+    await NodeEvents.EventEmitter.once(final, "message");
+    const [lastHost] = await connected;
+    const down = NodeEvents.EventEmitter.once(lastHost, "message");
+    final.send(JSON.stringify(key("down")));
+    expect(JSON.parse((await down)[0].toString())).toEqual(key("down"));
+    const released = NodeEvents.EventEmitter.once(lastHost, "message");
+    for (const stop of peers) stop();
+    expect(JSON.parse((await released)[0].toString())).toEqual(key("up"));
+    await session.close(after.id);
+    expect(deleted).toEqual([
+      "/v1/browser/view/sessions/physical-1",
+      "/v1/browser/view/sessions/physical-2",
+    ]);
     expect(peers.size).toBe(0);
   } finally {
     await Promise.all(leases.map((id) => session.close(id)));
@@ -269,4 +333,58 @@ it("connects only the owned released stream with a private token and preserves O
     for (const socket of server.clients) socket.terminate();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
+});
+
+it("bounds each acknowledged viewer to a drawing frame and the newest pending frame", () => {
+  const delivery = new BrowserFrameDelivery(true);
+  const first = new Uint8Array([1]);
+  const latest = new Uint8Array([3]);
+  expect(delivery.offer(1, first)).toBe(first);
+  expect(delivery.offer(2, new Uint8Array([2]))).toBeUndefined();
+  expect(delivery.offer(3, latest)).toBeUndefined();
+  expect(delivery.acknowledge(99)).toBeUndefined();
+  expect(delivery.acknowledge(1)).toBe(latest);
+  expect(delivery.acknowledge(1)).toBeUndefined();
+  expect(delivery.acknowledge(3)).toBeUndefined();
+  expect(delivery.offer(4, first)).toBe(first);
+  const other = new BrowserFrameDelivery(true);
+  expect(other.offer(1, latest)).toBe(latest);
+  const legacy = new BrowserFrameDelivery(false);
+  expect(legacy.offer(1, first)).toBe(first);
+  expect(legacy.offer(2, latest)).toBe(latest);
+});
+
+it("releases only this viewer's held controls at the last drag position without replaying text", () => {
+  const held = new BrowserHeldInput();
+  held.record(
+    decodeBrowserViewInput('{"type":"pointer","action":"down","x":0.1,"y":0.2,"button":"right"}'),
+  );
+  held.record(
+    decodeBrowserViewInput('{"type":"pointer","action":"move","x":0.8,"y":0.9,"button":"right"}'),
+  );
+  held.record(
+    decodeBrowserViewInput(
+      '{"type":"key","action":"down","key":"Shift","code":"ShiftLeft","text":"","modifiers":8}',
+    ),
+  );
+  held.record(
+    decodeBrowserViewInput(
+      '{"type":"key","action":"char","key":"a","code":"KeyA","text":"a","modifiers":8}',
+    ),
+  );
+  expect(held.release()).toEqual([
+    {
+      type: "pointer",
+      action: "up",
+      x: 0.8,
+      y: 0.9,
+      button: "right",
+      clickCount: 1,
+      deltaX: 0,
+      deltaY: 0,
+      modifiers: 0,
+    },
+    { type: "key", action: "up", key: "Shift", code: "ShiftLeft", text: "", modifiers: 0 },
+  ]);
+  expect(held.release()).toEqual([]);
 });

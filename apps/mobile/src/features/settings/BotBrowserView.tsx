@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { Image } from "expo-image";
 import * as Base64 from "effect/encoding/Base64";
 import { decodeBrowserViewFrame, type BrowserViewInput } from "@t3tools/contracts";
-import { ScrollView, View, type GestureResponderEvent } from "react-native";
+import { AppState, ScrollView, View, type GestureResponderEvent } from "react-native";
 import { AppText, AppTextInput } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
 import { browserTextInput } from "./botBrowserInput";
+import { BrowserFrameDraw } from "@t3tools/client-runtime/openbot/presentation";
 
 export function BotBrowserView({
   connect,
@@ -32,11 +33,17 @@ function BrowserStream({
 }) {
   const [status, setStatus] = useState("Connecting browser view…");
   const [connected, setConnected] = useState(false);
-  const [frame, setFrame] = useState<{ uri: string; width: number; height: number } | null>(null);
+  const [frame, setFrame] = useState<{
+    uri: string;
+    width: number;
+    height: number;
+    sequence: number;
+  } | null>(null);
   const [mode, setMode] = useState<"tap" | "scroll" | "drag">("tap");
   const [text, setText] = useState("");
   const [inputError, setInputError] = useState<string | null>(null);
   const socket = useRef<WebSocket | null>(null);
+  const draw = useRef(new BrowserFrameDraw());
   const layout = useRef({ width: 0, height: 0 });
   const touch = useRef<{ x: number; y: number } | null>(null);
   const pressed = useRef(false);
@@ -45,12 +52,22 @@ function BrowserStream({
   useEffect(() => {
     let disposed = false;
     let peer: WebSocket | null = null;
+    const drawings = draw.current;
+    drawings.reset();
     const ended = (message: string) => {
       if (disposed) return;
       setStatus(message);
       setConnected(false);
       setFrame(null);
     };
+    const release = () => {
+      pressed.current = false;
+      touch.current = null;
+      if (peer?.readyState === WebSocket.OPEN) peer.send('{"type":"release"}');
+    };
+    const activity = AppState.addEventListener("change", (state) => {
+      if (state !== "active") release();
+    });
     void connect().then(
       (next) => {
         peer = next;
@@ -69,17 +86,24 @@ function BrowserStream({
         if (next.readyState === WebSocket.OPEN) opened();
         next.addEventListener("message", (event) => {
           if (disposed || !(event.data instanceof ArrayBuffer)) return;
+          let nextFrame: ReturnType<typeof decodeBrowserViewFrame>;
           try {
-            const nextFrame = decodeBrowserViewFrame(new Uint8Array(event.data));
-            setFrame({
-              uri: `data:image/jpeg;base64,${Base64.encode(nextFrame.image)}`,
-              width: nextFrame.width,
-              height: nextFrame.height,
-            });
+            nextFrame = decodeBrowserViewFrame(new Uint8Array(event.data));
           } catch {
             ended("The browser sent an invalid frame. Reconnect to continue.");
             next.close();
+            return;
           }
+          const frame = {
+            uri: `data:image/jpeg;base64,${Base64.encode(nextFrame.image)}`,
+            sequence: nextFrame.sequence,
+            width: nextFrame.width,
+            height: nextFrame.height,
+          };
+          const alreadyDrawn = drawings.offer(frame);
+          setFrame(frame);
+          if (alreadyDrawn && next.readyState === WebSocket.OPEN)
+            next.send(JSON.stringify({ type: "ack", sequence: frame.sequence }));
         });
         next.addEventListener("close", () => ended("Browser view closed. Reconnect to continue."));
         next.addEventListener("error", () => {
@@ -91,10 +115,22 @@ function BrowserStream({
     );
     return () => {
       disposed = true;
+      drawings.reset();
+      release();
+      activity.remove();
       peer?.close();
       socket.current = null;
     };
   }, [connect]);
+
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Control loss releases remote capture; socket cleanup handles unmount.
+  useEffect(() => {
+    if (interactive) return;
+    pressed.current = false;
+    touch.current = null;
+    const peer = socket.current;
+    if (peer?.readyState === WebSocket.OPEN) peer.send('{"type":"release"}');
+  }, [interactive]);
 
   function send(inputs: readonly BrowserViewInput[]) {
     const peer = socket.current;
@@ -195,6 +231,13 @@ function BrowserStream({
         {frame && (
           <Image
             source={{ uri: frame.uri }}
+            onLoad={() => {
+              const peer = socket.current;
+              const sequence = draw.current.loaded(frame.sequence);
+              if (sequence !== undefined && peer?.readyState === WebSocket.OPEN)
+                peer.send(JSON.stringify({ type: "ack", sequence }));
+            }}
+            onError={() => socket.current?.close()}
             style={{ width: "100%", height: "100%" }}
             contentFit="contain"
             cachePolicy="none"

@@ -717,3 +717,146 @@ it("requires provider management for every exact released registry operation on 
     }
   }
 });
+
+it("requires settings/provider authority for template reviews and operate authority for template mutations on local and pinned host ports", () => {
+  for (const method of [
+    WS_METHODS.openbotRead,
+    WS_METHODS.openbotReadToHost,
+    WS_METHODS.openbotAdmin,
+    WS_METHODS.openbotAdminToHost,
+  ]) {
+    const read = method === WS_METHODS.openbotRead || method === WS_METHODS.openbotReadToHost;
+    const pinned =
+      method === WS_METHODS.openbotReadToHost || method === WS_METHODS.openbotAdminToHost;
+    for (const operation of read
+      ? ["templates.preview", "templates.detail", "templates.listing"]
+      : [
+          "templates.install",
+          "templates.installMarketplace",
+          "templates.updateMarketplace",
+          "templates.publish",
+          "templates.unpublish",
+        ]) {
+      const request = {
+        operation,
+        agentId: "agent",
+        templateId: "template",
+        listingId: "listing",
+        expectedUpdatedAt: "revision",
+        receiptId: "receipt",
+        timezone: "UTC",
+      };
+      expect(
+        clientRpcRequiredScopes(method, pinned ? { hostId: "host", request } : request),
+      ).toEqual(
+        read
+          ? [AuthSettingsWriteScope, AuthProvidersManageScope]
+          : [AuthSettingsWriteScope, AuthProvidersManageScope, AuthOrchestrationOperateScope],
+      );
+    }
+  }
+});
+
+it.effect(
+  "enforces template review and mutation grants before local or pinned host handlers run",
+  () =>
+    Effect.gen(function* () {
+      const tested = [
+        WS_METHODS.openbotRead,
+        WS_METHODS.openbotReadToHost,
+        WS_METHODS.openbotAdmin,
+        WS_METHODS.openbotAdminToHost,
+      ] as const;
+      const group = WsRpcGroup.omit(
+        ...[...WsRpcGroup.requests.keys()].filter(
+          (tag): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, (typeof tested)[number]> =>
+            !(tested as ReadonlyArray<string>).includes(tag),
+        ),
+      );
+      for (const grants of [
+        {
+          scopes: [AuthSettingsWriteScope],
+          missingRead: AuthProvidersManageScope,
+          missingAdmin: AuthProvidersManageScope,
+        },
+        {
+          scopes: [AuthSettingsWriteScope, AuthProvidersManageScope],
+          missingRead: null,
+          missingAdmin: AuthOrchestrationOperateScope,
+        },
+        {
+          scopes: [AuthProvidersManageScope, AuthOrchestrationOperateScope],
+          missingRead: AuthSettingsWriteScope,
+          missingAdmin: AuthSettingsWriteScope,
+        },
+        {
+          scopes: [AuthSettingsWriteScope, AuthProvidersManageScope, AuthOrchestrationOperateScope],
+          missingRead: null,
+          missingAdmin: null,
+        },
+      ] as const) {
+        const handled: string[] = [];
+        const client = yield* RpcTest.makeClient(group).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              group.toLayerHandler(WS_METHODS.openbotRead, () =>
+                Effect.sync(() => {
+                  handled.push("read");
+                  return null;
+                }),
+              ),
+              group.toLayerHandler(WS_METHODS.openbotReadToHost, () =>
+                Effect.sync(() => {
+                  handled.push("read.host");
+                  return null;
+                }),
+              ),
+              group.toLayerHandler(WS_METHODS.openbotAdmin, () =>
+                Effect.sync(() => {
+                  handled.push("admin");
+                  return null;
+                }),
+              ),
+              group.toLayerHandler(WS_METHODS.openbotAdminToHost, () =>
+                Effect.sync(() => {
+                  handled.push("admin.host");
+                  return null;
+                }),
+              ),
+              RpcAuthorization.layer(grants.scopes),
+            ),
+          ),
+        );
+        const read = { operation: "templates.preview", agentId: "agent" } as const;
+        for (const effect of [
+          client[WS_METHODS.openbotRead](read),
+          client[WS_METHODS.openbotReadToHost]({ hostId: "host", request: read }),
+        ]) {
+          const result = yield* effect.pipe(Effect.result);
+          if (grants.missingRead)
+            expect(result).toMatchObject({
+              _tag: "Failure",
+              failure: { requiredPermission: grants.missingRead },
+            });
+          else expect(result).toMatchObject({ _tag: "Success", success: null });
+        }
+        const publish = { operation: "templates.publish", agentId: "agent" } as const;
+        for (const effect of [
+          client[WS_METHODS.openbotAdmin](publish),
+          client[WS_METHODS.openbotAdminToHost]({ hostId: "host", request: publish }),
+        ]) {
+          const result = yield* effect.pipe(Effect.result);
+          if (grants.missingAdmin)
+            expect(result).toMatchObject({
+              _tag: "Failure",
+              failure: { requiredPermission: grants.missingAdmin },
+            });
+          else expect(result).toMatchObject({ _tag: "Success", success: null });
+        }
+        expect(handled).toEqual([
+          ...(grants.missingRead ? [] : ["read", "read.host"]),
+          ...(grants.missingAdmin ? [] : ["admin", "admin.host"]),
+        ]);
+      }
+    }).pipe(Effect.scoped),
+);

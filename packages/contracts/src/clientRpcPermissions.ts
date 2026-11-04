@@ -1,3 +1,4 @@
+import { templateRequiredScopes } from "./openbotTemplates.ts";
 import { catalogRequiredScopes } from "./openbotCatalog.ts";
 import * as Schema from "effect/Schema";
 import { OpenbotSledToolsConnectInput } from "./openbotSledTools.ts";
@@ -129,6 +130,8 @@ export function clientRpcRequiredScopes(
         ? input.request
         : input;
     if (typeof request === "object" && request !== null && "operation" in request) {
+      const templateScopes = templateRequiredScopes(request.operation, "read");
+      if (templateScopes) return templateScopes;
       const catalogScopes = catalogRequiredScopes(request.operation, "read");
       if (catalogScopes) return catalogScopes;
       if (request.operation === "tables.list")
@@ -163,6 +166,8 @@ export function clientRpcRequiredScopes(
       "operation" in request &&
       typeof request.operation === "string"
     ) {
+      const templateScopes = templateRequiredScopes(request.operation, "admin");
+      if (templateScopes) return templateScopes;
       const catalogScopes = catalogRequiredScopes(request.operation, "admin");
       if (catalogScopes) return catalogScopes;
       if (request.operation === "tables.delete" || request.operation === "sites.delete")

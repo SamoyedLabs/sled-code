@@ -1,3 +1,4 @@
+import { TemplateEnvironment } from "./TemplateEnvironment";
 import { CatalogEnvironment } from "./CatalogEnvironment";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
@@ -639,6 +640,11 @@ export function BotProviderSetup({
         </>
       )}
       <BotConnections environmentId={environmentId} hostId={hostId} />
+      <TemplateEnvironment
+        key={`templates:${environmentId}:${hostId}`}
+        environmentId={environmentId}
+        hostId={hostId}
+      />
       <CatalogEnvironment
         key={`registry:${environmentId}:${hostId}`}
         environmentId={environmentId}

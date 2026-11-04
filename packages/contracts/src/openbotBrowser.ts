@@ -1,3 +1,4 @@
+import { decodeBrowserViewInput, type BrowserViewInput } from "./openbotBrowserWire.ts";
 import * as Schema from "effect/Schema";
 const Id = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128));
 const ProfileId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{32}$/));
@@ -56,7 +57,22 @@ export const OpenbotBrowserDisplay = Schema.Struct({
   activeTabId: Schema.NullOr(Id),
 });
 export const OpenbotBrowserViewCommand = Schema.Union([
-  Schema.Struct({ operation: Schema.Literal("open"), hostId: Id, tabId: Id }),
+  Schema.Struct({
+    operation: Schema.Literal("open"),
+    hostId: Id,
+    tabId: Id,
+    ackFrames: Schema.optional(Schema.Boolean),
+  }),
   Schema.Struct({ operation: Schema.Literal("close"), hostId: Id, id: Id }),
 ]);
 export type OpenbotBrowserViewCommand = typeof OpenbotBrowserViewCommand.Type;
+
+/** Private Sled viewer control; never forward release to the frozen upstream wire. */
+export function decodeOpenbotBrowserViewerInput(
+  text: string,
+): BrowserViewInput | { type: "release" } {
+  const value: unknown = JSON.parse(text);
+  if (typeof value === "object" && value !== null && "type" in value && value.type === "release")
+    return { type: "release" };
+  return decodeBrowserViewInput(text);
+}

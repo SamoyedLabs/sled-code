@@ -209,6 +209,239 @@ it.live(
 );
 
 it.live(
+  "preserves template review and install identities while projecting private fields and propagating host refusals",
+  () =>
+    Effect.gen(function* () {
+      const requests: Array<{ method: string; path: string; body: unknown }> = [];
+      const capabilities: string[][] = [];
+      let status = 200;
+      let malformedPublication = false;
+      const publication = {
+        templateId: "abcdefghijklmnopqrstuv",
+        shareUrl: "https://openbot.run/agents/abcdefghijklmnopqrstuv",
+        publishedAt: "publication-revision",
+      };
+      const preview = {
+        agentId: "existing-agent",
+        name: "Reviewed agent",
+        title: "Reviewed title",
+        description: "Shareable instructions",
+        skills: [
+          { kind: "embedded", slug: "owned", name: "Owned skill", markdown: "Shareable skill" },
+        ],
+        routines: [
+          {
+            name: "Check assignments",
+            instruction: "Check owned fixture",
+            active: false,
+            schedule: { kind: "daily", time: "09:00" },
+          },
+        ],
+        updatedAt: "reviewed-revision",
+        publication: null,
+        skillsError: null,
+      };
+      const apiUrl = yield* fixture(async (request, response) => {
+        let text = "";
+        for await (const chunk of request) text += chunk.toString();
+        response.setHeader("content-type", "application/json");
+        if (request.url === "/v1/auth/login") {
+          response.end(JSON.stringify({ sessionToken: "private", sessionExpiresAt: "2027-01-01" }));
+          return;
+        }
+        if (request.url === "/v1/auth/logout") {
+          response.writeHead(204).end();
+          return;
+        }
+        expect(request.headers.authorization).toBe("Bearer private");
+        capabilities.push(String(request.headers["openbot-capabilities"]).split(","));
+        requests.push({
+          method: request.method ?? "",
+          path: request.url ?? "",
+          body: JSON.parse(text),
+        });
+        if (status !== 200) {
+          response.writeHead(status).end(JSON.stringify({ message: "Private host failure" }));
+          return;
+        }
+        if (request.url === "/v1/admin/agents/template-preview")
+          response.end(
+            JSON.stringify({
+              ...preview,
+              avatarSeed: "private-avatar-seed",
+              avatarImage: { mimeType: "image/png", data: "private-image" },
+              avatarUrl: "/private/avatar",
+              credentials: "private-credential",
+              command: "/private/provider",
+              account: { token: "private-account" },
+            }),
+          );
+        else if (request.url === "/v1/admin/agents/template-publish")
+          response.end(
+            JSON.stringify({
+              ...publication,
+              ...(malformedPublication ? { shareUrl: "https://attacker.invalid/template" } : {}),
+              accountToken: "private-token",
+            }),
+          );
+        else if (request.url === "/v1/admin/agents/template-unpublish")
+          response.end(JSON.stringify({ accountToken: "private-token" }));
+        else if (
+          [
+            "/v1/admin/agents/install-template",
+            "/v1/admin/agents/install-marketplace",
+            "/v1/admin/agents/update-marketplace",
+          ].includes(request.url ?? "")
+        )
+          response.end(
+            JSON.stringify({
+              agentId:
+                request.url === "/v1/admin/agents/update-marketplace"
+                  ? "existing-agent"
+                  : "created-agent",
+              name: "Installed agent",
+              provider: { command: "/private/provider", env: { TOKEN: "private-token" } },
+            }),
+          );
+        else response.writeHead(404).end("{}");
+      });
+      const session = yield* (yield* TeamClient.TeamClient).connect({
+        apiUrl,
+        ownerSecret: "fixture",
+      });
+      expect(
+        yield* session.apiRead({ operation: "templates.preview", agentId: "existing-agent" }),
+      ).toEqual(preview);
+      expect(
+        yield* session.apiAdmin({
+          operation: "templates.install",
+          templateId: "template/with-query?",
+          timezone: "America/Chicago",
+          expectedUpdatedAt: "reviewed-revision",
+        }),
+      ).toEqual({ agentId: "created-agent", name: "Installed agent" });
+      expect(
+        yield* session.apiAdmin({
+          operation: "templates.installMarketplace",
+          listingId: "listing/with-query?",
+          timezone: "UTC",
+          receiptId: "original-receipt",
+        }),
+      ).toEqual({ agentId: "created-agent", name: "Installed agent" });
+      expect(
+        yield* session.apiAdmin({
+          operation: "templates.updateMarketplace",
+          agentId: "existing-agent",
+          listingId: "original-listing",
+          timezone: "UTC",
+        }),
+      ).toEqual({ agentId: "existing-agent", name: "Installed agent" });
+      expect(
+        yield* session.apiAdmin({ operation: "templates.publish", agentId: "existing-agent" }),
+      ).toEqual(publication);
+      expect
+        .soft(
+          yield* session.apiAdmin({ operation: "templates.unpublish", agentId: "existing-agent" }),
+        )
+        .toEqual({});
+      expect(requests).toEqual([
+        {
+          method: "POST",
+          path: "/v1/admin/agents/template-preview",
+          body: { agentId: "existing-agent" },
+        },
+        {
+          method: "POST",
+          path: "/v1/admin/agents/install-template",
+          body: {
+            templateId: "template/with-query?",
+            timezone: "America/Chicago",
+            expectedUpdatedAt: "reviewed-revision",
+          },
+        },
+        {
+          method: "POST",
+          path: "/v1/admin/agents/install-marketplace",
+          body: {
+            listingId: "listing/with-query?",
+            timezone: "UTC",
+            receiptId: "original-receipt",
+          },
+        },
+        {
+          method: "POST",
+          path: "/v1/admin/agents/update-marketplace",
+          body: { agentId: "existing-agent", listingId: "original-listing", timezone: "UTC" },
+        },
+        {
+          method: "POST",
+          path: "/v1/admin/agents/template-publish",
+          body: { agentId: "existing-agent", card: null },
+        },
+        {
+          method: "POST",
+          path: "/v1/admin/agents/template-unpublish",
+          body: { agentId: "existing-agent" },
+        },
+      ]);
+      malformedPublication = true;
+      expect(
+        yield* Effect.flip(
+          session.apiAdmin({ operation: "templates.publish", agentId: "existing-agent" }),
+        ),
+      ).toMatchObject({ reason: "decode" });
+      for (const request of [
+        { operation: "templates.detail", templateId: "template" },
+        { operation: "templates.listing", listingId: "listing" },
+      ] as const)
+        expect(yield* Effect.flip(session.apiRead(request))).toMatchObject({
+          reason: "http",
+          status: 404,
+        });
+      const beforeRefusal = requests.length;
+      status = 401;
+      expect(
+        yield* Effect.flip(
+          session.apiRead({ operation: "templates.preview", agentId: "existing-agent" }),
+        ),
+      ).toMatchObject({ reason: "http", status: 401 });
+      status = 409;
+      expect(
+        yield* Effect.flip(
+          session.apiAdmin({
+            operation: "templates.install",
+            templateId: "template",
+            timezone: "UTC",
+            expectedUpdatedAt: "original-revision",
+          }),
+        ),
+      ).toMatchObject({ reason: "http", status: 409 });
+      expect(requests.slice(beforeRefusal)).toEqual([
+        {
+          method: "POST",
+          path: "/v1/admin/agents/template-preview",
+          body: { agentId: "existing-agent" },
+        },
+        {
+          method: "POST",
+          path: "/v1/admin/agents/install-template",
+          body: { templateId: "template", timezone: "UTC", expectedUpdatedAt: "original-revision" },
+        },
+      ]);
+      for (const negotiated of capabilities) {
+        expect(negotiated).toEqual(
+          expect.arrayContaining(["agent-install-v1", "agent-update-v1", "agent-publish-v1"]),
+        );
+        expect(negotiated).not.toContain("agent-review-v1");
+      }
+      yield* session.close;
+    }).pipe(
+      Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+      Effect.scoped,
+    ),
+);
+
+it.live(
   "re-reads the exact main or task UI prompt before answering and requires authoritative 204",
   () =>
     Effect.gen(function* () {

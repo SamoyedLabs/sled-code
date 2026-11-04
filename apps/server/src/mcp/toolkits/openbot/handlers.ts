@@ -396,7 +396,16 @@ export const layer = McpToolAccess.toLayer(OpenbotToolkit, {
     ),
     McpToolAccess.writesEnvironment((input, check) =>
       Effect.gen(function* () {
-        yield* check;
+        const checkedCaller = yield* check;
+        const channelAuthority: RemoteCoding.Authority | undefined =
+          checkedCaller.scope.client !== undefined && checkedCaller.scope.thread === undefined
+            ? {
+                kind: "session",
+                sessionId: AuthSessionId.make(checkedCaller.scope.client.sessionId),
+                linked: checkedCaller.scope.client.linked,
+                limits: checkedCaller.limits,
+              }
+            : undefined;
         if (input.action.startsWith("maintenance.")) {
           const command = yield* decodeMaintenance(input.request ?? { action: "check" }).pipe(
             Effect.mapError(invalidRequest),
@@ -467,14 +476,20 @@ export const layer = McpToolAccess.toLayer(OpenbotToolkit, {
           case "admin":
             return yield* service
               .apiAdmin(yield* decodeAdmin(input.request).pipe(Effect.mapError(invalidRequest)))
-              .pipe(Effect.mapError(failed));
+              .pipe(
+                Effect.provideService(RemoteCoding.Caller, channelAuthority),
+                Effect.mapError(failed),
+              );
           case "admin.host": {
             const request = yield* decodeHostAdmin(input.request).pipe(
               Effect.mapError(invalidRequest),
             );
             return yield* service
               .apiAdminToHost(request.hostId, request.request)
-              .pipe(Effect.mapError(failed));
+              .pipe(
+                Effect.provideService(RemoteCoding.Caller, channelAuthority),
+                Effect.mapError(failed),
+              );
           }
           default:
             return yield* invalidRequest();
