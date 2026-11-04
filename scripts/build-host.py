@@ -34,7 +34,7 @@ subprocess.run(['install_name_tool', '-add_rpath', '@executable_path/../Framewor
 with (contents / 'Info.plist').open('wb') as output:
     plistlib.dump({
         'CFBundleIdentifier': 'com.t3tools.remote-desktop.host',
-        'CFBundleName': 'T3 Remote Desktop',
+        'CFBundleName': 'Sled Remote Desktop',
         'CFBundleExecutable': 'T3RemoteHost',
         'CFBundlePackageType': 'APPL',
         'CFBundleShortVersionString': '0.0.1',

@@ -217,7 +217,7 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       );
       expect(yield* resolve).toBeNull();
       yield* fs.symlink(entry, globalBin);
-      expect(yield* resolve).toEqual({ kind: "npm-global", prefix });
+      expect(yield* resolve).toEqual({ kind: "npm-global", prefix: yield* fs.realPath(prefix) });
       yield* fs.remove(globalBin);
       yield* fs.writeFileString(globalBin, "an unrelated t3 command");
       expect(yield* resolve).toBeNull();
@@ -249,7 +249,7 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       );
       for (const [version, expected] of [
         ["0.0.1", null],
-        [packageJson.version, { kind: "npm-global", prefix }],
+        [packageJson.version, { kind: "npm-global", prefix: yield* fs.realPath(prefix) }],
       ] as const) {
         yield* fs.writeFileString(
           path.join(packageRoot, "package.json"),
