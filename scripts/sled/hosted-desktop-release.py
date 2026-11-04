@@ -140,11 +140,13 @@ def publish():
     # Existing tags/releases are never overwritten; failed publishes remain visible drafts.
     run('gh', 'release', 'create', tag, '--repo', REPO, '--target', sha, '--draft',
         '--title', 'Sled Code ' + version, '--notes', 'Sled source: ' + sha)
+    release_id = json.loads(run('gh', 'release', 'view', tag, '--repo', REPO, '--json', 'databaseId'))['databaseId']
     run('gh', 'release', 'upload', tag, '--repo', REPO, *[str(folder / name) for name in assets])
-    remote = {a['name']: a for a in api('releases/tags/' + tag)['assets']}
+    remote = {a['name']: a for a in api(f'releases/{release_id}')['assets']}
     if set(remote) != set(assets) or any(remote[n].get('digest') != 'sha256:' + digest for n, digest in assets.items()):
         raise ValueError('Remote asset digest mismatch; release retained as draft')
-    run('gh', 'release', 'edit', tag, '--repo', REPO, '--draft=false', '--prerelease=false', '--latest')
+    run('gh', 'api', '--method', 'PATCH', f'repos/{REPO}/releases/{release_id}',
+        '-F', 'draft=false', '-F', 'prerelease=false', '-f', 'make_latest=true')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
