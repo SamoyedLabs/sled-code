@@ -276,7 +276,7 @@ def plan():
 
 def release():
     sha = checked_main()
-    configure()
+    configure(require_signing=False)
     output = ROOT / 'release-mobile'
     output.mkdir(exist_ok=(output / 'plan.json').is_file())
     items = releases()
@@ -294,6 +294,8 @@ def release():
     mobile = ROOT / 'apps/mobile'
     source_runtime = prepare_runtime(sha, output, reuse=True)
     mode = decide(source_runtime, baseline)
+    if mode == 'native':
+        configure()
     if mode == 'ota' and not os.environ.get('SLED_EXPO_TOKEN'):
         raise ValueError('OTA requires dedicated SLED_EXPO_TOKEN; local OAuth sessions are forbidden')
     write(output / 'plan.json', dict(sourceSha=sha, runtimeVersion=source_runtime, mode=mode,

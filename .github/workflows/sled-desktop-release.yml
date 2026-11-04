@@ -75,6 +75,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     env:
+      CI_SOURCE_SHA: ${{ needs.resolve.outputs.sha }}
       CI_TIMING_BASELINE: ${{ needs.resolve.outputs.timings }}
       CI_TIMING_JOB: build (${{ matrix.runner }}, ${{ matrix.platform }}, ${{ matrix.arch }}, ${{ matrix.target }})
       T3CODE_DESKTOP_PRIVATE_BUILD: "true"
@@ -182,7 +183,7 @@ jobs:
           if [[ '${{ matrix.platform }}' == 'mac' && "$SLED_MAC_DISTRIBUTION" == 'private-development' ]]; then
             signing=()
           fi
-          python3 scripts/sled/ci_progress.py run --phase "Build signed final installer and updater metadata" -- vp run dist:desktop:artifact --platform '${{ matrix.platform }}' --target '${{ matrix.target }}' --arch '${{ matrix.arch }}' --build-version '${{ needs.resolve.outputs.version }}' "${signing[@]}" --skip-build --output-dir release-desktop
+          python3 scripts/sled/ci_progress.py run --phase "Build signed final installer and updater metadata" -- vp run dist:desktop:artifact --platform '${{ matrix.platform }}' --target '${{ matrix.target }}' --arch '${{ matrix.arch }}' --build-version '${{ needs.resolve.outputs.version }}' "${signing[@]}" --skip-build --verbose --output-dir release-desktop
       - name: Finalize private metadata and verify signatures and update assets
         env:
           SLED_RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
@@ -295,7 +296,7 @@ jobs:
       - name: Verify actual desktop packaging
         if: runner.os != 'Linux'
         run: |
-          python3 scripts/sled/ci_progress.py run --phase "Package desktop" -- vp run dist:desktop:artifact --platform '${{ runner.os == 'macOS' && 'mac' || 'win' }}' --target '${{ runner.os == 'macOS' && 'zip' || 'nsis' }}' --arch '${{ runner.os == 'macOS' && 'arm64' || 'x64' }}' --build-version 0.2.999 --skip-build --output-dir "$RUNNER_TEMP/desktop-verify"
+          python3 scripts/sled/ci_progress.py run --phase "Package desktop" -- vp run dist:desktop:artifact --platform '${{ runner.os == 'macOS' && 'mac' || 'win' }}' --target '${{ runner.os == 'macOS' && 'zip' || 'nsis' }}' --arch '${{ runner.os == 'macOS' && 'arm64' || 'x64' }}' --build-version 0.2.999 --skip-build --verbose --output-dir "$RUNNER_TEMP/desktop-verify"
       - name: Retain phase timing records
         if: always()
         uses: actions/upload-artifact@v7

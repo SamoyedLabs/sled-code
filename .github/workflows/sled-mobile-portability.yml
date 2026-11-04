@@ -30,12 +30,14 @@ jobs:
         with:
           path: .tools/webrtc/*.zip
           key: webrtc-archive-macos-v1-${{ hashFiles('third-party/webrtc/manifest.json') }}
-      - name: Verify runtime and native change detection
+      - name: Verify runtime, native change detection, and Linux OTA export
         run: python3 scripts/sled/verify-mobile-portability.py
       - uses: actions/upload-artifact@v7
         with:
           name: mobile-fingerprint-${{ matrix.os }}
-          path: ${{ runner.temp }}/mobile-portability/fingerprints.json
+          path: |
+            ${{ runner.temp }}/mobile-portability/fingerprints.json
+            ${{ runner.temp }}/mobile-portability/export-timings.json
           retention-days: 7
           if-no-files-found: error
   compare:

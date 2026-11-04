@@ -1,6 +1,7 @@
 """Timing estimates must not turn missing, stale, or failed observations into promises."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -41,11 +42,13 @@ class ProgressTests(unittest.TestCase):
             target = Path(directory) / 'timings.jsonl'
             result = subprocess.run([sys.executable, str(Path(m.__file__)), 'run', '--phase', 'fixture',
                                      '--records', str(target), '--', sys.executable, '-c',
-                                     'import sys; sys.exit(7)'], capture_output=True, text=True)
+                                     'import sys; sys.exit(7)'], capture_output=True, text=True,
+                                    env={**os.environ, 'CI_SOURCE_SHA': 'a' * 40, 'GITHUB_SHA': 'b' * 40})
             self.assertEqual(result.returncode, 7)
             records = [json.loads(line) for line in target.read_text().splitlines()]
             self.assertEqual([r['event'] for r in records], ['start', 'finish'])
             self.assertEqual(records[-1]['exit_code'], 7)
+            self.assertEqual(records[-1]['source_sha'], 'a' * 40)
             self.assertNotIn('sys.exit', target.read_text())
             self.assertIn('ETA unavailable', result.stdout)
 

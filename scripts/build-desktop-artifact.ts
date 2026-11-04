@@ -45,6 +45,7 @@ import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
@@ -1773,8 +1774,28 @@ const runCommand = Effect.fn("runCommand")(function* (
     { concurrency: "unbounded" },
   );
 
+  const elapsed = (performance.now() - started) / 1000;
+  if (process.env.RUNNER_TEMP) {
+    const path = yield* Path.Path;
+    const record = yield* encodeJsonString({
+      event: "finish",
+      phase: options.label,
+      job: process.env.CI_TIMING_JOB ?? process.env.GITHUB_JOB,
+      at: DateTime.formatIso(yield* DateTime.now),
+      elapsed_seconds: Math.round(elapsed * 1000) / 1000,
+      exit_code: exitCode,
+      source_sha: process.env.CI_SOURCE_SHA || process.env.GITHUB_SHA,
+      run_id: process.env.GITHUB_RUN_ID,
+      attempt: process.env.GITHUB_RUN_ATTEMPT,
+      runner_os: process.env.RUNNER_OS,
+      runner_arch: process.env.RUNNER_ARCH,
+    });
+    yield* Effect.tryPromise(() =>
+      NodeFSP.appendFile(path.join(process.env.RUNNER_TEMP!, "ci-timings.jsonl"), record + "\n"),
+    ).pipe(Effect.catch(() => Effect.logWarning("Could not write desktop phase timing")));
+  }
   yield* Effect.log(
-    `[desktop-phase] ${options.label}: finished in ${((performance.now() - started) / 1000).toFixed(1)}s (exit=${exitCode})`,
+    `[desktop-phase] ${options.label}: finished in ${elapsed.toFixed(1)}s (exit=${exitCode})`,
   );
   if (exitCode !== 0) {
     return yield* new BuildCommandFailedError({

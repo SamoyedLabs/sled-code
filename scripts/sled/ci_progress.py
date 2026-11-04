@@ -150,7 +150,7 @@ def run_phase(args):
         elapsed = round(time.monotonic() - started, 1)
         record = dict(event=event, phase=args.phase, job=job,
                       at=datetime.now(timezone.utc).isoformat(), elapsed_seconds=elapsed,
-                      historical_seconds=samples, source_sha=os.environ.get('GITHUB_SHA'),
+                      historical_seconds=samples, source_sha=os.environ.get('CI_SOURCE_SHA') or os.environ.get('GITHUB_SHA'),
                       run_id=os.environ.get('GITHUB_RUN_ID'), attempt=os.environ.get('GITHUB_RUN_ATTEMPT'),
                       runner_os=os.environ.get('RUNNER_OS'), runner_arch=os.environ.get('RUNNER_ARCH'))
         if exit_code is not None:

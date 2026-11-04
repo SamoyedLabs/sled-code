@@ -42,7 +42,7 @@ def run_logged(command, *, cwd, env, log, check=False):
             stopped.set()
             reporter.join()
             record = dict(phase=stage, elapsed_seconds=round(time.monotonic() - started, 3),
-                          exit_code=exit_code, source_sha=os.environ.get('GITHUB_SHA'),
+                          exit_code=exit_code, source_sha=os.environ.get('CI_SOURCE_SHA') or os.environ.get('GITHUB_SHA'),
                           run_id=os.environ.get('GITHUB_RUN_ID'), run_attempt=os.environ.get('GITHUB_RUN_ATTEMPT'))
             with (log.parent / 'phase-timings.jsonl').open('a') as timings:
                 timings.write(json.dumps(record) + '\n')

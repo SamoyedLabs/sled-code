@@ -210,6 +210,26 @@ class MobileReleaseTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Missing release settings'):
                 m.configure()
 
+    def test_ota_release_works_without_native_signing_credentials(self):
+        settings = {key: 'fixture' for key in m.PUBLIC}
+        settings.update(SLED_APPLE_TEAM_ID=m.TEAM, SLED_EXPO_TOKEN='fixture-token')
+        for mode_runtime in ('a' * 40, 'c' * 40):
+            with self.subTest(runtime=mode_runtime), tempfile.TemporaryDirectory() as temp, \
+                    patch.dict(os.environ, settings, clear=True), patch.object(m, 'ROOT', Path(temp)), \
+                    patch.object(m, 'checked_main', return_value='d' * 40), patch.object(m, 'releases', return_value=[]), \
+                    patch.object(m, 'baseline_from_releases', return_value=baseline()), \
+                    patch.object(m, 'prepare_runtime', return_value=mode_runtime), patch.object(m, 'runtime', return_value=mode_runtime), \
+                    patch.object(m, 'gh') as gh, patch.object(m, 'signing') as signing, \
+                    patch.object(m, 'run', return_value=json.dumps([dict(platform='ios', runtimeVersion=mode_runtime)])):
+                if mode_runtime == 'a' * 40:
+                    m.release()
+                    self.assertEqual(json.loads((Path(temp) / 'release-mobile/plan.json').read_text())['mode'], 'ota')
+                else:
+                    with self.assertRaisesRegex(ValueError, 'Missing release settings'):
+                        m.release()
+                    gh.assert_not_called()
+                signing.assert_not_called()
+
     def test_matching_runtime_uses_ota(self):
         self.assertEqual(m.decide('a' * 40, baseline()), 'ota')
 

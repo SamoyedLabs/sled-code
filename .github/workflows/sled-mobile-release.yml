@@ -37,9 +37,16 @@ jobs:
       contents: read
       checks: read
       actions: read
+    env:
+      SLED_APPLE_TEAM_ID: ${{ vars.SLED_APPLE_TEAM_ID }}
+      T3CODE_RELAY_URL: ${{ vars.T3CODE_RELAY_URL }}
+      T3CODE_CLERK_PUBLISHABLE_KEY: ${{ vars.T3CODE_CLERK_PUBLISHABLE_KEY }}
+      T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ vars.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID }}
+      T3CODE_CLERK_JWT_TEMPLATE: ${{ vars.T3CODE_CLERK_JWT_TEMPLATE }}
     outputs:
       timings: ${{ steps.timing.outputs.timings }}
       sha: ${{ steps.resolve.outputs.sha }}
+      mode: ${{ steps.plan.outputs.mode }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -50,20 +57,40 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/sled/hosted-mobile-release.py resolve
+      - uses: ./.github/actions/setup-ci-deps
+        if: steps.resolve.outputs.sha != ''
+        with:
+          install-args: --filter @t3tools/mobile... --filter @t3tools/scripts...
+          restore-full-store: "false"
+      - name: Reuse pinned native downloads
+        if: steps.resolve.outputs.sha != ''
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: .tools/webrtc/*.zip
+          key: webrtc-archive-macos-v1-${{ hashFiles('third-party/webrtc/manifest.json') }}
+      - name: Choose OTA or native before allocating a Mac
+        if: steps.resolve.outputs.sha != ''
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/sled/hosted-mobile-release.py plan
       - name: Load recent GitHub step timings
+        if: steps.resolve.outputs.sha != ''
         id: timing
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/sled/ci_progress.py history --workflow sled-mobile-release.yml
   release:
+    name: release (${{ needs.resolve.outputs.mode }})
     needs: resolve
-    if: needs.resolve.outputs.sha != ''
-    runs-on: macos-15
+    if: needs.resolve.outputs.sha != '' && contains(fromJSON('["ota","native"]'), needs.resolve.outputs.mode)
+    runs-on: ${{ needs.resolve.outputs.mode == 'ota' && 'ubuntu-24.04' || 'macos-15' }}
     timeout-minutes: 90
     env:
+      CI_SOURCE_SHA: ${{ needs.resolve.outputs.sha }}
       CI_TIMING_BASELINE: ${{ needs.resolve.outputs.timings }}
-      CI_TIMING_JOB: release
-      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      CI_TIMING_JOB: release (${{ needs.resolve.outputs.mode }})
+      DEVELOPER_DIR: ${{ needs.resolve.outputs.mode == 'native' && '/Applications/Xcode_26.3.app/Contents/Developer' || '' }}
       APP_VARIANT: preview
       SLED_APPLE_TEAM_ID: ${{ vars.SLED_APPLE_TEAM_ID }}
       T3CODE_RELAY_URL: ${{ vars.T3CODE_RELAY_URL }}
@@ -99,6 +126,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/sled/hosted-mobile-release.py plan
+      - name: Confirm the release still matches its selected runner
+        env:
+          EXPECTED_MODE: ${{ needs.resolve.outputs.mode }}
+          ACTUAL_MODE: ${{ steps.plan.outputs.mode }}
+        run: test "$ACTUAL_MODE" = "$EXPECTED_MODE"
       - name: Identify the bundler cache configuration
         if: steps.plan.outputs.mode != 'skip'
         id: metro-context
@@ -165,12 +197,6 @@ jobs:
           T3CODE_CLERK_PUBLISHABLE_KEY: ${{ vars.T3CODE_CLERK_PUBLISHABLE_KEY }}
           T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ vars.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID }}
           T3CODE_CLERK_JWT_TEMPLATE: ${{ vars.T3CODE_CLERK_JWT_TEMPLATE }}
-          SLED_IOS_CSC_LINK: ${{ secrets.SLED_IOS_CSC_LINK }}
-          SLED_IOS_CSC_KEY_PASSWORD: ${{ secrets.SLED_IOS_CSC_KEY_PASSWORD }}
-          SLED_IOS_PROVISIONING_PROFILE: ${{ secrets.SLED_IOS_PROVISIONING_PROFILE }}
-          SLED_APPLE_API_KEY: ${{ secrets.SLED_APPLE_API_KEY }}
-          SLED_APPLE_API_KEY_ID: ${{ secrets.SLED_APPLE_API_KEY_ID }}
-          SLED_APPLE_API_ISSUER: ${{ secrets.SLED_APPLE_API_ISSUER }}
           SLED_EXPO_TOKEN: ${{ secrets.SLED_EXPO_TOKEN }}
         run: python3 scripts/sled/ci_progress.py run --phase "Release compatible OTA update" -- python3 scripts/sled/hosted-mobile-release.py release
       - name: Preserve native compiler and dependency caches
