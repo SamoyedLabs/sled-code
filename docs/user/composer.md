@@ -47,7 +47,7 @@ before an upload finishes requires you to attach that file again.
 You can drag or paste images into the web or desktop composer. HEIC and HEIF
 photos are converted to JPEG there and when selected from the mobile photo
 library; photos over the image limit are also resized to fit. On mobile, you can
-also send files to T3 Code through another app's system share sheet.
+also send files to Sled Code through another app's system share sheet.
 On Android, you can also drag images from another app into the message input
 in split screen.
 
@@ -111,7 +111,7 @@ instance:
 
 ## Model defaults
 
-T3 Code remembers your provider, model, and model options for new threads. A
+Sled Code remembers your provider, model, and model options for new threads. A
 project's configured model takes precedence; resetting that project setting
 returns to the remembered selection.
 
@@ -177,32 +177,40 @@ Stashes containing uploaded files must be restored in their original environment
 Those files are retained for 24 hours. After an upload expires, restore the prompt
 and use **Attach again** or remove the missing file before sending.
 
-## Voice input on iPhone and Mac
+## Voice input on mobile and Mac
 
-On supported iPhones with iOS 26 or later and Macs with macOS 26 or later, use the composer's microphone to record,
-then stop to transcribe. Text is inserted where your selection was when
-recording started, ready for you to review and edit before sending.
+On supported iPhones with iOS 26 or later, Macs with macOS 26 or later, and Android devices with Android 12 or
+later, use the composer's microphone to record, then confirm to transcribe. Text is
+inserted where your selection was when recording started, ready for you to review
+and edit before sending.
 
-Voice input depends on Apple's on-device speech transcription. On a device without
-it, the composer has no microphone button and **Settings → Microphone** says voice
-input isn't available.
+Voice input uses on-device speech transcription: Apple's on iOS, and compatible
+Google speech services on Android. When it is unavailable for the device or its
+language, the composer has no microphone button and **Settings → Microphone** says
+voice input isn't available. On Android, keep Sled Code open while recording and
+transcribing.
 
-The first use may download Apple's speech model and needs a network connection.
-Later transcription works offline for that language. Recordings can be up to five
-minutes long. Canceling, leaving the screen, or an audio interruption discards the
-recording and preserves your existing draft. While recording, the screen stays
+The first use may download a speech model and needs a network connection.
+Later transcription works offline for that language. On Android, transcription
+processes the full recording at roughly its original duration. Recordings can be up to five
+minutes long. Canceling or an audio interruption discards the recording and
+preserves your existing draft. Navigating to another screen keeps dictation active;
+use the floating controls to finish or cancel. While recording, the screen stays
 awake; it can sleep normally once recording stops.
 
-On Mac, voice input uses your system input device. Choose it in **System Settings → Sound → Input**.
+On Mac, choose your input in **System Settings → Sound → Input**.
 
-On iPhone, voice input records from the first connected microphone in **Settings → Microphone**.
-The list mixes kinds (built-in, other wired, other Bluetooth, CarPlay) with wired and
-Bluetooth devices you have dictated with, listed by name. Drag to rank them together:
+On mobile, choose a preferred order in **Settings → Microphone**. Voice input requests the first
+connected microphone in the list. The list mixes kinds (built-in, other wired, other
+Bluetooth, and CarPlay on iOS) with wired and Bluetooth devices you have dictated
+with, listed by name. Drag to rank them together:
 for example, put **Other Bluetooth** above your AirPods so a new headset is preferred
 while the AirPods microphone stays low. By default, CarPlay comes after the built-in
-microphone. Swipe a device left to forget it.
+microphone on iOS. Swipe a device left to forget it. Android may use another input
+when the preferred microphone cannot be routed. Devices with the same name may share
+a saved preference, but simultaneous same-name inputs remain separately selectable.
 
-Transcription runs on your device. T3 Code deletes the temporary audio after
+Transcription runs on your device. Sled Code deletes the temporary audio after
 transcription or cancellation; only the message text is sent when you submit.
 
 ## Queued messages
@@ -245,7 +253,7 @@ After you add or change skills, plugins, or MCP servers, use **Restart agent
 session** in the command palette on web and desktop. The conversation continues,
 and your next message starts the agent again with the new setup.
 
-Provider commands must start the message to run. T3 Code commands such as
+Provider commands must start the message to run. Sled Code commands such as
 `/model` and `/plan`, and skill mentions, work on any line.
 
 Send `/compact` in an existing conversation to reduce context usage when the
@@ -298,14 +306,15 @@ the repository by text. Choose a result to insert it as a chip.
 Another thread can be context too. Type `@` followed by part of its title to pick one from
 the same server, or from a machine it links to while the Linked environments beta is on; those
 show the machine's name. On web and desktop you can also drag a thread out of the sidebar and
-drop it on the composer; a multi-selection drops together. On any client, **Copy thread** puts a
-thread on the clipboard that pastes into a composer as its chip. The chip shows the thread's
+drop it on the composer; a multi-selection drops together. On any client, **Copy thread** copies a
+link to the thread that pastes into a composer as its chip. The chip shows the thread's
 current title and opens it when selected. Your prompt only carries a reference: the agent reads the thread's
 history on demand, so attaching a long thread costs nothing until the agent looks. Attaching a
 thread does not change it, and the agent cannot send messages to it unless you ask.
 
 A thread from a linked machine, picked, pasted or dropped, stays a reference that the agent reads
-on that machine. Dropping a thread from any other environment attaches a saved transcript file. The source
+on that machine. A pasted link to a thread on any other machine stays a link. Dropping a thread
+from any other environment attaches a saved transcript file. The source
 environment must be connected and up to date. The transcript includes the visible history and
 saved text context at the time of the drop; later messages and the contents of attached files
 are not copied. The agent can read the saved transcript after the source disconnects. Normal
@@ -319,7 +328,7 @@ exist only as chips: deleting a file's last chip removes the file from the messa
 Copy text that holds chips and paste it into another draft, in the same thread or another one,
 and the chips come along with what they point to. Images and files are fetched again from the
 environment they came from; while that happens the chip shows a dashed outline, and if it cannot
-complete T3 Code tells you and leaves the chip for you to remove or replace. A chip whose
+complete Sled Code tells you and leaves the chip for you to remove or replace. A chip whose
 context is no longer available shows the same dashed outline; hover it for what to do.
 
 Copying a message with the copy button, or copying text out of it, gives other apps readable
@@ -368,7 +377,7 @@ styles, or images from neighboring files.
 
 On web and desktop, HTML and PDF files open as rendered pages. Switch an HTML
 file to source view to read its markup; a link to a specific line opens source
-automatically. HTML previews cannot access your T3 Code session.
+automatically. HTML previews cannot access your Sled Code session.
 
 The file viewer recognizes images, HTML, and PDF files by their filename extension,
 including filenames or folders containing `#` or `?`.

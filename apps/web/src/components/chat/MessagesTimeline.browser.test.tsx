@@ -247,6 +247,9 @@ describe("MessagesTimeline work rows", () => {
         ),
       ).toBe(true);
     });
+    // LegendList keeps rows click-through until its initial scroll settles on animation
+    // frames, which the fake clock below would freeze.
+    await expect.element(heading).toHaveStyle({ pointerEvents: "auto" });
     const viewport = props.listRef.current!.getScrollableNode()!;
     await vi.waitFor(() =>
       expect(viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThan(2),
