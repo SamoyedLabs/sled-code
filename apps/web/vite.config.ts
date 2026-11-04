@@ -401,7 +401,8 @@ export default defineConfig(({ command }) => {
     },
     worker: { format: "es" },
     test: {
-      sequence: { sequencer: weightedShardSequencer(browserShardWeights) },
+      // Weights include amortized startup so short files do not pile onto one browser shard.
+      sequence: { sequencer: weightedShardSequencer(browserShardWeights, 1.7) },
       projects: [
         defineProject(unitTestProject),
         defineProject(browserTestProject),
