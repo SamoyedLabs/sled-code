@@ -31,8 +31,6 @@ jobs:
       T3CODE_CLERK_PUBLISHABLE_KEY: ${{ vars.T3CODE_CLERK_PUBLISHABLE_KEY }}
       T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ vars.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID }}
       T3CODE_CLERK_JWT_TEMPLATE: ${{ vars.T3CODE_CLERK_JWT_TEMPLATE }}
-      SLED_METRO_CACHE_DIR: ${{ runner.temp }}/sled-mobile-metro
-      npm_config_cache: ${{ runner.temp }}/sled-release-cli
     permissions:
       contents: write
       checks: read
@@ -41,6 +39,10 @@ jobs:
         with:
           ref: main
           persist-credentials: false
+      - name: Select release cache directories
+        run: |
+          echo "SLED_METRO_CACHE_DIR=$RUNNER_TEMP/sled-mobile-metro" >> "$GITHUB_ENV"
+          echo "npm_config_cache=$RUNNER_TEMP/sled-release-cli" >> "$GITHUB_ENV"
       - name: Test mobile release decisions
         run: python3 scripts/sled/hosted-mobile-release-test.py
       - uses: ./.github/actions/setup-ci-deps
