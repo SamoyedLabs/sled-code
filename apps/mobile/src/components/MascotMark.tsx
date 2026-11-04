@@ -14,18 +14,35 @@ import Animated, {
 
 import geometry from "../../../../assets/branding/mascot/geometry.json";
 import { useAppActive, useReduceMotionEnabled } from "../lib/appState";
+import { darkMascot } from "../lib/mascotBranding";
 import { AppText } from "./ui/AppText";
 import { useControlTheme } from "./ui/useControlTheme";
 
-const LEFT_EAR = require("../../../../assets/branding/mascot/ear-left.png");
-const RIGHT_EAR = require("../../../../assets/branding/mascot/ear-right.png");
-const CLOSED_MOUTH = require("../../../../assets/branding/mascot/closed-mouth.png");
-const PANT = require("../../../../assets/branding/mascot/pant-mouth.png");
+const LEFT_EAR = darkMascot
+  ? require("../../../../assets/branding/mascot-dev/ear-left.png")
+  : require("../../../../assets/branding/mascot/ear-left.png");
+const RIGHT_EAR = darkMascot
+  ? require("../../../../assets/branding/mascot-dev/ear-right.png")
+  : require("../../../../assets/branding/mascot/ear-right.png");
+const CLOSED_MOUTH = darkMascot
+  ? require("../../../../assets/branding/mascot-dev/closed-mouth.png")
+  : require("../../../../assets/branding/mascot/closed-mouth.png");
+const PANT = darkMascot
+  ? require("../../../../assets/branding/mascot-dev/pant-mouth.png")
+  : require("../../../../assets/branding/mascot/pant-mouth.png");
 const SPEECH_BUBBLE = require("../../../../assets/branding/mascot/speech-bubble.png");
-const FUR = require("../../../../assets/branding/mascot/fur.png");
-const LEFT_EYE = require("../../../../assets/branding/mascot/eye-left.png");
-const RIGHT_EYE = require("../../../../assets/branding/mascot/eye-right.png");
-const CLOSED = require("../../../../assets/branding/mascot/closed.png");
+const FUR = darkMascot
+  ? require("../../../../assets/branding/mascot-dev/fur.png")
+  : require("../../../../assets/branding/mascot/fur.png");
+const LEFT_EYE = darkMascot
+  ? require("../../../../assets/branding/mascot-dev/eye-left.png")
+  : require("../../../../assets/branding/mascot/eye-left.png");
+const RIGHT_EYE = darkMascot
+  ? require("../../../../assets/branding/mascot-dev/eye-right.png")
+  : require("../../../../assets/branding/mascot/eye-right.png");
+const CLOSED = darkMascot
+  ? require("../../../../assets/branding/mascot-dev/closed.png")
+  : require("../../../../assets/branding/mascot/closed.png");
 const TONGUE = require("../../../../assets/branding/mascot/tongue.png");
 
 export function MascotMark({

@@ -144,9 +144,13 @@ const variant = {
     ...baseVariant.assets,
     appIcon: SLED_BRANDING.icon,
     iosIcon: SLED_BRANDING.icon,
-    splashIcon: SLED_BRANDING.icon,
+    splashIcon: fromRepoRoot(
+      `assets/branding/${APP_VARIANT === "production" ? "startup" : "startup-dev"}/rest.png`,
+    ),
     androidAdaptiveForeground: SLED_BRANDING.icon,
-    androidSplashIcon: SLED_BRANDING.icon,
+    androidSplashIcon: fromRepoRoot(
+      `assets/branding/${APP_VARIANT === "production" ? "startup" : "startup-dev"}/android-rest.png`,
+    ),
   },
 };
 const iosBundleIdentifier = isIosPersonalTeamBuild
@@ -427,7 +431,7 @@ const config: ExpoConfig = {
         image: variant.assets.splashIcon,
         resizeMode: "contain",
         backgroundColor: "#ffffff",
-        imageWidth: 220,
+        imageWidth: 200,
         dark: {
           image: variant.assets.splashIcon,
           backgroundColor: "#0a0a0a",

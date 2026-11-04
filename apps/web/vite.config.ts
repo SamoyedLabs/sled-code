@@ -253,7 +253,14 @@ const configuredAllowedHosts = (process.env.T3CODE_DEV_ALLOWED_HOSTS ?? "")
   .filter((entry) => entry.length > 0);
 const allowedHosts = [".ts.net", ...configuredAllowedHosts];
 
-export default defineConfig(() => {
+export default defineConfig(({ command }) => {
+  const mascotChannel =
+    configuredHostedAppChannel || configuredReleaseChannel || (command === "serve" ? "dev" : "");
+  const mascotVariant = ["dev", "development", "nightly", "preview"].includes(
+    mascotChannel.toLowerCase(),
+  )
+    ? "development"
+    : "production";
   return {
     run: {
       tasks: {
@@ -319,6 +326,7 @@ export default defineConfig(() => {
       ),
       "import.meta.env.T3CODE_FEATURE_SECRETS": JSON.stringify(configuredFeatureSecrets),
       "import.meta.env.VITE_RELEASE_CHANNEL": JSON.stringify(configuredReleaseChannel),
+      "import.meta.env.VITE_MASCOT_VARIANT": JSON.stringify(mascotVariant),
       "import.meta.env.APP_VERSION": JSON.stringify(configuredAppVersion),
     },
     resolve: {
