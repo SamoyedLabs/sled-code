@@ -167,6 +167,11 @@
       // These workspace packages are private to this monorepo.
       "includeEntryExports": true,
     },
+    "packages/contracts": {
+      "includeEntryExports": true,
+      // Preserve the pinned upstream wire module as a complete protocol surface.
+      "ignoreIssues": { "src/openbotBrowserWire.ts": ["exports"] },
+    },
     "packages/effect-acp": {
       "includeEntryExports": true,
       "entry": ["test/fixtures/*.ts"],

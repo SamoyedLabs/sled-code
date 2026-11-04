@@ -6,7 +6,7 @@ import * as ThreadManagement from "../../../orchestration-v2/ThreadManagementSer
 
 const OpenbotTool = Tool.make("openbot", {
   description:
-    "Manage persistent bots on this Sled environment. describe gives request schemas; status engine state; attention pending decisions; read history/tasks/memory/routines; write messages/tasks; admin configuration. start/stop control the engine. upstream.status/check/stage/install prepare verified releases; runtime.activate/rollback switch installed compatible releases. Writes need full-access/default authority. Coding assignments use Sled threads.",
+    "Manage persistent bots on this Sled environment. describe gives request schemas; status engine state; attention pending decisions; read history/tasks/memory/routines; write messages/tasks; admin configuration. start/stop control the engine. upstream.status/check/stage/install prepare verified releases; runtime.activate/rollback switch installed compatible releases. Writes need full-access/default authority. Coding assignments use Sled threads. maintenance.status/check/review/report/stage track upstream proposals; queued review is not completion. Policy and decisions belong to the user. Reports never certify compatibility.",
   parameters: Schema.Struct({
     action: Schema.Literals([
       "describe",
@@ -20,6 +20,11 @@ const OpenbotTool = Tool.make("openbot", {
       "write",
       "admin",
       "admin.host",
+      "maintenance.status",
+      "maintenance.check",
+      "maintenance.review",
+      "maintenance.report",
+      "maintenance.stage",
       "upstream.status",
       "upstream.check",
       "upstream.stage",

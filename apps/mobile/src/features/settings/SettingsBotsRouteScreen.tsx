@@ -1,7 +1,9 @@
 import { botHostRecoveryDescription } from "@t3tools/client-runtime/openbot/presentation";
 import { BotProviderChoice } from "./BotProviderChoice";
 import { BotRuntimeControls } from "./BotRuntimeControls";
+import { OpenbotMaintenance } from "./OpenbotMaintenance";
 import { BotFiles } from "./BotFiles";
+import { BotBrowser } from "./BotBrowser";
 import { BotCodingPolicy } from "./BotCodingPolicy";
 import { BotWorkflows } from "./BotWorkflows";
 import { BotChannels } from "./BotChannels";
@@ -185,6 +187,7 @@ function BotEnvironment({ environment }: { environment: SettingsTarget }) {
           </Text>
         )}
         <BotRuntimeControls environmentId={environmentId} />
+        <OpenbotMaintenance environmentId={environmentId} />
         {state === "ready" && <SledToolsConnection environmentId={environment.environmentId} />}
         {state === "ready" && <BotAttention environmentId={environmentId} />}
         {state === "ready" && host.data?.hostId && (
@@ -711,6 +714,14 @@ function BotDetail({
         )}
         {hostId && (
           <BotConfiguration environmentId={environmentId} agentId={agentId} hostId={hostId} />
+        )}
+        {hostId && (
+          <BotBrowser
+            key={`${environmentId}:${hostId}:${agentId}`}
+            environmentId={environmentId}
+            agentId={agentId}
+            hostId={hostId}
+          />
         )}
         {hostId && (
           <BotCodingPolicy

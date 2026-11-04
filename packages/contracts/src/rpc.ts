@@ -1,3 +1,5 @@
+import { OpenbotMaintenanceState, OpenbotMaintenanceCommand } from "./openbotMaintenance.ts";
+import { OpenbotBrowserViewCommand, OpenbotBrowserViewerGrant } from "./openbotBrowser.ts";
 import { OpenbotSledToolsStatus, OpenbotSledToolsConnectInput } from "./openbotSledTools.ts";
 import {
   OpenbotCodingPolicyScope,
@@ -607,9 +609,12 @@ export const WS_METHODS = {
   serverRefreshUsageRates: "server.refreshUsageRates",
 
   openbotRead: "openbot.read",
+  openbotBrowserViewCommand: "openbot.browserViewCommand",
   openbotAttention: "openbot.attention",
   openbotAttentionRespond: "openbot.attention.respond",
   openbotSubscribeChanges: "openbot.subscribeChanges",
+  openbotMaintenanceStatus: "openbot.maintenance.status",
+  openbotMaintenanceCommand: "openbot.maintenance.command",
   openbotUpstreamStatus: "openbot.upstream.status",
   openbotUpstreamCheck: "openbot.upstream.check",
   openbotUpstreamStage: "openbot.upstream.stage",
@@ -2044,6 +2049,21 @@ const WsOpenbotSubscribeChangesRpc = Rpc.make(WS_METHODS.openbotSubscribeChanges
   error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
   stream: true,
 });
+const WsOpenbotMaintenanceStatusRpc = Rpc.make(WS_METHODS.openbotMaintenanceStatus, {
+  payload: Schema.Struct({}),
+  success: OpenbotMaintenanceState,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotBrowserViewCommandRpc = Rpc.make(WS_METHODS.openbotBrowserViewCommand, {
+  payload: OpenbotBrowserViewCommand,
+  success: Schema.NullOr(OpenbotBrowserViewerGrant),
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotMaintenanceCommandRpc = Rpc.make(WS_METHODS.openbotMaintenanceCommand, {
+  payload: OpenbotMaintenanceCommand,
+  success: OpenbotMaintenanceState,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
 const WsOpenbotUpstreamStatusRpc = Rpc.make(WS_METHODS.openbotUpstreamStatus, {
   payload: Schema.Struct({}),
   success: OpenbotUpstreamStatus,
@@ -2363,6 +2383,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsOpenbotAttentionRpc,
   WsOpenbotAttentionRespondRpc,
   WsOpenbotSubscribeChangesRpc,
+  WsOpenbotMaintenanceStatusRpc,
+  WsOpenbotBrowserViewCommandRpc,
+  WsOpenbotMaintenanceCommandRpc,
   WsOpenbotUpstreamStatusRpc,
   WsOpenbotUpstreamCheckRpc,
   WsOpenbotUpstreamStageRpc,

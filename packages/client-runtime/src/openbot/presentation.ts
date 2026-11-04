@@ -5,6 +5,7 @@ export * from "./providers.ts";
 export * from "./connections.ts";
 export * from "./codingPolicy.ts";
 export * from "./hostRecovery.ts";
+export * from "./maintenance.ts";
 export * from "./workflows.ts";
 export * from "./channels.ts";
 
@@ -132,3 +133,11 @@ export const sledToolAccessOptions = [
   { value: "auto", label: "Automatic" },
   { value: "full-access", label: "Full access" },
 ] as const;
+export {
+  browserDisplay,
+  browserProfiles,
+  browserTabActions,
+  browserActionLabel,
+} from "./browser.ts";
+export { browserViewerConnection } from "./browserViewer.ts";
+export { BrowserKeyboard } from "./browserKeyboard.ts";

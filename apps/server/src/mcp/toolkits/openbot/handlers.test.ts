@@ -1,5 +1,6 @@
+import * as Maintenance from "../../../openbot/Maintenance.ts";
 import { expect, it } from "@effect/vitest";
-import { EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentId, ThreadId, ProviderInstanceId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { McpServer, McpSchema } from "effect/ai";
@@ -61,6 +62,9 @@ it.effect.each([
   { name: "openbot", action: "admin" },
   { name: "openbot", action: "admin.host" },
   { name: "openbot", action: "attention.respond" },
+  { name: "openbot", action: "maintenance.check" },
+  { name: "openbot", action: "maintenance.review" },
+  { name: "openbot", action: "maintenance.stage" },
   { name: "openbot", action: "upstream.check" },
   { name: "openbot", action: "upstream.stage" },
   { name: "openbot", action: "upstream.install" },
@@ -86,5 +90,59 @@ it.effect.each([
     Effect.provideService(McpInvocationContext.McpInvocationContext, scope),
     Effect.provideService(McpSchema.McpServerClient, client),
     Effect.provide(layer),
+  ),
+);
+
+it.effect.each([
+  { caller: "review-thread", denied: false },
+  { caller: "other-thread", denied: true },
+])("binds review reports to the authenticated review thread: $caller", ({ caller, denied }) =>
+  Effect.gen(function* () {
+    const server = yield* McpServer.McpServer;
+    const result = yield* server.callTool({
+      name: "openbot",
+      arguments: {
+        action: "maintenance.report",
+        request: {
+          action: "report",
+          proposalId: "candidate",
+          threadId: "review-thread",
+          report: {
+            sourceComparison: "Source delta",
+            findings: "Needs validation",
+            evidence: [],
+            decisionRequest: "Review this change",
+          },
+        },
+      },
+    });
+    expect(result.isError === true).toBe(denied);
+  }).pipe(
+    Effect.provideService(McpInvocationContext.McpInvocationContext, {
+      ...scope,
+      client: undefined,
+      thread: {
+        threadId: ThreadId.make(caller),
+        providerInstanceId: ProviderInstanceId.make("replay"),
+        providerSessionId: "fixture",
+      },
+    }),
+    Effect.provideService(McpSchema.McpServerClient, client),
+    Effect.provide(
+      layer.pipe(
+        Layer.provide(
+          Layer.mock(Maintenance.Maintenance)({
+            execute: () =>
+              Effect.succeed({
+                revision: 1,
+                policy: null,
+                nextCheckAt: null,
+                lastError: null,
+                proposals: [],
+              }),
+          }),
+        ),
+      ),
+    ),
   ),
 );

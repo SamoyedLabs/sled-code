@@ -1,12 +1,14 @@
 import { botHostRecoveryDescription } from "@t3tools/client-runtime/openbot/presentation";
 import { BotProviderChoice } from "./BotProviderChoice";
 import { BotRuntimeControls } from "./BotRuntimeControls";
+import { OpenbotMaintenance } from "./OpenbotMaintenance";
 import { BotProviderSetup } from "./BotProviderSetup";
 import { BotProviderSettings } from "./BotProviderSettings";
 import { BotAttention } from "./BotAttention";
 import { SledToolsConnection } from "./SledToolsConnection";
 import { BotConfiguration } from "./BotConfiguration";
 import { BotFiles } from "./BotFiles";
+import { BotBrowser } from "./BotBrowser";
 import { BotCodingPolicy } from "./BotCodingPolicy";
 import { BotWorkflows } from "./BotWorkflows";
 import { BotChannels } from "./BotChannels";
@@ -246,6 +248,10 @@ function BotEnvironment({ environmentId, label }: { environmentId: EnvironmentId
           </p>
         )}
         <BotRuntimeControls environmentId={environmentId} />
+        <details className="space-y-3">
+          <summary className="cursor-pointer text-sm font-medium">Upstream maintenance</summary>
+          <OpenbotMaintenance environmentId={environmentId} />
+        </details>
         {state === "ready" && <SledToolsConnection environmentId={environmentId} />}
         {state === "ready" && <BotAttention environmentId={environmentId} />}
         {state === "ready" && host.data?.hostId && (
@@ -710,6 +716,14 @@ function BotDetail({
         hostId={expectedHostId}
       />
       <BotConfiguration environmentId={environmentId} agentId={agentId} hostId={expectedHostId} />
+      {host.data?.state === "ready" && host.data.hostId === expectedHostId && (
+        <BotBrowser
+          key={`${environmentId}:${expectedHostId}:${agentId}`}
+          environmentId={environmentId}
+          agentId={agentId}
+          hostId={expectedHostId}
+        />
+      )}
       <BotCodingPolicy
         key={`policy:${expectedHostId}:${agentId}`}
         environmentId={environmentId}

@@ -58,6 +58,12 @@ export class Integration extends Context.Service<
       hostId: string,
       action: (files: TeamClient.Session["files"]) => Effect.Effect<A, TeamClient.TeamClientError>,
     ) => Effect.Effect<A, IntegrationError>;
+    readonly withBrowserToHost: <A>(
+      hostId: string,
+      action: (
+        browser: NonNullable<TeamClient.Session["browser"]>,
+      ) => Effect.Effect<A, TeamClient.TeamClientError>,
+    ) => Effect.Effect<A, IntegrationError>;
     readonly apiRead: (
       input: OpenbotReadRequest,
     ) => Effect.Effect<typeof OpenbotApiResponse.Type, IntegrationError>;
@@ -524,6 +530,22 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
           files: TeamClient.Session["files"],
         ) => Effect.Effect<A, TeamClient.TeamClientError>,
       ) => withSession((session) => action(session.files), "Unable to transfer bot files.", hostId),
+    ),
+    withBrowserToHost: Effect.fn("OpenbotIntegration.withBrowserToHost")(
+      <A>(
+        hostId: string,
+        action: (
+          browser: NonNullable<TeamClient.Session["browser"]>,
+        ) => Effect.Effect<A, TeamClient.TeamClientError>,
+      ) =>
+        withSession(
+          (session) =>
+            session.browser
+              ? action(session.browser)
+              : Effect.fail(new TeamClient.TeamClientError({ reason: "closed" })),
+          "Unable to open bot browser.",
+          hostId,
+        ),
     ),
     apiWrite,
     apiWriteToHost,

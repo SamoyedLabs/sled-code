@@ -1,3 +1,6 @@
+import { OpenbotMaintenanceCommand } from "@t3tools/contracts";
+import * as Maintenance from "../../../openbot/Maintenance.ts";
+import * as Invocation from "../../McpInvocationContext.ts";
 import {
   AuthSessionId,
   OpenbotReadRequest,
@@ -39,6 +42,7 @@ import * as CodingPolicy from "../../../openbot/CodingPolicy.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { OpenbotToolkit } from "./tools.ts";
 
+const decodeMaintenance = Schema.decodeUnknownEffect(OpenbotMaintenanceCommand);
 const decodeRead = Schema.decodeUnknownEffect(OpenbotReadRequest);
 const decodeWrite = Schema.decodeUnknownEffect(OpenbotWriteRequest);
 const decodeAdmin = Schema.decodeUnknownEffect(OpenbotAdminRequest);
@@ -50,6 +54,7 @@ const decodeUpstreamCheck = Schema.decodeUnknownEffect(UpstreamCheckInput);
 const decodeUpstreamStage = Schema.decodeUnknownEffect(OpenbotUpstreamStageInput);
 const decodeUpstreamInstall = Schema.decodeUnknownEffect(OpenbotUpstreamInstallInput);
 const description = {
+  maintenance: Schema.toJsonSchemaDocument(OpenbotMaintenanceCommand),
   upstreamVersion: "0.60.0",
   read: Schema.toJsonSchemaDocument(OpenbotReadRequest),
   write: Schema.toJsonSchemaDocument(OpenbotWriteRequest),
@@ -333,10 +338,44 @@ export const layer = McpToolAccess.toLayer(OpenbotToolkit, {
       input.action === "read" ||
       input.action === "read.host" ||
       input.action === "attention" ||
-      input.action === "upstream.status",
+      input.action === "upstream.status" ||
+      input.action === "maintenance.status" ||
+      input.action === "maintenance.report",
     McpToolAccess.reads((input) =>
       Effect.gen(function* () {
         if (input.action === "describe") return description;
+        if (input.action === "maintenance.status" || input.action === "maintenance.report") {
+          const service = yield* Effect.serviceOption(Maintenance.Maintenance);
+          if (Option.isNone(service)) return yield* invalidRequest();
+          if (input.action === "maintenance.status")
+            return yield* service.value.get.pipe(
+              Effect.mapError(
+                (e) =>
+                  new OrchestratorMcpFailure({ code: "orchestration_error", message: e.message }),
+              ),
+            );
+          const command = yield* decodeMaintenance(input.request).pipe(
+            Effect.mapError(invalidRequest),
+          );
+          // Plan-mode reviewers may record their own report; this grants no environment action or decision authority.
+          const caller = yield* Invocation.McpInvocationContext;
+          if (
+            command.action !== "report" ||
+            !caller.thread ||
+            caller.client ||
+            caller.thread.threadId !== command.threadId
+          )
+            return yield* invalidRequest();
+          return yield* service.value
+            .execute(command)
+            .pipe(
+              Effect.mapError(
+                (e) =>
+                  new OrchestratorMcpFailure({ code: "orchestration_error", message: e.message }),
+              ),
+            );
+        }
+
         if (input.action === "upstream.status")
           return yield* (yield* upstream).getStatus.pipe(Effect.mapError(upstreamFailed));
         const service = yield* integration;
@@ -358,6 +397,26 @@ export const layer = McpToolAccess.toLayer(OpenbotToolkit, {
     McpToolAccess.writesEnvironment((input, check) =>
       Effect.gen(function* () {
         yield* check;
+        if (input.action.startsWith("maintenance.")) {
+          const command = yield* decodeMaintenance(input.request ?? { action: "check" }).pipe(
+            Effect.mapError(invalidRequest),
+          );
+          if (
+            !["check", "review", "stage"].includes(command.action) ||
+            input.action !== `maintenance.${command.action}`
+          )
+            return yield* invalidRequest();
+          const service = yield* Effect.serviceOption(Maintenance.Maintenance);
+          if (Option.isNone(service)) return yield* invalidRequest();
+          return yield* service.value
+            .execute(command)
+            .pipe(
+              Effect.mapError(
+                (e) =>
+                  new OrchestratorMcpFailure({ code: "orchestration_error", message: e.message }),
+              ),
+            );
+        }
         if (input.action === "upstream.check") {
           const service = yield* upstream;
           const request = yield* decodeUpstreamCheck(input.request ?? {}).pipe(

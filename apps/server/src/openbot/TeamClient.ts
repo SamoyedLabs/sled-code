@@ -1,3 +1,4 @@
+import * as BrowserProtocol from "./BrowserProtocol.ts";
 import {
   OpenbotReadRequest,
   OpenbotWriteRequest,
@@ -554,6 +555,39 @@ function apiRoute(request: Exclude<ApiRequest, SavedMcpRequest>): Route {
       const { operation: _operation, ...body } = request;
       return { method: "POST", path: "/v1/admin/agents/instructions/save", body };
     }
+    case "browser.display":
+      return { method: "GET", path: "/v1/browser/display" };
+    case "browser.tabProfiles":
+      return { method: "POST", path: "/v1/browser/tab-profiles", body: {} };
+    case "browser.profiles.list":
+      return { method: "POST", path: "/v1/admin/browser-profiles", body: {} };
+    case "browser.profiles.create":
+    case "browser.profiles.update":
+    case "browser.profiles.clear":
+    case "browser.profiles.delete": {
+      const { operation, ...body } = request;
+      return { method: "POST", path: `/v1/admin/browser-profiles/${operation.slice(17)}`, body };
+    }
+    case "browser.profile.clearAgent":
+      return {
+        method: "POST",
+        path: "/v1/admin/browser-profiles/clear",
+        body: { agentId: request.agentId },
+      };
+    case "browser.profile.read":
+      return {
+        method: "POST",
+        path: "/v1/admin/agents/browser-profile",
+        body: { agentId: request.agentId },
+      };
+    case "browser.profile.assign":
+      return {
+        method: "POST",
+        path: "/v1/admin/agents/browser-profile/update",
+        body: { agentId: request.agentId, profile: request.profile },
+      };
+    case "browser.stop":
+      return { method: "POST", path: "/v1/browser/stop", body: { tabId: request.tabId } };
     case "browser.tabs":
       return { method: "GET", path: "/v1/browser/tabs" };
     case "browser.control":
@@ -785,6 +819,7 @@ function apiRoute(request: Exclude<ApiRequest, SavedMcpRequest>): Route {
 }
 
 export interface Session {
+  readonly browser?: BrowserProtocol.BrowserSession;
   readonly files: FileProtocol.FileSession<TeamClientError>;
   readonly events: Stream.Stream<EventStream.Frame, TeamClientError>;
   readonly listAgents: Effect.Effect<ReadonlyArray<typeof Agent.Type>, TeamClientError>;
@@ -826,7 +861,7 @@ const make = Effect.gen(function* () {
             "OpenBot-Protocol-Version": "9",
             "OpenBot-App-Version": "0.60.0",
             "OpenBot-Capabilities":
-              "agent-tasks-v1,agent-create-model,agent-admin-v1,agent-instructions-v1,skills-admin-v1,mcp-servers-v1,mcp-sign-in-v1,browser-navigation,browser-user-control,connectors-v1,channel-chats-v1,providers-v8,provider-accounts-v1,provider-default-v1,provider-host-sign-in-v1,provider-sign-out-v1,custom-provider-harness-v1,custom-agents-v1,model-visibility-v1,claude-api-key-v1,sign-in-relay-v1,provider-account-relay-v1,provider-account-relay-v2,workspace-directory-v1,conversation-file-search-v1,agent-thread-files-v1,message-client-id-v1,workflows-v1,channel-delete-v1,channel-task-cancel-v1,channel-attention-v1",
+              "agent-tasks-v1,agent-create-model,agent-admin-v1,agent-instructions-v1,skills-admin-v1,mcp-servers-v1,mcp-sign-in-v1,browser-navigation,browser-user-control,browser-page-state,browser-profiles-v1,connectors-v1,channel-chats-v1,providers-v8,provider-accounts-v1,provider-default-v1,provider-host-sign-in-v1,provider-sign-out-v1,custom-provider-harness-v1,custom-agents-v1,model-visibility-v1,claude-api-key-v1,sign-in-relay-v1,provider-account-relay-v1,provider-account-relay-v2,workspace-directory-v1,conversation-file-search-v1,agent-thread-files-v1,message-client-id-v1,workflows-v1,channel-delete-v1,channel-task-cancel-v1,channel-attention-v1",
           }),
         ),
       )
@@ -908,6 +943,7 @@ const make = Effect.gen(function* () {
         isTeamClientError(cause) ? cause : new TeamClientError({ reason: "transport", cause }),
       ),
     );
+    const browserContext = yield* Effect.context<never>();
     let closed = false;
     const peers = new Set<() => void>();
     const authenticated = (path: string, method: "GET" | "POST" | "PATCH" | "DELETE") =>
@@ -1044,6 +1080,25 @@ const make = Effect.gen(function* () {
         ),
       );
     return {
+      browser: BrowserProtocol.createBrowserSession({
+        origin,
+        token: login.sessionToken,
+        isClosed: () => closed,
+        peers,
+        request: (path, method, body) =>
+          Effect.runPromiseWith(browserContext)(
+            Effect.gen(function* () {
+              if (closed) return yield* new TeamClientError({ reason: "closed" });
+              let request = authenticated(path, method);
+              if (body !== undefined)
+                request = yield* HttpClientRequest.bodyJson(body)(request).pipe(
+                  Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+                );
+              const response = yield* send(request);
+              return method === "DELETE" ? null : yield* readJson(response);
+            }),
+          ),
+      }),
       files: FileProtocol.createFileSession({
         authenticated,
         send,

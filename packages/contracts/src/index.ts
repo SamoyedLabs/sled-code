@@ -91,6 +91,14 @@ export * from "./openbotSledTools.ts";
 export * from "./openbotEvents.ts";
 
 export * from "./openbotUpstream.ts";
+export * from "./openbotMaintenance.ts";
 export * from "./openbotFiles.ts";
 
 export * from "./threadLaunchReceipt.ts";
+export * from "./openbotBrowser.ts";
+export {
+  decodeBrowserViewFrame,
+  decodeBrowserViewInput,
+  browserViewInputForHost,
+  type BrowserViewInput,
+} from "./openbotBrowserWire.ts";

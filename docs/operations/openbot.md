@@ -1,6 +1,6 @@
 # Openbot engine development
 
-The Openbot integration is under development. It provides an opt-in managed host, bot controls in web and mobile Settings, and a bridge from bot assignments to actual Sled coding threads. Automatic installation, remote coding destinations and full upstream feature coverage remain incomplete.
+The Openbot integration is under development. It provides an opt-in managed host, bot controls in web and mobile Settings, and a bridge from bot assignments to actual Sled coding threads on configured local or linked environments. Full upstream feature coverage and packaged cross-platform verification remain incomplete.
 
 ## Enable a development host
 
@@ -12,7 +12,7 @@ Sled places the engine profile and agent workspace beneath its own state directo
 
 ## Connect bots to Sled
 
-Open Settings → Bots in the connected environment and start its engine. Start and stop require settings write access. The engine does not start automatically on Sled launch. Removing the executable setting disables it after a Sled restart.
+Open Settings → Bots in the connected environment and start its engine. Start and stop require settings write access. Starting saves the opt-in: Sled restores that engine after a server restart and retries unexpected engine exits with bounded backoff. Stop clears the opt-in and cancels pending retries. Removing the executable setting disables it after a Sled restart.
 
 Use **Connect Sled tools** to grant the engine access to this environment. This requires access administration, settings write access and every scope being delegated. The selected authority is a ceiling; bots retain their own permissions. Read-only access permits inspection; actions such as launching coding work require the appropriate writable grant.
 
@@ -22,10 +22,18 @@ Bots reach the `openbot` and `openbot_coding` MCP tools through that connection.
 
 The bot screens use live updates and expose pending questions and approvals. Approval responses are bound to the engine that issued the request. An incomplete attention snapshot is a partial list, not confirmation that no other requests exist. Browser help can still require interaction on the host; push notifications are not integrated yet.
 
+Open a bot's Browser panel to manage profiles and tabs. Take control before interacting with its page and return control when finished so the bot can continue. Browser management and viewing require settings write and preview operate access. The live viewer uses Sled's authenticated media connection; no upstream endpoint or credential is sent to the client. OS consent and host-level browser permission prompts must still be handled on the host.
+
 ## Stage upstream releases
 
 The authenticated RPC methods `openbot.upstream.status`, `openbot.upstream.check` and `openbot.upstream.stage` require settings write access. Check accepts an optional version such as `v0.60.0`; stage takes a version and platform, for example `{ "version": "v0.60.0", "platform": "darwin-arm64" }`. The `openbot` MCP tool exposes corresponding `upstream.status`, `upstream.check` and `upstream.stage` actions; mutations require full-access/default authority.
 
-Staging resolves the official release and immutable commit, verifies archive size and SHA-256, and records an audit beneath the Sled state directory at `openbot/upstream`. It does not extract, activate or execute the archive, migrate a profile, or change the configured executable. A version other than the pinned baseline remains marked as requiring validation. Staging is not an automatic update or a maintenance-agent workflow.
+Staging resolves the official release and immutable commit, verifies archive size and SHA-256, and records an audit beneath the Sled state directory at `openbot/upstream`. It does not extract, activate or execute the archive, migrate a profile, or change the configured executable. A version other than the pinned baseline remains marked as requiring validation.
+
+## Review future upstream releases
+
+Upstream maintenance in Settings → Bots is disabled until configured. Choose the integration project, review provider/model, base branch, platform, interval and allowed work. Check-only authority never launches a model. Review authority creates a real Sled thread in a separate worktree with plan mode and approval-required execution. Reviews can return source comparisons, evidence and a decision request to the maintenance panel. Reported evidence still requires independent verification.
+
+Accepting a review records a decision; it does not activate an engine. With stage authority, a separate Stage action verifies the reviewed release identity before downloading. Future releases retain the compatibility gate after review and staging. Source patching, compatibility promotion and profile migration remain separate work. Disabling maintenance stops future checks and launches; stop an already running review through its normal Sled thread controls. Maintenance decisions currently appear in this panel without push notifications.
 
 The Team API stays on loopback. Sled performs login and logout server-side; owner credentials and upstream session tokens are never returned to its clients. Shutting down the owning Sled server also disposes its engine process. Persistent execution therefore requires that host and Sled server to remain running.

@@ -1,3 +1,5 @@
+import * as OpenbotMaintenance from "./openbot/Maintenance.ts";
+import * as OpenbotBrowserGateway from "./openbot/BrowserViewGateway.ts";
 import * as OpenbotSledTools from "./openbot/SledTools.ts";
 import * as OpenbotUpstream from "./openbot/UpstreamRuntime.ts";
 import * as OpenbotCoding from "./openbot/CodingBridge.ts";
@@ -1380,6 +1382,10 @@ export const layerWsRpc = (
       const scheduledTasks = yield* ScheduledTasks.ScheduledTaskService;
       const sledTools = yield* Effect.serviceOption(OpenbotSledTools.SledTools);
       const openbot = yield* Effect.serviceOption(Openbot.Integration);
+      const openbotMaintenance = yield* Effect.serviceOption(OpenbotMaintenance.Maintenance);
+      const openbotBrowserGateway = yield* Effect.serviceOption(
+        OpenbotBrowserGateway.BrowserViewGateway,
+      );
       const openbotUpstream = yield* Effect.serviceOption(OpenbotUpstream.UpstreamRuntime);
       const openbotCoding = yield* Effect.serviceOption(OpenbotCoding.CodingBridge);
       const openbotDelivery = yield* Effect.serviceOption(OpenbotDelivery.CodingDelivery);
@@ -2282,7 +2288,29 @@ export const layerWsRpc = (
               ? openbot.value.subscribeChanges
               : Stream.make({ hostId: null, resource: "all" as const }),
             Option.isSome(openbotDelivery) ? openbotDelivery.value.changes : Stream.empty,
+          ).pipe(
+            Stream.merge(
+              Option.isSome(openbotMaintenance) ? openbotMaintenance.value.changes : Stream.empty,
+            ),
           ),
+        [WS_METHODS.openbotMaintenanceStatus]: () =>
+          Option.isSome(openbotMaintenance)
+            ? openbotMaintenance.value.get.pipe(
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(new OpenbotError({ message: "Upstream maintenance is unavailable." })),
+        [WS_METHODS.openbotBrowserViewCommand]: (input) =>
+          Option.isSome(openbotBrowserGateway)
+            ? openbotBrowserGateway.value
+                .command(currentSessionId, input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "The bot browser view is unavailable." })),
+        [WS_METHODS.openbotMaintenanceCommand]: (input) =>
+          Option.isSome(openbotMaintenance)
+            ? openbotMaintenance.value
+                .execute(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Upstream maintenance is unavailable." })),
         [WS_METHODS.openbotUpstreamStatus]: () =>
           Option.isSome(openbotUpstream)
             ? openbotUpstream.value.getStatus.pipe(
@@ -3647,6 +3675,8 @@ export const layer = Layer.unwrap(
     const openbotCodingPolicy = yield* Effect.serviceOption(OpenbotCodingPolicy.CodingPolicy);
     const sledTools = yield* Effect.serviceOption(OpenbotSledTools.SledTools);
     const upstream = yield* Effect.serviceOption(OpenbotUpstream.UpstreamRuntime);
+    const maintenance = yield* Effect.serviceOption(OpenbotMaintenance.Maintenance);
+    const browserGateway = yield* Effect.serviceOption(OpenbotBrowserGateway.BrowserViewGateway);
     const remoteDesktop = yield* RemoteDesktop.Service;
     const serverBrowser = yield* ServerBrowser.ServerBrowser;
     const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
@@ -3725,6 +3755,11 @@ export const layer = Layer.unwrap(
                     onNone: () => Layer.empty,
                     onSome: (service) => Layer.succeed(OpenbotFiles.Files, service),
                   }),
+                  Option.match(browserGateway, {
+                    onNone: () => Layer.empty,
+                    onSome: (service) =>
+                      Layer.succeed(OpenbotBrowserGateway.BrowserViewGateway, service),
+                  }),
                   Option.match(openbotCodingPolicy, {
                     onNone: () => Layer.empty,
                     onSome: (service) => Layer.succeed(OpenbotCodingPolicy.CodingPolicy, service),
@@ -3756,10 +3791,16 @@ export const layer = Layer.unwrap(
                 }),
               ),
               Layer.provide(
-                Option.match(upstream, {
-                  onNone: () => Layer.empty,
-                  onSome: (service) => Layer.succeed(OpenbotUpstream.UpstreamRuntime, service),
-                }),
+                Layer.mergeAll(
+                  Option.match(maintenance, {
+                    onNone: () => Layer.empty,
+                    onSome: (service) => Layer.succeed(OpenbotMaintenance.Maintenance, service),
+                  }),
+                  Option.match(upstream, {
+                    onNone: () => Layer.empty,
+                    onSome: (service) => Layer.succeed(OpenbotUpstream.UpstreamRuntime, service),
+                  }),
+                ),
               ),
               Layer.provideMerge(RpcSerialization.layerJson),
               // Handler-context reporters see only request defects, not server-wide defects.

@@ -4,6 +4,7 @@ import {
   AuthFilesystemReadScope,
   AuthProvidersManageScope,
   AuthSettingsWriteScope,
+  AuthPreviewOperateScope,
   AuthAccessWriteScope,
   clientRpcRequiredScopes,
   DEFAULT_SERVER_SETTINGS,
@@ -54,6 +55,8 @@ describe("RPC authorization scopes", () => {
     }
     expect(requiredScopeForRpcMethod(WS_METHODS.openbotWrite)).toBe(AuthOrchestrationOperateScope);
     for (const method of [
+      WS_METHODS.openbotMaintenanceStatus,
+      WS_METHODS.openbotMaintenanceCommand,
       WS_METHODS.openbotUpstreamInstall,
       WS_METHODS.openbotRuntimeActivate,
       WS_METHODS.openbotRuntimeRollback,
@@ -119,6 +122,20 @@ describe("RPC authorization scopes", () => {
         AuthSettingsWriteScope,
         AuthOrchestrationOperateScope,
       ]);
+  });
+  it("requires settings and browser authority for private bot browser supervision", () => {
+    expect(
+      clientRpcRequiredScopes(WS_METHODS.openbotBrowserViewCommand, { operation: "open" }),
+    ).toEqual([AuthSettingsWriteScope, AuthPreviewOperateScope]);
+    for (const method of [WS_METHODS.openbotAdmin, WS_METHODS.openbotAdminToHost]) {
+      const request = { operation: "browser.display" };
+      expect(
+        clientRpcRequiredScopes(
+          method,
+          method === WS_METHODS.openbotAdminToHost ? { hostId: "host", request } : request,
+        ),
+      ).toEqual([AuthSettingsWriteScope, AuthPreviewOperateScope]);
+    }
   });
 
   it("requires provider management for bot provider administration and operate access for starting bots", () => {

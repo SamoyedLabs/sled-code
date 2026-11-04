@@ -9,6 +9,7 @@ import {
 import type * as EnvironmentRegistry from "../connection/registry.ts";
 import * as Effect from "effect/Effect";
 import type { Atom } from "effect/reactivity";
+import type { HttpClient } from "effect/http";
 import {
   createEnvironmentQueryAtomFamily,
   createEnvironmentRpcCommand,
@@ -17,6 +18,7 @@ import {
 import {
   readHostStatus,
   readRuntimeStatus,
+  readMaintenanceStatus,
   listAgents,
   read,
   codingTasks,
@@ -26,9 +28,10 @@ import {
   readCodingPolicy,
 } from "./rpc/index.ts";
 import { createOpenbotFileAtoms } from "./files.ts";
+import { createOpenbotBrowserAtoms } from "./browserAtoms.ts";
 
 export function createOpenbotAtoms<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, E>,
+  runtime: Atom.AtomRuntime<HttpClient.HttpClient | EnvironmentRegistry.EnvironmentRegistry | R, E>,
 ) {
   const changes = createEnvironmentRpcSubscriptionAtomFamily(runtime, {
     label: "openbot:changes",
@@ -61,8 +64,23 @@ export function createOpenbotAtoms<R, E>(
     staleTimeMs: 5_000,
     refreshTrigger,
   });
+  const maintenance = createEnvironmentQueryAtomFamily(runtime, {
+    label: "openbot:maintenance",
+    execute: (_input: Record<string, never>) => readMaintenanceStatus(),
+    staleTimeMs: 5_000,
+    refreshTrigger,
+  });
   return {
+    maintenance,
+    maintenanceCommand: createEnvironmentRpcCommand(runtime, {
+      label: "Update upstream maintenance",
+      tag: WS_METHODS.openbotMaintenanceCommand,
+      onSuccess: ({ environmentId }, registry) =>
+        Effect.sync(() => registry.refresh(maintenance({ environmentId, input: {} }))),
+      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
+    }),
     ...createOpenbotFileAtoms(runtime, refreshTrigger),
+    ...createOpenbotBrowserAtoms(runtime),
     codingPolicy,
     codingPolicyEnable: createEnvironmentRpcCommand(runtime, {
       label: "Enable bot coding delegation",

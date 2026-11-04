@@ -4,6 +4,9 @@ import * as OpenbotCodingDelivery from "./openbot/CodingDelivery.ts";
 import * as OpenbotRemoteCoding from "./openbot/RemoteCoding.ts";
 import * as OpenbotRuntimeInstallation from "./openbot/RuntimeInstallation.ts";
 import * as OpenbotFiles from "./openbot/Files.ts";
+import * as OpenbotMaintenance from "./openbot/Maintenance.ts";
+import * as OpenbotBrowserGateway from "./openbot/BrowserViewGateway.ts";
+import * as OpenbotBrowserHttp from "./openbot/browserViewHttp.ts";
 import * as OpenbotCodingPolicy from "./openbot/CodingPolicy.ts";
 import * as Openbot from "./openbot/Integration.ts";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
@@ -814,6 +817,7 @@ const layerMakeRoutes = Layer.mergeAll(
     GuestHttp.layer,
     DeviceHubProxy.layer,
     ServerBrowserStream.routeLayer,
+    OpenbotBrowserHttp.routeLayer,
     ServerHttp.layerStaticAndDevRoute,
     Ws.layer,
   ),
@@ -835,7 +839,13 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.provide(PeerLinkRequests.layer),
   Layer.provide(OpenbotCodingDelivery.layer.pipe(Layer.provide(ProjectionStoreV2.layer))),
   Layer.provide(OpenbotFiles.layer),
-  Layer.provide(OpenbotCodingPolicy.layer),
+  Layer.provide(
+    Layer.mergeAll(
+      OpenbotCodingPolicy.layer,
+      OpenbotMaintenance.layer,
+      OpenbotBrowserGateway.layer,
+    ),
+  ),
   Layer.provide(OpenbotSledTools.layer.pipe(Layer.provide(ServerSecretStore.layer))),
   Layer.provide(
     Layer.unwrap(

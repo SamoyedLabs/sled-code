@@ -1,3 +1,4 @@
+import { OpenbotBrowserReadRequest, OpenbotBrowserAdminRequest } from "./openbotBrowser.ts";
 import * as Schema from "effect/Schema";
 import { OpenbotChannelReadRequest, OpenbotChannelAdminRequest } from "./openbotChannels.ts";
 import { OpenbotWorkflowReadRequest, OpenbotWorkflowAdminRequest } from "./openbotWorkflows.ts";
@@ -229,6 +230,8 @@ export const OpenbotAttentionResponseInput = Schema.Struct({
 export type OpenbotAttentionResponseInput = typeof OpenbotAttentionResponseInput.Type;
 
 export const OpenbotAdminRequest = Schema.Union([
+  OpenbotBrowserReadRequest,
+  OpenbotBrowserAdminRequest,
   OpenbotChannelAdminRequest,
   OpenbotWorkflowAdminRequest,
   Schema.Struct({

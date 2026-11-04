@@ -93,6 +93,8 @@ import Migration0086 from "./Migrations/086_OpenbotCodingPolicies.ts";
 import Migration0087 from "./Migrations/087_OpenbotFileDeliveryIdentity.ts";
 import Migration0088 from "./Migrations/088_OpenbotHostPreference.ts";
 
+import Migration0089 from "./Migrations/089_OpenbotMaintenance.ts";
+
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
   [2, "OrchestrationCommandReceipts", Migration0002],
@@ -183,6 +185,7 @@ const migrationEntries = [
   [86, "OpenbotCodingPolicies", Migration0086],
   [87, "OpenbotFileDeliveryIdentity", Migration0087],
   [88, "OpenbotHostPreference", Migration0088],
+  [89, "OpenbotMaintenance", Migration0089],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

@@ -1,8 +1,9 @@
 import { WS_METHODS, type OpenbotHostReadInput } from "@t3tools/contracts";
-import { request } from "../../rpc/client.ts";
+import { request, requestGuarded } from "../../rpc/client.ts";
 
 export const readHostStatus = () => request(WS_METHODS.openbotStatus, {});
 export const readRuntimeStatus = () => request(WS_METHODS.openbotUpstreamStatus, {});
+export const readMaintenanceStatus = () => requestGuarded(WS_METHODS.openbotMaintenanceStatus, {});
 export const listAgents = () => request(WS_METHODS.openbotListAgents, {});
 
 import type { OpenbotReadRequest } from "@t3tools/contracts";

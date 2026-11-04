@@ -21,7 +21,10 @@ import { WS_METHODS } from "./rpc.ts";
 
 /** Incremental client enforcement; the server still authorizes every request. */
 export const CLIENT_GUARDED_RPC_SCOPES = {
+  [WS_METHODS.openbotBrowserViewCommand]: AuthSettingsWriteScope,
   [WS_METHODS.openbotAttentionRespond]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotMaintenanceStatus]: AuthEnvironmentMaintainScope,
+  [WS_METHODS.openbotMaintenanceCommand]: AuthEnvironmentMaintainScope,
   [WS_METHODS.openbotUpstreamCheck]: AuthSettingsWriteScope,
   [WS_METHODS.openbotUpstreamStage]: AuthSettingsWriteScope,
   [WS_METHODS.openbotUpstreamInstall]: AuthEnvironmentMaintainScope,
@@ -114,6 +117,8 @@ export function clientRpcRequiredScopes(
   method: string,
   input: unknown,
 ): readonly AuthEnvironmentScope[] {
+  if (method === WS_METHODS.openbotBrowserViewCommand)
+    return [AuthSettingsWriteScope, AuthPreviewOperateScope];
   if (
     method === WS_METHODS.openbotCodingPolicyEnable ||
     method === WS_METHODS.openbotCodingPolicyDisable
@@ -140,6 +145,8 @@ export function clientRpcRequiredScopes(
     ) {
       if (request.operation.startsWith("provider."))
         return [AuthSettingsWriteScope, AuthProvidersManageScope];
+      if (request.operation.startsWith("browser."))
+        return [AuthSettingsWriteScope, AuthPreviewOperateScope];
       if (
         request.operation === "agent.create" ||
         request.operation === "workflow.startRun" ||

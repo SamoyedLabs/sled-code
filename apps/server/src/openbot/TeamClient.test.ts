@@ -1294,3 +1294,63 @@ it.live(
       Effect.scoped,
     ),
 );
+
+it.live("renames browser profiles without rewriting their assignments or unknown metadata", () =>
+  Effect.gen(function* () {
+    let profile = {
+      id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      name: "Old",
+      hue: 185,
+      agentIds: ["bot1", "hidden-bot"],
+      tabCount: 2,
+      futureMetadata: { keep: true },
+    };
+    const origin = yield* fixture(async (request, response) => {
+      response.setHeader("content-type", "application/json");
+      if (request.url === "/v1/auth/login") {
+        response.end(
+          JSON.stringify({ sessionToken: "owner", sessionExpiresAt: "2099-01-01T00:00:00Z" }),
+        );
+        return;
+      }
+      if (request.url === "/v1/admin/browser-profiles/update") {
+        let text = "";
+        for await (const chunk of request) text += chunk;
+        const patch = JSON.parse(text);
+        expect(patch).toEqual({ profileId: profile.id, name: "Renamed" });
+        profile = { ...profile, name: patch.name };
+        response.end(JSON.stringify(profile));
+        return;
+      }
+      if (request.url === "/v1/admin/browser-profiles") {
+        response.end(JSON.stringify({ profiles: [profile], sharedAgentIds: [] }));
+        return;
+      }
+      if (request.url === "/v1/auth/logout") {
+        response.statusCode = 204;
+        response.end();
+        return;
+      }
+      response.statusCode = 404;
+      response.end("{}");
+    });
+    const session = yield* (yield* TeamClient.TeamClient).connect({
+      apiUrl: origin,
+      ownerSecret: "fixture",
+    });
+    yield* session.apiAdmin({
+      operation: "browser.profiles.update",
+      profileId: profile.id,
+      name: "Renamed",
+    });
+    expect(yield* session.apiAdmin({ operation: "browser.profiles.list" })).toMatchObject({
+      profiles: [
+        { name: "Renamed", agentIds: ["bot1", "hidden-bot"], futureMetadata: { keep: true } },
+      ],
+    });
+    yield* session.close;
+  }).pipe(
+    Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+    Effect.scoped,
+  ),
+);
