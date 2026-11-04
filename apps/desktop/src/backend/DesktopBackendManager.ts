@@ -17,6 +17,7 @@ import { HttpClient } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 import {
+  SERVER_EXIT_CODE_MANAGED_POLICY,
   SERVER_EXIT_CODE_STATE_DIR_OWNED,
   DesktopBackendBootstrap,
   type DesktopBackendBootstrap as DesktopBackendBootstrapValue,
@@ -226,6 +227,8 @@ export const PRIMARY_INSTANCE_ID: BackendInstanceId = BackendInstanceId(
 
 export interface BackendStartupFailure {
   readonly reason: string;
+  /** The server refused to start under this machine's managed policy. */
+  readonly managedPolicy: boolean;
   /** Tail of the last run's stdout and stderr. */
   readonly output: string;
 }
@@ -671,9 +674,11 @@ export const makeBackendInstance = Effect.fn("makeBackendInstance")(function* (
   // One streaming decoder per stream keeps UTF-8 characters split across chunks intact.
   const makeOutputDecoders = () => ({ stdout: new TextDecoder(), stderr: new TextDecoder() });
   let outputDecoders = makeOutputDecoders();
-  const reportStartupFailure = (reason: string) =>
+  const reportStartupFailure = (reason: string, managedPolicy = false) =>
     Ref.get(outputTail).pipe(
-      Effect.flatMap((output) => spec.onStartupFailure?.({ reason, output }) ?? Effect.void),
+      Effect.flatMap(
+        (output) => spec.onStartupFailure?.({ reason, managedPolicy, output }) ?? Effect.void,
+      ),
     );
 
   const { logWarning: logInstanceWarning, logError: logInstanceError } =
@@ -916,7 +921,7 @@ export const makeBackendInstance = Effect.fn("makeBackendInstance")(function* (
                   yield* (spec.onStateDirOwned?.() ?? Effect.void).pipe(Effect.ignore);
                   return;
                 }
-                yield* scheduleRestart(reason);
+                yield* scheduleRestart(reason, exitCode);
               }
             }),
           );
@@ -1026,6 +1031,7 @@ export const makeBackendInstance = Effect.fn("makeBackendInstance")(function* (
 
   const scheduleRestart = Effect.fn("desktop.backendInstance.scheduleRestart")(function* (
     reason: string,
+    exitCode?: number,
   ) {
     const scheduled = yield* SubscriptionRef.modify(state, (latest) => {
       if (!latest.desiredRunning || Option.isSome(latest.restartFiber)) {
@@ -1049,8 +1055,10 @@ export const makeBackendInstance = Effect.fn("makeBackendInstance")(function* (
           reason,
           delayMs: Duration.toMillis(delay),
         });
-        if (attempt >= STARTUP_FAILURE_RESTART_ATTEMPTS) {
-          yield* reportStartupFailure(`The server could not start (${reason}).`);
+        // Retrying cannot fix a policy refusal, so say so at once; retries still pick up a fix.
+        const managedPolicy = exitCode === SERVER_EXIT_CODE_MANAGED_POLICY;
+        if (managedPolicy || attempt >= STARTUP_FAILURE_RESTART_ATTEMPTS) {
+          yield* reportStartupFailure(`The server could not start (${reason}).`, managedPolicy);
         }
         const restartFiber = yield* Effect.forkIn(
           Effect.sleep(delay).pipe(
