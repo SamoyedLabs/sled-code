@@ -1769,7 +1769,7 @@ it.effect.skipIf(!symlinksSupported)("keeps native framework links portable afte
     yield* stageRemoteDesktopBundle(source, destination);
     assert.equal(
       yield* fs.readLink(path.join(destination, framework, "Video")),
-      "Versions/Current/Video",
+      path.join("Versions", "Current", "Video"),
     );
     assert.equal(yield* fs.readLink(path.join(destination, framework, "Versions/Current")), "A");
     // A packaged app must work after the source checkout is gone.
