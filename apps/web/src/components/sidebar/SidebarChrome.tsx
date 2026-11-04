@@ -14,7 +14,8 @@ import {
 import { primaryServerKeybindingsAtom } from "../../state/server";
 import { cn } from "../../lib/utils";
 import { usePullRequestsSupported } from "../../state/environments";
-import { APP_BASE_NAME, APP_MARK_URL } from "../../branding";
+import { APP_BASE_NAME } from "../../branding";
+import { MascotMark } from "../MascotMark";
 import {
   resolveEnvironmentIdentificationPillLabel,
   resolveSidebarStageBackdropVariant,
@@ -180,7 +181,7 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
 function SidebarBrandMark({ onBackdrop }: { onBackdrop: boolean }) {
   return (
     <span className="inline-flex min-w-0 items-center gap-2 text-sm font-medium tracking-tight">
-      <img src={APP_MARK_URL} alt="" className="size-6 shrink-0 object-contain" />
+      <MascotMark />
       <span
         className={cn(
           "truncate [text-box:trim-both_cap_alphabetic] supports-[text-box:trim-both_cap_alphabetic]:py-1",

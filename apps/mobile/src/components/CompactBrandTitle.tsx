@@ -1,7 +1,8 @@
 import { NATIVE_WORKSPACE_COLUMNS_SUPPORTED } from "../native/NativeWorkspaceColumns";
 import Constants from "expo-constants";
-import { Image } from "expo-image";
-import { T3_CODE_BRAND_MARK_SOURCE } from "./brandAssets";
+import { useAtomValue } from "@effect/atom-react";
+import { MASCOT_ACTIVITY_LABELS } from "@t3tools/client-runtime/state/mascot-activity";
+import { useIsFocused } from "@react-navigation/native";
 import type { NativeStackNavigationOptions } from "@react-navigation/native-stack";
 import { useState } from "react";
 import { Platform, View } from "react-native";
@@ -10,6 +11,8 @@ import { AppText as Text } from "./ui/AppText";
 import { IPAD_HOME_TITLE_OFFSET } from "../lib/layoutMetrics";
 import { resolveMobileStageLabel } from "../lib/mobileBranding";
 import { useAndroidControlSizing } from "./ui/useAndroidControlSizing";
+import { MascotMark } from "./MascotMark";
+import { mascotActivityAtom } from "../state/mascot";
 
 const BRAND_MAX_FONT_SCALE = 1.4;
 
@@ -32,6 +35,8 @@ export function CompactBrandTitle(
     : resolveMobileStageLabel(Constants.expoConfig?.extra?.appVariant);
   const titleOffset = brandTitleOffset();
   const { scale } = useAndroidControlSizing();
+  const activity = useAtomValue(mascotActivityAtom);
+  const focused = useIsFocused();
   const [availableWidth, setAvailableWidth] = useState<number | null>(null);
   // Measured only while the badge shows, so hiding it does not make it look like it fits.
   const [fullWidth, setFullWidth] = useState<number | null>(null);
@@ -44,9 +49,7 @@ export function CompactBrandTitle(
         props.fit && showStage ? (event) => setFullWidth(event.nativeEvent.layout.width) : undefined
       }
       aria-level={1}
-      accessibilityLabel={
-        props.accessibilityLabel ?? `${Constants.expoConfig?.name ?? "Sled Code"}, Threads`
-      }
+      accessibilityLabel={`${props.accessibilityLabel ?? `${Constants.expoConfig?.name ?? "Sled Code"}, Threads`}. ${MASCOT_ACTIVITY_LABELS[activity.state]}`}
       accessible
       role="heading"
       className="flex-row items-center gap-1.5"
@@ -56,7 +59,7 @@ export function CompactBrandTitle(
         props.fit && { flexShrink: 0 },
       ]}
     >
-      <Image source={T3_CODE_BRAND_MARK_SOURCE} style={{ width: 24 * scale, height: 24 * scale }} />
+      <MascotMark activity={activity} size={32 * scale} visible={focused} />
       {/* A logo beside a fixed-size wordmark: it may grow with Dynamic Type, not crowd the bar. */}
       <Text
         allowFontScaling={props.allowFontScaling}
