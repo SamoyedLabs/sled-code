@@ -390,3 +390,255 @@ it.live(
       Effect.scoped,
     ),
 );
+
+it.live(
+  "keeps provider setup credentials write-only while preserving sign-in challenges and opaque models",
+  () =>
+    Effect.gen(function* () {
+      const requests: Array<{
+        path: string;
+        body: unknown;
+        capabilities: string | string[] | undefined;
+      }> = [];
+      const apiUrl = yield* fixture(async (request, response) => {
+        let body = "";
+        for await (const chunk of request) body += chunk.toString();
+        requests.push({
+          path: request.url ?? "",
+          body: body ? JSON.parse(body) : null,
+          capabilities: request.headers["openbot-capabilities"],
+        });
+        response.setHeader("content-type", "application/json");
+        if (request.url === "/v1/auth/login") {
+          response.end(
+            JSON.stringify({ sessionToken: "private-token", sessionExpiresAt: "2027-01-01" }),
+          );
+        } else if (request.url === "/v1/admin/providers/accounts/list") {
+          response.end(
+            JSON.stringify({
+              providers: [
+                {
+                  provider: "codex",
+                  accounts: [
+                    {
+                      id: "default",
+                      label: null,
+                      email: "person@example.test",
+                      state: "connected",
+                      message: null,
+                      accessToken: "stored-account-token",
+                    },
+                  ],
+                },
+              ],
+              agents: [{ agentId: "bot1", accountId: "default" }],
+              credentials: "stored-account-token",
+            }),
+          );
+        } else if (request.url === "/v1/admin/providers/v8/code-login/start") {
+          response.end(
+            JSON.stringify({
+              kind: "code",
+              userCode: "ABCD-EFGH",
+              verificationUrl: "https://auth.example.test/device",
+              verificationUrlComplete: "https://auth.example.test/device?user_code=ABCD-EFGH",
+              expiresAt: 1000,
+              accessToken: "stored-account-token",
+            }),
+          );
+        } else if (request.url === "/v1/admin/custom-agents/save") {
+          response.end(
+            JSON.stringify({
+              agents: [
+                {
+                  id: "local",
+                  name: "Local",
+                  command: "node",
+                  args: ["agent.mjs"],
+                  envNames: ["API_KEY"],
+                  usagePrompt: null,
+                  resolvedCommand: "/usr/bin/node",
+                  env: [{ name: "API_KEY", value: "write-only-env" }],
+                },
+              ],
+              restart: "not-running",
+            }),
+          );
+        } else if (request.url === "/v1/admin/sign-in-relay/provider-account/v2/start") {
+          response.end(
+            JSON.stringify({
+              flowId: "flow1",
+              expiresAt: 1000,
+              refreshToken: "stored-account-token",
+            }),
+          );
+        } else if (
+          request.url === "/v1/admin/sign-in-relay/status" ||
+          request.url === "/v1/admin/sign-in-relay/complete"
+        ) {
+          response.end(
+            JSON.stringify({
+              authorizeUrl: "https://auth.example.test/authorize?state=expected-state",
+              callback: { port: 34567, path: "/callback", state: "expected-state" },
+              result: request.url.endsWith("complete")
+                ? { error: null }
+                : body.includes("failed-flow")
+                  ? { error: "stored-account-token" }
+                  : null,
+              refreshToken: "stored-account-token",
+            }),
+          );
+        } else if (request.url === "/v1/admin/providers/accounts/sign-in/status") {
+          response.end(
+            JSON.stringify({
+              tabId: "private-sign-in-tab",
+              result: null,
+              credentials: "stored-account-token",
+            }),
+          );
+        } else {
+          response.end(JSON.stringify({ apiKey: "write-only-provider-key" }));
+        }
+      });
+      const session = yield* (yield* TeamClient.TeamClient).connect({
+        apiUrl,
+        ownerSecret: "private-password",
+      });
+      expect(yield* session.apiAdmin({ operation: "provider.accounts.list" })).toEqual({
+        providers: [
+          {
+            provider: "codex",
+            accounts: [
+              {
+                id: "default",
+                label: null,
+                email: "person@example.test",
+                state: "connected",
+                message: null,
+              },
+            ],
+          },
+        ],
+        agents: [{ agentId: "bot1", accountId: "default" }],
+      });
+      expect(
+        yield* session.apiAdmin({ operation: "provider.codeLogin.start", provider: "codex" }),
+      ).toEqual({
+        kind: "code",
+        userCode: "ABCD-EFGH",
+        verificationUrl: "https://auth.example.test/device",
+        verificationUrlComplete: "https://auth.example.test/device?user_code=ABCD-EFGH",
+        expiresAt: 1000,
+      });
+      expect(
+        yield* session.apiAdmin({
+          operation: "provider.apiKey.set",
+          provider: "codex",
+          key: "write-only-provider-key",
+        }),
+      ).toEqual({});
+      expect(
+        yield* session.apiAdmin({ operation: "provider.account.signIn.status", provider: "codex" }),
+      ).toEqual({ tabId: "private-sign-in-tab", result: null });
+      expect(
+        yield* session.apiAdmin({
+          operation: "provider.customAgent.save",
+          input: {
+            id: "local",
+            name: "Local",
+            command: "node",
+            args: ["agent.mjs"],
+            env: [{ name: "API_KEY", value: "write-only-env" }],
+            usagePrompt: null,
+          },
+        }),
+      ).toEqual({
+        agents: [
+          {
+            id: "local",
+            name: "Local",
+            command: "node",
+            args: ["agent.mjs"],
+            envNames: ["API_KEY"],
+            usagePrompt: null,
+            resolvedCommand: "/usr/bin/node",
+          },
+        ],
+        restart: "not-running",
+      });
+      yield* session.apiAdmin({
+        operation: "agent.update",
+        agentId: "bot1",
+        input: {
+          provider: "cursor",
+          model: "gpt-test[context=272k,reasoning=medium,fast=false]",
+          reasoningEffort: "ultra",
+        },
+      });
+      expect(requests.at(-1)).toMatchObject({
+        path: "/v1/agents/bot1",
+        body: {
+          provider: "cursor",
+          model: "gpt-test[context=272k,reasoning=medium,fast=false]",
+          reasoningEffort: "ultra",
+        },
+      });
+      yield* session.apiAdmin({
+        operation: "provider.account.assign",
+        agentId: "bot1",
+        accountId: "a1234567890abcdef",
+      });
+      expect(requests.at(-1)).toMatchObject({
+        path: "/v1/admin/providers/accounts/agent",
+        body: { agentId: "bot1", accountId: "a1234567890abcdef" },
+      });
+      expect(
+        yield* session.apiAdmin({
+          operation: "provider.account.signInRelay.start",
+          provider: "codex",
+          accountId: null,
+        }),
+      ).toEqual({ flowId: "flow1", expiresAt: 1000 });
+      expect(
+        yield* session.apiAdmin({ operation: "provider.signInRelay.status", flowId: "flow1" }),
+      ).toEqual({
+        authorizeUrl: "https://auth.example.test/authorize?state=expected-state",
+        callback: { port: 34567, path: "/callback", state: "expected-state" },
+        result: null,
+      });
+      expect(
+        yield* session.apiAdmin({
+          operation: "provider.signInRelay.status",
+          flowId: "failed-flow",
+        }),
+      ).toMatchObject({ result: { error: "The provider sign-in failed." } });
+      expect(
+        yield* session.apiAdmin({
+          operation: "provider.signInRelay.complete",
+          flowId: "flow1",
+          query: "code=one-time-code&state=expected-state",
+        }),
+      ).toMatchObject({ result: { error: null } });
+      expect(requests.at(-1)).toMatchObject({
+        path: "/v1/admin/sign-in-relay/complete",
+        body: { flowId: "flow1", query: "code=one-time-code&state=expected-state" },
+      });
+      const count = requests.length;
+      expect(
+        (yield* Effect.flip(
+          session.apiAdmin({
+            operation: "provider.account.assign",
+            agentId: "bot1",
+            accountId: "invalid-account",
+          }),
+        )).reason,
+      ).toBe("invalid-configuration");
+      expect(requests).toHaveLength(count);
+      expect(String(requests[1]?.capabilities)).toContain("provider-accounts-v1");
+      expect(String(requests[1]?.capabilities)).toContain("providers-v8");
+      yield* session.close;
+    }).pipe(
+      Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+      Effect.scoped,
+    ),
+);

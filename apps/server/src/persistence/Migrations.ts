@@ -84,6 +84,8 @@ import Migration0078 from "./Migrations/078_DropOrchestrationEventCorrelationInd
 
 import Migration0079 from "./Migrations/079_OpenbotCodingTasks.ts";
 import Migration0080 from "./Migrations/080_OpenbotCodingDeliveryRecovery.ts";
+import Migration0081 from "./Migrations/081_OpenbotRemoteCoding.ts";
+import Migration0082 from "./Migrations/082_OpenbotRemoteCodingCommands.ts";
 
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -167,6 +169,8 @@ const migrationEntries = [
   [78, "DropOrchestrationEventCorrelationIndex", Migration0078],
   [79, "OpenbotCodingTasks", Migration0079],
   [80, "OpenbotCodingDeliveryRecovery", Migration0080],
+  [81, "OpenbotRemoteCoding", Migration0081],
+  [82, "OpenbotRemoteCodingCommands", Migration0082],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

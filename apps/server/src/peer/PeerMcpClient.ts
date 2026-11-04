@@ -6,6 +6,7 @@ import {
   type RuntimeMode,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
@@ -37,6 +38,8 @@ export class PeerMcpClient extends Context.Service<
     /** Calls `tool` on the peer and decodes its structured result with `success`. */
     readonly call: <S extends Schema.Decoder<unknown>>(input: {
       readonly environmentId: EnvironmentId;
+      /** An existing assignment must keep using the same link grant across retries. */
+      readonly expectedLinkedAt?: string;
       readonly tool: string;
       readonly arguments: Record<string, unknown>;
       readonly limits: PeerCallLimits;
@@ -157,6 +160,16 @@ const make = Effect.gen(function* () {
       const resolved = yield* links
         .resolve(input.environmentId)
         .pipe(Effect.mapError(fromLinkError));
+      if (
+        input.expectedLinkedAt !== undefined &&
+        DateTime.formatIso(resolved.link.linkedAt) !== input.expectedLinkedAt
+      ) {
+        return yield* new OrchestratorMcpFailure({
+          code: "capability_denied",
+          message:
+            "The linked environment grant changed. This assignment needs reconciliation before using the replacement link.",
+        });
+      }
       const limitHeader = {
         [McpInvocationContext.MODE_LIMIT_HEADER]: `${input.limits.runtimeMode}/${input.limits.interactionMode}`,
       };

@@ -1,3 +1,6 @@
+import { BotProviderChoice } from "./BotProviderChoice";
+import { BotProviderSetup } from "./BotProviderSetup";
+import { BotProviderSettings } from "./BotProviderSettings";
 import { BotAttention } from "./BotAttention";
 import { SledToolsConnection } from "./SledToolsConnection";
 import { BotConfiguration } from "./BotConfiguration";
@@ -10,6 +13,12 @@ import * as Crypto from "expo-crypto";
 import type { EnvironmentId, OpenbotAdminRequest, OpenbotWriteRequest } from "@t3tools/contracts";
 import {
   botViewRequest,
+  providerModels,
+  providerStatus,
+  validProviderChoice,
+  botCreateRequest,
+  EMPTY_BOT_PROVIDER_CHOICE,
+  type BotProviderChoice as ProviderChoice,
   conversationView,
   memoryViews,
   routineViews,
@@ -69,7 +78,15 @@ function BotEnvironment({ environment }: { environment: SettingsTarget }) {
     host.data?.state === "ready" ? openbot.agents({ environmentId, input: {} }) : null,
   );
   const canManage = useAtomValue(openbot.start.permissionAtom(environmentId));
-  const canAdmin = useAtomValue(openbot.admin.permissionAtom(environmentId));
+  const canCreate = useAtomValue(
+    openbot.adminToHost.permissionAtom(environmentId, {
+      hostId: host.data?.hostId ?? "unavailable",
+      request: {
+        operation: "agent.create",
+        input: { name: "permission check", description: "", initialMessage: "permission check" },
+      },
+    }),
+  );
   const start = useAtomCommand(openbot.start, { reportFailure: false });
   const stop = useAtomCommand(openbot.stop, { reportFailure: false });
   const [busy, setBusy] = useState(false);
@@ -136,14 +153,33 @@ function BotEnvironment({ environment }: { environment: SettingsTarget }) {
         )}
         {state === "ready" && <SledToolsConnection environmentId={environment.environmentId} />}
         {state === "ready" && <BotAttention environmentId={environmentId} />}
+        {state === "ready" && host.data?.hostId && (
+          <Button
+            label="Provider setup"
+            tone="secondary"
+            onPress={() => {
+              if (host.data?.hostId)
+                navigation.navigate("SettingsBotProviders", {
+                  environmentId,
+                  hostId: host.data.hostId,
+                });
+            }}
+          />
+        )}
         {state === "ready" && (
           <>
             <Button
               label="Create bot"
               icon="plus"
               size="compact"
-              disabled={!canAdmin || busy}
-              onPress={() => navigation.navigate("SettingsBotNew", { environmentId })}
+              disabled={!canCreate || busy || !host.data?.hostId}
+              onPress={() => {
+                if (host.data?.hostId)
+                  navigation.navigate("SettingsBotNew", {
+                    environmentId,
+                    hostId: host.data.hostId,
+                  });
+              }}
             />
             {agents.isPending && !agents.data && <Text>Loading bots…</Text>}
             {agents.data?.length === 0 && (
@@ -161,6 +197,7 @@ function BotEnvironment({ environment }: { environment: SettingsTarget }) {
                     environmentId,
                     agentId: bot.id,
                     name: bot.name,
+                    hostId: host.data?.hostId,
                   })
                 }
               />
@@ -174,30 +211,54 @@ function BotEnvironment({ environment }: { environment: SettingsTarget }) {
 
 export function SettingsBotNewRouteScreen({
   route,
-}: StaticScreenProps<{ environmentId: EnvironmentId }>) {
+}: StaticScreenProps<{ environmentId: EnvironmentId; hostId: string }>) {
   const environmentId = route.params.environmentId;
+  const expectedHostId = route.params.hostId;
+  const host = useEnvironmentQuery(openbot.status({ environmentId, input: {} }));
+  const modelsQuery = useEnvironmentQuery(
+    openbot.readFromHost({
+      environmentId,
+      input: { hostId: expectedHostId, request: { operation: "agent.models" } },
+    }),
+  );
+  const statusQuery = useEnvironmentQuery(
+    openbot.readFromHost({
+      environmentId,
+      input: { hostId: expectedHostId, request: { operation: "agent.status" } },
+    }),
+  );
+  const models = providerModels(modelsQuery.data);
+  const providers = providerStatus(statusQuery.data);
+  const [choice, setChoice] = useState<ProviderChoice>(EMPTY_BOT_PROVIDER_CHOICE);
   const navigation = useNavigation();
-  const canAdmin = useAtomValue(openbot.admin.permissionAtom(environmentId));
-  const admin = useAtomCommand(openbot.admin, { reportFailure: false });
+  const canAdmin = useAtomValue(
+    openbot.adminToHost.permissionAtom(environmentId, {
+      hostId: expectedHostId,
+      request: {
+        operation: "agent.create",
+        input: { name: "permission check", description: "", initialMessage: "permission check" },
+      },
+    }),
+  );
+  const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const create = async () => {
-    if (busy || !name.trim() || !instructions.trim()) return;
+    if (
+      busy ||
+      host.data?.hostId !== expectedHostId ||
+      !models ||
+      !providers ||
+      !validProviderChoice(models, providers, choice)
+    )
+      return;
+    const request = botCreateRequest(name, instructions, choice);
+    if (!request) return;
     setBusy(true);
     setError(null);
-    const result = await admin({
-      environmentId,
-      input: {
-        operation: "agent.create",
-        input: {
-          name: name.trim(),
-          description: instructions.trim(),
-          initialMessage: instructions.trim(),
-        },
-      },
-    });
+    const result = await admin({ environmentId, input: { hostId: expectedHostId, request } });
     if (result._tag === "Failure") setError(String(squashAtomCommandFailure(result)));
     else navigation.goBack();
     setBusy(false);
@@ -227,6 +288,39 @@ export function SettingsBotNewRouteScreen({
           textAlignVertical="top"
           className="min-h-32 rounded-xl bg-grouped-card p-3"
         />
+        <BotProviderChoice
+          value={choice}
+          onChange={setChoice}
+          models={models ?? []}
+          providers={providers ?? []}
+          disabled={busy || !canAdmin || models === null || providers === null}
+        />
+        <Text className="text-foreground-muted">
+          Creating a bot sends its first message using the selected model and the provider's own
+          sign-in. Other accounts can be assigned after creation.
+        </Text>
+        <Button
+          label="Provider setup"
+          tone="secondary"
+          onPress={() =>
+            navigation.navigate("SettingsBotProviders", { environmentId, hostId: expectedHostId })
+          }
+        />
+        <Button
+          label="Refresh providers"
+          tone="text"
+          onPress={() => {
+            modelsQuery.refresh();
+            statusQuery.refresh();
+          }}
+        />
+        {(modelsQuery.error || statusQuery.error || host.data?.hostId !== expectedHostId) && (
+          <Text accessibilityRole="alert" className="text-danger">
+            {modelsQuery.error ??
+              statusQuery.error ??
+              "The bot engine changed. Reopen this form before creating a bot."}
+          </Text>
+        )}
         {error && (
           <Text accessibilityRole="alert" className="text-danger">
             {error}
@@ -235,7 +329,15 @@ export function SettingsBotNewRouteScreen({
         <Button
           label="Create bot"
           loading={busy}
-          disabled={!canAdmin || !name.trim() || !instructions.trim()}
+          disabled={
+            !canAdmin ||
+            !name.trim() ||
+            !instructions.trim() ||
+            !models ||
+            !providers ||
+            !validProviderChoice(models, providers, choice) ||
+            host.data?.hostId !== expectedHostId
+          }
           onPress={() => void create()}
         />
       </ScreenScrollView>
@@ -246,7 +348,12 @@ export function SettingsBotNewRouteScreen({
 type BotTab = "conversation" | "task" | "memory" | "routine";
 export function SettingsBotDetailRouteScreen({
   route,
-}: StaticScreenProps<{ environmentId: EnvironmentId; agentId: string; name: string }>) {
+}: StaticScreenProps<{
+  environmentId: EnvironmentId;
+  agentId: string;
+  name: string;
+  hostId?: string;
+}>) {
   return (
     <BotDetail key={`${route.params.environmentId}:${route.params.agentId}`} {...route.params} />
   );
@@ -255,10 +362,12 @@ function BotDetail({
   environmentId,
   agentId,
   name,
+  hostId,
 }: {
   environmentId: EnvironmentId;
   agentId: string;
   name: string;
+  hostId?: string;
 }) {
   const pendingMessage = useRef<{ text: string; id: string } | null>(null);
   const messageIdFor = (value: string) => {
@@ -287,15 +396,18 @@ function BotDetail({
       : null,
   );
   const canWrite = useAtomValue(openbot.write.permissionAtom(environmentId));
-  const canAdmin = useAtomValue(openbot.admin.permissionAtom(environmentId));
+  const canAdmin = useAtomValue(openbot.admin.permissionAtom(environmentId)) && Boolean(hostId);
   const write = useAtomCommand(openbot.write, { reportFailure: false });
-  const admin = useAtomCommand(openbot.admin, { reportFailure: false });
+  const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
   const send = async (input: OpenbotWriteRequest | OpenbotAdminRequest, privileged = false) => {
     if (busy) return;
     setBusy(true);
     setError(null);
     const result = privileged
-      ? await admin({ environmentId, input: input as OpenbotAdminRequest })
+      ? await admin({
+          environmentId,
+          input: { hostId: hostId ?? "unavailable", request: input as OpenbotAdminRequest },
+        })
       : await write({ environmentId, input: input as OpenbotWriteRequest });
     if (result._tag === "Failure") setError(String(squashAtomCommandFailure(result)));
     else {
@@ -319,7 +431,10 @@ function BotDetail({
           setError(null);
           const result = await admin({
             environmentId,
-            input: { operation: "agent.delete", agentId },
+            input: {
+              hostId: hostId ?? "unavailable",
+              request: { operation: "agent.delete", agentId },
+            },
           });
           if (result._tag === "Failure") {
             setError(String(squashAtomCommandFailure(result)));
@@ -543,7 +658,12 @@ function BotDetail({
               view.
             </Text>
           )}
-        <BotConfiguration environmentId={environmentId} agentId={agentId} />
+        {hostId && (
+          <BotProviderSettings environmentId={environmentId} agentId={agentId} hostId={hostId} />
+        )}
+        {hostId && (
+          <BotConfiguration environmentId={environmentId} agentId={agentId} hostId={hostId} />
+        )}
         <SettingsSection title="Coding work">
           <View className="gap-3 p-3">
             <Button label="Refresh coding work" size="compact" onPress={coding.refresh} />
@@ -599,6 +719,7 @@ function BotDetail({
           <DailyRoutineForm
             environmentId={environmentId}
             agentId={agentId}
+            hostId={hostId ?? "unavailable"}
             onCreated={query.refresh}
           />
         )}
@@ -692,14 +813,16 @@ function BotDetail({
 function DailyRoutineForm({
   environmentId,
   agentId,
+  hostId,
   onCreated,
 }: {
   environmentId: EnvironmentId;
   agentId: string;
+  hostId: string;
   onCreated: () => void;
 }) {
   const canAdmin = useAtomValue(openbot.admin.permissionAtom(environmentId));
-  const admin = useAtomCommand(openbot.admin, { reportFailure: false });
+  const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
   const [name, setName] = useState("");
   const [instruction, setInstruction] = useState("");
   const [time, setTime] = useState("09:00");
@@ -715,14 +838,17 @@ function DailyRoutineForm({
     const result = await admin({
       environmentId,
       input: {
-        operation: "routine.create",
-        agentId,
-        input: {
-          name: name.trim(),
-          instruction: instruction.trim(),
-          active: true,
-          timezone: timezone.trim(),
-          schedule: { kind: "daily", time },
+        hostId,
+        request: {
+          operation: "routine.create",
+          agentId,
+          input: {
+            name: name.trim(),
+            instruction: instruction.trim(),
+            active: true,
+            timezone: timezone.trim(),
+            schedule: { kind: "daily", time },
+          },
         },
       },
     });
@@ -797,5 +923,25 @@ function DailyRoutineForm({
         />
       </View>
     </SettingsSection>
+  );
+}
+
+export function SettingsBotProvidersRouteScreen({
+  route,
+}: StaticScreenProps<{ environmentId: EnvironmentId; hostId: string }>) {
+  return (
+    <SettingsScreen title="Bot providers">
+      <ScreenScrollView
+        keyboardShouldPersistTaps="handled"
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerClassName="gap-4 px-5 py-4"
+      >
+        <BotProviderSetup
+          key={route.params.hostId}
+          environmentId={route.params.environmentId}
+          hostId={route.params.hostId}
+        />
+      </ScreenScrollView>
+    </SettingsScreen>
   );
 }

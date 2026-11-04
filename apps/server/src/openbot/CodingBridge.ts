@@ -17,6 +17,7 @@ import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as PubSub from "effect/PubSub";
@@ -26,6 +27,8 @@ import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ThreadLaunch from "../orchestration-v2/ThreadLaunchService.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
+import * as RemoteCoding from "./RemoteCoding.ts";
+import type { CodingRow as Row } from "./RemoteCodingLedger.ts";
 
 export class CodingBridgeError extends Schema.TaggedError<CodingBridgeError>()(
   "OpenbotCodingBridgeError",
@@ -62,17 +65,6 @@ export class CodingBridge extends Context.Service<
   }
 >()("t3/openbot/CodingBridge") {}
 
-interface Row {
-  readonly host_id: string;
-  readonly agent_id: string;
-  readonly task_id: string;
-  readonly operation_id: string;
-  readonly project_id: string;
-  readonly thread_id: string;
-  readonly command_id: string;
-  readonly input_json: string;
-  readonly cancel_requested: number;
-}
 const encodeLaunch = Schema.encodeEffect(Schema.fromJsonString(LaunchSchema));
 const decodeDeliveryStatus = Schema.decodeUnknownEffect(OpenbotCodingDeliveryStatus);
 
@@ -82,6 +74,7 @@ const make = Effect.gen(function* () {
   const threads = yield* ThreadManagement.ThreadManagementService;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const random = yield* SecureRandom.SecureRandom;
+  const remote = Option.getOrUndefined(yield* Effect.serviceOption(RemoteCoding.RemoteCoding));
   const gate = yield* Semaphore.make(1);
   const changes = yield* PubSub.unbounded<ThreadId>();
 
@@ -125,6 +118,18 @@ const make = Effect.gen(function* () {
   });
 
   const snapshot = Effect.fn("CodingBridge.snapshot")(function* (row: Row) {
+    if (row.destination_environment_id !== null) {
+      if (!remote) return yield* new CodingBridgeError({ operation: "read", reason: "execution" });
+      const task = yield* remote
+        .snapshot(row)
+        .pipe(
+          Effect.mapError(
+            (cause) => new CodingBridgeError({ operation: "read", reason: "execution", cause }),
+          ),
+        );
+      const delivery = yield* deliveryStatus(ThreadId.make(row.thread_id), task.runId);
+      return { ...task, ...(delivery === undefined ? {} : { delivery }) };
+    }
     const threadId = ThreadId.make(row.thread_id);
     const base = {
       origin: { hostId: row.host_id, agentId: row.agent_id, taskId: row.task_id },
@@ -184,6 +189,19 @@ const make = Effect.gen(function* () {
         (cause) => new CodingBridgeError({ operation: "launch", reason: "conflict", cause }),
       ),
     );
+    const authorityJson =
+      input.environmentId === undefined
+        ? null
+        : remote === undefined
+          ? yield* new CodingBridgeError({ operation: "launch", reason: "execution" })
+          : yield* remote
+              .authorize(input)
+              .pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new CodingBridgeError({ operation: "launch", reason: "execution", cause }),
+                ),
+              );
     const now = yield* DateTime.now;
     const [threadId, commandId] = yield* Effect.all([random.uuidV4(), random.uuidV4()]).pipe(
       Effect.mapError(
@@ -192,9 +210,9 @@ const make = Effect.gen(function* () {
     );
     // Persist identity before calling execution: an uncertain launch response must retry the same receipt and thread.
     yield* sql`INSERT INTO openbot_coding_tasks
-      (host_id, agent_id, task_id, operation_id, project_id, thread_id, command_id, input_json, created_at)
+      (host_id, agent_id, task_id, operation_id, project_id, thread_id, command_id, input_json, created_at, destination_environment_id, remote_authority_json)
       VALUES (${input.origin.hostId}, ${input.origin.agentId}, ${input.origin.taskId}, ${input.operationId}, ${input.projectId},
-      ${threadId}, ${commandId}, ${inputJson}, ${DateTime.formatIso(now)})
+      ${threadId}, ${commandId}, ${inputJson}, ${DateTime.formatIso(now)}, ${input.environmentId ?? null}, ${authorityJson})
       ON CONFLICT (host_id, agent_id, task_id, operation_id) DO NOTHING`.pipe(
       Effect.mapError(
         (cause) => new CodingBridgeError({ operation: "launch", reason: "storage", cause }),
@@ -204,6 +222,16 @@ const make = Effect.gen(function* () {
     if (row.input_json !== inputJson)
       return yield* new CodingBridgeError({ operation: "launch", reason: "conflict" });
     if (row.cancel_requested) return yield* snapshot(row);
+    if (row.destination_environment_id !== null) {
+      yield* remote!
+        .launch(row, input)
+        .pipe(
+          Effect.mapError(
+            (cause) => new CodingBridgeError({ operation: "launch", reason: "execution", cause }),
+          ),
+        );
+      return yield* snapshot(yield* find(input));
+    }
     yield* launchService
       .launch({
         commandId: CommandId.make(row.command_id),
@@ -245,6 +273,17 @@ const make = Effect.gen(function* () {
 
   const send = Effect.fn("CodingBridge.send")(function* (input: OpenbotCodingSendInput) {
     const row = yield* find(input);
+    if (row.destination_environment_id !== null) {
+      if (!remote) return yield* new CodingBridgeError({ operation: "send", reason: "execution" });
+      yield* remote
+        .send(row, input)
+        .pipe(
+          Effect.mapError(
+            (cause) => new CodingBridgeError({ operation: "send", reason: "execution", cause }),
+          ),
+        );
+      return yield* snapshot(yield* find(input));
+    }
     if (row.cancel_requested)
       return yield* new CodingBridgeError({ operation: "send", reason: "cancelled" });
     yield* threads
@@ -269,6 +308,18 @@ const make = Effect.gen(function* () {
 
   const cancel = Effect.fn("CodingBridge.cancel")(function* (input: OpenbotCodingCancelInput) {
     const row = yield* find(input);
+    if (row.destination_environment_id !== null) {
+      if (!remote)
+        return yield* new CodingBridgeError({ operation: "cancel", reason: "execution" });
+      yield* remote
+        .cancel(row, input)
+        .pipe(
+          Effect.mapError(
+            (cause) => new CodingBridgeError({ operation: "cancel", reason: "execution", cause }),
+          ),
+        );
+      return yield* snapshot(yield* find(input));
+    }
     yield* sql`UPDATE openbot_coding_tasks SET cancel_requested = 1 WHERE thread_id = ${row.thread_id}`.pipe(
       Effect.mapError(
         (cause) => new CodingBridgeError({ operation: "cancel", reason: "storage", cause }),
@@ -318,20 +369,28 @@ const make = Effect.gen(function* () {
   }, gate.withPermit);
 
   return CodingBridge.of({
-    changes: Stream.fromPubSub(changes),
+    changes: remote
+      ? Stream.merge(Stream.fromPubSub(changes), remote.changes)
+      : Stream.fromPubSub(changes),
     launch: Effect.fn("CodingBridge.launchAndPublish")(
       launch,
-      Effect.tap((task) => PubSub.publish(changes, task.threadId)),
+      Effect.tap((task) =>
+        task.environmentId === undefined ? PubSub.publish(changes, task.threadId) : Effect.void,
+      ),
     ),
     get,
     list,
     send: Effect.fn("CodingBridge.sendAndPublish")(
       send,
-      Effect.tap((task) => PubSub.publish(changes, task.threadId)),
+      Effect.tap((task) =>
+        task.environmentId === undefined ? PubSub.publish(changes, task.threadId) : Effect.void,
+      ),
     ),
     cancel: Effect.fn("CodingBridge.cancelAndPublish")(
       cancel,
-      Effect.tap((task) => PubSub.publish(changes, task.threadId)),
+      Effect.tap((task) =>
+        task.environmentId === undefined ? PubSub.publish(changes, task.threadId) : Effect.void,
+      ),
     ),
   });
 });

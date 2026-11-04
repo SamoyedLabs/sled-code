@@ -1,6 +1,7 @@
 import * as OpenbotSledTools from "./openbot/SledTools.ts";
 import * as OpenbotUpstream from "./openbot/UpstreamRuntime.ts";
 import * as OpenbotCodingDelivery from "./openbot/CodingDelivery.ts";
+import * as OpenbotRemoteCoding from "./openbot/RemoteCoding.ts";
 import * as Openbot from "./openbot/Integration.ts";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import type { RelayManagedEndpointRuntimeConfig } from "@t3tools/contracts/relay";
@@ -568,6 +569,8 @@ const layerScheduledTaskWebhookOrigin = Layer.effect(
   }),
 );
 
+const layerPeerConnectivity = PeerMcpClient.layer.pipe(Layer.provideMerge(PeerLinks.layer));
+
 const layerOrchestrationV2Runtime = RuntimeLayer.layerProduction.pipe(
   Layer.provide(layerScheduledTaskWebhookOrigin),
   Layer.provide(ProviderUsageAnalytics.layer),
@@ -677,6 +680,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   Layer.effectDiscard(ProjectSettingsOverrideSweep.sweep),
 ).pipe(
   Layer.provideMerge(layerOrchestrationApplication),
+  Layer.provideMerge(layerPeerConnectivity),
   Layer.provideMerge(RuntimeLayer.layerEventInfrastructure),
   Layer.provideMerge(Layer.merge(ProjectStore.layer, ThreadSearch.layer)),
   Layer.provideMerge(SecretResolver.layer),
@@ -786,6 +790,9 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.effectDiscard(
     OpenbotCodingDelivery.CodingDelivery.pipe(Effect.flatMap((delivery) => delivery.start)),
   ),
+  Layer.effectDiscard(
+    OpenbotRemoteCoding.RemoteCoding.pipe(Effect.flatMap((remote) => remote.start)),
+  ),
   Layer.mergeAll(
     HttpApiBuilder.layer(EnvironmentHttpApi).pipe(
       Layer.provide(AuthHttp.layer),
@@ -850,12 +857,7 @@ const layerMakeRoutes = Layer.mergeAll(
     ),
   ),
   // Links to other environments, shared by Settings (WebSocket) and agents (/mcp).
-  Layer.provide(
-    PeerForwarding.layer.pipe(
-      Layer.provideMerge(PeerMcpClient.layer),
-      Layer.provideMerge(PeerLinks.layer),
-    ),
-  ),
+  Layer.provide(PeerForwarding.layer),
   Layer.provide(PreviewAutomationBroker.layer),
   Layer.provide(ServerSelfUpdate.layer.pipe(Layer.provide(layerDesktopAppUpdate))),
   Layer.provide(layerCommandReadiness),

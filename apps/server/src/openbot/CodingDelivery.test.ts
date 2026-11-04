@@ -1,6 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import {
   EventId,
+  EnvironmentId,
   MessageId,
   ProjectId,
   ProviderInstanceId,
@@ -232,53 +233,74 @@ it.effect.each(["conversation", "queued", "unconfirmed", "legacy"] as const)(
   },
 );
 
-it.effect("does not deliver a result into a different host or while coding remains active", () => {
-  let hostId = "other-host";
-  let completed = false;
-  let sends = 0;
-  const dependencies = Layer.mergeAll(
-    SqlitePersistence.layerMemory,
-    Layer.mock(CodingBridge.CodingBridge)({
-      get: () => Effect.sync(() => ({ ...task, state: completed ? "completed" : "running" })),
-      changes: Stream.empty,
-    }),
-    Layer.mock(ProjectionStore.ProjectionStoreV2)({
-      getThreadProjection: () =>
-        Effect.succeed({
-          ...ProjectionStore.emptyProjection({
-            type: "thread.created",
-            id: EventId.make("created"),
-            threadId,
-            occurredAt: now,
-            payload: thread,
+it.effect.each([false, true])(
+  "delivers only settled results for the bound host and durable receipt (remote: %s)",
+  (remote) => {
+    let hostId = "other-host";
+    let completed = false;
+    let sends = 0;
+    const dependencies = Layer.mergeAll(
+      SqlitePersistence.layerMemory,
+      Layer.mock(CodingBridge.CodingBridge)({
+        get: () =>
+          Effect.sync(() => ({
+            ...task,
+            state: completed ? "completed" : "running",
+            ...(remote
+              ? {
+                  environmentId: EnvironmentId.make("destination"),
+                  threadId: ThreadId.make("remote-thread"),
+                  remoteState: completed ? ("settled" as const) : ("following" as const),
+                }
+              : {}),
+          })),
+        changes: Stream.empty,
+      }),
+      Layer.mock(ProjectionStore.ProjectionStoreV2)({
+        getThreadProjection: () =>
+          remote
+            ? Effect.die("Remote results must not load a local projection")
+            : Effect.succeed({
+                ...ProjectionStore.emptyProjection({
+                  type: "thread.created",
+                  id: EventId.make("created"),
+                  threadId,
+                  occurredAt: now,
+                  payload: thread,
+                }),
+                runs: [run],
+              }),
+      }),
+      Layer.mock(Events.OrchestrationEventStore)({}),
+      Layer.mock(Integration.Integration)({
+        readyHostId: Effect.sync(() => hostId),
+        readyChanges: Stream.empty,
+        apiWriteToHost: () =>
+          Effect.sync(() => {
+            sends++;
+            return { messageId: "ack", deliveries: [{ recipientAgentId: "bot" }] };
           }),
-          runs: [run],
-        }),
-    }),
-    Layer.mock(Events.OrchestrationEventStore)({}),
-    Layer.mock(Integration.Integration)({
-      readyHostId: Effect.sync(() => hostId),
-      readyChanges: Stream.empty,
-      apiWriteToHost: () =>
-        Effect.sync(() => {
-          sends++;
-          return { messageId: "ack", deliveries: [{ recipientAgentId: "bot" }] };
-        }),
-    }),
-  );
-  return Effect.gen(function* () {
-    yield* seed;
-    const delivery = yield* CodingDelivery.CodingDelivery;
-    yield* delivery.reconcile(threadId);
-    expect(sends).toBe(0);
-    hostId = "host";
-    yield* delivery.reconcile(threadId);
-    expect(sends).toBe(0);
-    completed = true;
-    yield* delivery.reconcile(threadId);
-    expect(sends).toBe(1);
-  }).pipe(Effect.provide(CodingDelivery.layer.pipe(Layer.provideMerge(dependencies))));
-});
+      }),
+    );
+    return Effect.gen(function* () {
+      yield* seed;
+      const delivery = yield* CodingDelivery.CodingDelivery;
+      yield* delivery.reconcile(threadId);
+      expect(sends).toBe(0);
+      hostId = "host";
+      yield* delivery.reconcile(threadId);
+      expect(sends).toBe(0);
+      completed = true;
+      yield* delivery.reconcile(threadId);
+      expect(sends).toBe(1);
+      const sql = yield* SqlClient.SqlClient;
+      const receipts = yield* sql<{
+        readonly thread_id: string;
+      }>`SELECT thread_id FROM openbot_coding_deliveries`;
+      expect(receipts.map((receipt) => receipt.thread_id)).toEqual([threadId]);
+    }).pipe(Effect.provide(CodingDelivery.layer.pipe(Layer.provideMerge(dependencies))));
+  },
+);
 
 it.effect(
   "reconciles on readiness and retries transient delivery without another application event",

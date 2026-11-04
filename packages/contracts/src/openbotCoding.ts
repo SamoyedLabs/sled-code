@@ -1,7 +1,9 @@
 import * as Schema from "effect/Schema";
 import {
   CommandId,
+  EnvironmentId,
   IsoDateTime,
+  NonNegativeInt,
   ProjectId,
   RunId,
   RuntimeRequestId,
@@ -32,6 +34,7 @@ export const OpenbotCodingReference = Schema.Struct({
 export type OpenbotCodingReference = typeof OpenbotCodingReference.Type;
 export const OpenbotCodingLaunchInput = Schema.Struct({
   ...OpenbotCodingReference.fields,
+  environmentId: Schema.optional(EnvironmentId),
   projectId: ProjectId,
   title: TrimmedNonEmptyString.check(Schema.isMaxLength(256)),
   prompt: TrimmedNonEmptyString.check(Schema.isMaxLength(200_000)),
@@ -74,6 +77,18 @@ export const OpenbotCodingTask = Schema.Struct({
   pendingRequestIds: Schema.Array(RuntimeRequestId),
   result: Schema.NullOr(Schema.String),
   delivery: Schema.optional(OpenbotCodingDeliveryStatus),
+  environmentId: Schema.optional(EnvironmentId),
+  link: Schema.optional(Schema.String),
+  pendingRequestCount: Schema.optional(NonNegativeInt),
+  remoteState: Schema.optional(
+    Schema.Literals([
+      "following",
+      "settled",
+      "unavailable",
+      "authorization-required",
+      "reconciliation-required",
+    ]),
+  ),
 });
 export type OpenbotCodingTask = typeof OpenbotCodingTask.Type;
 export const OpenbotCodingTaskList = Schema.Array(OpenbotCodingTask);

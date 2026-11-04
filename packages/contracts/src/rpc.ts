@@ -23,7 +23,13 @@ import {
   OpenbotApiResponse,
   OpenbotAttentionResponseInput,
 } from "./openbotApi.ts";
-import { OpenbotHostStatus, OpenbotAgentList, OpenbotError } from "./openbot.ts";
+import {
+  OpenbotHostStatus,
+  OpenbotAgentList,
+  OpenbotError,
+  OpenbotHostAdminInput,
+  OpenbotHostReadInput,
+} from "./openbot.ts";
 import {
   OrchestrationV2SearchThreadError,
   OrchestrationV2SearchThreadInput,
@@ -587,6 +593,8 @@ export const WS_METHODS = {
   openbotUpstreamStage: "openbot.upstream.stage",
   openbotWrite: "openbot.write",
   openbotAdmin: "openbot.admin",
+  openbotAdminToHost: "openbot.adminToHost",
+  openbotReadToHost: "openbot.readToHost",
   openbotCodingLaunch: "openbot.coding.launch",
   openbotCodingGet: "openbot.coding.get",
   openbotCodingList: "openbot.coding.list",
@@ -2032,6 +2040,16 @@ const WsOpenbotAdminRpc = Rpc.make(WS_METHODS.openbotAdmin, {
   success: OpenbotApiResponse,
   error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
 });
+const WsOpenbotAdminToHostRpc = Rpc.make(WS_METHODS.openbotAdminToHost, {
+  payload: OpenbotHostAdminInput,
+  success: OpenbotApiResponse,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotReadToHostRpc = Rpc.make(WS_METHODS.openbotReadToHost, {
+  payload: OpenbotHostReadInput,
+  success: OpenbotApiResponse,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
 
 const WsOpenbotCodingLaunchRpc = Rpc.make(WS_METHODS.openbotCodingLaunch, {
   payload: OpenbotCodingLaunchInput,
@@ -2250,6 +2268,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsOpenbotUpstreamStageRpc,
   WsOpenbotWriteRpc,
   WsOpenbotAdminRpc,
+  WsOpenbotAdminToHostRpc,
+  WsOpenbotReadToHostRpc,
   WsOpenbotCodingLaunchRpc,
   WsOpenbotCodingGetRpc,
   WsOpenbotCodingListRpc,

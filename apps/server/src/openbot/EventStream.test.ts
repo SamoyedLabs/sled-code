@@ -5,9 +5,13 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as Deferred from "effect/Deferred";
 import * as Fiber from "effect/Fiber";
+import * as Schema from "effect/Schema";
 import * as EventStream from "./EventStream.ts";
 
 const identity = { requestId: "request1", botId: "bot1", threadId: "thread1", turnId: "turn1" };
+const decodeScope = Schema.decodeUnknownSync(
+  Schema.Struct({ capabilities: Schema.Array(Schema.String) }),
+);
 const emptySnapshot = {
   attentionComplete: true,
   pendingPrompts: [],
@@ -64,60 +68,71 @@ it.live(
         expect(request.headers["openbot-protocol-version"]).toBe("9");
         socket.once("message", (data) => {
           scope = JSON.parse(data.toString());
+          // Released event visibility is negotiated by capabilities, even with HTTP protocol 9.
+          const supportsAcp = decodeScope(scope).capabilities.includes("open-providers-v1");
           socket.send(
             JSON.stringify({
               type: "runtime-snapshot",
               snapshot: {
                 ...emptySnapshot,
                 mcpServers: [{ env: { TOKEN: "private-config" } }],
-                pendingApprovals: [
-                  {
-                    ...identity,
-                    kind: "command",
-                    command: "git status",
-                    cwd: "/workspace/project",
-                    reason: "Inspect work before editing",
-                    grantRoot: null,
-                    permissions: {
-                      fileSystem: { read: ["/workspace/project"], write: [] },
-                      network: false,
-                    },
-                    truncated: false,
-                    providerPrivateState: "private-provider-state",
-                  },
-                ],
-                pendingPrompts: [
-                  {
-                    ...identity,
-                    requestId: 2,
-                    questions: [
+                pendingApprovals: supportsAcp
+                  ? [
                       {
-                        id: "q1",
-                        isSecret: true,
-                        header: "API key",
-                        question: "Enter the API key for your connector",
-                        options: null,
-                        privateAnswer: "private-answer",
+                        ...identity,
+                        kind: "command",
+                        command: "git status",
+                        cwd: "/workspace/project",
+                        reason: "Inspect work before editing",
+                        grantRoot: null,
+                        permissions: {
+                          fileSystem: { read: ["/workspace/project"], write: [] },
+                          network: false,
+                        },
+                        truncated: false,
+                        providerPrivateState: "private-provider-state",
                       },
-                    ],
-                  },
-                ],
-                pendingBrowserTakeovers: [
-                  {
-                    ...identity,
-                    requestId: 3,
-                    tabId: "tab1",
-                    reason: "sign-in-blocked",
-                    secret: {
-                      method: "password",
-                      origin: "https://example.com",
-                      digits: 6,
-                      password: "private-password",
-                    },
-                  },
-                ],
+                    ]
+                  : [],
+                pendingPrompts: supportsAcp
+                  ? [
+                      {
+                        ...identity,
+                        requestId: 2,
+                        questions: [
+                          {
+                            id: "q1",
+                            isSecret: true,
+                            header: "API key",
+                            question: "Enter the API key for your connector",
+                            options: null,
+                            privateAnswer: "private-answer",
+                          },
+                        ],
+                      },
+                    ]
+                  : [],
+                pendingBrowserTakeovers: supportsAcp
+                  ? [
+                      {
+                        ...identity,
+                        requestId: 3,
+                        tabId: "tab1",
+                        reason: "sign-in-blocked",
+                        secret: {
+                          method: "password",
+                          origin: "https://example.com",
+                          digits: 6,
+                          password: "private-password",
+                        },
+                      },
+                    ]
+                  : [],
               },
             }),
+          );
+          socket.send(
+            JSON.stringify({ type: "status", status: { token: "private-provider-token" } }),
           );
           socket.send(
             JSON.stringify({
@@ -125,6 +140,7 @@ it.live(
               configs: [{ token: "private-mcp-token" }],
             }),
           );
+          socket.send(JSON.stringify({ type: "agents-changed" }));
         });
       });
       const frames = yield* EventStream.connect({
@@ -132,7 +148,7 @@ it.live(
         sessionToken: "private-session",
         isClosed: () => false,
         peers,
-      }).pipe(Stream.take(2), Stream.runCollect);
+      }).pipe(Stream.take(3), Stream.runCollect);
       expect(scope).toMatchObject({
         type: "agent-event-scope",
         includeConversations: false,
@@ -190,6 +206,7 @@ it.live(
             },
           ],
         },
+        { type: "change", resource: "configuration" },
         { type: "change", resource: "configuration" },
       ]);
       expect(JSON.stringify(frames)).not.toContain("private-");

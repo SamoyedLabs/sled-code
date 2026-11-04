@@ -11,12 +11,14 @@ import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
 export function BotConfiguration({
   environmentId,
   agentId,
+  hostId,
 }: {
   environmentId: EnvironmentId;
   agentId: string;
+  hostId: string;
 }) {
-  const canAdmin = useAtomValue(openbot.admin.permissionAtom(environmentId));
-  const admin = useAtomCommand(openbot.admin, { reportFailure: false });
+  const canAdmin = useAtomValue(openbot.adminToHost.permissionAtom(environmentId));
+  const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<ReturnType<typeof permissionView>>(null);
@@ -29,11 +31,11 @@ export function BotConfiguration({
     setError(null);
     const permissionResult = await admin({
       environmentId,
-      input: { operation: "agent.permissions.read", agentId },
+      input: { hostId, request: { operation: "agent.permissions.read", agentId } },
     });
     const instructionResult = await admin({
       environmentId,
-      input: { operation: "agent.instructions.read", agentId },
+      input: { hostId, request: { operation: "agent.instructions.read", agentId } },
     });
     if (permissionResult._tag === "Failure")
       setError(String(squashAtomCommandFailure(permissionResult)));
@@ -59,7 +61,7 @@ export function BotConfiguration({
     if (busy) return;
     setBusy(true);
     setError(null);
-    const result = await admin({ environmentId, input });
+    const result = await admin({ environmentId, input: { hostId, request: input } });
     if (result._tag === "Failure") setError(String(squashAtomCommandFailure(result)));
     else if (input.operation === "agent.permissions.update") {
       const value = permissionView(result.value);

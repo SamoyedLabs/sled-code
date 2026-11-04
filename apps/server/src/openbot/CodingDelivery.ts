@@ -166,24 +166,25 @@ const make = Effect.gen(function* () {
       .pipe(Effect.mapError((cause) => new CodingDeliveryError({ stage: "read", cause })));
     if (!terminal.has(task.state)) return;
     // A result belongs to the final settled work, not merely the first provider turn to end.
-    if (task.runId !== null) {
+    if (task.environmentId !== undefined && task.remoteState !== "settled") return;
+    if (task.runId !== null && task.environmentId === undefined) {
       const projection = yield* projections
         .getThreadProjection(task.threadId)
         .pipe(Effect.mapError((cause) => new CodingDeliveryError({ stage: "read", cause })));
       if (delegatedTaskProgress(projection).state !== "result_available") return;
     }
     const runId = task.runId ?? "cancelled-before-launch";
-    const clientMessageId = `sled-coding:${task.threadId}:${runId}`;
+    const clientMessageId = `sled-coding:${row.thread_id}:${runId}`;
     const result =
       task.result ??
       (task.cancelRequested
         ? "The coding assignment was cancelled before execution."
         : "The coding assignment ended without an assistant result.");
-    const text = `Sled coding result\nThread: ${task.threadId}\nRun: ${runId}\nStatus: ${task.state}\n\n${result}`;
+    const text = `Sled coding result\n${task.environmentId === undefined ? "" : `Environment: ${task.environmentId}\n`}Thread: ${task.threadId}\nRun: ${runId}\nStatus: ${task.state}\n\n${result}`;
     const now = yield* DateTime.now;
     const inserted = yield* sql`INSERT INTO openbot_coding_deliveries
       (thread_id, run_id, client_message_id, first_attempt_at, payload_text)
-      VALUES (${task.threadId}, ${runId}, ${clientMessageId}, ${DateTime.formatIso(now)}, ${text})
+      VALUES (${row.thread_id}, ${runId}, ${clientMessageId}, ${DateTime.formatIso(now)}, ${text})
       ON CONFLICT (thread_id, run_id) DO NOTHING RETURNING thread_id`.pipe(
       Effect.mapError((cause) => new CodingDeliveryError({ stage: "storage", cause })),
     );
@@ -192,7 +193,7 @@ const make = Effect.gen(function* () {
       readonly first_attempt_at: string | null;
       readonly payload_text: string | null;
     }>`SELECT accepted_at, first_attempt_at, payload_text FROM openbot_coding_deliveries
-      WHERE thread_id = ${task.threadId} AND run_id = ${runId}`.pipe(
+      WHERE thread_id = ${row.thread_id} AND run_id = ${runId}`.pipe(
       Effect.mapError((cause) => new CodingDeliveryError({ stage: "storage", cause })),
     );
     const receipt = rows[0];
@@ -209,7 +210,7 @@ const make = Effect.gen(function* () {
         elapsed < RETRY_WINDOW_MS;
       if (!mayRetry) {
         const updated = yield* sql`UPDATE openbot_coding_deliveries SET reconciliation_required = 1
-          WHERE thread_id = ${task.threadId} AND run_id = ${runId} AND reconciliation_required = 0
+          WHERE thread_id = ${row.thread_id} AND run_id = ${runId} AND reconciliation_required = 0
           RETURNING thread_id`.pipe(
           Effect.mapError((cause) => new CodingDeliveryError({ stage: "storage", cause })),
         );
@@ -250,7 +251,7 @@ const make = Effect.gen(function* () {
     }
     const acceptedAt = yield* DateTime.now;
     yield* sql`UPDATE openbot_coding_deliveries SET accepted_at = ${DateTime.formatIso(acceptedAt)}, reconciliation_required = 0
-      WHERE thread_id = ${task.threadId} AND run_id = ${runId}`.pipe(
+      WHERE thread_id = ${row.thread_id} AND run_id = ${runId}`.pipe(
       Effect.mapError((cause) => new CodingDeliveryError({ stage: "storage", cause })),
     );
     yield* PubSub.publish(changes, { hostId: row.host_id, resource: "all" });
@@ -312,9 +313,13 @@ const make = Effect.gen(function* () {
     yield* Stream.runForEach(integration.readyChanges, (hostId) =>
       hostId === null ? Effect.void : enqueue(),
     ).pipe(Effect.forkScoped);
-    yield* Stream.runForEach(bridge.changes, (threadId) => enqueue(threadId)).pipe(
-      Effect.forkScoped,
-    );
+    yield* Stream.runForEach(bridge.changes, (threadId) =>
+      Effect.gen(function* () {
+        const hostId = yield* integration.readyHostId;
+        if (hostId !== null) yield* PubSub.publish(changes, { hostId, resource: "all" });
+        yield* enqueue(threadId);
+      }),
+    ).pipe(Effect.forkScoped);
     yield* events.streamApplicationEvents({ afterSequence: sequence }).pipe(
       Stream.runForEach((stored) => {
         if (!("event" in stored)) return Effect.void;

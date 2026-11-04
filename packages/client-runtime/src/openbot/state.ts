@@ -1,6 +1,7 @@
 import {
   type OpenbotCodingListInput,
   type OpenbotReadRequest,
+  type OpenbotHostReadInput,
   type EnvironmentId,
   WS_METHODS,
 } from "@t3tools/contracts";
@@ -19,6 +20,7 @@ import {
   codingTasks,
   sledToolsStatus,
   attentionSnapshot,
+  readFromHost,
 } from "./rpc/index.ts";
 
 export function createOpenbotAtoms<R, E>(
@@ -66,6 +68,12 @@ export function createOpenbotAtoms<R, E>(
       staleTimeMs: 5_000,
       refreshTrigger,
     }),
+    readFromHost: createEnvironmentQueryAtomFamily(runtime, {
+      label: "openbot:host-read",
+      execute: (input: OpenbotHostReadInput) => readFromHost(input),
+      staleTimeMs: 5_000,
+      refreshTrigger,
+    }),
     sledTools: createEnvironmentQueryAtomFamily(runtime, {
       label: "openbot:sled-tools",
       execute: (_input: Record<string, never>) => sledToolsStatus(),
@@ -96,6 +104,16 @@ export function createOpenbotAtoms<R, E>(
     admin: createEnvironmentRpcCommand(runtime, {
       label: "Update bot",
       tag: WS_METHODS.openbotAdmin,
+      onSuccess: ({ environmentId }, registry) =>
+        Effect.sync(() => {
+          registry.refresh(agents({ environmentId, input: {} }));
+          registry.refresh(attention({ environmentId, input: {} }));
+        }),
+      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
+    }),
+    adminToHost: createEnvironmentRpcCommand(runtime, {
+      label: "Update bot engine configuration",
+      tag: WS_METHODS.openbotAdminToHost,
       onSuccess: ({ environmentId }, registry) =>
         Effect.sync(() => {
           registry.refresh(agents({ environmentId, input: {} }));

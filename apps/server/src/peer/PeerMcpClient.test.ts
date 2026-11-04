@@ -153,10 +153,25 @@ it.effect("renews a missing peer session once and reuses its replacement", () =>
       ),
     );
     const client = Context.get(context, PeerMcpClient.PeerMcpClient);
+    // The current resolve may return a replacement credential even when a caller read the old link first.
+    expect(
+      (yield* Effect.flip(
+        client.call({
+          environmentId: box.environmentId,
+          expectedLinkedAt: DateTime.formatIso(DateTime.makeUnsafe(1)),
+          tool: "probe",
+          arguments: {},
+          limits: { runtimeMode: "approval-required", interactionMode: "plan" },
+          success: Result,
+        }),
+      )).code,
+    ).toBe("capability_denied");
+    expect(sessionHeaders).toEqual([]);
     for (let call = 0; call < 2; call++) {
       expect(
         yield* client.call({
           environmentId: box.environmentId,
+          expectedLinkedAt: DateTime.formatIso(DateTime.makeUnsafe(0)),
           tool: "probe",
           arguments: {},
           limits: { runtimeMode: "approval-required", interactionMode: "plan" },

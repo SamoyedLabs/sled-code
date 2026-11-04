@@ -42,6 +42,7 @@ describe("RPC authorization scopes", () => {
       WS_METHODS.openbotStatus,
       WS_METHODS.openbotListAgents,
       WS_METHODS.openbotRead,
+      WS_METHODS.openbotReadToHost,
       WS_METHODS.openbotAttention,
       WS_METHODS.openbotSubscribeChanges,
     ]) {
@@ -52,6 +53,7 @@ describe("RPC authorization scopes", () => {
       WS_METHODS.openbotStart,
       WS_METHODS.openbotStop,
       WS_METHODS.openbotAdmin,
+      WS_METHODS.openbotAdminToHost,
       WS_METHODS.openbotAttentionRespond,
       WS_METHODS.openbotUpstreamStatus,
       WS_METHODS.openbotUpstreamCheck,
@@ -78,6 +80,23 @@ describe("RPC authorization scopes", () => {
       AuthOrchestrationOperateScope,
       AuthSourceControlWriteScope,
     ]);
+  });
+
+  it("requires provider management for bot provider administration and operate access for starting bots", () => {
+    for (const method of [WS_METHODS.openbotAdmin, WS_METHODS.openbotAdminToHost]) {
+      const payload = (request: unknown) =>
+        method === WS_METHODS.openbotAdminToHost ? { hostId: "fixture-host", request } : request;
+      expect(
+        clientRpcRequiredScopes(method, payload({ operation: "provider.runtimes.check" })),
+      ).toEqual([AuthSettingsWriteScope, AuthProvidersManageScope]);
+      expect(clientRpcRequiredScopes(method, payload({ operation: "agent.create" }))).toEqual([
+        AuthSettingsWriteScope,
+        AuthOrchestrationOperateScope,
+      ]);
+      expect(clientRpcRequiredScopes(method, payload({ operation: "memory.create" }))).toEqual([
+        AuthSettingsWriteScope,
+      ]);
+    }
   });
 
   it("keeps webhook delivery logs, which hold request bodies, behind operate scope", () => {

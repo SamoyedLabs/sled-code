@@ -1,4 +1,4 @@
-import { WS_METHODS } from "@t3tools/contracts";
+import { WS_METHODS, type OpenbotHostReadInput } from "@t3tools/contracts";
 import { request } from "../../rpc/client.ts";
 
 export const readHostStatus = () => request(WS_METHODS.openbotStatus, {});
@@ -14,3 +14,5 @@ export const codingTasks = (input: OpenbotCodingListInput) =>
 export const sledToolsStatus = () => request(WS_METHODS.openbotSledToolsStatus, {});
 
 export const attentionSnapshot = () => request(WS_METHODS.openbotAttention, {});
+export const readFromHost = (input: OpenbotHostReadInput) =>
+  request(WS_METHODS.openbotReadToHost, input);

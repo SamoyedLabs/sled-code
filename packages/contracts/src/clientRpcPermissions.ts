@@ -9,6 +9,7 @@ import {
   AuthPreviewOperateScope,
   AuthDesktopOperateScope,
   AuthSettingsWriteScope,
+  AuthProvidersManageScope,
   AuthSourceControlWriteScope,
   AuthTerminalOperateScope,
   type AuthEnvironmentScope,
@@ -23,6 +24,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.openbotUpstreamStage]: AuthSettingsWriteScope,
   [WS_METHODS.openbotWrite]: AuthOrchestrationOperateScope,
   [WS_METHODS.openbotAdmin]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotAdminToHost]: AuthSettingsWriteScope,
   [WS_METHODS.openbotCodingLaunch]: AuthOrchestrationOperateScope,
   [WS_METHODS.openbotCodingSend]: AuthOrchestrationOperateScope,
   [WS_METHODS.openbotCodingCancel]: AuthOrchestrationOperateScope,
@@ -101,6 +103,28 @@ export function clientRpcRequiredScopes(
   method: string,
   input: unknown,
 ): readonly AuthEnvironmentScope[] {
+  if (method === WS_METHODS.openbotAdmin || method === WS_METHODS.openbotAdminToHost) {
+    const request =
+      method === WS_METHODS.openbotAdminToHost &&
+      typeof input === "object" &&
+      input !== null &&
+      "request" in input
+        ? input.request
+        : input;
+    // Inspect metadata without decoding credential values into validation errors.
+    if (
+      typeof request === "object" &&
+      request !== null &&
+      "operation" in request &&
+      typeof request.operation === "string"
+    ) {
+      if (request.operation.startsWith("provider."))
+        return [AuthSettingsWriteScope, AuthProvidersManageScope];
+      if (request.operation === "agent.create")
+        return [AuthSettingsWriteScope, AuthOrchestrationOperateScope];
+    }
+    return [AuthSettingsWriteScope];
+  }
   if (
     method === WS_METHODS.openbotSledToolsConnect ||
     method === WS_METHODS.openbotSledToolsDisconnect

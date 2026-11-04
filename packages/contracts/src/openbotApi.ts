@@ -2,7 +2,23 @@ import * as Schema from "effect/Schema";
 
 const Id = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$/));
 const Text = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100_000));
-const Model = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256));
+const Model = Schema.String.check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(160),
+  Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._:/[\],=-]*$/),
+);
+const ProviderId = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]{0,63}$/));
+const AccountId = Schema.String.check(Schema.isPattern(/^(?:default|a[0-9a-f]{16})$/));
+const ReasoningEffort = Schema.Literals([
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra",
+]);
 const Timezone = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128));
 const Timestamp = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(64));
 const Name = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(80));
@@ -126,6 +142,7 @@ export const OpenbotReadRequest = Schema.Union([
 
   Schema.Struct({ operation: Schema.Literal("agent.list") }),
   Schema.Struct({ operation: Schema.Literal("agent.models") }),
+  Schema.Struct({ operation: Schema.Literal("provider.modelVisibility.listing") }),
   Schema.Struct({ operation: Schema.Literal("agent.status") }),
   Schema.Struct({ operation: Schema.Literal("conversation.read"), agentId: Id }),
   Schema.Struct({ operation: Schema.Literal("task.list"), agentId: Id }),
@@ -191,6 +208,146 @@ export const OpenbotAttentionResponseInput = Schema.Struct({
 export type OpenbotAttentionResponseInput = typeof OpenbotAttentionResponseInput.Type;
 
 export const OpenbotAdminRequest = Schema.Union([
+  Schema.Struct({
+    operation: Schema.Literal("provider.signInRelay.start"),
+    provider: Schema.Literals(["codex", "claude", "antigravity", "muse"]),
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("provider.account.signInRelay.start"),
+    provider: Schema.Literals(["codex", "claude", "antigravity"]),
+    accountId: Schema.NullOr(AccountId),
+  }),
+  Schema.Struct({
+    operation: Schema.Literals(["provider.signInRelay.status", "provider.signInRelay.cancel"]),
+    flowId: Id,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("provider.signInRelay.complete"),
+    flowId: Id,
+    query: Schema.String.check(Schema.isMaxLength(8192)),
+  }),
+  Schema.Struct({
+    operation: Schema.Literals(["provider.accounts.list", "provider.accounts.usage"]),
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("provider.account.signIn.start"),
+    provider: ProviderId,
+    accountId: Schema.NullOr(AccountId),
+  }),
+  Schema.Struct({
+    operation: Schema.Literals([
+      "provider.account.signIn.status",
+      "provider.account.signIn.cancel",
+    ]),
+    provider: ProviderId,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("provider.account.rename"),
+    provider: ProviderId,
+    accountId: AccountId,
+    label: Schema.NullOr(Schema.String.check(Schema.isMaxLength(60))),
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("provider.account.remove"),
+    provider: ProviderId,
+    accountId: AccountId,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("provider.account.assign"),
+    agentId: Id,
+    accountId: Schema.NullOr(AccountId),
+  }),
+  Schema.Struct({
+    operation: Schema.Literals([
+      "provider.codeLogin.start",
+      "provider.codeLogin.cancel",
+      "provider.apiKey.state",
+      "provider.apiKey.clear",
+      "provider.runtimes.download",
+      "provider.runtimes.cancel",
+      "provider.signOut",
+    ]),
+    provider: ProviderId,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("provider.codeLogin.submit"),
+    provider: ProviderId,
+    code: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2048)),
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("provider.apiKey.set"),
+    provider: ProviderId,
+    key: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)),
+  }),
+  Schema.Struct({
+    operation: Schema.Literals([
+      "provider.runtimes.status",
+      "provider.runtimes.check",
+      "provider.default.read",
+      "provider.custom.list",
+      "provider.customAgent.list",
+    ]),
+  }),
+  Schema.Struct({
+    operation: Schema.Literals([
+      "provider.hostSignIn.start",
+      "provider.hostSignIn.status",
+      "provider.hostSignIn.cancel",
+    ]),
+    provider: Schema.Literal("antigravity"),
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("provider.default.update"),
+    provider: ProviderId,
+    model: Schema.NullOr(Model),
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("provider.custom.save"),
+    input: Schema.Struct({
+      id: Id,
+      name: Name,
+      baseUrl: ShortUrl,
+      apiKey: Schema.NullOr(Schema.String.check(Schema.isMaxLength(4096))),
+      models: Schema.Array(
+        Schema.Struct({ id: Model, name: Schema.String.check(Schema.isMaxLength(160)) }),
+      ).check(Schema.isMaxLength(64)),
+      headers: Schema.Array(
+        Schema.Struct({
+          name: Schema.String.check(Schema.isMaxLength(128)),
+          value: Schema.String.check(Schema.isMaxLength(4096)),
+        }),
+      ).check(Schema.isMaxLength(32)),
+    }),
+  }),
+  Schema.Struct({ operation: Schema.Literal("provider.custom.delete"), id: Id }),
+  Schema.Struct({
+    operation: Schema.Literal("provider.customAgent.save"),
+    input: Schema.Struct({
+      id: Id,
+      name: Name,
+      command: Schema.String.check(Schema.isMaxLength(1024)),
+      args: Schema.Array(Schema.String.check(Schema.isMaxLength(1024))).check(
+        Schema.isMaxLength(32),
+      ),
+      env: Schema.Array(
+        Schema.Struct({
+          name: Schema.String.check(Schema.isMaxLength(128)),
+          value: Schema.NullOr(Schema.String.check(Schema.isMaxLength(4096))),
+        }),
+      ).check(Schema.isMaxLength(16)),
+      usagePrompt: Schema.NullOr(Schema.String.check(Schema.isMaxLength(256))),
+    }),
+  }),
+  Schema.Struct({ operation: Schema.Literal("provider.customAgent.delete"), id: Id }),
+  Schema.Struct({
+    operation: Schema.Literal("provider.modelVisibility.read"),
+    provider: ProviderId,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("provider.modelVisibility.update"),
+    provider: ProviderId,
+    shown: Schema.NullOr(Schema.Array(Model).check(Schema.isMaxLength(10000))),
+  }),
   AttentionResponse,
   Schema.Struct({ operation: Schema.Literal("agent.permissions.read"), agentId: Id }),
   Schema.Struct({
@@ -306,8 +463,9 @@ export const OpenbotAdminRequest = Schema.Union([
       name: Name,
       description: Description,
       initialMessage: Text,
-      provider: Schema.optional(Id),
+      provider: Schema.optional(ProviderId),
       model: Schema.optional(Model),
+      reasoningEffort: Schema.optional(ReasoningEffort),
     }),
   }),
   Schema.Struct({
@@ -318,8 +476,9 @@ export const OpenbotAdminRequest = Schema.Union([
       title: Schema.optional(Schema.String.check(Schema.isMaxLength(120))),
       description: Schema.optional(Description),
       notifications: Schema.optional(Schema.Boolean),
-      provider: Schema.optional(Id),
+      provider: Schema.optional(ProviderId),
       model: Schema.optional(Model),
+      reasoningEffort: Schema.optional(ReasoningEffort),
     }),
   }),
   Schema.Struct({ operation: Schema.Literal("agent.delete"), agentId: Id }),
@@ -342,5 +501,5 @@ export const OpenbotAdminRequest = Schema.Union([
 ]);
 export type OpenbotAdminRequest = typeof OpenbotAdminRequest.Type;
 
-// Results retain the released upstream JSON shape; routes cannot reach auth, secrets or host administration.
+// Results retain released JSON shapes; provider and MCP replies are projected server-side.
 export const OpenbotApiResponse = Schema.Json;

@@ -40,6 +40,7 @@ type WsRpcMethod = RpcGroup.Rpcs<typeof WsRpcGroup>["_tag"];
 export const RPC_REQUIRED_SCOPES = {
   ...CLIENT_GUARDED_RPC_SCOPES,
   [WS_METHODS.openbotRead]: AuthOrchestrationReadScope,
+  [WS_METHODS.openbotReadToHost]: AuthOrchestrationReadScope,
   [WS_METHODS.openbotAttention]: AuthOrchestrationReadScope,
   [WS_METHODS.openbotSubscribeChanges]: AuthOrchestrationReadScope,
   [WS_METHODS.openbotUpstreamStatus]: AuthSettingsWriteScope,

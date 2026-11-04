@@ -68,6 +68,176 @@ const safeMcpUrl = (value: string) => {
   }
 };
 
+const ProviderId = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]{0,63}$/));
+const AccountId = Schema.String.check(Schema.isPattern(/^(?:default|a[0-9a-f]{16})$/));
+const PublicText = Schema.String.check(Schema.isMaxLength(2000));
+const NullableText = Schema.NullOr(PublicText);
+const PublicUrl = Schema.String.check(Schema.isMaxLength(2048), Schema.isPattern(/^https?:\/\//));
+const ProviderAccount = Schema.Struct({
+  id: AccountId,
+  label: NullableText,
+  email: NullableText,
+  state: PublicText,
+  message: NullableText,
+});
+const ProviderAccounts = Schema.Struct({
+  providers: Schema.Array(
+    Schema.Struct({
+      provider: ProviderId,
+      accounts: Schema.Array(ProviderAccount).check(Schema.isMaxLength(10)),
+    }),
+  ).check(Schema.isMaxLength(64)),
+  agents: Schema.Array(Schema.Struct({ agentId: Identifier, accountId: AccountId })).check(
+    Schema.isMaxLength(10000),
+  ),
+});
+const UsageWindow = Schema.Struct({
+  usedPercent: Schema.Number,
+  windowDurationMins: Schema.NullOr(Schema.Int),
+  resetsAt: Schema.NullOr(Schema.Number),
+});
+const ProviderUsage = Schema.Struct({
+  limits: Schema.Array(
+    Schema.Struct({
+      id: ProviderId,
+      accountId: AccountId,
+      primary: Schema.NullOr(UsageWindow),
+      secondary: Schema.NullOr(UsageWindow),
+    }),
+  ).check(Schema.isMaxLength(640)),
+});
+const ProviderSignInStatus = Schema.Struct({
+  tabId: Schema.NullOr(Identifier),
+  result: Schema.NullOr(Schema.Struct({ error: NullableText })),
+});
+const ProviderLogin = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("code"),
+    userCode: Schema.String.check(Schema.isMaxLength(64)),
+    verificationUrl: PublicUrl,
+    verificationUrlComplete: Schema.optional(PublicUrl),
+    expiresAt: Schema.Number,
+  }),
+  Schema.Struct({
+    kind: Schema.Literals(["paste", "link"]),
+    verificationUrl: PublicUrl,
+    expiresAt: Schema.Number,
+  }),
+  Schema.Struct({ kind: Schema.Literal("connected") }),
+]);
+const Runtime = Schema.Struct({
+  id: ProviderId,
+  phase: Schema.Literals(["not-downloaded", "downloading", "finishing", "ready", "download-error"]),
+  progress: Schema.NullOr(Schema.Int),
+  message: NullableText,
+  version: NullableText,
+  availableVersion: Schema.optional(NullableText),
+});
+const ProviderRuntimes = Schema.Struct({
+  revision: Schema.Int,
+  providers: Schema.Array(Runtime).check(Schema.isMaxLength(64)),
+  toolRuntimes: Schema.Array(Runtime).check(Schema.isMaxLength(64)),
+});
+const CustomProvider = Schema.Struct({
+  id: Identifier,
+  name: PublicText,
+  baseUrl: PublicUrl,
+  hasApiKey: Schema.Boolean,
+  models: Schema.Array(Schema.Struct({ id: PublicText, name: PublicText })).check(
+    Schema.isMaxLength(64),
+  ),
+  harness: Schema.Literals(["opencode", "pi"]),
+});
+const CustomAgent = Schema.Struct({
+  id: Identifier,
+  name: PublicText,
+  command: PublicText,
+  args: Schema.Array(PublicText).check(Schema.isMaxLength(32)),
+  envNames: Schema.Array(PublicText).check(Schema.isMaxLength(16)),
+  usagePrompt: NullableText,
+  resolvedCommand: NullableText,
+});
+const Restart = Schema.Literals(["restarted", "skipped-busy", "not-running"]);
+const ModelVisibility = Schema.Struct({
+  provider: ProviderId,
+  models: Schema.Array(Schema.Struct({ id: PublicText, name: PublicText })).check(
+    Schema.isMaxLength(10000),
+  ),
+  shown: Schema.Array(PublicText).check(Schema.isMaxLength(10000)),
+  changed: Schema.Boolean,
+});
+const providerDecoders = {
+  relayStarted: Schema.decodeUnknownEffect(
+    Schema.Struct({ flowId: Identifier, expiresAt: Schema.Int }),
+  ),
+  relayFlow: Schema.decodeUnknownEffect(
+    Schema.Struct({
+      authorizeUrl: Schema.NullOr(
+        Schema.String.check(Schema.isMaxLength(8192), Schema.isPattern(/^https?:\/\//)),
+      ),
+      callback: Schema.NullOr(
+        Schema.Struct({
+          port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })),
+          path: Schema.String.check(Schema.isMaxLength(2048)),
+          state: Schema.NullOr(Schema.String.check(Schema.isMaxLength(1024))),
+        }),
+      ),
+      result: Schema.NullOr(
+        Schema.Struct({ error: NullableText, toolCount: Schema.optional(Schema.Int) }),
+      ),
+    }),
+  ),
+  empty: Schema.decodeUnknownEffect(Schema.Struct({})),
+  accounts: Schema.decodeUnknownEffect(ProviderAccounts),
+  usage: Schema.decodeUnknownEffect(ProviderUsage),
+  login: Schema.decodeUnknownEffect(ProviderLogin),
+  signInStatus: Schema.decodeUnknownEffect(ProviderSignInStatus),
+  keyState: Schema.decodeUnknownEffect(
+    Schema.Struct({ status: Schema.Literals(["missing", "saved", "unreadable"]) }),
+  ),
+  runtimes: Schema.decodeUnknownEffect(ProviderRuntimes),
+  customProviders: Schema.decodeUnknownEffect(
+    Schema.Array(CustomProvider).check(Schema.isMaxLength(256)),
+  ),
+  customProviderResult: Schema.decodeUnknownEffect(
+    Schema.Struct({
+      providers: Schema.Array(CustomProvider).check(Schema.isMaxLength(256)),
+      restart: Restart,
+    }),
+  ),
+  customAgents: Schema.decodeUnknownEffect(Schema.Array(CustomAgent).check(Schema.isMaxLength(16))),
+  customAgentResult: Schema.decodeUnknownEffect(
+    Schema.Struct({
+      agents: Schema.Array(CustomAgent).check(Schema.isMaxLength(16)),
+      restart: Restart,
+    }),
+  ),
+  default: Schema.decodeUnknownEffect(
+    Schema.Struct({ provider: Schema.NullOr(ProviderId), model: NullableText }),
+  ),
+  modelVisibility: Schema.decodeUnknownEffect(ModelVisibility),
+  modelListings: Schema.decodeUnknownEffect(
+    Schema.Struct({
+      models: Schema.Array(
+        Schema.Struct({
+          provider: ProviderId,
+          id: PublicText,
+          listing: Schema.Literals(["new", "older"]),
+        }),
+      ).check(Schema.isMaxLength(10000)),
+    }),
+  ),
+};
+
+const decodeJsonValue = Schema.decodeUnknownEffect(Schema.Json);
+const decodeProviderResult = Effect.fn("OpenbotTeamClient.projectProvider")((
+  projection: keyof typeof providerDecoders,
+  value: unknown,
+) => {
+  const decode: (value: unknown) => Effect.Effect<unknown, Schema.SchemaError> =
+    providerDecoders[projection];
+  return decode(value).pipe(Effect.flatMap(decodeJsonValue));
+});
 const decodeJson = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json));
 const decodeReadRequest = Schema.decodeUnknownEffect(OpenbotReadRequest);
 const decodeWriteRequest = Schema.decodeUnknownEffect(OpenbotWriteRequest);
@@ -79,12 +249,231 @@ interface Route {
   readonly path: string;
   readonly body?: unknown;
   readonly projection?: "mcp-list" | "mcp-test" | "mcp-status";
+  readonly providerProjection?: keyof typeof providerDecoders;
 }
 // Only these source-backed operations can spend the private host-owner session.
 function apiRoute(request: ApiRequest): Route {
   const agentPath =
     "agentId" in request ? `/v1/agents/${encodeURIComponent(request.agentId)}` : "/v1/agents";
   switch (request.operation) {
+    case "provider.signInRelay.start":
+      return {
+        method: "POST",
+        path: "/v1/admin/sign-in-relay/provider/start",
+        body: { provider: request.provider },
+        providerProjection: "relayStarted",
+      };
+    case "provider.account.signInRelay.start":
+      return {
+        method: "POST",
+        path: "/v1/admin/sign-in-relay/provider-account/v2/start",
+        body: { provider: request.provider, accountId: request.accountId },
+        providerProjection: "relayStarted",
+      };
+    case "provider.signInRelay.status":
+    case "provider.signInRelay.cancel":
+      return {
+        method: "POST",
+        path: `/v1/admin/sign-in-relay/${request.operation.endsWith("status") ? "status" : "cancel"}`,
+        body: { flowId: request.flowId },
+        providerProjection: request.operation.endsWith("status") ? "relayFlow" : "empty",
+      };
+    case "provider.signInRelay.complete":
+      return {
+        method: "POST",
+        path: "/v1/admin/sign-in-relay/complete",
+        body: { flowId: request.flowId, query: request.query },
+        providerProjection: "relayFlow",
+      };
+    case "provider.accounts.list":
+      return {
+        method: "POST",
+        path: "/v1/admin/providers/accounts/list",
+        body: {},
+        providerProjection: "accounts",
+      };
+    case "provider.accounts.usage":
+      return {
+        method: "POST",
+        path: "/v1/admin/providers/accounts/usage",
+        body: {},
+        providerProjection: "usage",
+      };
+    case "provider.account.assign":
+      return {
+        method: "POST",
+        path: "/v1/admin/providers/accounts/agent",
+        body: { agentId: request.agentId, accountId: request.accountId },
+        providerProjection: "empty",
+      };
+    case "provider.account.signIn.start":
+      return {
+        method: "POST",
+        path: "/v1/admin/providers/accounts/sign-in/start",
+        body: { provider: request.provider, accountId: request.accountId },
+        providerProjection: "empty",
+      };
+    case "provider.account.signIn.status":
+    case "provider.account.signIn.cancel":
+      return {
+        method: "POST",
+        path: `/v1/admin/providers/accounts/sign-in/${request.operation.endsWith("status") ? "status" : "cancel"}`,
+        body: { provider: request.provider },
+        providerProjection: request.operation.endsWith("status") ? "signInStatus" : "empty",
+      };
+    case "provider.account.rename":
+      return {
+        method: "POST",
+        path: "/v1/admin/providers/accounts/rename",
+        body: { provider: request.provider, accountId: request.accountId, label: request.label },
+        providerProjection: "empty",
+      };
+    case "provider.account.remove":
+      return {
+        method: "POST",
+        path: "/v1/admin/providers/accounts/remove",
+        body: { provider: request.provider, accountId: request.accountId },
+        providerProjection: "empty",
+      };
+    case "provider.codeLogin.start":
+    case "provider.codeLogin.cancel":
+      return {
+        method: "POST",
+        path: `/v1/admin/providers/v8/code-login/${request.operation.endsWith("start") ? "start" : "cancel"}`,
+        body: { provider: request.provider },
+        providerProjection: request.operation.endsWith("start") ? "login" : "empty",
+      };
+    case "provider.codeLogin.submit":
+      return {
+        method: "POST",
+        path: "/v1/admin/providers/v8/code-login/submit",
+        body: { provider: request.provider, code: request.code },
+        providerProjection: "empty",
+      };
+    case "provider.apiKey.state":
+    case "provider.apiKey.clear":
+      return {
+        method: "POST",
+        path: `/v1/admin/providers/v8/api-key/${request.operation.endsWith("state") ? "state" : "clear"}`,
+        body: { provider: request.provider },
+        providerProjection: request.operation.endsWith("state") ? "keyState" : "empty",
+      };
+    case "provider.apiKey.set":
+      return {
+        method: "POST",
+        path: "/v1/admin/providers/v8/api-key/set",
+        body: { provider: request.provider, key: request.key },
+        providerProjection: "empty",
+      };
+    case "provider.runtimes.status":
+    case "provider.runtimes.check":
+      return {
+        method: "POST",
+        path: `/v1/admin/providers/v8/runtimes/${request.operation.endsWith("status") ? "status" : "check-updates"}`,
+        body: {},
+        providerProjection: "runtimes",
+      };
+    case "provider.runtimes.download":
+    case "provider.runtimes.cancel":
+      return {
+        method: "POST",
+        path: `/v1/admin/providers/v8/runtimes/${request.operation.endsWith("download") ? "download" : "cancel"}`,
+        body: { provider: request.provider },
+        providerProjection: "runtimes",
+      };
+    case "provider.hostSignIn.start":
+    case "provider.hostSignIn.status":
+    case "provider.hostSignIn.cancel":
+      return {
+        method: "POST",
+        path: `/v1/admin/providers/host-sign-in/${request.operation.slice("provider.hostSignIn.".length)}`,
+        body: { provider: request.provider },
+        providerProjection: request.operation.endsWith("status") ? "signInStatus" : "empty",
+      };
+    case "provider.signOut":
+      return {
+        method: "POST",
+        path: "/v1/admin/providers/sign-out",
+        body: { provider: request.provider },
+        providerProjection: "empty",
+      };
+    case "provider.default.read":
+      return {
+        method: "POST",
+        path: "/v1/admin/host/default-provider",
+        body: {},
+        providerProjection: "default",
+      };
+    case "provider.default.update":
+      return {
+        method: "POST",
+        path: "/v1/admin/host/default-provider/update",
+        body: { provider: request.provider, model: request.model },
+        providerProjection: "default",
+      };
+    case "provider.custom.list":
+      return {
+        method: "POST",
+        path: "/v1/admin/providers/custom-harness/list",
+        body: {},
+        providerProjection: "customProviders",
+      };
+    case "provider.custom.save":
+      return {
+        method: "POST",
+        path: "/v1/admin/providers/custom-harness/save",
+        body: request.input,
+        providerProjection: "customProviderResult",
+      };
+    case "provider.custom.delete":
+      return {
+        method: "POST",
+        path: "/v1/admin/providers/custom-harness/delete",
+        body: { id: request.id },
+        providerProjection: "customProviderResult",
+      };
+    case "provider.customAgent.list":
+      return {
+        method: "POST",
+        path: "/v1/admin/custom-agents/list",
+        body: {},
+        providerProjection: "customAgents",
+      };
+    case "provider.customAgent.save":
+      return {
+        method: "POST",
+        path: "/v1/admin/custom-agents/save",
+        body: request.input,
+        providerProjection: "customAgentResult",
+      };
+    case "provider.customAgent.delete":
+      return {
+        method: "POST",
+        path: "/v1/admin/custom-agents/delete",
+        body: { id: request.id },
+        providerProjection: "customAgentResult",
+      };
+    case "provider.modelVisibility.read":
+      return {
+        method: "POST",
+        path: "/v1/admin/host/model-visibility",
+        body: { provider: request.provider },
+        providerProjection: "modelVisibility",
+      };
+    case "provider.modelVisibility.update":
+      return {
+        method: "POST",
+        path: "/v1/admin/host/model-visibility/update",
+        body: { provider: request.provider, shown: request.shown },
+        providerProjection: "modelVisibility",
+      };
+    case "provider.modelVisibility.listing":
+      return {
+        method: "POST",
+        path: "/v1/model-visibility/listing",
+        body: {},
+        providerProjection: "modelListings",
+      };
     case "agent.models":
       return { method: "GET", path: "/v1/agents/models" };
     case "agent.status":
@@ -399,7 +788,7 @@ const make = Effect.gen(function* () {
             "OpenBot-Protocol-Version": "9",
             "OpenBot-App-Version": "0.60.0",
             "OpenBot-Capabilities":
-              "agent-tasks-v1,agent-create-model,agent-admin-v1,agent-instructions-v1,skills-admin-v1,mcp-servers-v1,mcp-sign-in-v1,browser-navigation,browser-user-control,connectors-v1,channel-chats-v1",
+              "agent-tasks-v1,agent-create-model,agent-admin-v1,agent-instructions-v1,skills-admin-v1,mcp-servers-v1,mcp-sign-in-v1,browser-navigation,browser-user-control,connectors-v1,channel-chats-v1,providers-v8,provider-accounts-v1,provider-default-v1,provider-host-sign-in-v1,provider-sign-out-v1,custom-provider-harness-v1,custom-agents-v1,model-visibility-v1,claude-api-key-v1,sign-in-relay-v1,provider-account-relay-v1,provider-account-relay-v2",
           }),
         ),
       )
@@ -506,6 +895,42 @@ const make = Effect.gen(function* () {
       const response = yield* send(request);
       if (response.status === 204) return null;
       const result = yield* readJson(response);
+      if (route.providerProjection) {
+        if (route.providerProjection === "empty") return {};
+        const projected = yield* decodeProviderResult(route.providerProjection, result).pipe(
+          Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+        );
+        if (route.providerProjection === "relayFlow") {
+          const flow = yield* providerDecoders
+            .relayFlow(projected)
+            .pipe(Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })));
+          return {
+            ...flow,
+            result:
+              flow.result === null
+                ? null
+                : {
+                    error: flow.result.error === null ? null : "The provider sign-in failed.",
+                    ...(flow.result.toolCount === undefined
+                      ? {}
+                      : { toolCount: flow.result.toolCount }),
+                  },
+          };
+        }
+        if (route.providerProjection === "signInStatus") {
+          const status = yield* providerDecoders
+            .signInStatus(projected)
+            .pipe(Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })));
+          return {
+            tabId: status.tabId,
+            result:
+              status.result === null
+                ? null
+                : { error: status.result.error === null ? null : "The provider sign-in failed." },
+          };
+        }
+        return projected;
+      }
       // MCP administration responds with stored credentials; project them out before leaving this service.
       if (route.projection === "mcp-list")
         return yield* decodeMcpRows(result).pipe(

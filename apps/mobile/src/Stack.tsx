@@ -2,6 +2,7 @@ import {
   SettingsBotsRouteScreen,
   SettingsBotNewRouteScreen,
   SettingsBotDetailRouteScreen,
+  SettingsBotProvidersRouteScreen,
 } from "./features/settings/SettingsBotsRouteScreen";
 import { isDraftThreadRoute } from "./features/threads/thread-route-state";
 import { ComponentCatalogScreen } from "./features/development/ComponentCatalogScreen";
@@ -394,6 +395,10 @@ const SETTINGS_SCREENS = {
   SettingsBotNew: createNativeStackScreen({
     screen: SettingsBotNewRouteScreen,
     options: { ...SETTINGS_PAGE_OPTIONS, title: "Create bot" },
+  }),
+  SettingsBotProviders: createNativeStackScreen({
+    screen: SettingsBotProvidersRouteScreen,
+    options: { ...SETTINGS_PAGE_OPTIONS, title: "Bot providers" },
   }),
   SettingsBotDetail: createNativeStackScreen({
     screen: SettingsBotDetailRouteScreen,

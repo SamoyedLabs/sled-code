@@ -59,6 +59,7 @@ it.effect("lets a read-only bot discover the request schemas and observe engine 
 
 it.effect.each([
   { name: "openbot", action: "admin" },
+  { name: "openbot", action: "admin.host" },
   { name: "openbot", action: "attention.respond" },
   { name: "openbot", action: "upstream.check" },
   { name: "openbot", action: "upstream.stage" },

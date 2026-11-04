@@ -70,6 +70,7 @@ export type Frame =
   | { readonly type: "change"; readonly resource: OpenbotChange["resource"] };
 
 const resources: Readonly<Record<string, OpenbotChange["resource"]>> = {
+  status: "configuration",
   "bots-changed": "agents",
   "agents-changed": "agents",
   "agent-access-changed": "agents",
@@ -101,6 +102,8 @@ const attentionEvents = new Set([
   "browser-takeover-resolved",
 ]);
 const capabilities = [
+  // Protocol 9's HTTP header does not opt the event stream into open-provider visibility.
+  "open-providers-v1",
   "agent-runtime-snapshots",
   "agent-tasks-v1",
   "agent-memories-v1",

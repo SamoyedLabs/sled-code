@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import * as Result from "effect/Result";
 import type { OpenbotAdminRequest, OpenbotAttentionRequest } from "@t3tools/contracts";
+export * from "./providers.ts";
 
 const Message = Schema.Struct({
   id: Schema.String,

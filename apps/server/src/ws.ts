@@ -9,6 +9,7 @@ import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
 import * as PeerLinkRequests from "./peer/PeerLinkRequests.ts";
 import * as PeerLinks from "./peer/PeerLinks.ts";
+import * as OpenbotRemoteCoding from "./openbot/RemoteCoding.ts";
 
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -2293,6 +2294,12 @@ export const layerWsRpc = (
                 .stage(input)
                 .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
             : Effect.fail(new OpenbotError({ message: "Openbot release staging is unavailable." })),
+        [WS_METHODS.openbotReadToHost]: (input) =>
+          Option.isSome(openbot)
+            ? openbot.value
+                .apiReadToHost(input.hostId, input.request)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
         [WS_METHODS.openbotRead]: (input) =>
           Option.isSome(openbot)
             ? openbot.value
@@ -2305,6 +2312,12 @@ export const layerWsRpc = (
                 .apiWrite(input)
                 .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
             : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
+        [WS_METHODS.openbotAdminToHost]: (input) =>
+          Option.isSome(openbot)
+            ? openbot.value
+                .apiAdminToHost(input.hostId, input.request)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
         [WS_METHODS.openbotAdmin]: (input) =>
           Option.isSome(openbot)
             ? openbot.value
@@ -2313,9 +2326,14 @@ export const layerWsRpc = (
             : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
         [WS_METHODS.openbotCodingLaunch]: (input) =>
           Option.isSome(openbotCoding)
-            ? openbotCoding.value
-                .launch(input)
-                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            ? openbotCoding.value.launch(input).pipe(
+                Effect.provideService(OpenbotRemoteCoding.Caller, {
+                  kind: "session",
+                  sessionId: currentSessionId,
+                  limits: { runtimeMode: "full-access", interactionMode: "default" },
+                }),
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
             : Effect.fail(new OpenbotError({ message: "Openbot coding bridge is unavailable." })),
         [WS_METHODS.openbotCodingGet]: (input) =>
           Option.isSome(openbotCoding)
@@ -2331,15 +2349,25 @@ export const layerWsRpc = (
             : Effect.fail(new OpenbotError({ message: "Openbot coding bridge is unavailable." })),
         [WS_METHODS.openbotCodingSend]: (input) =>
           Option.isSome(openbotCoding)
-            ? openbotCoding.value
-                .send(input)
-                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            ? openbotCoding.value.send(input).pipe(
+                Effect.provideService(OpenbotRemoteCoding.Caller, {
+                  kind: "session",
+                  sessionId: currentSessionId,
+                  limits: { runtimeMode: "full-access", interactionMode: "default" },
+                }),
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
             : Effect.fail(new OpenbotError({ message: "Openbot coding bridge is unavailable." })),
         [WS_METHODS.openbotCodingCancel]: (input) =>
           Option.isSome(openbotCoding)
-            ? openbotCoding.value
-                .cancel(input)
-                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            ? openbotCoding.value.cancel(input).pipe(
+                Effect.provideService(OpenbotRemoteCoding.Caller, {
+                  kind: "session",
+                  sessionId: currentSessionId,
+                  limits: { runtimeMode: "full-access", interactionMode: "default" },
+                }),
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
             : Effect.fail(new OpenbotError({ message: "Openbot coding bridge is unavailable." })),
         [WS_METHODS.openbotSledToolsStatus]: (_input) =>
           Option.isSome(sledTools)
