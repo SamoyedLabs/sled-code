@@ -30,6 +30,9 @@ class ProgressTests(unittest.TestCase):
         self.assertEqual(history['Test Server 1']['Test'], [60])
         audit = m.accuracy([job], {'Test Server 1': {'Test': [40, 50, 55]}})
         self.assertEqual(audit, dict(samples=1, within_range=0, median_absolute_error=10))
+        tiny = {**step, 'completed_at': '2026-11-04T00:00:01Z'}
+        self.assertEqual(m.accuracy([{**job, 'steps': [tiny]}],
+                                   {'Test Server 1': {'Test': [0, 1, 2]}})['samples'], 0)
         self.assertEqual(m.job_set([job, {**job, 'name': 'Unused', 'conclusion': 'skipped'},
                                    {**job, 'name': 'Check'}]), ['Test Server 1'])
 

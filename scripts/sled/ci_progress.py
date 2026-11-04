@@ -123,6 +123,8 @@ def accuracy(jobs, history):
             if len(samples) < 3 or step.get('conclusion') != 'success' or not step.get('completed_at'):
                 continue
             duration = timestamp(step['completed_at']) - timestamp(step['started_at'])
+            if duration < 10 and max(samples) < 10:
+                continue
             covered += min(samples) <= duration <= max(samples)
             errors.append(abs(duration - statistics.median(samples)))
     return dict(samples=len(errors), within_range=covered,
@@ -238,7 +240,7 @@ def main():
     lines += [job_status(job, history, now) for job in jobs]
     audit = accuracy(jobs, history)
     if audit['samples']:
-        lines.append(f"Estimate audit: {audit['within_range']}/{audit['samples']} completed phases within historical range; "
+        lines.append(f"Estimate audit: {audit['within_range']}/{audit['samples']} completed phases ≥10s within historical range; "
                      f"median absolute error vs historical median={audit['median_absolute_error']}s. Different commits/cache states can change timings.")
     else:
         lines.append('Estimate audit: unavailable; no completed phases with enough prior history.')
