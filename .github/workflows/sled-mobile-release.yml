@@ -2,6 +2,10 @@ name: Sled Mobile Release
 on:
   workflow_dispatch:
     inputs:
+      verify_portability:
+        description: Verify Linux/Mac OTA fingerprint parity without publishing
+        type: boolean
+        default: false
       benchmark:
         description: Measure unsigned cold/warm native builds without publishing
         type: boolean
@@ -15,12 +19,12 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: ${{ inputs.benchmark && format('sled-mobile-benchmark-{0}', github.ref) || 'sled-mobile-release' }}
+  group: ${{ inputs.benchmark && format('sled-mobile-benchmark-{0}', github.ref) || inputs.verify_portability && format('sled-mobile-portability-{0}', github.ref) || 'sled-mobile-release' }}
   cancel-in-progress: false
 jobs:
   resolve:
     if: >-
-      !inputs.benchmark && github.repository == 'SamoyedLabs/sled-code' &&
+      !inputs.benchmark && !inputs.verify_portability && github.repository == 'SamoyedLabs/sled-code' &&
       github.ref == 'refs/heads/main' &&
       vars.SLED_MOBILE_RELEASE_ENABLED == 'true' &&
       (github.event_name != 'workflow_run' ||
@@ -201,3 +205,6 @@ jobs:
   benchmark:
     if: github.event_name == 'workflow_dispatch' && inputs.benchmark
     uses: ./.github/workflows/sled-native-cache-benchmark.yml
+  portability:
+    if: github.event_name == 'workflow_dispatch' && inputs.verify_portability
+    uses: ./.github/workflows/sled-mobile-portability.yml

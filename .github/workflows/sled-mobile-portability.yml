@@ -1,0 +1,59 @@
+name: Sled Mobile Portability
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  fingerprint:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      SLED_APPLE_TEAM_ID: ${{ vars.SLED_APPLE_TEAM_ID }}
+      T3CODE_RELAY_URL: ${{ vars.T3CODE_RELAY_URL }}
+      T3CODE_CLERK_PUBLISHABLE_KEY: ${{ vars.T3CODE_CLERK_PUBLISHABLE_KEY }}
+      T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ vars.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID }}
+      T3CODE_CLERK_JWT_TEMPLATE: ${{ vars.T3CODE_CLERK_JWT_TEMPLATE }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci-deps
+        with:
+          install-args: --filter @t3tools/mobile... --filter @t3tools/scripts...
+          restore-full-store: "false"
+      - name: Reuse pinned native downloads
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: .tools/webrtc/*.zip
+          key: webrtc-archive-macos-v1-${{ hashFiles('third-party/webrtc/manifest.json') }}
+      - name: Verify runtime and native change detection
+        run: python3 scripts/sled/verify-mobile-portability.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mobile-fingerprint-${{ matrix.os }}
+          path: ${{ runner.temp }}/mobile-portability/fingerprints.json
+          retention-days: 7
+          if-no-files-found: error
+  compare:
+    needs: fingerprint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mobile-fingerprint-*
+          path: fingerprints
+      - name: Require Linux and Mac runtime parity
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          linux = json.loads(Path('fingerprints/mobile-fingerprint-ubuntu-24.04/fingerprints.json').read_text())
+          mac = json.loads(Path('fingerprints/mobile-fingerprint-macos-15/fingerprints.json').read_text())
+          if linux != mac:
+              raise SystemExit(f'Fingerprint portability failed: Linux={linux}, Mac={mac}')
+          print('PASS: identical runtime fingerprints, including native-change detection and restoration')
+          PY
