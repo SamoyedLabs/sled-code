@@ -52,6 +52,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/sled/ci_progress.py history --workflow sled-desktop-release.yml
   build:
+    name: build (${{ matrix.runner }}, ${{ matrix.platform }}, ${{ matrix.arch }}, ${{ matrix.target }})
     needs: resolve
     if: needs.resolve.outputs.sha != ''
     strategy:

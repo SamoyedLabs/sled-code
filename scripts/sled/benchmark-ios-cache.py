@@ -26,12 +26,16 @@ if args.label == 'cold':
     release.prepare_runtime(os.environ['GITHUB_SHA'], root)
 for name in ('derived-data', 'current'):
     shutil.rmtree(root / name, ignore_errors=True)
-subprocess.run([sys.executable, str(release.ROOT / 'scripts/testflight-ios.py'), 'archive',
-                '--unsigned', '--team', release.TEAM, '--build-number', '1',
-                '--bundle-id', release.BUNDLE, '--prepare', '--skip-prebuild',
-                '--enable-ota', '--ota-channel', release.CHANNEL,
-                '--credentials-dir', str(credentials), '--public-config', str(public),
-                '--derived-data-path', str(root / 'derived-data'), '--output-dir', str(root / 'current')], check=True)
+try:
+    subprocess.run([sys.executable, str(release.ROOT / 'scripts/testflight-ios.py'), 'archive',
+                    '--unsigned', '--team', release.TEAM, '--build-number', '1',
+                    '--bundle-id', release.BUNDLE, '--prepare', '--skip-prebuild',
+                    '--enable-ota', '--ota-channel', release.CHANNEL,
+                    '--credentials-dir', str(credentials), '--public-config', str(public),
+                    '--derived-data-path', str(root / 'derived-data'), '--output-dir', str(root / 'current')], check=True)
+finally:
+    release.retain_errors(root / 'current', os.environ, credentials)
+
 destination = root / args.label
 destination.mkdir(exist_ok=True)
 for name in ('phase-timings.jsonl', 'compilation-cache-statistics.json'):
