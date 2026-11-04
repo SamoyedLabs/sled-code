@@ -13,6 +13,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Config from "../config.ts";
@@ -110,6 +111,7 @@ const fixture = Effect.fnUntraced(function* () {
     Layer.provide(TeamClient.layer),
     Layer.provide(
       Layer.mock(ManagedHost.ManagedHost)({
+        changes: Stream.never,
         getStatus: Effect.succeed({
           status: "ready",
           ready: {

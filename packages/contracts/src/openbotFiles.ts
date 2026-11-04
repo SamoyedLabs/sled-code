@@ -108,7 +108,12 @@ export const OpenbotDraftFile = Schema.Struct({
   sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
   state: Schema.Literals(["ready", "sending", "sent", "reconciliation-required"]),
   sendText: Schema.NullOr(Schema.String.check(Schema.isMaxLength(100_000))),
+  /** Upstream queued-message receipt ID; this is not a conversation entry ID. */
   messageId: Schema.NullOr(Id),
+  conversationMessageId: Schema.NullOr(Id),
+  committedAttachments: Schema.NullOr(
+    Schema.Array(OpenbotFileSummary).check(Schema.isMaxLength(10)),
+  ),
   target: Schema.NullOr(OpenbotFileTarget),
   taskId: Schema.NullOr(Id),
 });

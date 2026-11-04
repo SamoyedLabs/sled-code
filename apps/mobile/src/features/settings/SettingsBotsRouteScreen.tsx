@@ -1,8 +1,10 @@
+import { botHostRecoveryDescription } from "@t3tools/client-runtime/openbot/presentation";
 import { BotProviderChoice } from "./BotProviderChoice";
 import { BotRuntimeControls } from "./BotRuntimeControls";
 import { BotFiles } from "./BotFiles";
 import { BotCodingPolicy } from "./BotCodingPolicy";
 import { BotWorkflows } from "./BotWorkflows";
+import { BotChannels } from "./BotChannels";
 import { BotProviderSetup } from "./BotProviderSetup";
 import { BotProviderSettings } from "./BotProviderSettings";
 import { BotAttention } from "./BotAttention";
@@ -93,18 +95,19 @@ function BotEnvironment({ environment }: { environment: SettingsTarget }) {
   );
   const start = useAtomCommand(openbot.start, { reportFailure: false });
   const stop = useAtomCommand(openbot.stop, { reportFailure: false });
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const act = async () => {
-    if (busy) return;
-    setBusy(true);
+  const [engineBusy, setEngineBusy] = useState<"start" | "stop" | null>(null);
+  const engineEpoch = useRef(0);
+  const act = async (operation: "start" | "stop") => {
+    if (engineBusy === "stop" || (operation === "start" && engineBusy !== null)) return;
+    const epoch = ++engineEpoch.current;
+    setEngineBusy(operation);
     setError(null);
-    const result = await (host.data?.state === "ready" ? stop : start)({
-      environmentId,
-      input: {},
-    });
-    if (result._tag === "Failure") setError(String(squashAtomCommandFailure(result)));
-    setBusy(false);
+    const result = await (operation === "start" ? start : stop)({ environmentId, input: {} });
+    if (engineEpoch.current === epoch) {
+      if (result._tag === "Failure") setError(String(squashAtomCommandFailure(result)));
+      setEngineBusy(null);
+    }
     host.refresh();
     agents.refresh();
   };
@@ -134,7 +137,7 @@ function BotEnvironment({ environment }: { environment: SettingsTarget }) {
           <Button
             label="Refresh"
             size="compact"
-            disabled={busy}
+            disabled={engineBusy !== null}
             onPress={() => {
               host.refresh();
               agents.refresh();
@@ -142,14 +145,40 @@ function BotEnvironment({ environment }: { environment: SettingsTarget }) {
           />
           {state && state !== "disabled" && (
             <Button
-              label={state === "ready" ? "Stop engine" : "Start engine"}
+              label={
+                engineBusy === "start"
+                  ? "Starting…"
+                  : state === "ready"
+                    ? "Enable automatic startup"
+                    : host.data?.desiredRunning
+                      ? "Retry engine"
+                      : "Start engine"
+              }
               size="compact"
-              loading={busy}
-              disabled={!canManage || state === "starting"}
-              onPress={() => void act()}
+              disabled={
+                !canManage ||
+                engineBusy !== null ||
+                state === "starting" ||
+                host.data?.recovery?.state === "switching" ||
+                (state === "ready" && host.data?.desiredRunning !== false)
+              }
+              onPress={() => void act("start")}
+            />
+          )}
+          {state && (state !== "disabled" || host.data?.desiredRunning) && (
+            <Button
+              label={engineBusy === "stop" ? "Stopping…" : "Stop engine"}
+              size="compact"
+              disabled={!canManage || engineBusy === "stop"}
+              onPress={() => void act("stop")}
             />
           )}
         </View>
+        {host.data && (
+          <Text textRole="footnote" className="text-foreground-muted">
+            {botHostRecoveryDescription(host.data)}
+          </Text>
+        )}
         {!canManage && state !== "disabled" && (
           <Text textRole="footnote" className="text-foreground-muted">
             Settings permission is required to start or stop this engine.
@@ -161,6 +190,13 @@ function BotEnvironment({ environment }: { environment: SettingsTarget }) {
         {state === "ready" && host.data?.hostId && (
           <BotWorkflows
             key={`workflows:${host.data.hostId}`}
+            environmentId={environmentId}
+            hostId={host.data.hostId}
+          />
+        )}
+        {state === "ready" && host.data?.hostId && (
+          <BotChannels
+            key={`channels:${host.data.hostId}`}
             environmentId={environmentId}
             hostId={host.data.hostId}
           />
@@ -184,7 +220,7 @@ function BotEnvironment({ environment }: { environment: SettingsTarget }) {
               label="Create bot"
               icon="plus"
               size="compact"
-              disabled={!canCreate || busy || !host.data?.hostId}
+              disabled={!canCreate || !host.data?.hostId}
               onPress={() => {
                 if (host.data?.hostId)
                   navigation.navigate("SettingsBotNew", {

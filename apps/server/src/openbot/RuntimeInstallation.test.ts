@@ -241,6 +241,7 @@ it.live(
                         listWorkspace: () => Effect.die("unused file protocol"),
                         search: () => Effect.die("unused file protocol"),
                         attachment: () => Effect.die("unused file protocol"),
+                        sentAttachments: () => Effect.die("unused file protocol"),
                         download: () => Effect.die("unused file protocol"),
                         upload: () => Effect.die("unused file protocol"),
                         send: () => Effect.die("unused file protocol"),

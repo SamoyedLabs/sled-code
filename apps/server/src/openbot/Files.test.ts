@@ -219,9 +219,12 @@ it.live(
           if (sends.filter((sent) => sent.attachment === body.attachmentDraftIds[0]).length === 1)
             response.writeHead(503).end(JSON.stringify({ error: "accepted; reply lost" }));
           else
-            response
-              .writeHead(202)
-              .end(JSON.stringify({ messageId: "side-message", deliveries: [] }));
+            response.writeHead(202).end(
+              JSON.stringify({
+                messageId: "task-receipt",
+                deliveries: [{ id: "side-message", recipientAgentId: "bot" }],
+              }),
+            );
         } else if (request.url === "/v1/agent-threads/start-with-files") {
           starts++;
           const body = JSON.parse(bytes.toString());
@@ -293,6 +296,18 @@ it.live(
             });
             expect(sent).toMatchObject({
               state: "sent",
+              messageId: "task-receipt",
+              conversationMessageId: "side-message",
+              committedAttachments: [
+                {
+                  id: "committed-1",
+                  name: "task.bin",
+                  size: 3,
+                  kind: "file",
+                  mimeType: "application/octet-stream",
+                  previewKind: "none",
+                },
+              ],
               taskId: "existing",
               target: { kind: "task", taskId: "existing" },
             });
@@ -334,6 +349,11 @@ it.live(
                 target: { kind: "new-task" },
               }),
             );
+            expect(
+              (yield* files.listDrafts(scope)).find(
+                (row) => row.attachment.id === draft.attachment.id,
+              )?.state,
+            ).toBe("reconciliation-required");
           }).pipe(Effect.provide(Files.layer));
           yield* Effect.gen(function* () {
             const files = yield* Files.Files;
@@ -550,6 +570,7 @@ it.live(
     Effect.gen(function* () {
       let uploads = 0;
       const sends: string[] = [];
+      let committedVisible = false;
       const summary = {
         id: "draft-one",
         name: "report.bin",
@@ -572,9 +593,28 @@ it.live(
           );
         else if (request.url === "/v1/agents")
           response.end(JSON.stringify([{ id: "bot", name: "Files", provider: "codex" }]));
-        else if (request.url?.startsWith("/v1/agents/bot/conversation-page?"))
-          response.end(JSON.stringify({ agentId: "bot", threadId: null, messages: [] }));
-        else if (request.url?.startsWith("/v1/agents/other/conversation-page?"))
+        else if (request.url?.startsWith("/v1/agents/bot/conversation-page?")) {
+          expect(new URL(request.url, "http://fixture.local").searchParams.get("around")).toBe(
+            "delivery-one",
+          );
+          if (!committedVisible)
+            response.writeHead(503).end(JSON.stringify({ error: "not yet visible" }));
+          else
+            response.end(
+              JSON.stringify({
+                agentId: "bot",
+                threadId: null,
+                messages: [
+                  {
+                    id: "delivery-one",
+                    attachments: [
+                      { ...summary, id: "committed-one", previewUrl: `${apiUrl}/private-preview` },
+                    ],
+                  },
+                ],
+              }),
+            );
+        } else if (request.url?.startsWith("/v1/agents/other/conversation-page?"))
           response.writeHead(404).end(JSON.stringify({ error: "missing" }));
         else if (request.url?.startsWith("/v1/attachments?")) {
           uploads++;
@@ -590,9 +630,19 @@ it.live(
           if (sends.length === 1)
             response.writeHead(503).end(JSON.stringify({ error: "accepted; reply lost" }));
           else
-            response
-              .writeHead(202)
-              .end(JSON.stringify({ messageId: "message-one", deliveries: [] }));
+            response.writeHead(202).end(
+              JSON.stringify({
+                messageId: "receipt-one",
+                deliveries: [
+                  { id: "wrong-delivery", recipientAgentId: "other" },
+                  { id: "delivery-one", recipientAgentId: "bot" },
+                ],
+              }),
+            );
+        } else if (request.url === "/v1/attachments/committed-one" && request.method === "GET") {
+          response
+            .writeHead(200, { "content-type": "application/octet-stream", "content-length": 7 })
+            .end(Buffer.from([0, 255, 23, 8, 13, 10, 199]));
         } else response.writeHead(204).end();
       });
       yield* Effect.gen(function* () {
@@ -653,7 +703,9 @@ it.live(
             text: "Review this file",
           });
           expect(sent.state).toBe("sent");
-          expect(sent.messageId).toBe("message-one");
+          expect(sent.messageId).toBe("receipt-one");
+          expect(sent.conversationMessageId).toBe("delivery-one");
+          expect(sent.committedAttachments).toBeNull();
           expect(uploads).toBe(1);
           expect(sends).toHaveLength(2);
           expect(sends[0]).toBe(sends[1]);
@@ -661,6 +713,37 @@ it.live(
             (yield* Effect.flip(files.discardDraft({ ...scope, attachmentId: "draft-one" })))
               .reason,
           ).toBe("conflict");
+        }).pipe(Effect.provide(Files.layer));
+        committedVisible = true;
+        yield* Effect.gen(function* () {
+          const files = yield* Files.Files;
+          const persisted = (yield* files.listDrafts(scope))[0];
+          expect(persisted).toMatchObject({
+            state: "sent",
+            messageId: "receipt-one",
+            conversationMessageId: "delivery-one",
+            committedAttachments: null,
+          });
+          const resolved = yield* files.sendDraft({
+            ...scope,
+            attachmentId: "draft-one",
+            text: "Review this file",
+          });
+          expect(resolved.attachment.id).toBe("draft-one");
+          expect(resolved.committedAttachments?.[0]?.id).toBe("committed-one");
+          expect(JSON.stringify(resolved)).not.toContain(apiUrl);
+          expect(sends).toHaveLength(2);
+          const stored = (yield* files.listDrafts(scope))[0];
+          expect(stored?.committedAttachments?.[0]?.id).toBe("committed-one");
+          const artifact = yield* files.materialize({
+            ...scope,
+            source: {
+              kind: "attachment",
+              attachmentId: "committed-one",
+              messageId: "delivery-one",
+            },
+          });
+          expect(artifact.size).toBe(7);
         }).pipe(Effect.provide(Files.layer));
       }).pipe(Effect.provide(applicationAt(apiUrl)));
     }).pipe(

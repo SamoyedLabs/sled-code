@@ -28,6 +28,11 @@ export interface FileSession<E> {
     agentId: string,
     source: Extract<Source, { kind: "attachment" }>,
   ) => Effect.Effect<Summary, E>;
+  readonly sentAttachments: (
+    agentId: string,
+    conversationMessageId: string,
+    taskId?: string,
+  ) => Effect.Effect<readonly Summary[], E>;
   readonly download: (
     agentId: string,
     source: Source,
@@ -54,7 +59,11 @@ export interface FileSession<E> {
     target: OpenbotFileTarget,
     reconcile: boolean,
   ) => Effect.Effect<
-    { readonly messageId: string | null; readonly taskId: string | null } | null,
+    {
+      readonly messageId: string | null;
+      readonly conversationMessageId: string | null;
+      readonly taskId: string | null;
+    } | null,
     E
   >;
   readonly discard: (attachmentId: string) => Effect.Effect<void, E>;
@@ -71,7 +80,13 @@ const Conversation = Schema.Struct({
   ),
 });
 const Sent = Schema.Struct({
-  messageId: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
+  messageId: OpenbotFileScope.fields.agentId,
+  deliveries: Schema.Array(
+    Schema.Struct({
+      id: OpenbotFileScope.fields.agentId,
+      recipientAgentId: OpenbotFileScope.fields.agentId,
+    }),
+  ).check(Schema.isMaxLength(100)),
 });
 const decodeWorkspace = Schema.decodeUnknownEffect(OpenbotWorkspaceDirectory);
 const decodeSearch = Schema.decodeUnknownEffect(OpenbotConversationFilePage);
@@ -161,6 +176,35 @@ export function createFileSession<E>(transport: {
     if (!task) return yield* Effect.fail(transport.error("decode"));
     return task;
   });
+  const conversationMessage = Effect.fn("OpenbotFiles.protocol.conversationMessage")(function* (
+    agentId: string,
+    messageId: string,
+    taskId?: string,
+  ) {
+    const data = yield* (
+      taskId === undefined
+        ? get(
+            `/v1/agents/${encodeURIComponent(agentId)}/conversation-page?${new URLSearchParams({ around: messageId, limit: "100" })}`,
+          ).pipe(Effect.flatMap(transport.json), Effect.flatMap(decodeConversation))
+        : readTask(agentId, yield* findTask(agentId, taskId))
+    ).pipe(
+      Effect.mapError((cause) =>
+        transport.isError(cause) ? cause : transport.error("decode", cause),
+      ),
+    );
+    if (data.agentId !== agentId) return yield* Effect.fail(transport.error("decode"));
+    const message = data.messages.find((message) => message.id === messageId);
+    if (!message) return yield* Effect.fail(transport.error("decode"));
+    return message;
+  });
+  const receipt = (data: typeof Sent.Type, agentId: string, taskId: string | null) => {
+    const own = data.deliveries.filter((delivery) => delivery.recipientAgentId === agentId);
+    return {
+      messageId: data.messageId,
+      conversationMessageId: own.length === 1 ? own[0]!.id : null,
+      taskId,
+    };
+  };
   return {
     listWorkspace: Effect.fn("OpenbotFiles.protocol.listWorkspace")(function* (agentId, path) {
       const data = yield* post("/v1/workspace-directory", { agentId, path }).pipe(
@@ -224,25 +268,17 @@ export function createFileSession<E>(transport: {
       };
     }),
     attachment: Effect.fn("OpenbotFiles.protocol.attachment")(function* (agentId, source) {
-      const data = yield* (
-        source.taskId === undefined
-          ? get(
-              `/v1/agents/${encodeURIComponent(agentId)}/conversation-page?${new URLSearchParams({ around: source.messageId, limit: "100" })}`,
-            ).pipe(Effect.flatMap(transport.json))
-          : readTask(agentId, yield* findTask(agentId, source.taskId))
-      ).pipe(
-        Effect.flatMap(decodeConversation),
-        Effect.mapError((cause) =>
-          transport.isError(cause) ? cause : transport.error("decode", cause),
-        ),
-      );
-      if (data.agentId !== agentId) return yield* Effect.fail(transport.error("decode"));
-      const summary = data.messages
-        .find((entry) => entry.id === source.messageId)
-        ?.attachments?.find((entry) => entry.id === source.attachmentId);
+      const message = yield* conversationMessage(agentId, source.messageId, source.taskId);
+      const summary = message.attachments?.find((entry) => entry.id === source.attachmentId);
       if (!summary) return yield* Effect.fail(transport.error("decode"));
       return projectAttachment(summary);
     }),
+    sentAttachments: Effect.fn("OpenbotFiles.protocol.sentAttachments")(
+      function* (agentId, messageId, taskId) {
+        const message = yield* conversationMessage(agentId, messageId, taskId);
+        return (message.attachments ?? []).map(projectAttachment);
+      },
+    ),
     download: Effect.fn("OpenbotFiles.protocol.download")(function* (agentId, source) {
       const path =
         source.kind === "attachment"
@@ -301,16 +337,9 @@ export function createFileSession<E>(transport: {
       function* (agentId, attachmentId, text, clientMessageId, target, reconcile) {
         if (target.kind === "new-task") {
           if (reconcile) {
-            // startTask creates a task before deduplicating its first message. Never replay it.
-            const found: Array<{ messageId: string; taskId: string }> = [];
-            for (const task of yield* listTasks(agentId)) {
-              const conversation = yield* readTask(agentId, task);
-              const message = conversation.messages.find((message) =>
-                message.attachments?.some((file) => file.id === attachmentId),
-              );
-              if (message) found.push({ messageId: message.id, taskId: task.id });
-            }
-            return found.length === 1 ? found[0]! : null;
+            // Start creates a task before deduplication, and commit assigns new attachment IDs.
+            // Released reads cannot correlate this lost start with its clientMessageId.
+            return null;
           }
           const task = yield* post("/v1/agent-threads/start-with-files", {
             agentId,
@@ -324,7 +353,7 @@ export function createFileSession<E>(transport: {
             ),
           );
           if (task.agentId !== agentId) return yield* Effect.fail(transport.error("decode"));
-          return { messageId: null, taskId: task.id };
+          return { messageId: null, conversationMessageId: null, taskId: task.id };
         }
         if (target.kind === "task") {
           yield* findTask(agentId, target.taskId);
@@ -340,7 +369,7 @@ export function createFileSession<E>(transport: {
               transport.isError(cause) ? cause : transport.error("decode", cause),
             ),
           );
-          return { messageId: response.messageId, taskId: target.taskId };
+          return receipt(response, agentId, target.taskId);
         }
         const response = yield* post(`/v1/agents/${encodeURIComponent(agentId)}/messages`, {
           text,
@@ -353,7 +382,7 @@ export function createFileSession<E>(transport: {
             transport.isError(cause) ? cause : transport.error("decode", cause),
           ),
         );
-        return { messageId: response.messageId, taskId: null };
+        return receipt(response, agentId, null);
       },
     ),
     discard: Effect.fn("OpenbotFiles.protocol.discard")(function* (attachmentId) {

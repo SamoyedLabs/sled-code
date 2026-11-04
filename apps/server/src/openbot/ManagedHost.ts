@@ -10,6 +10,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
+import * as PubSub from "effect/PubSub";
+import * as Stream from "effect/Stream";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 
 export interface ManagedHostConfig {
@@ -63,10 +65,12 @@ export class ManagedHost extends Context.Service<
   ManagedHost,
   {
     readonly getStatus: Effect.Effect<HostStatus>;
+    readonly changes: Stream.Stream<HostStatus>;
     readonly start: Effect.Effect<HostReady, ManagedHostError>;
     readonly stop: Effect.Effect<void>;
     readonly switchExecutable: (
       executablePath: string | null,
+      options?: { readonly start?: boolean },
     ) => Effect.Effect<HostReady | null, ManagedHostError>;
   }
 >()("t3/openbot/ManagedHost") {}
@@ -145,6 +149,20 @@ const make = Effect.fn("ManagedHost.make")(function* (config: ManagedHostConfig 
   let executablePath = config?.executablePath;
   let running: RunningChild | undefined;
   let disposed = false;
+  const events = yield* PubSub.unbounded<HostStatus>();
+  const setState = (value: HostStatus) => {
+    state = value;
+    PubSub.publishUnsafe(events, value);
+  };
+  const changes = Stream.unwrap(
+    Effect.gen(function* () {
+      const subscription = yield* PubSub.subscribe(events);
+      return Stream.concat(
+        Stream.fromEffect(Effect.sync(() => state)),
+        Stream.fromSubscription(subscription),
+      );
+    }),
+  );
 
   const stopOwned = Effect.fn("ManagedHost.stopOwned")(function* () {
     const active = running;
@@ -172,7 +190,7 @@ const make = Effect.fn("ManagedHost.make")(function* (config: ManagedHostConfig 
       Effect.gen(function* () {
         disposed = true;
         yield* stopOwned();
-        state = { status: executablePath ? "stopped" : "disabled" };
+        setState({ status: executablePath ? "stopped" : "disabled" });
       }),
     ),
   );
@@ -184,7 +202,7 @@ const make = Effect.fn("ManagedHost.make")(function* (config: ManagedHostConfig 
     if (state.status === "ready") return state.ready;
     if (!validConfiguration({ ...config, executablePath: command }))
       return yield* new ManagedHostError({ reason: "configuration" });
-    state = { status: "starting" };
+    setState({ status: "starting" });
     yield* stopOwned();
     yield* Effect.forEach([config.userDataDirectory, config.agentRoot], (path) =>
       fileSystem.makeDirectory(path, { recursive: true, mode: 0o700 }),
@@ -231,7 +249,7 @@ const make = Effect.fn("ManagedHost.make")(function* (config: ManagedHostConfig 
     child.once("close", () => {
       active.closed = true;
       Deferred.doneUnsafe(ready, Exit.fail(new ManagedHostError({ reason: "exited" })));
-      if (running === active && !active.stopping) state = { status: "failed", reason: "exited" };
+      if (running === active && !active.stopping) setState({ status: "failed", reason: "exited" });
     });
     child.stdout?.setEncoding("utf8");
     child.stdout?.on("data", (chunk: string) => {
@@ -272,24 +290,25 @@ const make = Effect.fn("ManagedHost.make")(function* (config: ManagedHostConfig 
       }),
     );
     if (active.closed) return yield* new ManagedHostError({ reason: "exited" });
-    state = { status: "ready", ready: result };
+    setState({ status: "ready", ready: result });
     return result;
   });
 
   return ManagedHost.of({
     getStatus: Effect.sync(() => state),
+    changes,
     start: gate.withPermit(
       start().pipe(
         Effect.tapError((error) =>
           Effect.gen(function* () {
             yield* stopOwned();
-            if (config) state = { status: "failed", reason: error.reason };
+            if (config) setState({ status: "failed", reason: error.reason });
           }),
         ),
         Effect.onInterrupt(() =>
           Effect.gen(function* () {
             yield* stopOwned();
-            state = { status: executablePath ? "stopped" : "disabled" };
+            setState({ status: executablePath ? "stopped" : "disabled" });
           }),
         ),
       ),
@@ -297,23 +316,25 @@ const make = Effect.fn("ManagedHost.make")(function* (config: ManagedHostConfig 
     stop: gate.withPermit(
       Effect.gen(function* () {
         yield* stopOwned();
-        state = { status: executablePath ? "stopped" : "disabled" };
+        setState({ status: executablePath ? "stopped" : "disabled" });
       }),
     ),
     switchExecutable: Effect.fn("ManagedHost.switchExecutable")(function* (
       selected: string | null,
+      options?: { readonly start?: boolean },
     ) {
       if (!config?.allowExecutableSwitch || (selected !== null && !NodePath.isAbsolute(selected)))
         return yield* new ManagedHostError({ reason: "configuration" });
       if (disposed) return yield* new ManagedHostError({ reason: "exited" });
-      if (selected === executablePath && state.status === "ready") return state.ready;
+      if (selected === executablePath && state.status === "ready" && options?.start !== false)
+        return state.ready;
       const previous = executablePath;
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           yield* stopOwned();
           executablePath = selected ?? undefined;
-          state = { status: selected ? "stopped" : "disabled" };
-          if (selected === null) return null;
+          setState({ status: selected ? "stopped" : "disabled" });
+          if (selected === null || options?.start === false) return null;
           return yield* restore(start()).pipe(
             Effect.onExit((exit) =>
               Exit.isSuccess(exit)
@@ -321,13 +342,13 @@ const make = Effect.fn("ManagedHost.make")(function* (config: ManagedHostConfig 
                 : Effect.gen(function* () {
                     yield* stopOwned();
                     executablePath = previous;
-                    state = { status: previous ? "stopped" : "disabled" };
-                    if (previous)
+                    setState({ status: previous ? "stopped" : "disabled" });
+                    if (previous && !Exit.hasInterrupts(exit) && options?.start !== false)
                       yield* start().pipe(
                         Effect.catch((error) =>
                           Effect.gen(function* () {
                             yield* stopOwned();
-                            state = { status: "failed", reason: error.reason };
+                            setState({ status: "failed", reason: error.reason });
                           }),
                         ),
                       );

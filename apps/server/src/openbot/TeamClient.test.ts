@@ -31,6 +31,282 @@ const fixture = Effect.fnUntraced(function* (handle: NodeHttp.RequestListener) {
   return `http://127.0.0.1:${address.port}`;
 });
 
+it.live(
+  "reads channel cursors and preserves acknowledged channel command identity and lifecycle",
+  () =>
+    Effect.gen(function* () {
+      const channel = {
+        id: "channel-one",
+        name: "Team",
+        title: "Shared work",
+        instructions: "Coordinate the work",
+        members: [{ agentId: "bot-one" }, { agentId: "unlisted-bot" }],
+        leadAgentId: "unlisted-bot",
+        archived: false,
+        revision: 3,
+        createdAt: "2026-11-04T00:00:00Z",
+      };
+      const task = {
+        id: "task-one",
+        channelId: channel.id,
+        parentTaskId: null,
+        rootTaskId: "task-one",
+        ownerAgentId: "bot-one",
+        requestMessageId: "message-one",
+        instruction: "Investigate",
+        attachmentDraftIds: [],
+        expectedResult: "Report",
+        sourceMessageIds: [],
+        dependencies: [],
+        resources: [],
+        state: "running",
+        revision: 1,
+        assignmentCount: 1,
+        error: null,
+      };
+      const operations = new Set<string>();
+      const messages: unknown[] = [];
+      let deleted = false;
+      let sends = 0;
+      let savedDraft: unknown;
+      const apiUrl = yield* fixture(async (request, response) => {
+        let text = "";
+        for await (const chunk of request) text += chunk.toString();
+        const body: unknown = text ? JSON.parse(text) : {};
+        response.setHeader("content-type", "application/json");
+        if (request.url === "/v1/auth/login") {
+          response.end(
+            JSON.stringify({ sessionToken: "private-token", sessionExpiresAt: "2027-01-01" }),
+          );
+          return;
+        }
+        if (request.url === "/v1/auth/logout") {
+          response.writeHead(204).end();
+          return;
+        }
+        if (typeof body !== "object" || body === null) {
+          response.writeHead(400).end("{}");
+          return;
+        }
+        if (request.url === "/v1/channels/read") {
+          if (
+            "beforeSequence" in body &&
+            (typeof body.beforeSequence !== "number" || !Number.isSafeInteger(body.beforeSequence))
+          ) {
+            response.writeHead(400).end("{}");
+            return;
+          }
+          if (deleted) {
+            response.writeHead(404).end("{}");
+            return;
+          }
+          response.end(
+            JSON.stringify({
+              channel,
+              messages,
+              tasks: [task],
+              olderCursor: "beforeSequence" in body ? null : 4,
+              throughSequence: 5,
+              privateProviderState: "must-stay-private",
+            }),
+          );
+          return;
+        }
+        if (request.url === "/v1/channels/delete") {
+          if (
+            !String(request.headers["openbot-capabilities"])
+              .split(",")
+              .includes("channel-delete-v1")
+          ) {
+            response.writeHead(400).end("{}");
+            return;
+          }
+          deleted = true;
+          response.writeHead(204).end();
+          return;
+        }
+        if (
+          request.url !== "/v1/channels/commands" ||
+          !("operationId" in body) ||
+          typeof body.operationId !== "string" ||
+          !("type" in body)
+        ) {
+          response.writeHead(400).end("{}");
+          return;
+        }
+        if (deleted) {
+          response.writeHead(404).end("{}");
+          return;
+        }
+        if (operations.has(body.operationId)) {
+          response.end(JSON.stringify(channel));
+          return;
+        }
+        if (body.type === "save") {
+          if (
+            !("draft" in body) ||
+            typeof body.draft !== "object" ||
+            body.draft === null ||
+            !("name" in body.draft) ||
+            typeof body.draft.name !== "string" ||
+            !("update" in body) ||
+            body.update !== true
+          ) {
+            response.writeHead(400).end("{}");
+            return;
+          }
+          savedDraft = body.draft;
+          channel.name = body.draft.name;
+        } else if (body.type === "send") {
+          if (
+            !("text" in body) ||
+            typeof body.text !== "string" ||
+            !("recipientAgentId" in body) ||
+            !("replyToMessageId" in body) ||
+            !("attachmentDraftIds" in body)
+          ) {
+            response.writeHead(400).end("{}");
+            return;
+          }
+          sends++;
+          messages.push({
+            id: "message-one",
+            channelId: channel.id,
+            sequence: 5,
+            author: { kind: "member", id: "owner", name: "Owner" },
+            taskId: task.id,
+            superseded: false,
+            message: {
+              id: "message-one",
+              author: "user",
+              text: body.text,
+              createdAt: channel.createdAt,
+              status: "completed",
+              privateSession: "must-stay-private",
+            },
+          });
+        } else if (body.type === "archive") {
+          channel.archived = true;
+          task.state = "paused";
+        } else if (body.type === "restore") channel.archived = false;
+        else if (body.type === "stop") task.state = "paused";
+        else if (body.type === "resume") task.state = "queued";
+        else if (
+          body.type === "reassign" &&
+          "recipientAgentId" in body &&
+          typeof body.recipientAgentId === "string"
+        ) {
+          task.ownerAgentId = body.recipientAgentId;
+          task.state = "queued";
+        } else if (body.type === "cancel") {
+          if (
+            !String(request.headers["openbot-capabilities"])
+              .split(",")
+              .includes("channel-task-cancel-v1") ||
+            task.state !== "paused"
+          ) {
+            response.writeHead(400).end("{}");
+            return;
+          }
+          task.state = "cancelled";
+        }
+        operations.add(body.operationId);
+        channel.revision++;
+        response.end(JSON.stringify(channel));
+      });
+      const client = yield* TeamClient.TeamClient;
+      const session = yield* client.connect({ apiUrl, ownerSecret: "private-password" });
+      const initial = yield* session.apiRead({ operation: "channel.read", channelId: channel.id });
+      expect(initial).toMatchObject({ channel: { revision: 3 }, olderCursor: 4 });
+      expect(initial).not.toHaveProperty("privateProviderState");
+      expect(
+        yield* session.apiRead({
+          operation: "channel.read",
+          channelId: channel.id,
+          beforeSequence: 4,
+        }),
+      ).toMatchObject({ olderCursor: null });
+      const draft = {
+        name: "Renamed",
+        title: channel.title,
+        instructions: channel.instructions,
+        members: channel.members,
+        leadAgentId: channel.leadAgentId,
+      };
+      yield* session.apiAdmin({
+        operation: "channel.save",
+        channelId: channel.id,
+        operationId: "save-one",
+        draft,
+        update: true,
+      });
+      expect(savedDraft).toEqual(draft);
+      const send = {
+        operation: "channel.send",
+        channelId: channel.id,
+        operationId: "send-one",
+        text: "Investigate",
+        recipientAgentId: "bot-one",
+        replyToMessageId: null,
+        attachmentDraftIds: [],
+      } as const;
+      yield* session.apiAdmin(send);
+      yield* session.apiAdmin(send);
+      expect(sends).toBe(1);
+      yield* session.apiAdmin({
+        operation: "channel.archive",
+        channelId: channel.id,
+        operationId: "archive-one",
+      });
+      yield* session.apiAdmin({
+        operation: "channel.restore",
+        channelId: channel.id,
+        operationId: "restore-one",
+      });
+      const restored = yield* session.apiRead({ operation: "channel.read", channelId: channel.id });
+      expect(restored).toMatchObject({
+        channel: { name: "Renamed", archived: false },
+        tasks: [{ state: "paused" }],
+        messages: [{ message: { text: "Investigate" } }],
+      });
+      expect(JSON.stringify(restored)).not.toContain("must-stay-private");
+      for (const operation of [
+        "channel.resume",
+        "channel.reassign",
+        "channel.stop",
+        "channel.cancel",
+      ] as const)
+        yield* session.apiAdmin({
+          operation,
+          channelId: channel.id,
+          operationId: operation,
+          taskId: task.id,
+          recipientAgentId: operation === "channel.reassign" ? "unlisted-bot" : null,
+        });
+      expect(
+        yield* session.apiRead({ operation: "channel.read", channelId: channel.id }),
+      ).toMatchObject({ tasks: [{ state: "cancelled", ownerAgentId: "unlisted-bot" }] });
+      expect(
+        yield* session.apiAdmin({ operation: "channel.delete", channelId: channel.id }),
+      ).toBeNull();
+      expect(
+        (yield* Effect.flip(
+          session.apiAdmin({
+            operation: "channel.save",
+            channelId: channel.id,
+            operationId: "late-save",
+            draft,
+            update: true,
+          }),
+        )).status,
+      ).toBe(404);
+      yield* session.close;
+    }).pipe(
+      Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+      Effect.scoped,
+    ),
+);
+
 it.live("preserves workflow graph content through revision conflicts and stable run retries", () =>
   Effect.gen(function* () {
     const graph = {

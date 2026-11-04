@@ -14,6 +14,22 @@ export const OpenbotHostAdminInput = Schema.Struct({
 export type OpenbotHostAdminInput = typeof OpenbotHostAdminInput.Type;
 
 export const OpenbotHostStatus = Schema.Struct({
+  desiredRunning: Schema.optional(Schema.Boolean),
+  recovery: Schema.optional(
+    Schema.Struct({
+      state: Schema.Literals([
+        "idle",
+        "starting",
+        "running",
+        "backoff",
+        "exhausted",
+        "preference-error",
+        "switching",
+      ]),
+      attempt: Schema.Int,
+      retryAt: Schema.NullOr(Schema.String),
+    }),
+  ),
   hostId: Schema.optional(Schema.String),
   state: Schema.Literals(["disabled", "stopped", "starting", "ready", "failed"]),
   reason: Schema.optional(

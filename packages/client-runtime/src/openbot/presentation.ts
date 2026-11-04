@@ -4,7 +4,9 @@ import type { OpenbotAdminRequest, OpenbotAttentionRequest } from "@t3tools/cont
 export * from "./providers.ts";
 export * from "./connections.ts";
 export * from "./codingPolicy.ts";
+export * from "./hostRecovery.ts";
 export * from "./workflows.ts";
+export * from "./channels.ts";
 
 const Message = Schema.Struct({
   id: Schema.String,

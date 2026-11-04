@@ -1,3 +1,4 @@
+import { botHostRecoveryDescription } from "@t3tools/client-runtime/openbot/presentation";
 import { BotProviderChoice } from "./BotProviderChoice";
 import { BotRuntimeControls } from "./BotRuntimeControls";
 import { BotProviderSetup } from "./BotProviderSetup";
@@ -8,6 +9,7 @@ import { BotConfiguration } from "./BotConfiguration";
 import { BotFiles } from "./BotFiles";
 import { BotCodingPolicy } from "./BotCodingPolicy";
 import { BotWorkflows } from "./BotWorkflows";
+import { BotChannels } from "./BotChannels";
 import { requestConfirmDialog } from "../../confirmDialog";
 import { Link } from "@tanstack/react-router";
 import { randomUUID } from "../../lib/utils";
@@ -107,13 +109,18 @@ function BotEnvironment({ environmentId, label }: { environmentId: EnvironmentId
   const adminToHost = useAtomCommand(openbot.adminToHost, { reportFailure: false });
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
+  const [engineBusy, setEngineBusy] = useState<"start" | "stop" | null>(null);
+  const engineEpoch = useRef(0);
   const act = async (operation: "start" | "stop") => {
-    if (busy) return;
-    setBusy(true);
+    if (engineBusy === "stop" || (operation === "start" && engineBusy !== null)) return;
+    const epoch = ++engineEpoch.current;
+    setEngineBusy(operation);
     setError(null);
     const result = await (operation === "start" ? start : stop)({ environmentId, input: {} });
-    if (result._tag === "Failure") setError(String(squashAtomCommandFailure(result)));
-    setBusy(false);
+    if (engineEpoch.current === epoch) {
+      if (result._tag === "Failure") setError(String(squashAtomCommandFailure(result)));
+      setEngineBusy(null);
+    }
     host.refresh();
     agents.refresh();
   };
@@ -195,13 +202,39 @@ function BotEnvironment({ environmentId, label }: { environmentId: EnvironmentId
             <Button
               variant="outline"
               size="sm"
-              disabled={!canManage || busy || state === "starting"}
-              onClick={() => void act(state === "ready" ? "stop" : "start")}
+              disabled={
+                !canManage ||
+                busy ||
+                engineBusy !== null ||
+                state === "starting" ||
+                host.data?.recovery?.state === "switching" ||
+                (state === "ready" && host.data?.desiredRunning !== false)
+              }
+              onClick={() => void act("start")}
             >
-              {busy ? "Working…" : state === "ready" ? "Stop engine" : "Start engine"}
+              {engineBusy === "start"
+                ? "Starting…"
+                : state === "ready"
+                  ? "Enable automatic startup"
+                  : host.data?.desiredRunning
+                    ? "Retry engine"
+                    : "Start engine"}
+            </Button>
+          )}
+          {state && (state !== "disabled" || host.data?.desiredRunning) && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!canManage || busy || engineBusy === "stop"}
+              onClick={() => void act("stop")}
+            >
+              {engineBusy === "stop" ? "Stopping…" : "Stop engine"}
             </Button>
           )}
         </div>
+        {host.data && (
+          <p className="text-sm text-muted-foreground">{botHostRecoveryDescription(host.data)}</p>
+        )}
         {!canManage && state !== "disabled" && (
           <p className="text-xs text-muted-foreground">
             Settings permission is required to start or stop this engine.
@@ -225,6 +258,13 @@ function BotEnvironment({ environmentId, label }: { environmentId: EnvironmentId
         {state === "ready" && host.data?.hostId && (
           <BotWorkflows
             key={`workflows:${host.data.hostId}`}
+            environmentId={environmentId}
+            hostId={host.data.hostId}
+          />
+        )}
+        {state === "ready" && host.data?.hostId && (
+          <BotChannels
+            key={`channels:${host.data.hostId}`}
             environmentId={environmentId}
             hostId={host.data.hostId}
           />

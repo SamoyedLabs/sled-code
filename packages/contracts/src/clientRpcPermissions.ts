@@ -147,7 +147,15 @@ export function clientRpcRequiredScopes(
         request.operation === "workflow.stopRun" ||
         request.operation === "workflow.stopStep" ||
         request.operation === "workflow.retryStep" ||
-        request.operation === "workflow.decide"
+        request.operation === "workflow.decide" ||
+        request.operation === "channel.send" ||
+        request.operation === "channel.stop" ||
+        request.operation === "channel.resume" ||
+        request.operation === "channel.reassign" ||
+        request.operation === "channel.cancel" ||
+        request.operation === "channel.archive" ||
+        request.operation === "channel.delete" ||
+        request.operation === "channel.save"
       )
         return [AuthSettingsWriteScope, AuthOrchestrationOperateScope];
     }

@@ -81,6 +81,7 @@ export * from "./openbot.ts";
 
 export * from "./openbotApi.ts";
 export * from "./openbotWorkflows.ts";
+export * from "./openbotChannels.ts";
 
 export * from "./openbotCoding.ts";
 export * from "./openbotCodingPolicy.ts";

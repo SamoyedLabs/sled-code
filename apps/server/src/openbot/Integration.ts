@@ -29,6 +29,7 @@ import * as ServerConfig from "../config.ts";
 import * as ManagedHost from "./ManagedHost.ts";
 import * as TeamClient from "./TeamClient.ts";
 import * as RuntimeInstallation from "./RuntimeInstallation.ts";
+import * as HostRecovery from "./HostRecovery.ts";
 
 export class IntegrationError extends Schema.TaggedError<IntegrationError>()(
   "OpenbotIntegrationError",
@@ -86,18 +87,21 @@ const isIntegrationError = Schema.is(IntegrationError);
 const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string | undefined) {
   const host = yield* ManagedHost.ManagedHost;
   const client = yield* TeamClient.TeamClient;
+  const recovery = Option.getOrUndefined(yield* Effect.serviceOption(HostRecovery.HostRecovery));
   const installation = Option.getOrUndefined(
     yield* Effect.serviceOption(RuntimeInstallation.RuntimeInstallation),
   );
   const environment = yield* HostProcess.Environment;
   const platform = `${yield* HostProcess.Platform}-${yield* HostProcess.Architecture}`;
-  const status = host.getStatus.pipe(
-    Effect.map((value) => ({
+  const status = Effect.gen(function* () {
+    const value = yield* host.getStatus;
+    return {
       state: value.status,
       ...(value.status === "ready" ? { hostId: value.ready.serverId } : {}),
       ...(value.status === "failed" ? { reason: value.reason } : {}),
-    })),
-  );
+      ...(recovery ? yield* recovery.getState : {}),
+    };
+  });
   const scope = yield* Effect.scope;
   const gate = yield* Semaphore.make(1);
   const eventChanges = yield* PubSub.sliding<OpenbotChange>(1);
@@ -117,7 +121,7 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
       const current = yield* readyHostId;
       return Stream.concat(Stream.make(current), Stream.fromSubscription(subscription));
     }),
-  );
+  ).pipe(Stream.changes);
   let connection: { readonly key: string; readonly session: TeamClient.Session } | undefined;
   const clearConnection = Effect.fn("OpenbotIntegration.clearConnection")(function* () {
     const previous = connection;
@@ -127,31 +131,37 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
     if (previous) yield* previous.session.close.pipe(Effect.ignore);
   });
   yield* Effect.addFinalizer(() => gate.withPermit(clearConnection()));
-  const start = gate
-    .withPermit(
+  const start = Effect.gen(function* () {
+    yield* gate.withPermit(
       Effect.gen(function* () {
         if ((yield* host.getStatus).status !== "ready") yield* clearConnection();
-        const started = yield* host.start;
-        yield* PubSub.publish(changes, started.serverId);
-        return yield* status;
       }),
-    )
-    .pipe(
-      Effect.mapError(
-        (cause) =>
-          new IntegrationError({
-            message: "Unable to start the configured Openbot host.",
-            cause,
-          }),
-      ),
     );
-  const stop = gate.withPermit(
-    Effect.gen(function* () {
-      yield* clearConnection();
-      yield* host.stop;
-      yield* PubSub.publish(changes, null);
-      return yield* status;
-    }),
+    const started = yield* recovery ? recovery.start : host.start;
+    yield* PubSub.publish(changes, started.serverId);
+    return yield* status;
+  }).pipe(
+    Effect.mapError(
+      (cause) =>
+        new IntegrationError({
+          message: "Unable to start the configured Openbot host.",
+          cause,
+        }),
+    ),
+  );
+  const stop = Effect.gen(function* () {
+    if (recovery) yield* recovery.stopWithCleanup(gate.withPermit(clearConnection()));
+    else yield* gate.withPermit(clearConnection().pipe(Effect.andThen(host.stop)));
+    yield* PubSub.publish(changes, null);
+    return yield* status;
+  }).pipe(
+    Effect.mapError(
+      (cause) =>
+        new IntegrationError({
+          message: "Unable to finish stopping the bot engine; check its saved startup preference.",
+          cause,
+        }),
+    ),
   );
   const initializedSessions = new WeakSet<TeamClient.Session>();
   const readyAction = Effect.fn("OpenbotIntegration.readyAction")(function* <A>(
@@ -364,7 +374,10 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
       let committed = false;
       const restorePrevious = Effect.gen(function* () {
         yield* clearConnection();
-        yield* host.switchExecutable(previous?.executablePath ?? null).pipe(Effect.ignore);
+        const desired = recovery ? (yield* recovery.getState).desiredRunning : true;
+        yield* host
+          .switchExecutable(previous?.executablePath ?? null, { start: desired })
+          .pipe(Effect.ignore);
         yield* PubSub.publish(changes, yield* readyHostId);
       });
       return yield* Effect.uninterruptibleMask((restore) =>
@@ -447,6 +460,28 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
           : new IntegrationError({ message: "Unable to restore the previous bot runtime.", cause }),
       ),
     );
+  const lifecycle = recovery
+    ? Stream.merge(
+        host.changes.pipe(Stream.map(() => undefined)),
+        recovery.changes.pipe(Stream.map(() => undefined)),
+      )
+    : host.changes.pipe(Stream.map(() => undefined));
+  yield* lifecycle.pipe(
+    Stream.runForEach(() =>
+      Effect.gen(function* () {
+        const hostId = yield* readyHostId;
+        yield* PubSub.publish(changes, hostId);
+        yield* PubSub.publish(eventChanges, { hostId, resource: "all" });
+        if (hostId === null)
+          yield* gate.withPermit(
+            Effect.gen(function* () {
+              if ((yield* readyHostId) === null) yield* clearConnection();
+            }),
+          );
+      }),
+    ),
+    Effect.forkIn(scope),
+  );
   return Integration.of({
     status,
     readyHostId,
@@ -455,8 +490,30 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
     attentionSnapshot,
     start,
     stop,
-    activateRuntime,
-    rollbackRuntime,
+    activateRuntime: Effect.fn("OpenbotIntegration.activateRuntimeSupervised")((input) =>
+      recovery
+        ? recovery
+            .withRuntimeSwitch(activateRuntime(input))
+            .pipe(
+              Effect.mapError((cause) =>
+                isIntegrationError(cause)
+                  ? cause
+                  : new IntegrationError({ message: "Bot runtime switching was stopped.", cause }),
+              ),
+            )
+        : activateRuntime(input),
+    ),
+    rollbackRuntime: recovery
+      ? recovery
+          .withRuntimeSwitch(rollbackRuntime)
+          .pipe(
+            Effect.mapError((cause) =>
+              isIntegrationError(cause)
+                ? cause
+                : new IntegrationError({ message: "Bot runtime rollback was stopped.", cause }),
+            ),
+          )
+      : rollbackRuntime,
     listAgents,
     apiRead,
     apiReadToHost,
@@ -503,9 +560,11 @@ export const layer = Layer.unwrap(
       serverName: "Sled bots",
       ownerSecret,
     };
+    const managed = ManagedHost.layer(hostConfig);
     return layerWithHost(ownerSecret).pipe(
       Layer.provide(Layer.succeed(RuntimeInstallation.RuntimeInstallation, installation)),
-      Layer.provide(ManagedHost.layer(hostConfig)),
+      Layer.provide(HostRecovery.layer.pipe(Layer.provide(managed))),
+      Layer.provide(managed),
       Layer.provide(TeamClient.layer),
     );
   }),

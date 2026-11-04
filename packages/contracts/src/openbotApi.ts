@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { OpenbotChannelReadRequest, OpenbotChannelAdminRequest } from "./openbotChannels.ts";
 import { OpenbotWorkflowReadRequest, OpenbotWorkflowAdminRequest } from "./openbotWorkflows.ts";
 
 const Id = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$/));
@@ -158,14 +159,7 @@ export const OpenbotMessagingOrchestratorRequest = Schema.Union([
 export const OpenbotReadRequest = Schema.Union([
   OpenbotWorkflowReadRequest,
   Schema.Struct({ operation: Schema.Literal("compatibility.read") }),
-  Schema.Struct({ operation: Schema.Literal("channel.list") }),
-  Schema.Struct({
-    operation: Schema.Literal("channel.read"),
-    channelId: Id,
-    beforeSequence: Schema.optional(
-      Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-    ),
-  }),
+  OpenbotChannelReadRequest,
 
   Schema.Struct({ operation: Schema.Literal("agent.list") }),
   Schema.Struct({ operation: Schema.Literal("agent.models") }),
@@ -235,6 +229,7 @@ export const OpenbotAttentionResponseInput = Schema.Struct({
 export type OpenbotAttentionResponseInput = typeof OpenbotAttentionResponseInput.Type;
 
 export const OpenbotAdminRequest = Schema.Union([
+  OpenbotChannelAdminRequest,
   OpenbotWorkflowAdminRequest,
   Schema.Struct({
     operation: Schema.Literal("provider.signInRelay.start"),

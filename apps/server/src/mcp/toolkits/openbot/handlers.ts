@@ -121,6 +121,15 @@ const decodeFileUpload = Schema.decodeUnknownEffect(OpenbotFileUploadInput);
 const decodeFileSend = Schema.decodeUnknownEffect(OpenbotFileSendInput);
 const decodeFileDiscard = Schema.decodeUnknownEffect(OpenbotFileDiscardInput);
 const fileDescription = {
+  delivery: {
+    messageId: "Queued-message receipt ID, not a conversation entry or attachment ID.",
+    conversationMessageId:
+      "Use this exact entry ID as download source.messageId with committedAttachments[].id. The original attachment.id remains an upload draft ID.",
+    committedAttachments:
+      "Null means unresolved. Repeating send with the saved text and target on a sent row with a known conversationMessageId refreshes metadata without resending.",
+    newTask:
+      "An uncertain new-task start requires manual reconciliation; released public reads cannot identify its operation safely.",
+  },
   list: Schema.toJsonSchemaDocument(OpenbotWorkspaceListInput),
   search: Schema.toJsonSchemaDocument(OpenbotConversationFileSearchInput),
   download: Schema.toJsonSchemaDocument(OpenbotFileMaterializeInput),

@@ -14,6 +14,7 @@ const unusedFiles: TeamClient.Session["files"] = {
   listWorkspace: () => Effect.die("unused file protocol"),
   search: () => Effect.die("unused file protocol"),
   attachment: () => Effect.die("unused file protocol"),
+  sentAttachments: () => Effect.die("unused file protocol"),
   download: () => Effect.die("unused file protocol"),
   upload: () => Effect.die("unused file protocol"),
   send: () => Effect.die("unused file protocol"),
@@ -56,6 +57,7 @@ it.effect("reuses one login across roster refreshes and revokes it on stop", () 
     }).pipe(
       Effect.provide(Integration.layerWithHost("owner-secret")),
       Effect.provideService(ManagedHost.ManagedHost, {
+        changes: Stream.never,
         switchExecutable: () => Effect.die("unused executable switch"),
         getStatus: Effect.succeed<ManagedHost.HostStatus>({ status: "ready", ready }),
         start: Effect.succeed(ready),
@@ -103,6 +105,7 @@ it.effect("reconnects once when the host rejects an expired session", () =>
     }).pipe(
       Effect.provide(Integration.layerWithHost("owner-secret")),
       Effect.provideService(ManagedHost.ManagedHost, {
+        changes: Stream.never,
         switchExecutable: () => Effect.die("unused executable switch"),
         getStatus: Effect.succeed<ManagedHost.HostStatus>({ status: "ready", ready }),
         start: Effect.succeed(ready),
@@ -144,6 +147,7 @@ it.effect("keeps an unconfigured engine disabled and rejects listing without con
   }).pipe(
     Effect.provide(Integration.layerWithHost(undefined)),
     Effect.provideService(ManagedHost.ManagedHost, {
+      changes: Stream.never,
       switchExecutable: () => Effect.die("unused executable switch"),
       getStatus: Effect.succeed<ManagedHost.HostStatus>({ status: "disabled" }),
       start: Effect.fail(new ManagedHost.ManagedHostError({ reason: "disabled" })),
@@ -167,6 +171,7 @@ it.effect.each([false, true])(
       }).pipe(
         Effect.provide(Integration.layerWithHost("owner-secret")),
         Effect.provideService(ManagedHost.ManagedHost, {
+          changes: Stream.never,
           switchExecutable: () => Effect.die("unused executable switch"),
           getStatus: Effect.succeed<ManagedHost.HostStatus>({ status: "ready", ready }),
           start: Effect.succeed(ready),
@@ -240,6 +245,7 @@ it.effect("emits current readiness then start and stop changes without polling",
     }).pipe(
       Effect.provide(Integration.layerWithHost("owner-secret")),
       Effect.provideService(ManagedHost.ManagedHost, {
+        changes: Stream.never,
         switchExecutable: () => Effect.die("unused executable switch"),
         getStatus: Effect.sync(() => state),
         start: Effect.sync(() => {
@@ -321,6 +327,7 @@ it.effect(
       }).pipe(
         Effect.provide(Integration.layerWithHost("owner-secret")),
         Effect.provideService(ManagedHost.ManagedHost, {
+          changes: Stream.never,
           switchExecutable: () => Effect.die("unused executable switch"),
           getStatus: Effect.succeed<ManagedHost.HostStatus>({ status: "ready", ready }),
           start: Effect.succeed(ready),
@@ -402,6 +409,7 @@ it.effect("drops the stopped host's pending attention and cancels its event subs
     }).pipe(
       Effect.provide(Integration.layerWithHost("owner-secret")),
       Effect.provideService(ManagedHost.ManagedHost, {
+        changes: Stream.never,
         switchExecutable: () => Effect.die("unused executable switch"),
         getStatus: Effect.sync(() => state),
         start: Effect.succeed(ready),

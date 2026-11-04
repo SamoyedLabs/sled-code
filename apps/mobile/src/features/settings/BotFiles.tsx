@@ -512,7 +512,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
           {draft.state === "sending" && (
             <Text textRole="footnote" className="text-foreground-muted">
               {draft.target?.kind === "new-task"
-                ? "Creation was not confirmed. Find created task checks existing tasks without starting another."
+                ? "Creation could not be confirmed. Check task conversations before starting another task."
                 : "Delivery was not confirmed. Retry sends the same file and original message using its saved receipt."}
             </Text>
           )}
@@ -529,13 +529,96 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
                 : "Delivered to the main conversation."}
             </Text>
           )}
+          {draft.state === "sent" &&
+            draft.conversationMessageId &&
+            draft.committedAttachments === null && (
+              <Button
+                label="Refresh sent file"
+                size="compact"
+                disabled={busy || !canSend}
+                onPress={() =>
+                  void act(async () => {
+                    const result = await send({
+                      environmentId,
+                      input: {
+                        ...scope,
+                        attachmentId: draft.attachment.id,
+                        text: draft.sendText ?? "",
+                        target: draft.target ?? { kind: "main" },
+                      },
+                    });
+                    if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+                  })
+                }
+              />
+            )}
+          {draft.state === "sent" &&
+            draft.conversationMessageId &&
+            draft.committedAttachments?.map((file) => (
+              <View key={file.id} className="gap-2">
+                <Text selectable>{file.name}</Text>
+                <View className="flex-row flex-wrap gap-2">
+                  <Button
+                    label="Preview sent file"
+                    size="compact"
+                    disabled={busy || !canRead}
+                    onPress={() =>
+                      void open(
+                        {
+                          kind: "attachment",
+                          attachmentId: file.id,
+                          messageId: draft.conversationMessageId!,
+                          ...(draft.taskId ? { taskId: draft.taskId } : {}),
+                        },
+                        agentId,
+                        false,
+                      )
+                    }
+                  />
+                  <Button
+                    label="Save sent file"
+                    size="compact"
+                    disabled={busy || !canRead}
+                    onPress={() =>
+                      void open(
+                        {
+                          kind: "attachment",
+                          attachmentId: file.id,
+                          messageId: draft.conversationMessageId!,
+                          ...(draft.taskId ? { taskId: draft.taskId } : {}),
+                        },
+                        agentId,
+                        true,
+                      )
+                    }
+                  />
+                </View>
+              </View>
+            ))}
+          {draft.state === "sent" && !draft.conversationMessageId && (
+            <Text textRole="footnote" className="text-foreground-muted">
+              File details are available through conversation file search.
+            </Text>
+          )}
+          {draft.state === "sent" && draft.taskId && (
+            <Button
+              label="Task files"
+              size="compact"
+              disabled={busy}
+              onPress={() => {
+                selectTarget(`task:${draft.taskId}`);
+                setQuery(draft.attachment.name);
+                setSubmitted(draft.attachment.name);
+              }}
+            />
+          )}
           {(draft.state === "ready" || draft.state === "sending") && (
             <View className="flex-row flex-wrap gap-2">
               <Button
                 label={
                   draft.state === "sending"
                     ? draft.target?.kind === "new-task"
-                      ? "Find created task"
+                      ? "Review delivery"
                       : "Retry delivery"
                     : target.kind === "new-task"
                       ? "Start task with file"

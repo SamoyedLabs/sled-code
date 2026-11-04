@@ -139,6 +139,14 @@ describe("RPC authorization scopes", () => {
         "workflow.stopStep",
         "workflow.retryStep",
         "workflow.decide",
+        "channel.send",
+        "channel.stop",
+        "channel.resume",
+        "channel.reassign",
+        "channel.cancel",
+        "channel.archive",
+        "channel.delete",
+        "channel.save",
       ]) {
         expect(clientRpcRequiredScopes(method, payload({ operation }))).toEqual([
           AuthSettingsWriteScope,

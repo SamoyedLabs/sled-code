@@ -74,6 +74,12 @@ const decodeSummaryJson = Schema.decodeUnknownEffect(Schema.fromJsonString(Summa
 const encodeSummaryJson = Schema.encodeEffect(Schema.fromJsonString(SummarySchema));
 const decodeTargetJson = Schema.decodeUnknownEffect(Schema.fromJsonString(TargetSchema));
 const encodeTargetJson = Schema.encodeEffect(Schema.fromJsonString(TargetSchema));
+const decodeCommittedJson = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(DraftSchema.fields.committedAttachments),
+);
+const encodeCommittedJson = Schema.encodeEffect(
+  Schema.fromJsonString(DraftSchema.fields.committedAttachments),
+);
 interface DraftRow {
   readonly host_id: string;
   readonly agent_id: string;
@@ -87,12 +93,16 @@ interface DraftRow {
   readonly message_id: string | null;
   readonly target_json: string | null;
   readonly task_id: string | null;
+  readonly conversation_message_id: string | null;
+  readonly committed_json: string | null;
 }
 const draftFromRow = Effect.fn("OpenbotFiles.draftFromRow")((row: DraftRow) =>
   decodeSummaryJson(row.summary_json).pipe(
     Effect.flatMap((attachment) =>
       Effect.gen(function* () {
         const target = row.target_json === null ? null : yield* decodeTargetJson(row.target_json);
+        const committedAttachments =
+          row.committed_json === null ? null : yield* decodeCommittedJson(row.committed_json);
         return yield* decodeDraft({
           hostId: row.host_id,
           agentId: row.agent_id,
@@ -101,6 +111,8 @@ const draftFromRow = Effect.fn("OpenbotFiles.draftFromRow")((row: DraftRow) =>
           state: row.state,
           sendText: row.send_text,
           messageId: row.message_id,
+          conversationMessageId: row.conversation_message_id,
+          committedAttachments,
           target,
           taskId: row.task_id,
         });
@@ -129,6 +141,26 @@ const make = Effect.gen(function* () {
       );
     if (!rows[0]) return yield* new OpenbotFilesError({ operation, reason: "ownership" });
     return rows[0];
+  });
+  const resolveCommitted = Effect.fn("OpenbotFiles.resolveCommitted")(function* (row: DraftRow) {
+    if (row.conversation_message_id === null || row.committed_json !== null) return row;
+    // Receipt persistence precedes this optional read. Visibility/read failure cannot undo acceptance.
+    const attachments = yield* integration
+      .withFilesToHost(row.host_id, (files) =>
+        files.sentAttachments(row.agent_id, row.conversation_message_id!, row.task_id ?? undefined),
+      )
+      .pipe(
+        Effect.timeout("10 seconds"),
+        Effect.orElseSucceed(() => null),
+      );
+    if (attachments === null) return row;
+    const committedJson = yield* encodeCommittedJson(attachments).pipe(
+      Effect.mapError(storageError("send")),
+    );
+    yield* sql`UPDATE openbot_file_drafts SET committed_json = ${committedJson} WHERE host_id = ${row.host_id} AND agent_id = ${row.agent_id} AND attachment_id = ${row.attachment_id}`.pipe(
+      Effect.mapError(storageError("send")),
+    );
+    return { ...row, committed_json: committedJson };
   });
   return Files.of({
     listWorkspace: Effect.fn("OpenbotFiles.listWorkspace")((input) =>
@@ -278,6 +310,8 @@ const make = Effect.gen(function* () {
                 state: "ready",
                 sendText: null,
                 messageId: null,
+                conversationMessageId: null,
+                committedAttachments: null,
                 target: null,
                 taskId: null,
               });
@@ -330,8 +364,10 @@ const make = Effect.gen(function* () {
             return yield* new OpenbotFilesError({ operation: "send", reason: "conflict" });
           if (row.send_text !== null && row.send_text !== input.text)
             return yield* new OpenbotFilesError({ operation: "send", reason: "conflict" });
-          if (row.state === "sent")
-            return yield* draftFromRow(row).pipe(Effect.mapError(storageError("send")));
+          if (row.state === "sent") {
+            const resolved = yield* resolveCommitted(row);
+            return yield* draftFromRow(resolved).pipe(Effect.mapError(storageError("send")));
+          }
           const now = yield* DateTime.now;
           if (
             row.state === "reconciliation-required" ||
@@ -365,8 +401,18 @@ const make = Effect.gen(function* () {
             )
             .pipe(
               Effect.timeout("120 seconds"),
-              Effect.mapError(
-                (cause) => new OpenbotFilesError({ operation: "send", reason: "transfer", cause }),
+              Effect.catch((cause) =>
+                Effect.gen(function* () {
+                  if (target.kind === "new-task")
+                    yield* sql`UPDATE openbot_file_drafts SET state = 'reconciliation-required' WHERE host_id = ${input.hostId} AND agent_id = ${input.agentId} AND attachment_id = ${input.attachmentId}`.pipe(
+                      Effect.mapError(storageError("send")),
+                    );
+                  return yield* new OpenbotFilesError({
+                    operation: "send",
+                    reason: "transfer",
+                    cause,
+                  });
+                }),
               ),
             );
           if (accepted === null) {
@@ -378,17 +424,19 @@ const make = Effect.gen(function* () {
               reason: "reconciliation-required",
             });
           }
-          yield* sql`UPDATE openbot_file_drafts SET state = 'sent', message_id = ${accepted.messageId}, task_id = ${accepted.taskId} WHERE host_id = ${input.hostId} AND agent_id = ${input.agentId} AND attachment_id = ${input.attachmentId}`.pipe(
+          yield* sql`UPDATE openbot_file_drafts SET state = 'sent', message_id = ${accepted.messageId}, conversation_message_id = ${accepted.conversationMessageId}, task_id = ${accepted.taskId} WHERE host_id = ${input.hostId} AND agent_id = ${input.agentId} AND attachment_id = ${input.attachmentId}`.pipe(
             Effect.mapError(storageError("send")),
           );
-          return yield* draftFromRow({
+          const resolved = yield* resolveCommitted({
             ...row,
             state: "sent",
             send_text: input.text,
             message_id: accepted.messageId,
+            conversation_message_id: accepted.conversationMessageId,
             target_json: targetJson,
             task_id: accepted.taskId,
-          }).pipe(Effect.mapError(storageError("send")));
+          });
+          return yield* draftFromRow(resolved).pipe(Effect.mapError(storageError("send")));
         }),
       );
     }),

@@ -490,7 +490,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
           {draft.state === "sending" && (
             <p className="text-xs text-muted-foreground">
               {draft.target?.kind === "new-task"
-                ? "Creation was not confirmed. Find created task checks existing tasks without starting another."
+                ? "Creation could not be confirmed. Check task conversations before starting another task."
                 : "Delivery was not confirmed. Retry sends the same file and original message using its saved receipt."}
             </p>
           )}
@@ -506,6 +506,95 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
                 ? `Delivered to task ${draft.taskId}.`
                 : "Delivered to the main conversation."}
             </p>
+          )}
+          {draft.state === "sent" &&
+            draft.conversationMessageId &&
+            draft.committedAttachments === null && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy || !canSend}
+                onClick={() =>
+                  void act(async () => {
+                    const result = await send({
+                      environmentId,
+                      input: {
+                        ...scope,
+                        attachmentId: draft.attachment.id,
+                        text: draft.sendText ?? "",
+                        target: draft.target ?? { kind: "main" },
+                      },
+                    });
+                    if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+                  })
+                }
+              >
+                Refresh sent file
+              </Button>
+            )}
+          {draft.state === "sent" &&
+            draft.conversationMessageId &&
+            draft.committedAttachments?.map((file) => (
+              <div key={file.id} className="flex flex-wrap items-center gap-2">
+                <span className="min-w-0 flex-1 break-all text-sm">{file.name}</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy || !canRead}
+                  onClick={() =>
+                    void open(
+                      {
+                        kind: "attachment",
+                        attachmentId: file.id,
+                        messageId: draft.conversationMessageId!,
+                        ...(draft.taskId ? { taskId: draft.taskId } : {}),
+                      },
+                      agentId,
+                      false,
+                    )
+                  }
+                >
+                  Preview sent file
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy || !canRead}
+                  onClick={() =>
+                    void open(
+                      {
+                        kind: "attachment",
+                        attachmentId: file.id,
+                        messageId: draft.conversationMessageId!,
+                        ...(draft.taskId ? { taskId: draft.taskId } : {}),
+                      },
+                      agentId,
+                      true,
+                    )
+                  }
+                >
+                  Download sent file
+                </Button>
+              </div>
+            ))}
+          {draft.state === "sent" && !draft.conversationMessageId && (
+            <p className="text-xs text-muted-foreground">
+              File details are available through conversation file search.
+            </p>
+          )}
+          {draft.state === "sent" && draft.taskId && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                selectTarget(`task:${draft.taskId}`);
+                setQuery(draft.attachment.name);
+                setSubmitted(draft.attachment.name);
+              }}
+            >
+              Task files
+            </Button>
           )}
           {(draft.state === "ready" || draft.state === "sending") && (
             <div className="flex flex-wrap gap-2">
@@ -529,7 +618,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
               >
                 {draft.state === "sending"
                   ? draft.target?.kind === "new-task"
-                    ? "Find created task"
+                    ? "Review delivery"
                     : "Retry delivery"
                   : target.kind === "new-task"
                     ? "Start task with file"
