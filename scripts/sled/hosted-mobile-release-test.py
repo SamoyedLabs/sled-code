@@ -59,8 +59,8 @@ class MobileReleaseTest(unittest.TestCase):
                     m.check_environment(manifest)
 
     def test_manual_signing_is_opt_in_and_does_not_apply_profiles_to_pods(self):
-        for manual in (False, True):
-            with self.subTest(manual=manual), tempfile.TemporaryDirectory() as temp:
+        for manual, exit_code in ((False, 0), (True, 0), (True, 65)):
+            with self.subTest(manual=manual, exit_code=exit_code), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
                 script = root / 'scripts/testflight-ios.py'
                 script.parent.mkdir()
@@ -88,11 +88,22 @@ class MobileReleaseTest(unittest.TestCase):
                         '--output-dir', str(output), '--credentials-dir', str(credentials), '--public-config', str(public)]
                 if manual:
                     argv.append('--manual-signing')
-                with patch.object(sys, 'argv', argv), patch.object(subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)) as commands, \
-                        patch.object(subprocess, 'check_output', return_value=''):
+                with patch.object(sys, 'argv', argv), patch.object(subprocess, 'run', side_effect=lambda command, **kwargs: subprocess.CompletedProcess(command, exit_code if command[0] == 'xcodebuild' else 0)) as commands, \
+                        patch.object(subprocess, 'check_output', return_value=''), patch('builtins.print') as printed, \
+                        patch('threading.Thread') as reporter, patch('threading.Event.wait', side_effect=[False, True]):
+                    reporter.return_value.start.side_effect = lambda: reporter.call_args.kwargs['target']()
                     with self.assertRaises(SystemExit) as result:
                         runpy.run_path(str(script), run_name='__main__')
-                    self.assertEqual(result.exception.code, 0)
+                    self.assertEqual(result.exception.code, exit_code)
+                console = '\n'.join(' '.join(map(str, call.args)) for call in printed.call_args_list)
+                self.assertIn('[native] archive started', console)
+                self.assertIn('[native] archive running:', console)
+                self.assertIn(f'[native] archive finished: exit={exit_code}', console)
+                if exit_code:
+                    self.assertFalse((output / 'status.json').exists())
+                self.assertNotIn('certificateSha1', console)
+                self.assertNotIn('profile-fixture', console)
+                self.assertNotIn('C' * 40, console)
                 actual = [call.args[0] for call in commands.call_args_list]
                 build = next(command for command in actual if command[:2] == ['xcodebuild', 'archive'])
                 self.assertEqual('CODE_SIGN_STYLE=Automatic' in build, not manual)
