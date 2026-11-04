@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Live phase progress and read-only GitHub timing reports; never print command arguments."""
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import json
 import math
 import os
 from pathlib import Path
 import signal
+import statistics
 import subprocess
 import sys
 import threading
@@ -58,16 +60,31 @@ def add_history(history, jobs):
                 history.setdefault(job['name'], {}).setdefault(step['name'], []).append(duration)
 
 
-def history_for(repository, workflow):
-    runs = api(repository, f'actions/workflows/{workflow}/runs?branch=main&status=success&per_page=5')['workflow_runs']
+def history_for(repository, workflow, before=None):
+    artifact = {'sled-desktop-release.yml': 'phase-timings-desktop-build-0',
+                'sled-mobile-release.yml': 'phase-timings-mobile-release'}.get(str(workflow))
+    runs = []
+    if artifact:
+        artifacts = api(repository, f'actions/artifacts?name={artifact}&per_page=30')['artifacts']
+        ids = list(dict.fromkeys(a['workflow_run']['id'] for a in artifacts
+                                if a.get('workflow_run', {}).get('head_branch') == 'main'))[:5]
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            runs = list(executor.map(lambda run_id: api(repository, f'actions/runs/{run_id}'), ids))
+        runs = [run for run in runs if run['conclusion'] == 'success']
+    if not runs:
+        runs = api(repository, f'actions/workflows/{workflow}/runs?branch=main&status=success&per_page=5')['workflow_runs']
     history = {}
     now = time.time()
-    deadline = time.monotonic() + 10
-    for run in runs:
-        if time.monotonic() > deadline:
-            break
-        if now - timestamp(run['created_at']) <= 30 * 86400:
-            jobs = jobs_for(repository, run['id'], run['run_attempt'])
+    recent = [run for run in runs if now - timestamp(run['created_at']) <= 30 * 86400
+              and (before is None or timestamp(run['created_at']) < before)]
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        reports = [(run, executor.submit(jobs_for, repository, run['id'], run['run_attempt']))
+                   for run in recent]
+        for run, report in reports:
+            try:
+                jobs = report.result()
+            except (RuntimeError, ValueError, OSError, subprocess.TimeoutExpired):
+                continue
             add_history(history, jobs)
             completed = [timestamp(j['completed_at']) for j in jobs if j.get('completed_at')]
             if completed:
@@ -98,6 +115,20 @@ def job_status(job, history, now):
     return f"{job['name']}: {job['status']}/{job.get('conclusion') or 'pending'}; execution={elapsed}s"
 
 
+def accuracy(jobs, history):
+    errors, covered = [], 0
+    for job in jobs:
+        for step in job.get('steps', []):
+            samples = history.get(job['name'], {}).get(step['name'], [])
+            if len(samples) < 3 or step.get('conclusion') != 'success' or not step.get('completed_at'):
+                continue
+            duration = timestamp(step['completed_at']) - timestamp(step['started_at'])
+            covered += min(samples) <= duration <= max(samples)
+            errors.append(abs(duration - statistics.median(samples)))
+    return dict(samples=len(errors), within_range=covered,
+                median_absolute_error=round(statistics.median(errors), 1) if errors else None)
+
+
 def run_phase(args):
     command = args.command[1:] if args.command[:1] == ['--'] else args.command
     if not command:
@@ -117,7 +148,9 @@ def run_phase(args):
         elapsed = round(time.monotonic() - started, 1)
         record = dict(event=event, phase=args.phase, job=job,
                       at=datetime.now(timezone.utc).isoformat(), elapsed_seconds=elapsed,
-                      historical_seconds=samples)
+                      historical_seconds=samples, source_sha=os.environ.get('GITHUB_SHA'),
+                      run_id=os.environ.get('GITHUB_RUN_ID'), attempt=os.environ.get('GITHUB_RUN_ATTEMPT'),
+                      runner_os=os.environ.get('RUNNER_OS'), runner_arch=os.environ.get('RUNNER_ARCH'))
         if exit_code is not None:
             record['exit_code'] = exit_code
         print(f"[progress] {args.phase}: {event}; elapsed={elapsed}s; "
@@ -194,7 +227,7 @@ def main():
         return 0
     run = api(args.repo, f'actions/runs/{args.run}')
     jobs = jobs_for(args.repo, args.run, run['run_attempt'])
-    history = history_for(args.repo, run['workflow_id'])
+    history = history_for(args.repo, run['path'].split('/')[-1].split('@')[0], before=timestamp(run['created_at']))
     now = time.time()
     comparable = [r['seconds'] for r in history.get('__runs__', []) if r['jobs'] == job_set(jobs)]
     overall = estimate(comparable, now - timestamp(run['run_started_at']))
@@ -203,9 +236,15 @@ def main():
     lines = [f"Run {run['html_url']} · attempt {run['run_attempt']} · {run['status']}/{run['conclusion'] or 'pending'}",
              f'Whole run: {overall}. Based on successful runs with the same enabled jobs; queue delays can exceed history.']
     lines += [job_status(job, history, now) for job in jobs]
+    audit = accuracy(jobs, history)
+    if audit['samples']:
+        lines.append(f"Estimate audit: {audit['within_range']}/{audit['samples']} completed phases within historical range; "
+                     f"median absolute error vs historical median={audit['median_absolute_error']}s. Different commits/cache states can change timings.")
+    else:
+        lines.append('Estimate audit: unavailable; no completed phases with enough prior history.')
     print('\n'.join(lines))
     if args.output:
-        args.output.write_text(json.dumps(dict(run=run, jobs=jobs, history=history), indent=2) + '\n')
+        args.output.write_text(json.dumps(dict(run=run, jobs=jobs, history=history, accuracy=audit), indent=2) + '\n')
     return 0
 
 

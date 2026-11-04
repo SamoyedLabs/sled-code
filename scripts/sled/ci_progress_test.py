@@ -28,6 +28,8 @@ class ProgressTests(unittest.TestCase):
         m.add_history(history, [job, {**job, 'conclusion': 'failure'},
                                 {**job, 'steps': [{**step, 'conclusion': 'skipped'}]}])
         self.assertEqual(history['Test Server 1']['Test'], [60])
+        audit = m.accuracy([job], {'Test Server 1': {'Test': [40, 50, 55]}})
+        self.assertEqual(audit, dict(samples=1, within_range=0, median_absolute_error=10))
         self.assertEqual(m.job_set([job, {**job, 'name': 'Unused', 'conclusion': 'skipped'},
                                    {**job, 'name': 'Check'}]), ['Test Server 1'])
 
@@ -43,6 +45,27 @@ class ProgressTests(unittest.TestCase):
             self.assertEqual(records[-1]['exit_code'], 7)
             self.assertNotIn('sys.exit', target.read_text())
             self.assertIn('ETA unavailable', result.stdout)
+
+    def test_release_history_uses_build_artifacts_and_excludes_future_runs(self):
+        run = dict(id=10, run_attempt=2, created_at='2026-11-03T00:00:00Z',
+                   run_started_at='2026-11-03T00:00:00Z', conclusion='success')
+        step = dict(name='Build desktop', conclusion='success',
+                    started_at='2026-11-03T00:00:00Z', completed_at='2026-11-03T00:01:00Z')
+        job = dict(name='build', conclusion='success', completed_at=step['completed_at'], steps=[step])
+        def api(repository, path):
+            if path.startswith('actions/artifacts?'):
+                return {'artifacts': [dict(workflow_run=dict(id=10, head_branch='main'))]}
+            if path == 'actions/runs/10':
+                return run
+            if path == 'actions/runs/10/attempts/2/jobs?per_page=100&page=1':
+                return {'jobs': [job]}
+            self.fail('Unexpected request: ' + path)
+        with patch.object(m, 'api', side_effect=api), patch.object(
+                m.time, 'time', return_value=m.timestamp('2026-11-04T00:00:00Z')):
+            history = m.history_for('owner/repo', 'sled-desktop-release.yml')
+            self.assertEqual(history['build']['Build desktop'], [60])
+            self.assertEqual(m.history_for('owner/repo', 'sled-desktop-release.yml',
+                                          before=m.timestamp(run['created_at'])), {})
 
     def test_history_failure_does_not_block_builds(self):
         with tempfile.TemporaryDirectory() as directory:

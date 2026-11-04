@@ -188,7 +188,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          name: phase-timings-mobile-release
           path: ${{ runner.temp }}/ci-timings.jsonl
           retention-days: 7
           if-no-files-found: ignore

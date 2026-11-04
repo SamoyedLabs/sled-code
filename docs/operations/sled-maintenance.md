@@ -162,7 +162,8 @@ python3 scripts/sled/ci_progress.py status --repo SamoyedLabs/sled-code --run RU
 ```
 
 Ranges use up to five successful main runs from the last 30 days and require three
-observations. They are historical ranges, not deadlines or calibrated confidence intervals.
+observations. Release history prefers runs with phase-timing artifacts so scheduled no-op
+runs do not crowd out real builds. They are historical ranges, not deadlines or calibrated confidence intervals.
 Overruns and missing history explicitly have no ETA. Whole-run estimates require the same
 enabled jobs; mobile whole-run estimates remain unavailable because native and OTA paths
 differ. Native and OTA phase histories are separate. Queueing, cache misses and changed

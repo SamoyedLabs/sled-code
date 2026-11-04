@@ -463,18 +463,14 @@ jobs:
     permissions:
       contents: read
       actions: read
-    name: Test Lint Rules ${{ matrix.shard }}/2
+    name: Test Lint Rules
     needs: changes
     env:
-      CI_TIMING_JOB: Test Lint Rules ${{ matrix.shard }}/2
+      CI_TIMING_JOB: Test Lint Rules
       CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.test_lint_rules != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -494,13 +490,13 @@ jobs:
       - name: Test
         id: tests
         working-directory: oxlint-plugin-t3code
-        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Test" -- vp test run --config ../vite.config.ts --dir . --shard=${{ matrix.shard }}/2 --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Test" -- vp test run --config ../vite.config.ts --dir . --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
 
       - name: Upload test timings
         if: always() && steps.tests.outcome != 'skipped'
         uses: actions/upload-artifact@v7
         with:
-          name: test-timings-lint-rules-${{ matrix.shard }}
+          name: test-timings-lint-rules
           path: ${{ runner.temp }}/test-results.json
           retention-days: 7
           if-no-files-found: error
@@ -685,6 +681,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Setup Vite+
+        id: dependencies
         uses: ./.github/actions/setup-ci-deps
 
       - name: Test
@@ -701,53 +698,16 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-      - name: Retain phase timing records
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
-          path: ${{ runner.temp }}/ci-timings.jsonl
-          retention-days: 7
-          if-no-files-found: ignore
-
-  test_mobile_compiler:
-    name: Mobile Compiler ${{ matrix.shard }}/2
-    needs: changes
-    env:
-      CI_TIMING_JOB: Mobile Compiler ${{ matrix.shard }}/2
-      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
-    if: ${{ !cancelled() && needs.changes.outputs.test_mobile != 'false' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ inputs.candidate_sha || github.sha }}
-          persist-credentials: false
-          sparse-checkout: |
-            /*
-            !/.repos/
-            !/vendor/
-            !/apps/mobile/modules/t3-terminal/Vendor/**/*.a
-          sparse-checkout-cone-mode: false
-
-      - name: Setup Vite+
-        uses: ./.github/actions/setup-ci-deps
-
       - name: Test compiler coverage
-        id: tests
+        if: ${{ !cancelled() && matrix.project == 'react' && steps.dependencies.outcome == 'success' }}
+        id: compiler
         working-directory: apps/mobile
         env:
           T3_MOBILE_COMPILER_SHARD: ${{ matrix.shard }}/2
         run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Test compiler coverage" -- vp test run --project compiler --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
 
-      - name: Upload test timings
-        if: always() && steps.tests.outcome != 'skipped'
+      - name: Upload compiler timings
+        if: always() && matrix.project == 'react' && steps.compiler.outcome != 'skipped'
         uses: actions/upload-artifact@v7
         with:
           name: test-timings-compiler-${{ matrix.shard }}
@@ -1088,7 +1048,6 @@ jobs:
         test_scripts,
         test_lint_rules,
         test_mobile,
-        test_mobile_compiler,
         test_server,
         rust,
         mobile_native_static_analysis,
@@ -1107,7 +1066,7 @@ jobs:
           # not needed. Gates are keyed by job name, except merged Build and the
           # macOS lint.
           echo "$RESULTS" | jq -e '.changes.outputs as $gates
-            | {build: ["build", "typecheck"], mobile_native_static_analysis: ["mobile_native"], test_web_boot: ["test_web"], test_mobile_compiler: ["test_mobile"]} as $renamed
+            | {build: ["build", "typecheck"], mobile_native_static_analysis: ["mobile_native"], test_web_boot: ["test_web"]} as $renamed
             | all(to_entries[];
                 .value.result == "success"
                 or (.value.result == "skipped"

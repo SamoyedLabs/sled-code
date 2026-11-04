@@ -23,7 +23,6 @@ const renamed = {
   build: ["build", "typecheck"],
   mobile_native_static_analysis: ["mobile_native"],
   test_web_boot: ["test_web"],
-  test_mobile_compiler: ["test_mobile"],
 };
 function resultsFor(files) {
   const { outputs } = decide(files, readWorkspace(), false);

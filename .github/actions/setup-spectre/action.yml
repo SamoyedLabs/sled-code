@@ -16,7 +16,10 @@ runs:
         "path=$(Join-Path $toolset.FullName 'lib\spectre\x64')" >> $env:GITHUB_OUTPUT
         "key=msvc-spectre-x64-v1-$($toolset.Name)-$($compiler.Hash)" >> $env:GITHUB_OUTPUT
         "MSVC_INSTALL=$install" >> $env:GITHUB_ENV
+        $installed = Test-Path (Join-Path $toolset.FullName 'lib\spectre\x64\libcmt.lib')
+        "installed=$($installed.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
     - name: Restore matching Windows Spectre libraries
+      if: steps.msvc.outputs.installed != 'true'
       id: spectre
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
@@ -42,7 +45,7 @@ runs:
         "path=$libraryPath" >> $env:GITHUB_OUTPUT
         "key=msvc-spectre-x64-v1-$($toolset.Name)-$($compiler.Hash)" >> $env:GITHUB_OUTPUT
     - name: Cache installed Windows Spectre libraries
-      if: steps.spectre.outputs.cache-matched-key != steps.installed_msvc.outputs.key
+      if: steps.msvc.outputs.installed != 'true' && steps.spectre.outputs.cache-matched-key != steps.installed_msvc.outputs.key
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
         path: ${{ steps.installed_msvc.outputs.path }}

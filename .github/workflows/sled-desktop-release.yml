@@ -199,7 +199,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          name: phase-timings-desktop-build-${{ strategy.job-index || 0 }}
           path: ${{ runner.temp }}/ci-timings.jsonl
           retention-days: 7
           if-no-files-found: ignore
@@ -260,6 +260,9 @@ jobs:
       - name: Ensure Windows Spectre libraries
         if: runner.os == 'Windows'
         uses: ./.github/actions/setup-spectre
+      - name: Select native SDK
+        if: runner.os == 'macOS'
+        run: echo 'DEVELOPER_DIR=/Applications/Xcode_26.3.app/Contents/Developer' >> "$GITHUB_ENV"
       - name: Setup dependencies
         uses: ./.github/actions/setup-ci-deps
         with:
@@ -268,9 +271,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Build desktop
         run: python3 scripts/sled/ci_progress.py run --phase "Build desktop" -- vp run build:desktop
-      - name: Select native SDK
-        if: runner.os == 'macOS'
-        run: echo 'DEVELOPER_DIR=/Applications/Xcode_26.3.app/Contents/Developer' >> "$GITHUB_ENV"
       - name: Cache pinned WebRTC binary
         if: runner.os == 'macOS'
         uses: actions/cache@v6
