@@ -1,3 +1,4 @@
+import { catalogRequiredScopes } from "./openbotCatalog.ts";
 import * as Schema from "effect/Schema";
 import { OpenbotSledToolsConnectInput } from "./openbotSledTools.ts";
 import { mcpClientScopes } from "./auth.ts";
@@ -128,6 +129,8 @@ export function clientRpcRequiredScopes(
         ? input.request
         : input;
     if (typeof request === "object" && request !== null && "operation" in request) {
+      const catalogScopes = catalogRequiredScopes(request.operation, "read");
+      if (catalogScopes) return catalogScopes;
       if (request.operation === "tables.list")
         return [AuthSettingsWriteScope, AuthOrchestrationReadScope];
       if (request.operation === "sites.list") return [AuthOrchestrationReadScope];
@@ -160,6 +163,8 @@ export function clientRpcRequiredScopes(
       "operation" in request &&
       typeof request.operation === "string"
     ) {
+      const catalogScopes = catalogRequiredScopes(request.operation, "admin");
+      if (catalogScopes) return catalogScopes;
       if (request.operation === "tables.delete" || request.operation === "sites.delete")
         return [AuthSettingsWriteScope, AuthOrchestrationReadScope, AuthOrchestrationOperateScope];
       if (request.operation === "computer.setup" || request.operation === "computer.display")

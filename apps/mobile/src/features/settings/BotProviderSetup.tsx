@@ -1,3 +1,4 @@
+import { CatalogEnvironment } from "./CatalogEnvironment";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { Linking, View } from "react-native";
@@ -638,6 +639,15 @@ export function BotProviderSetup({
         </>
       )}
       <BotConnections environmentId={environmentId} hostId={hostId} />
+      <CatalogEnvironment
+        key={`registry:${environmentId}:${hostId}`}
+        environmentId={environmentId}
+        hostId={hostId}
+        onChange={() => {
+          modelsQuery.refresh();
+          statusQuery.refresh();
+        }}
+      />
       <BotCustomProviders
         key={hostId}
         environmentId={environmentId}

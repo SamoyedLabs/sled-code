@@ -1,3 +1,4 @@
+import { BotUiBlock } from "./BotUiBlock";
 import { useState } from "react";
 import { View } from "react-native";
 import * as Crypto from "expo-crypto";
@@ -82,6 +83,16 @@ function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Pro
           {botMessageSections(message).map((section) => (
             <RichSection key={section.kind} {...section} />
           ))}
+          <BotUiBlock
+            key={JSON.stringify([message.id, message.uiBlock])}
+            environmentId={environmentId}
+            hostId={hostId}
+            message={message}
+            snapshot={c.snapshot}
+            taskId={taskId}
+            disabled={disabled}
+            respond={c.act}
+          />
           <Button label="Reply" disabled={disabled} onPress={() => c.setReply(message.id)} />
           <Button
             label="Branch here"
@@ -164,14 +175,41 @@ function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Pro
         />
       )}
       {c.reply && <Button label={`Cancel reply to ${c.reply}`} onPress={() => c.setReply(null)} />}
+      <Text>
+        File draft from Files (one file per journaled message). Selection is not sending. Cancel a
+        reply to send a file.
+      </Text>
+      <Button
+        label="No file"
+        disabled={c.busy || Boolean(c.fileAttempt)}
+        onPress={() => c.setSelectedDraftId(null)}
+      />
+      {c.fileDrafts.map((d) => (
+        <Button
+          key={d.attachment.id}
+          label={`${c.selectedDraftId === d.attachment.id ? "Selected: " : ""}${d.attachment.name} · ${d.state}`}
+          disabled={c.busy || Boolean(c.fileAttempt) || Boolean(c.reply)}
+          onPress={() => c.setSelectedDraftId(d.attachment.id)}
+        />
+      ))}
       <AppTextInput
+        editable={!c.fileAttempt}
         accessibilityLabel="Message to bot"
         multiline
         maxLength={100000}
         value={c.text}
         onChangeText={c.setText}
       />
-      <Button label="Send" disabled={disabled || !c.text.trim()} onPress={() => void c.send()} />
+      <Button
+        label="Send"
+        disabled={
+          c.busy ||
+          (c.selectedDraftId
+            ? !c.filePermission || Boolean(c.reply)
+            : !c.permission || !c.text.trim())
+        }
+        onPress={() => void c.send()}
+      />
       {c.snapshot?.activeTurnId && (
         <Button
           label="Stop turn"

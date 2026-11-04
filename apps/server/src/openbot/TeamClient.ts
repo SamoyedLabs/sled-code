@@ -1,3 +1,6 @@
+import * as UiBlocks from "./UiBlocks.ts";
+import { OpenbotConversationSnapshot } from "@t3tools/contracts";
+import * as CatalogProtocol from "./CatalogProtocol.ts";
 import * as ComputerViewSession from "./ComputerViewSession.ts";
 import * as DataProtocol from "./DataProtocol.ts";
 import * as VaultProtocol from "./VaultProtocol.ts";
@@ -55,6 +58,7 @@ const Login = Schema.Struct({
 });
 
 const isTeamClientError = Schema.is(TeamClientError);
+const isUiBlockRefused = Schema.is(UiBlocks.UiBlockRefused);
 const decodeLogin = Schema.decodeUnknownEffect(Login);
 const decodeRoster = Schema.decodeUnknownEffect(Roster);
 const SafeMcpRow = Schema.Struct({
@@ -285,6 +289,7 @@ function isSavedMcpRequest(request: ApiRequest): request is SavedMcpRequest {
   );
 }
 interface Route {
+  readonly catalogProjection?: Parameters<typeof CatalogProtocol.project>[0];
   readonly dataProjection?: Parameters<typeof DataProtocol.project>[0];
   readonly vaultProjection?: Parameters<typeof VaultProtocol.project>[0];
   readonly vaultVersion?: "v1" | "v2";
@@ -303,6 +308,7 @@ interface Route {
 }
 // Only these source-backed operations can spend the private host-owner session.
 function apiRoute(request: Exclude<ApiRequest, SavedMcpRequest>): Route {
+  if (CatalogProtocol.isRequest(request)) return CatalogProtocol.route(request);
   if (DataProtocol.isRequest(request)) return DataProtocol.route(request);
   if (VaultProtocol.isRequest(request)) return VaultProtocol.route(request);
   if (EventProtocol.isRequest(request)) return EventProtocol.route(request);
@@ -894,7 +900,7 @@ const make = Effect.gen(function* () {
             "OpenBot-Protocol-Version": "9",
             "OpenBot-App-Version": "0.60.0",
             "OpenBot-Capabilities":
-              "subagents-v1,queue-edit-v1,queue-window-v1,conversation-unread,agent-threads-v1,agent-thread-reads-v1,agent-thread-branches-v1,agent-thread-replies-v1,agent-tasks-v1,agent-create-model,agent-admin-v1,agent-instructions-v1,skills-admin-v1,mcp-servers-v1,mcp-sign-in-v1,browser-navigation,browser-user-control,browser-page-state,browser-profiles-v1,connectors-v1,channel-chats-v1,providers-v8,provider-accounts-v1,provider-default-v1,provider-host-sign-in-v1,provider-sign-out-v1,custom-provider-harness-v1,custom-agents-v1,model-visibility-v1,claude-api-key-v1,sign-in-relay-v1,provider-account-relay-v1,provider-account-relay-v2,workspace-directory-v1,conversation-file-search-v1,agent-thread-files-v1,message-client-id-v1,workflows-v1,events-v1,routine-recovery-v1,webhook-tests-v1,routine-flows-v1,channel-delete-v1,channel-task-cancel-v1,channel-attention-v1,vault-v1,vault-v2,vault-import-v1,onepassword-connector-v1,bitwarden-connector-v1,remote-desktop-setup,shared-tables-v1,hosted-sites-v1",
+              "ui-blocks-v1,agent-task-ui-blocks-v1,subagents-v1,queue-edit-v1,queue-window-v1,conversation-unread,agent-threads-v1,agent-thread-reads-v1,agent-thread-branches-v1,agent-thread-replies-v1,agent-tasks-v1,agent-create-model,agent-admin-v1,agent-instructions-v1,skills-admin-v1,mcp-servers-v1,mcp-sign-in-v1,browser-navigation,browser-user-control,browser-page-state,browser-profiles-v1,connectors-v1,channel-chats-v1,providers-v8,provider-accounts-v1,provider-default-v1,provider-host-sign-in-v1,provider-sign-out-v1,custom-provider-harness-v1,custom-agents-v1,model-visibility-v1,claude-api-key-v1,sign-in-relay-v1,provider-account-relay-v1,provider-account-relay-v2,workspace-directory-v1,conversation-file-search-v1,agent-thread-files-v1,message-client-id-v1,workflows-v1,events-v1,routine-recovery-v1,webhook-tests-v1,routine-flows-v1,channel-delete-v1,channel-task-cancel-v1,channel-attention-v1,vault-v1,vault-v2,vault-import-v1,onepassword-connector-v1,bitwarden-connector-v1,remote-desktop-setup,shared-tables-v1,hosted-sites-v1,acp-registry-v1",
           }),
         ),
       )
@@ -999,6 +1005,45 @@ const make = Effect.gen(function* () {
     });
     const execute = Effect.fn("OpenbotTeamClient.execute")(function* (input: ApiRequest) {
       if (closed) return yield* new TeamClientError({ reason: "closed" });
+      if (input.operation === "conversation.blockRespond") {
+        return yield* UiBlocks.respond(input, {
+          read: Effect.fn("OpenbotTeamClient.readUiBlock")(function* (
+            agentId: string,
+            taskId: string | null,
+          ) {
+            const request =
+              taskId === null
+                ? authenticated(`/v1/agents/${encodeURIComponent(agentId)}/conversation`, "GET")
+                : yield* HttpClientRequest.bodyJson({ agentId, taskId })(
+                    authenticated("/v1/agent-tasks/read", "POST"),
+                  ).pipe(
+                    Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+                  );
+            const response = yield* send(request);
+            return yield* readJson(response).pipe(
+              Effect.flatMap(Schema.decodeUnknownEffect(OpenbotConversationSnapshot)),
+              Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+            );
+          }),
+          answer: Effect.fn("OpenbotTeamClient.answerUiBlock")(function* (
+            requestId: string | number,
+            answers: Record<string, string[]>,
+          ) {
+            const request = yield* HttpClientRequest.bodyJson({ requestId, answers })(
+              authenticated("/v1/prompts/respond", "POST"),
+            ).pipe(Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })));
+            const response = yield* send(request);
+            if (response.status !== 204) return yield* new TeamClientError({ reason: "decode" });
+            return null;
+          }),
+        }).pipe(
+          Effect.mapError((cause) =>
+            isUiBlockRefused(cause)
+              ? new TeamClientError({ reason: "invalid-configuration", cause })
+              : cause,
+          ),
+        );
+      }
       const route = yield* Effect.gen(function* () {
         if (!isSavedMcpRequest(input)) return apiRoute(input);
         // Stored MCP URLs and credentials stay private, including when only an origin is shown to clients.
@@ -1052,6 +1097,10 @@ const make = Effect.gen(function* () {
       const response = responseResult.success;
       if (response.status === 204) return null;
       const result = yield* readJson(response);
+      if (route.catalogProjection)
+        return yield* CatalogProtocol.project(route.catalogProjection, result).pipe(
+          Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+        );
       if (route.dataProjection)
         return yield* DataProtocol.project(route.dataProjection, result).pipe(
           Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),

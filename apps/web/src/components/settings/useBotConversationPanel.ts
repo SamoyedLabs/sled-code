@@ -1,9 +1,11 @@
+import { selectableDraft, acceptedDraft } from "@t3tools/client-runtime/openbot/rich-conversation";
 import { useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import type {
   EnvironmentId,
   OpenbotWriteRequest,
   OpenbotConversationPage,
+  OpenbotDraftFile,
 } from "@t3tools/contracts";
 import {
   botConversationPage,
@@ -26,6 +28,20 @@ export function useBotConversationPanel(
 ) {
   const [pages, setPages] = useState<readonly OpenbotConversationPage[]>([]);
   const [text, setText] = useState("");
+  const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
+  const [fileAttempt, setFileAttempt] = useState<{ id: string; text: string } | null>(null);
+  const target = taskId ? { kind: "task" as const, taskId } : { kind: "main" as const };
+  const scope = { hostId, agentId };
+  const drafts = useEnvironmentQuery(openbot.fileDrafts({ environmentId, input: scope }));
+  const fileSend = useAtomCommand(openbot.fileSendDraft, { reportFailure: false });
+  const filePermission = useAtomValue(
+    openbot.fileSendDraft.permissionAtom(environmentId, {
+      ...scope,
+      attachmentId: selectedDraftId ?? "unselected",
+      text: fileAttempt?.text ?? text,
+      target,
+    }),
+  );
   const [reply, setReply] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +133,49 @@ export function useBotConversationPanel(
     return id;
   };
   const send = async () => {
+    if (selectedDraftId) {
+      if (lock.current || !filePermission || reply) return;
+      const draft = drafts.data?.find((d) => d.attachment.id === selectedDraftId);
+      if (draft && acceptedDraft(scope, target, selectedDraftId, draft)) {
+        setSelectedDraftId(null);
+        setFileAttempt(null);
+        setText("");
+        refresh();
+        return;
+      }
+      if (!draft || !selectableDraft(scope, target, draft)) {
+        setError("Refresh Files to reconcile this draft before sending.");
+        return;
+      }
+      const attempt = fileAttempt ?? { id: selectedDraftId, text: draft.sendText ?? text };
+      setFileAttempt(attempt);
+      lock.current = true;
+      setBusy(true);
+      setError(null);
+      const result = await settlePromise(() =>
+        fileSend({
+          environmentId,
+          input: { ...scope, attachmentId: attempt.id, text: attempt.text, target },
+        }),
+      );
+      lock.current = false;
+      setBusy(false);
+      drafts.refresh();
+      refresh();
+      if (
+        result._tag === "Success" &&
+        result.value._tag === "Success" &&
+        acceptedDraft(scope, target, attempt.id, result.value.value)
+      ) {
+        setSelectedDraftId(null);
+        setFileAttempt(null);
+        setText("");
+      } else
+        setError(
+          "File acceptance is uncertain. Retry this same selection and original text, or reconcile in Files. Selection is not delivery.",
+        );
+      return;
+    }
     if (!text.trim()) return;
     const key = JSON.stringify(["send", text, reply]);
     const clientMessageId = stableId(key);
@@ -200,6 +259,17 @@ export function useBotConversationPanel(
     setBusy(false);
   };
   return {
+    selectedDraftId,
+    setSelectedDraftId: (id: string | null) => {
+      if (!fileAttempt) setSelectedDraftId(id);
+    },
+    fileAttempt,
+    filePermission,
+    fileDrafts: (drafts.data ?? []).filter(
+      (d: OpenbotDraftFile) =>
+        selectableDraft(scope, target, d) ||
+        (d.hostId === hostId && d.agentId === agentId && d.attachment.id === selectedDraftId),
+    ),
     text,
     setText,
     reply,

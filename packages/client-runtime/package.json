@@ -526,6 +526,14 @@
     "./openbot/presentation": {
       "types": "./src/openbot/presentation.ts",
       "default": "./src/openbot/presentation.ts"
+    },
+    "./openbot/catalog": {
+      "types": "./src/openbot/catalog.ts",
+      "default": "./src/openbot/catalog.ts"
+    },
+    "./openbot/rich-conversation": {
+      "types": "./src/openbot/richConversation.ts",
+      "import": "./src/openbot/richConversation.ts"
     }
   },
   "scripts": {

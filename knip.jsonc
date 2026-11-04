@@ -69,6 +69,8 @@
         // graphqlgen reads its config.
         "graphql.config.ts",
       ],
+      // Copied into the upstream engine; its imports resolve only in that source tree.
+      "ignore": ["src/openbot/upstream/channel-coding/idle-deadline.e2e.mjs"],
       // The generated operations export every selection's class.
       "ignoreIssues": { "**/*.graphql.ts": ["exports", "types", "namespaceMembers"] },
       // Keep the transitive Effect runtime pinned for standalone npm installs.
@@ -169,8 +171,11 @@
     },
     "packages/contracts": {
       "includeEntryExports": true,
-      // Preserve the pinned upstream wire module as a complete protocol surface.
-      "ignoreIssues": { "src/openbotBrowserWire.ts": ["exports"] },
+      // Preserve pinned upstream wire and UI-block modules as complete protocol surfaces.
+      "ignoreIssues": {
+        "src/openbotBrowserWire.ts": ["exports"],
+        "src/openbotUiBlocks.ts": ["exports"],
+      },
     },
     "packages/effect-acp": {
       "includeEntryExports": true,

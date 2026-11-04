@@ -114,6 +114,22 @@ export function BotConversationQueue({
             </>
           ) : (
             <>
+              {edit.keepAttachmentIds.map((id) => (
+                <Button
+                  key={id}
+                  disabled={disabled}
+                  onClick={() =>
+                    setEdit(
+                      session.current.retainAttachments(
+                        edit.editId,
+                        edit.keepAttachmentIds.filter((keep) => keep !== id),
+                      ),
+                    )
+                  }
+                >
+                  Remove retained file {id}
+                </Button>
+              ))}
               <Textarea
                 aria-label="Edit queued message"
                 value={edit.text}

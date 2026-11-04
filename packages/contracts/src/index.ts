@@ -112,3 +112,5 @@ export * from "./openbotComputer.ts";
 export * from "./openbotVault.ts";
 
 export * from "./openbotData.ts";
+
+export * from "./openbotCatalog.ts";

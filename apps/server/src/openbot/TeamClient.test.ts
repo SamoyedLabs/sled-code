@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as TeamClient from "./TeamClient.ts";
+import type { BlockCommand } from "@t3tools/contracts/openbot-ui-block-answer";
 
 const fixture = Effect.fnUntraced(function* (handle: NodeHttp.RequestListener) {
   const server = yield* Effect.acquireRelease(
@@ -32,6 +33,305 @@ const fixture = Effect.fnUntraced(function* (handle: NodeHttp.RequestListener) {
     return yield* Effect.die("Missing fixture address");
   return `http://127.0.0.1:${address.port}`;
 });
+
+it.live(
+  "negotiates and projects the catalog while preserving install outcomes and HTTP refusal",
+  () =>
+    Effect.gen(function* () {
+      const requests: Array<{ method: string; path: string; body: unknown }> = [];
+      let status = 200;
+      let installState = "installing";
+      const apiUrl = yield* fixture(async (request, response) => {
+        let text = "";
+        for await (const chunk of request) text += chunk.toString();
+        response.setHeader("content-type", "application/json");
+        if (request.url === "/v1/auth/login") {
+          response.end(JSON.stringify({ sessionToken: "private", sessionExpiresAt: "2027-01-01" }));
+          return;
+        }
+        if (request.url === "/v1/auth/logout") {
+          response.writeHead(204).end();
+          return;
+        }
+        expect(request.headers.authorization).toBe("Bearer private");
+        expect(String(request.headers["openbot-capabilities"]).split(",")).toContain(
+          "acp-registry-v1",
+        );
+        requests.push({
+          method: request.method ?? "",
+          path: request.url ?? "",
+          body: JSON.parse(text),
+        });
+        response.statusCode = status;
+        if (request.url === "/v1/admin/acp-registry/search") {
+          response.end(
+            JSON.stringify([
+              {
+                id: "vendor/agent",
+                name: "Agent",
+                version: "2",
+                description: "Coding agent",
+                website: null,
+                license: "MIT",
+                distributions: ["binary", "npx"],
+                installedVersion: "1",
+                customAgentId: "existing-agent",
+                command: "/private/runtime",
+                env: { TOKEN: "private" },
+              },
+            ]),
+          );
+        } else if (request.url === "/v1/admin/acp-registry/installed") {
+          response.end(
+            JSON.stringify([
+              {
+                registryId: "vendor/agent",
+                customAgentId: "existing-agent",
+                version: "1",
+                distribution: "binary",
+                path: "/private/runtime",
+              },
+            ]),
+          );
+        } else if (request.url === "/v1/admin/acp-registry/status") {
+          response.end(
+            JSON.stringify([{ registryId: "vendor/agent", state: installState, message: null }]),
+          );
+        } else if (request.url === "/v1/admin/acp-registry/install") {
+          response.end(
+            JSON.stringify({
+              agents: [
+                {
+                  id: "existing-agent",
+                  name: "Agent",
+                  command: "/private/runtime",
+                  env: { TOKEN: "private" },
+                },
+              ],
+              restart: "skipped-busy",
+              token: "private",
+            }),
+          );
+        } else if (
+          request.url === "/v1/admin/acp-registry/cancel" ||
+          request.url === "/v1/admin/acp-registry/remove"
+        ) {
+          response.end(JSON.stringify({ token: "private" }));
+        } else response.writeHead(404).end("{}");
+      });
+      const session = yield* (yield* TeamClient.TeamClient).connect({
+        apiUrl,
+        ownerSecret: "fixture",
+      });
+      expect(
+        yield* session.apiRead({ operation: "registry.search", query: "vendor/agent" }),
+      ).toEqual([
+        {
+          id: "vendor/agent",
+          name: "Agent",
+          version: "2",
+          description: "Coding agent",
+          website: null,
+          license: "MIT",
+          distributions: ["binary", "npx"],
+          installedVersion: "1",
+          customAgentId: "existing-agent",
+        },
+      ]);
+      expect(yield* session.apiRead({ operation: "registry.installed" })).toEqual([
+        {
+          registryId: "vendor/agent",
+          customAgentId: "existing-agent",
+          version: "1",
+          distribution: "binary",
+        },
+      ]);
+      expect(yield* session.apiRead({ operation: "registry.status" })).toEqual([
+        {
+          registryId: "vendor/agent",
+          state: "installing",
+          message: null,
+        },
+      ]);
+      expect(
+        yield* session.apiAdmin({
+          operation: "registry.install",
+          registryId: "vendor/agent",
+          customAgentId: "existing-agent",
+          name: "Agent",
+          distribution: "binary",
+        }),
+      ).toEqual({ agents: [{ id: "existing-agent", name: "Agent" }], restart: "skipped-busy" });
+      expect(
+        yield* session.apiAdmin({ operation: "registry.cancel", registryId: "vendor/agent" }),
+      ).toEqual({});
+      expect(
+        yield* session.apiAdmin({ operation: "registry.remove", registryId: "vendor/agent" }),
+      ).toEqual({});
+      expect(requests).toEqual([
+        { method: "POST", path: "/v1/admin/acp-registry/search", body: { query: "vendor/agent" } },
+        { method: "POST", path: "/v1/admin/acp-registry/installed", body: {} },
+        { method: "POST", path: "/v1/admin/acp-registry/status", body: {} },
+        {
+          method: "POST",
+          path: "/v1/admin/acp-registry/install",
+          body: {
+            registryId: "vendor/agent",
+            customAgentId: "existing-agent",
+            name: "Agent",
+            distribution: "binary",
+          },
+        },
+        {
+          method: "POST",
+          path: "/v1/admin/acp-registry/cancel",
+          body: { registryId: "vendor/agent" },
+        },
+        {
+          method: "POST",
+          path: "/v1/admin/acp-registry/remove",
+          body: { registryId: "vendor/agent" },
+        },
+      ]);
+      installState = "complete";
+      expect(yield* Effect.flip(session.apiRead({ operation: "registry.status" }))).toMatchObject({
+        reason: "decode",
+      });
+      status = 401;
+      expect(
+        yield* Effect.flip(session.apiRead({ operation: "registry.installed" })),
+      ).toMatchObject({ reason: "http", status: 401 });
+      yield* session.close;
+    }).pipe(
+      Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+      Effect.scoped,
+    ),
+);
+
+it.live(
+  "re-reads the exact main or task UI prompt before answering and requires authoritative 204",
+  () =>
+    Effect.gen(function* () {
+      const requests: Array<{ method: string; path: string; body: unknown }> = [];
+      let readStatus = 200;
+      let answerStatus = 204;
+      let activeTurnId: string | null = "turn";
+      const apiUrl = yield* fixture(async (request, response) => {
+        let text = "";
+        for await (const chunk of request) text += chunk.toString();
+        response.setHeader("content-type", "application/json");
+        if (request.url === "/v1/auth/login") {
+          response.end(JSON.stringify({ sessionToken: "private", sessionExpiresAt: "2027-01-01" }));
+          return;
+        }
+        if (request.url === "/v1/auth/logout") {
+          response.writeHead(204).end();
+          return;
+        }
+        expect(request.headers.authorization).toBe("Bearer private");
+        const capabilities = String(request.headers["openbot-capabilities"]).split(",");
+        expect(capabilities).toContain("ui-blocks-v1");
+        expect(capabilities).toContain("agent-task-ui-blocks-v1");
+        requests.push({
+          method: request.method ?? "",
+          path: request.url ?? "",
+          body: text ? JSON.parse(text) : null,
+        });
+        if (
+          request.url === "/v1/agents/bot/conversation" ||
+          request.url === "/v1/agent-tasks/read"
+        ) {
+          response.statusCode = readStatus;
+          response.end(
+            JSON.stringify({
+              ...(request.method === "GET" ? { botId: "bot" } : { agentId: "bot" }),
+              threadId: "thread",
+              activeTurnId,
+              revision: 3,
+              messages: [
+                {
+                  id: "message",
+                  turnId: "turn",
+                  author: "agent",
+                  text: "Pick",
+                  status: "completed",
+                  createdAt: "now",
+                  questionPrompt: { requestId: 4, resolution: null },
+                  uiBlock: {
+                    version: 1,
+                    blockId: "block",
+                    spec: { type: "quick_replies", options: [{ id: "yes", label: "Yes please" }] },
+                    state: { status: "pending" },
+                  },
+                },
+              ],
+            }),
+          );
+        } else if (request.url === "/v1/prompts/respond") {
+          response.writeHead(answerStatus).end(answerStatus === 204 ? undefined : "{}");
+        } else response.writeHead(404).end("{}");
+      });
+      const session = yield* (yield* TeamClient.TeamClient).connect({
+        apiUrl,
+        ownerSecret: "fixture",
+      });
+      const command: BlockCommand = {
+        operation: "conversation.blockRespond",
+        agentId: "bot",
+        taskId: null,
+        threadId: "thread",
+        turnId: "turn",
+        messageId: "message",
+        blockId: "block",
+        requestId: 4,
+        response: { actionId: "yes" },
+      };
+      expect(yield* session.apiWrite(command)).toBeNull();
+      expect(yield* session.apiWrite({ ...command, taskId: "task" })).toBeNull();
+      expect(requests).toEqual([
+        { method: "GET", path: "/v1/agents/bot/conversation", body: null },
+        {
+          method: "POST",
+          path: "/v1/prompts/respond",
+          body: { requestId: 4, answers: { reply: ["Yes please"] } },
+        },
+        { method: "POST", path: "/v1/agent-tasks/read", body: { agentId: "bot", taskId: "task" } },
+        {
+          method: "POST",
+          path: "/v1/prompts/respond",
+          body: { requestId: 4, answers: { reply: ["Yes please"] } },
+        },
+      ]);
+      activeTurnId = null;
+      const beforeStale = requests.length;
+      expect(yield* Effect.flip(session.apiWrite(command))).toMatchObject({
+        reason: "invalid-configuration",
+      });
+      expect(requests.slice(beforeStale)).toEqual([
+        { method: "GET", path: "/v1/agents/bot/conversation", body: null },
+      ]);
+      activeTurnId = "turn";
+      readStatus = 401;
+      const beforeExpired = requests.length;
+      expect(yield* Effect.flip(session.apiWrite(command))).toMatchObject({
+        reason: "http",
+        status: 401,
+      });
+      expect(requests.slice(beforeExpired)).toHaveLength(1);
+      readStatus = 200;
+      answerStatus = 409;
+      expect(yield* Effect.flip(session.apiWrite(command))).toMatchObject({
+        reason: "http",
+        status: 409,
+      });
+      answerStatus = 200;
+      expect(yield* Effect.flip(session.apiWrite(command))).toMatchObject({ reason: "decode" });
+      yield* session.close;
+    }).pipe(
+      Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+      Effect.scoped,
+    ),
+);
 
 it.live(
   "reads channel cursors and preserves acknowledged channel command identity and lifecycle",

@@ -5,15 +5,34 @@
  import { randomUUID } from "node:crypto";
  import { realpathSync } from "node:fs";
  import { basename, dirname, isAbsolute, join, normalize, sep } from "node:path";
-@@ -1050,6 +1051,7 @@
+@@ -27,7 +28,7 @@
+ import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
+ import { isFixedSourceText, matchingSourceKeys, sourceText } from "@openbot/i18n/source";
+ import { createOpenBotLogger } from "@openbot/logging";
+-import { Deferred, Effect, Exit, Fiber, Result, Schema, Scope } from "effect";
++import { Clock, Schedule, Deferred, Effect, Exit, Fiber, Result, Schema, Scope } from "effect";
+ import { type ChannelOperationError, channelFailure, channelResult, channelSync } from "./channel-effects";
+ import {
+   assignmentText,
+@@ -191,6 +192,8 @@
+   readonly memories: ChannelMemoryStore;
+   readonly #history: ChannelHistory;
+   #scope = Scope.makeUnsafe();
++  #codingDeadline: Fiber.Fiber<void> | undefined;
++  #codingChanged = Deferred.makeUnsafe<void>();
+   readonly #pumps = new Map<string, Fiber.Fiber<void>>();
+   readonly #commands = new Map<string, Deferred.Deferred<void>>();
+   readonly #commandFibers = new Set<Fiber.Fiber<Channel | void, ChannelOperationError>>();
+@@ -1050,6 +1053,8 @@
      (channelId?: string): Effect.Effect<void, ChannelOperationError> =>
        Effect.gen({ self: this }, function* () {
          if (this.#stopped) return;
++        yield* this.#startCodingDeadline();
 +        yield* this.expireCoding();
          const archived = yield* channelSync(() => this.store.archivedIds());
          for (const id of yield* channelSync(() => this.store.ids())) {
            if (this.#deletedChannels.has(id)) continue;
-@@ -2058,6 +2060,10 @@
+@@ -2058,6 +2063,10 @@
      const archived = yield* channelSync(() => this.store.archivedIds());
      for (const channelId of yield* channelSync(() => this.store.ids())) {
        for (let assignment of (yield* channelSync(() => this.store.assignments(channelId))).filter(activeAssignment)) {
@@ -24,7 +43,7 @@
          const context = assignment.deliveryId
            ? this.mailbox.getDelivery(assignment.deliveryId)
            : this.mailbox.deliveryForKey(`channel-assignment:${assignment.id}`);
-@@ -2245,6 +2251,7 @@
+@@ -2245,6 +2254,7 @@
          (item) => item.id === assignment.taskId,
        );
        if (!task) return;
@@ -32,7 +51,7 @@
        // The drain and the turn start both report the same turn. Only the first report saves the
        // cursor: a changed message or a compaction can reset it before the second report.
        const repeated = assignment.state === "running" && assignment.turnId === turnId;
-@@ -2538,10 +2545,14 @@
+@@ -2538,10 +2548,15 @@
 
    private complete(channelId: string, turnId: string, status: string): Effect.Effect<void, ChannelOperationError> {
      return Effect.gen({ self: this }, function* () {
@@ -42,22 +61,26 @@
        );
        if (!assignment || !activeAssignment(assignment)) return;
 +      if (assignment.coding?.lease?.providerCompleted && assignment.pendingRevision !== null) {
-+        assignment = { ...assignment, pendingRevision: null, pendingOutcome: null };
-+        yield* channelSync(() => this.store.update(this.store.get(channelId), { assignments: [assignment] }));
++        const cleared = { ...assignment, pendingRevision: null, pendingOutcome: null };
++        assignment = cleared;
++        yield* channelSync(() => this.store.update(this.store.get(channelId), { assignments: [cleared] }));
 +      }
        if (assignment.pendingRevision !== null) {
          yield* channelSync(() =>
            this.store.update(this.store.get(channelId), { assignments: [{ ...assignment, pendingOutcome: status }] }),
-@@ -2551,6 +2562,17 @@
+@@ -2551,6 +2566,20 @@
        const tasks = yield* channelSync(() => this.store.tasks(channelId));
        const task = tasks.find((item) => item.id === assignment.taskId);
        if (!task) return;
-+      const lifetime = yield* channelSync(() => codingLifetime(this.codingView(channelId, assignment, task), Date.now(), status));
++      const now = yield* Clock.currentTimeMillis;
++      const lifetime = yield* channelSync(() => codingLifetime(this.codingView(channelId, assignment, task), now, status));
 +      if (lifetime === "hold") {
-+        const coding = assignment.coding!;
-+        if (!coding.lease!.providerCompleted)
++        const coding = assignment.coding;
++        const lease = coding?.lease;
++        if (!coding || !lease) return yield* channelFailure(new Error("Invalid coding lease."));
++        if (!lease.providerCompleted)
 +          yield* channelSync(() => this.store.update(this.store.get(channelId), {
-+            assignments: [{ ...assignment, coding: { ...coding, lease: { ...coding.lease!, providerCompleted: true } } }],
++            assignments: [{ ...assignment, coding: { ...coding, lease: { ...lease, providerCompleted: true } } }],
 +          }));
 +        this.publish(channelId);
 +        return;
@@ -66,7 +89,7 @@
        const newChildren = task.dependencies.filter((id) => !assignment.awaitedTaskIds.includes(id));
        const pendingChildren = task.dependencies.some(
          (id) => !tasks.some((item) => item.id === id && item.state === "completed"),
-@@ -2691,6 +2713,78 @@
+@@ -2691,6 +2720,119 @@
        instructions: channel.instructions,
      };
    });
@@ -80,6 +103,8 @@
 +    action: "bind" | "receipt" | "submit",
 +    text?: string,
 +  ) => Effect.gen({ self: this }, function* () {
++    yield* this.#startCodingDeadline();
++    const now = yield* Clock.currentTimeMillis;
 +    const receipt = yield* channelSync(() => {
 +    const channel = this.store.get(binding.channelId);
 +    const tasks = this.store.tasks(binding.channelId);
@@ -90,7 +115,7 @@
 +    const messageId = `channel-result-${assignment.id}-revision-${assignment.taskRevision}`;
 +    const existing = this.store.message(binding.channelId, messageId);
 +    return channelCoding({
-+      now: () => Date.now(),
++      now: () => now,
 +      read: () => ({
 +        channelId: channel.id,
 +        archived: channel.archived,
@@ -132,12 +157,51 @@
 +      result: existing ? { messageId: existing.id, text: existing.message.text } : null };
 +  }
 +
-+  /** Owner's durable scheduler must also invoke this at the persisted deadline when idle. */
++  /** A running provider is not interrupted here; late submission refuses and completion pauses. */
++  #startCodingDeadline(): Effect.Effect<void> {
++    return Effect.gen({ self: this }, function* () {
++      if (this.#stopped || this.#codingDeadline) return;
++      const work = Effect.gen({ self: this }, function* () {
++        while (!this.#stopped) {
++          const changed = Deferred.makeUnsafe<void>();
++          this.#codingChanged = changed;
++          const { now, deadline } = yield* Effect.gen({ self: this }, function* () {
++            yield* this.expireCoding();
++            const now = yield* Clock.currentTimeMillis;
++            const deadline = yield* channelSync(() => {
++              let next = Infinity;
++              for (const id of this.store.ids()) {
++                for (const assignment of this.store.assignments(id)) {
++                  const coding = assignment.coding;
++                  if (activeAssignment(assignment) && assignment.turnId && !coding?.result &&
++                    coding?.lease && coding.lease.expiresAt > now)
++                    next = Math.min(next, coding.lease.expiresAt);
++                }
++              }
++              return next;
++            });
++            return { now, deadline };
++          }).pipe(Effect.retry({ times: 3, schedule: Schedule.exponential("100 millis") }));
++          // Expiry runs outside the race, so release -> wake cannot interrupt its own completion.
++          if (Number.isFinite(deadline))
++            yield* Effect.raceFirst(Deferred.await(changed), Effect.sleep(Math.max(0, deadline - now)));
++          else yield* Deferred.await(changed);
++        }
++      }).pipe(Effect.catch((failure) => Effect.sync(() => this.hooks.error(failure.cause))));
++      const fiber = yield* Effect.forkIn(work, this.#scope, { startImmediately: false });
++      this.#codingDeadline = fiber;
++      fiber.addObserver(() => {
++        if (this.#codingDeadline === fiber) this.#codingDeadline = undefined;
++      });
++    });
++  }
++
 +  readonly expireCoding = Effect.fn("ChannelService.expireCoding")(function* (this: ChannelService) {
++    const now = yield* Clock.currentTimeMillis;
 +    for (const id of yield* channelSync(() => this.store.ids())) {
 +      for (const assignment of yield* channelSync(() => this.store.assignments(id))) {
 +        if (activeAssignment(assignment) && assignment.turnId && assignment.coding?.lease?.providerCompleted &&
-+          !assignment.coding.result && Date.now() >= assignment.coding.lease.expiresAt)
++          !assignment.coding.result && now >= assignment.coding.lease.expiresAt)
 +          yield* this.complete(id, assignment.turnId, "interrupted");
 +      }
 +    }
@@ -145,7 +209,7 @@
 
    readonly tool = Effect.fn("ChannelService.tool")(function* (
      this: ChannelService,
-@@ -2947,7 +3041,7 @@
+@@ -2947,7 +3089,7 @@
          // A turn of this revision already has the correction in its packet.
          item.taskRevision < task.revision,
      );
@@ -154,7 +218,7 @@
      const turnId = assignment.turnId;
      const agent = this.hooks.agents().find((item) => item.id === assignment.agentId);
      if (!agent) return false;
-@@ -2982,7 +3076,7 @@
+@@ -2982,7 +3124,7 @@
      const current = (yield* channelSync(() => this.store.assignments(channelId))).find(
        (item) => item.id === assignment.id,
      );
@@ -163,7 +227,7 @@
      yield* channelSync(() =>
        this.store.update(this.store.get(channelId), { assignments: [{ ...current, pendingRevision: task.revision }] }),
      );
-@@ -3068,6 +3162,10 @@
+@@ -3068,6 +3210,10 @@
        const task = tasks.find((item) => item.id === assignment.taskId);
        if (!task || !activeAssignment(assignment)) continue;
        if (options.staleOnly && assignment.taskRevision >= task.revision) continue;
@@ -174,6 +238,22 @@
        if (assignment.pendingRevision !== null) {
          const pendingOutcome = assignment.pendingOutcome;
          assignment = { ...assignment, pendingRevision: null, pendingOutcome: null };
+@@ -3307,6 +3453,7 @@
+   }
+
+   private publish(channelId: string): void {
++    Effect.runSync(Deferred.succeed(this.#codingChanged, undefined));
+     this.hooks.changed(channelId, this.store.get(channelId).revision);
+     this.#syncQueueHolds(channelId);
+   }
+@@ -3337,6 +3484,7 @@
+     this: ChannelService,
+   ): Effect.fn.Return<void, ChannelOperationError> {
+     this.#stopped = true;
++    this.#codingDeadline = undefined;
+     yield* Fiber.awaitAll([
+       ...this.#events,
+       ...this.#pumps.values(),
 --- a/src/backend/channel-store.ts
 +++ b/src/backend/channel-store.ts
 @@ -1,3 +1,4 @@
@@ -200,7 +280,7 @@
      taskId: value.taskId,
 --- /dev/null
 +++ b/src/backend/channel-coding-extension.ts
-@@ -0,0 +1,226 @@
+@@ -0,0 +1,260 @@
 +/** Maintained Openbot service extension. No HTTP route or runtime capability is implied. */
 +export interface CodingBinding {
 +  channelId: string;
@@ -265,54 +345,88 @@
 +  "requesterId",
 +  "operationId",
 +] as const;
++function isCodingObject(value: unknown): value is object {
++  return typeof value === "object" && value !== null && !Array.isArray(value);
++}
++function codingIdentifier(value: unknown): string {
++  if (typeof value !== "string" || !value.length || value.length > 512)
++    throw new Error("Invalid coding identity.");
++  return value;
++}
 +export function decodeCodingReceipt(value: unknown): CodingReceipt {
-+  if (typeof value !== "object" || value === null || !("binding" in value) || !("result" in value))
++  if (!isCodingObject(value) || !("binding" in value) || !("result" in value))
 +    throw new Error("Invalid coding receipt.");
-+  const binding = value.binding;
-+  if (typeof binding !== "object" || binding === null) throw new Error("Invalid coding binding.");
-+  for (const field of fields) {
-+    if (!(field in binding)) throw new Error("Missing coding identity.");
-+    const item = Reflect.get(binding, field);
-+    if (typeof item !== "string" || !item.length || item.length > 512)
-+      throw new Error("Invalid coding identity.");
-+  }
++  const source = value.binding;
 +  if (
-+    !("taskRevision" in binding) ||
-+    !Number.isSafeInteger(binding.taskRevision) ||
-+    Number(binding.taskRevision) < 0
++    !isCodingObject(source) ||
++    !("taskRevision" in source) ||
++    !("channelId" in source) ||
++    !("taskId" in source) ||
++    !("assignmentId" in source) ||
++    !("agentId" in source) ||
++    !("turnId" in source) ||
++    !("requestMessageId" in source) ||
++    !("requesterId" in source) ||
++    !("operationId" in source)
++  )
++    throw new Error("Invalid coding binding.");
++  if (
++    typeof source.taskRevision !== "number" ||
++    !Number.isSafeInteger(source.taskRevision) ||
++    source.taskRevision < 0
 +  )
 +    throw new Error("Invalid task revision.");
-+  if (
-+    value.result !== null &&
-+    (typeof value.result !== "object" ||
++  const binding: CodingBinding = {
++    channelId: codingIdentifier(source.channelId),
++    taskId: codingIdentifier(source.taskId),
++    taskRevision: source.taskRevision,
++    assignmentId: codingIdentifier(source.assignmentId),
++    agentId: codingIdentifier(source.agentId),
++    turnId: codingIdentifier(source.turnId),
++    requestMessageId: codingIdentifier(source.requestMessageId),
++    requesterId: codingIdentifier(source.requesterId),
++    operationId: codingIdentifier(source.operationId),
++  };
++  let result: CodingReceipt["result"] = null;
++  if (value.result !== null) {
++    if (
++      !isCodingObject(value.result) ||
 +      !("messageId" in value.result) ||
++      !("text" in value.result) ||
 +      typeof value.result.messageId !== "string" ||
 +      !value.result.messageId.length ||
-+      !("text" in value.result) ||
 +      typeof value.result.text !== "string" ||
 +      !value.result.text.trim() ||
-+      value.result.text.length > 100_000)
-+  )
-+    throw new Error("Invalid coding result.");
++      value.result.text.length > 100_000
++    )
++      throw new Error("Invalid coding result.");
++    result = { messageId: value.result.messageId, text: value.result.text };
++  }
++  let lease: CodingReceipt["lease"];
 +  if ("lease" in value) {
-+    const lease = value.lease;
++    const source = value.lease;
 +    if (
-+      typeof lease !== "object" ||
-+      lease === null ||
-+      !("reservedAt" in lease) ||
-+      !Number.isSafeInteger(lease.reservedAt) ||
-+      Number(lease.reservedAt) < 0 ||
-+      !("expiresAt" in lease) ||
-+      !Number.isSafeInteger(lease.expiresAt) ||
-+      Number(lease.expiresAt) <= Number(lease.reservedAt) ||
-+      Number(lease.expiresAt) - Number(lease.reservedAt) > 30 * 60_000 ||
-+      !("providerCompleted" in lease) ||
-+      typeof lease.providerCompleted !== "boolean"
++      !isCodingObject(source) ||
++      !("reservedAt" in source) ||
++      !("expiresAt" in source) ||
++      !("providerCompleted" in source) ||
++      typeof source.reservedAt !== "number" ||
++      !Number.isSafeInteger(source.reservedAt) ||
++      source.reservedAt < 0 ||
++      typeof source.expiresAt !== "number" ||
++      !Number.isSafeInteger(source.expiresAt) ||
++      source.expiresAt <= source.reservedAt ||
++      source.expiresAt - source.reservedAt > 30 * 60_000 ||
++      typeof source.providerCompleted !== "boolean"
 +    )
 +      throw new Error("Invalid coding lease.");
++    lease = {
++      reservedAt: source.reservedAt,
++      expiresAt: source.expiresAt,
++      providerCompleted: source.providerCompleted,
++    };
 +  }
-+  // Validation is kept independent of the host's Effect major version.
-+  return value as CodingReceipt;
++  return { binding, result, ...(lease === undefined ? {} : { lease }) };
 +}
 +function same(a: CodingBinding, b: CodingBinding): boolean {
 +  return a.taskRevision === b.taskRevision && fields.every((field) => a[field] === b[field]);
@@ -426,4 +540,262 @@
 +    return "interrupt";
 +  if (receipt.result || view.result) return "complete"; // A provider result always wins its existing slot.
 +  return now >= receipt.lease.expiresAt ? "interrupt" : "hold";
++}
+--- /dev/null
++++ b/scripts/channel-coding-idle-e2e.mjs
+@@ -0,0 +1,255 @@
++import * as NodeAssert from "node:assert/strict";
++import * as NodeFS from "node:fs";
++import * as NodeOS from "node:os";
++import * as NodePath from "node:path";
++import { Effect } from "effect";
++import { TestClock } from "effect/testing";
++import { ChannelService } from "../src/backend/channel-service.ts";
++import { OpenBotDatabase } from "../src/backend/openbot-database.ts";
++
++// Runs in patched upstream scripts/, against its actual class, store and SQLite event log.
++const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "openbot-coding-idle-"));
++const start = Date.now();
++const errors = [];
++const scheduled = [];
++let database = new OpenBotDatabase(root);
++await Effect.runPromise(database.initialize());
++const hooks = {
++  agents: () => [],
++  generate: () => Effect.die("Unexpected model call"),
++  schedule: (id) => scheduled.push(id),
++  interrupt: () => Effect.die("Unexpected provider interruption"),
++  busy: () => true,
++  changed: () => {},
++  error: (error) => errors.push(error),
++};
++const makeService = () => new ChannelService(database, {}, {}, hooks);
++let service = makeService();
++const state = (id) => service.store.assignments(id)[0].state;
++const taskState = (id) => service.store.tasks(id)[0].state;
++function seed(id, expiresAt, completed = true, pendingRevision = null) {
++  const channel = service.store.create(id, {
++    name: id,
++    title: id,
++    instructions: "",
++    members: [{ agentId: id }],
++    leadAgentId: null,
++  });
++  const binding = {
++    channelId: id,
++    taskId: id,
++    taskRevision: 1,
++    assignmentId: id,
++    agentId: id,
++    turnId: id,
++    requestMessageId: id,
++    requesterId: "person",
++    operationId: id,
++  };
++  service.store.update(channel, {
++    messages: [
++      {
++        id,
++        channelId: id,
++        sequence: 0,
++        author: { kind: "member", id: "person", name: "Person" },
++        taskId: id,
++        superseded: false,
++        message: {
++          id,
++          author: "user",
++          text: "Request",
++          createdAt: new Date().toISOString(),
++          status: "completed",
++        },
++      },
++    ],
++    tasks: [
++      {
++        id,
++        channelId: id,
++        rootTaskId: id,
++        parentTaskId: null,
++        ownerAgentId: id,
++        requestMessageId: id,
++        instruction: "Work",
++        attachmentDraftIds: [],
++        expectedResult: "Result",
++        sourceMessageIds: [],
++        dependencies: [],
++        resources: ["host"],
++        state: "running",
++        revision: 1,
++        assignmentCount: 1,
++        error: null,
++      },
++    ],
++    assignments: [
++      {
++        id,
++        channelId: id,
++        taskId: id,
++        taskRevision: 1,
++        agentId: id,
++        turnId: id,
++        requestMessageId: id,
++        state: "running",
++        deliveryId: null,
++        throughSequence: 0,
++        summaryVersion: 0,
++        pendingRevision,
++        pendingOutcome: null,
++        awaitedTaskIds: [],
++        resources: ["host"],
++        coding: {
++          binding,
++          result: null,
++          lease: { reservedAt: start, expiresAt: start + expiresAt, providerCompleted: completed },
++        },
++      },
++    ],
++  });
++  return binding;
++}
++function change(id, update) {
++  service.store.update(service.store.get(id), {
++    assignments: [{ ...service.store.assignments(id)[0], ...update }],
++  });
++  service.publish(id);
++}
++const program = Effect.gen(function* () {
++  yield* TestClock.setTime(start);
++  seed("later", 2000);
++  yield* service.wake();
++  yield* TestClock.adjust(0);
++  seed("earlier", 1000, true, 2);
++  service.publish("earlier");
++  yield* TestClock.adjust(999);
++  NodeAssert.equal(state("earlier"), "running");
++  yield* TestClock.adjust(1);
++  NodeAssert.equal(
++    state("earlier"),
++    "interrupted",
++    "idle expiry must release an ended provider, including pending steer",
++  );
++  NodeAssert.equal(taskState("earlier"), "paused");
++  NodeAssert.equal(state("later"), "running");
++  yield* TestClock.adjust(1000);
++  NodeAssert.equal(state("later"), "interrupted", "must continue after expiry -> release -> wake");
++  NodeAssert.deepEqual(scheduled.sort(), ["earlier", "later"]);
++
++  seed("cancelled", 3000);
++  seed("reassigned", 3500);
++  seed("future", 4000);
++  yield* service.wake();
++  change("cancelled", { state: "interrupted" });
++  change("reassigned", { state: "interrupted", agentId: "replacement" });
++  yield* TestClock.adjust(1500);
++  NodeAssert.equal(state("future"), "running");
++  NodeAssert.equal(scheduled.length, 2, "removed leases must not release twice");
++  yield* TestClock.adjust(500);
++  NodeAssert.equal(state("future"), "interrupted");
++
++  seed("stopped", 5000);
++  yield* service.wake();
++  yield* service.stop();
++  yield* TestClock.adjust(2000);
++  NodeAssert.equal(state("stopped"), "running", "scope stop must cancel the deadline");
++  database.close();
++  database = new OpenBotDatabase(root);
++  yield* database.initialize();
++  service = makeService();
++  seed("pending", 8000);
++  yield* service.recover();
++  NodeAssert.equal(state("stopped"), "interrupted", "restart must settle expired persisted holds");
++  NodeAssert.equal(state("pending"), "running", "restart must preserve a pending persisted hold");
++  yield* TestClock.adjust(2000);
++  NodeAssert.equal(state("pending"), "interrupted", "restart must reconstruct its deadline");
++
++  const binding = seed("live", 9000, false);
++  yield* service.wake();
++  yield* TestClock.adjust(1000);
++  NodeAssert.equal(state("live"), "running", "expiry does not claim to interrupt a live provider");
++  const refusal = yield* Effect.result(
++    service.coding(
++      { agentId: "live", turnId: "live", requesterId: "person" },
++      binding,
++      "submit",
++      "Late",
++    ),
++  );
++  NodeAssert.equal(refusal._tag, "Failure");
++  yield* service.complete("live", "live", "completed");
++  NodeAssert.equal(state("live"), "interrupted");
++  NodeAssert.equal(taskState("live"), "paused");
++  yield* TestClock.adjust(10000);
++  NodeAssert.equal(
++    scheduled.filter((id) => id === "live").length,
++    1,
++    "expired live provider must not repeat",
++  );
++  NodeAssert.deepEqual(errors, []);
++
++  seed("transient-expiry", 20000);
++  yield* service.wake();
++  service.publish("transient-expiry");
++  const realUpdate = service.store.update.bind(service.store);
++  let expiryFailures = 0;
++  service.store.update = (channel, changes, ...rest) => {
++    if (
++      channel.id === "transient-expiry" &&
++      changes?.assignments?.some((item) => item.state === "interrupted") &&
++      expiryFailures === 0
++    ) {
++      expiryFailures++;
++      throw new Error("Injected expiry transaction failure");
++    }
++    return realUpdate(channel, changes, ...rest);
++  };
++  yield* TestClock.adjust(1000);
++  NodeAssert.equal(expiryFailures, 1);
++  yield* TestClock.adjust(100);
++  service.store.update = realUpdate;
++  NodeAssert.equal(
++    state("transient-expiry"),
++    "interrupted",
++    "transient expiry failure must retry while idle",
++  );
++  NodeAssert.equal(taskState("transient-expiry"), "paused");
++
++  seed("exhausted-owner", 22000);
++  const realIds = service.store.ids.bind(service.store);
++  let scanFailures = 0;
++  service.store.ids = () => {
++    scanFailures++;
++    throw new Error("Injected deadline scan failure");
++  };
++  service.publish("exhausted-owner");
++  yield* TestClock.adjust(0);
++  yield* TestClock.adjust(100);
++  yield* TestClock.adjust(200);
++  yield* TestClock.adjust(400);
++  yield* TestClock.adjust(800);
++  NodeAssert.equal(scanFailures, 4, "failure retry budget must be bounded");
++  service.store.ids = realIds;
++  seed("restarted-owner", 30000);
++  yield* service.wake();
++  yield* TestClock.adjust(8400);
++  NodeAssert.equal(
++    state("restarted-owner"),
++    "interrupted",
++    "wake must restart an exhausted deadline owner",
++  );
++  NodeAssert.equal(errors.length, 1, "exhausted failure must remain visible");
++  yield* service.stop();
++});
++try {
++  await Effect.runPromise(program.pipe(Effect.provide(TestClock.layer())));
++  process.stdout.write(
++    `${JSON.stringify({ passed: true, proof: "actual patched ChannelService + ChannelStore + SQLite + TestClock", scheduled })}\n`,
++  );
++} finally {
++  await Effect.runPromise(service.stop());
++  database.close();
++  NodeFS.rmSync(root, { recursive: true, force: true });
 +}

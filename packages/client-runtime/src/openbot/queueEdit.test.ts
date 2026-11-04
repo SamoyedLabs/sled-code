@@ -31,6 +31,13 @@ it("keeps an uncertain edit recoverable and initializes it from the acquired del
     text: "Accepted update from another device",
     keepAttachmentIds: ["current-attachment"],
   });
+  expect(edits.retainAttachments("wrong-edit", [])).toMatchObject({
+    keepAttachmentIds: ["current-attachment"],
+  });
+  expect(edits.retainAttachments("edit-first", ["invented"])).toMatchObject({
+    keepAttachmentIds: ["current-attachment"],
+  });
+  expect(edits.retainAttachments("edit-first", [])).toMatchObject({ keepAttachmentIds: [] });
   expect(edits.changeText("My new draft")).toMatchObject({ text: "My new draft" });
   expect(edits.finish("wrong-edit")).not.toBeNull();
   expect(edits.finish("edit-first")).toBeNull();

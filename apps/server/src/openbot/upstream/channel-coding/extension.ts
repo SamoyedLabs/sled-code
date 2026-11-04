@@ -62,54 +62,88 @@ const fields = [
   "requesterId",
   "operationId",
 ] as const;
+function isCodingObject(value: unknown): value is object {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function codingIdentifier(value: unknown): string {
+  if (typeof value !== "string" || !value.length || value.length > 512)
+    throw new Error("Invalid coding identity.");
+  return value;
+}
 export function decodeCodingReceipt(value: unknown): CodingReceipt {
-  if (typeof value !== "object" || value === null || !("binding" in value) || !("result" in value))
+  if (!isCodingObject(value) || !("binding" in value) || !("result" in value))
     throw new Error("Invalid coding receipt.");
-  const binding = value.binding;
-  if (typeof binding !== "object" || binding === null) throw new Error("Invalid coding binding.");
-  for (const field of fields) {
-    if (!(field in binding)) throw new Error("Missing coding identity.");
-    const item = Reflect.get(binding, field);
-    if (typeof item !== "string" || !item.length || item.length > 512)
-      throw new Error("Invalid coding identity.");
-  }
+  const source = value.binding;
   if (
-    !("taskRevision" in binding) ||
-    !Number.isSafeInteger(binding.taskRevision) ||
-    Number(binding.taskRevision) < 0
+    !isCodingObject(source) ||
+    !("taskRevision" in source) ||
+    !("channelId" in source) ||
+    !("taskId" in source) ||
+    !("assignmentId" in source) ||
+    !("agentId" in source) ||
+    !("turnId" in source) ||
+    !("requestMessageId" in source) ||
+    !("requesterId" in source) ||
+    !("operationId" in source)
+  )
+    throw new Error("Invalid coding binding.");
+  if (
+    typeof source.taskRevision !== "number" ||
+    !Number.isSafeInteger(source.taskRevision) ||
+    source.taskRevision < 0
   )
     throw new Error("Invalid task revision.");
-  if (
-    value.result !== null &&
-    (typeof value.result !== "object" ||
+  const binding: CodingBinding = {
+    channelId: codingIdentifier(source.channelId),
+    taskId: codingIdentifier(source.taskId),
+    taskRevision: source.taskRevision,
+    assignmentId: codingIdentifier(source.assignmentId),
+    agentId: codingIdentifier(source.agentId),
+    turnId: codingIdentifier(source.turnId),
+    requestMessageId: codingIdentifier(source.requestMessageId),
+    requesterId: codingIdentifier(source.requesterId),
+    operationId: codingIdentifier(source.operationId),
+  };
+  let result: CodingReceipt["result"] = null;
+  if (value.result !== null) {
+    if (
+      !isCodingObject(value.result) ||
       !("messageId" in value.result) ||
+      !("text" in value.result) ||
       typeof value.result.messageId !== "string" ||
       !value.result.messageId.length ||
-      !("text" in value.result) ||
       typeof value.result.text !== "string" ||
       !value.result.text.trim() ||
-      value.result.text.length > 100_000)
-  )
-    throw new Error("Invalid coding result.");
+      value.result.text.length > 100_000
+    )
+      throw new Error("Invalid coding result.");
+    result = { messageId: value.result.messageId, text: value.result.text };
+  }
+  let lease: CodingReceipt["lease"];
   if ("lease" in value) {
-    const lease = value.lease;
+    const source = value.lease;
     if (
-      typeof lease !== "object" ||
-      lease === null ||
-      !("reservedAt" in lease) ||
-      !Number.isSafeInteger(lease.reservedAt) ||
-      Number(lease.reservedAt) < 0 ||
-      !("expiresAt" in lease) ||
-      !Number.isSafeInteger(lease.expiresAt) ||
-      Number(lease.expiresAt) <= Number(lease.reservedAt) ||
-      Number(lease.expiresAt) - Number(lease.reservedAt) > 30 * 60_000 ||
-      !("providerCompleted" in lease) ||
-      typeof lease.providerCompleted !== "boolean"
+      !isCodingObject(source) ||
+      !("reservedAt" in source) ||
+      !("expiresAt" in source) ||
+      !("providerCompleted" in source) ||
+      typeof source.reservedAt !== "number" ||
+      !Number.isSafeInteger(source.reservedAt) ||
+      source.reservedAt < 0 ||
+      typeof source.expiresAt !== "number" ||
+      !Number.isSafeInteger(source.expiresAt) ||
+      source.expiresAt <= source.reservedAt ||
+      source.expiresAt - source.reservedAt > 30 * 60_000 ||
+      typeof source.providerCompleted !== "boolean"
     )
       throw new Error("Invalid coding lease.");
+    lease = {
+      reservedAt: source.reservedAt,
+      expiresAt: source.expiresAt,
+      providerCompleted: source.providerCompleted,
+    };
   }
-  // Validation is kept independent of the host's Effect major version.
-  return value as CodingReceipt;
+  return { binding, result, ...(lease === undefined ? {} : { lease }) };
 }
 function same(a: CodingBinding, b: CodingBinding): boolean {
   return a.taskRevision === b.taskRevision && fields.every((field) => a[field] === b[field]);

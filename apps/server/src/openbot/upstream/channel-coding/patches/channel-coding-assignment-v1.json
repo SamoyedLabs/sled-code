@@ -8,20 +8,21 @@
   "status": "internal-service-only",
   "advertiseByDefault": false,
   "runtimeVerified": false,
-  "patchSha256": "c3db2d40890cae787acfcfd03a5291ef2317f6cb86e68ea8b260b277bdc20d8a",
+  "patchSha256": "58861a7387750a762f5062353731ffcb5fa4f5512671d8591c49619a2a56c5af",
   "baseFiles": {
     "src/backend/channel-service.ts": "81d26abc2278fb6ae56714b40f24cdb5f3cfb66a1e56e65463e5a6ae189377e5",
     "src/backend/channel-store.ts": "4d95139e14f72e65e11622aa5e7498056ad2b16ebc6c728e25c1359937efd109"
   },
   "patchedFiles": {
-    "src/backend/channel-service.ts": "1671a3b671f103984399c713a29798c3dd8ac2a97762c8b014ebd63975812b01",
+    "src/backend/channel-service.ts": "3ea0d477565943537e504500863f518781f8bdd894a9584f4e4c82487215bd31",
     "src/backend/channel-store.ts": "71413a394398150bbfd956fb0c2a21c20a66b4eba7ce8a2339ade41e64b3b315",
-    "src/backend/channel-coding-extension.ts": "2a9ddca9c0d386b7a2860b5872726e37c115ecddfc74d2c820c162d4d9e3b9d1"
+    "src/backend/channel-coding-extension.ts": "c9d67c8b085a5783c0e95cb5f6e8d09dd22e68fd038298a5cbb21376642d89ca",
+    "scripts/channel-coding-idle-e2e.mjs": "35e1256ca5ef557c183e84ce5761d942f9c0071810ed1b5803f5d07ebf1d350e"
   },
   "promotionRequires": [
     "assignment-scoped authenticated transport and capability negotiation",
     "original Sled approval owner and host-bound configured grant enforcement",
-    "durable deadline wake wiring for idle lease expiry",
-    "patched engine build and runtime verification by root"
+    "full persisted-store deadline/recovery/provider lifecycle runtime proof by root",
+    "authenticated patched engine transport/provider runtime verification by root"
   ]
 }

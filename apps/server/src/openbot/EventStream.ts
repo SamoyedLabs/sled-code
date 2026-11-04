@@ -103,6 +103,8 @@ const attentionEvents = new Set([
   "browser-takeover-resolved",
 ]);
 const capabilities = [
+  "ui-blocks-v1",
+  "agent-task-ui-blocks-v1",
   // Protocol 9's HTTP header does not opt the event stream into open-provider visibility.
   "open-providers-v1",
   "agent-runtime-snapshots",

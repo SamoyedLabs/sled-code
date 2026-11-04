@@ -116,6 +116,21 @@ export function BotConversationQueue({
             </>
           ) : (
             <>
+              {edit.keepAttachmentIds.map((id) => (
+                <Button
+                  key={id}
+                  label={`Remove retained file ${id}`}
+                  disabled={disabled}
+                  onPress={() =>
+                    setEdit(
+                      session.current.retainAttachments(
+                        edit.editId,
+                        edit.keepAttachmentIds.filter((keep) => keep !== id),
+                      ),
+                    )
+                  }
+                />
+              ))}
               <AppTextInput
                 accessibilityLabel="Edit queued message"
                 value={edit.text}

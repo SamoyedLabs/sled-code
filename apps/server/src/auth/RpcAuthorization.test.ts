@@ -696,3 +696,24 @@ it.effect("denies manual cleanup before the handler without settings permission"
     expect(handled).toBe(false);
   }).pipe(Effect.scoped),
 );
+
+it("requires provider management for every exact released registry operation on local and host RPCs", () => {
+  for (const method of [
+    WS_METHODS.openbotRead,
+    WS_METHODS.openbotReadToHost,
+    WS_METHODS.openbotAdmin,
+    WS_METHODS.openbotAdminToHost,
+  ]) {
+    const read = method === WS_METHODS.openbotRead || method === WS_METHODS.openbotReadToHost;
+    const toHost =
+      method === WS_METHODS.openbotReadToHost || method === WS_METHODS.openbotAdminToHost;
+    for (const operation of read
+      ? ["registry.search", "registry.status", "registry.installed"]
+      : ["registry.install", "registry.cancel", "registry.remove"]) {
+      const request = { operation, query: "", registryId: "demo", customAgentId: "demo" };
+      expect(
+        clientRpcRequiredScopes(method, toHost ? { hostId: "host", request } : request),
+      ).toEqual([AuthSettingsWriteScope, AuthProvidersManageScope]);
+    }
+  }
+});

@@ -16,6 +16,7 @@ type Request = OpenbotConversationReadRequest | OpenbotConversationCommand;
 export function isRequest(request: { readonly operation: string }): request is Request {
   return (
     [
+      "conversation.blockRespond",
       "conversation.page",
       "conversation.markRead",
       "conversation.markUnread",
@@ -24,6 +25,8 @@ export function isRequest(request: { readonly operation: string }): request is R
   );
 }
 export function route(request: Request) {
+  if (request.operation === "conversation.blockRespond")
+    throw new Error("UI block responses require fresh snapshot validation.");
   const { operation, agentId, ...input } = request;
   const agent = `/v1/agents/${encodeURIComponent(agentId)}`;
   if (request.operation === "conversation.page") {
@@ -64,7 +67,8 @@ export function publicRichValue(value: Schema.Json, depth = 0): Schema.Json {
     return Object.fromEntries(
       Object.entries(value)
         .filter(
-          ([key]) =>
+          ([key, item]) =>
+            (key === "secret" && typeof item === "boolean") ||
             !/token|secret|password|authorization|apiKey|cookie|credential|rawEvent|rawLog/i.test(
               key,
             ),

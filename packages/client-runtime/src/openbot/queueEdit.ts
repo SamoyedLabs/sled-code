@@ -44,6 +44,17 @@ export class BotQueueEditSession {
     };
     return this.#current;
   }
+  retainAttachments(editId: string, ids: readonly string[]) {
+    const current = this.#current;
+    if (
+      current?.state === "ready" &&
+      current.editId === editId &&
+      new Set(ids).size === ids.length &&
+      ids.every((id) => current.keepAttachmentIds.includes(id))
+    )
+      this.#current = { ...current, keepAttachmentIds: [...ids] };
+    return this.#current;
+  }
   changeText(text: string) {
     if (this.#current?.state === "ready") this.#current = { ...this.#current, text };
     return this.#current;

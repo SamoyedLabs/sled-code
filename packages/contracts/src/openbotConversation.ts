@@ -61,6 +61,20 @@ export const OpenbotConversationReadRequest = Schema.Union([
 export type OpenbotConversationReadRequest = typeof OpenbotConversationReadRequest.Type;
 export const OpenbotConversationCommand = Schema.Union([
   Schema.Struct({
+    operation: Schema.Literal("conversation.blockRespond"),
+    agentId: Id,
+    taskId: Schema.NullOr(Id),
+    threadId: Schema.NullOr(Id),
+    turnId: Id,
+    messageId: Id,
+    blockId: Id,
+    requestId: Schema.Union([Id, Schema.Int]),
+    response: Schema.Struct({
+      actionId: Id,
+      values: Schema.optional(Schema.Record(Id, Schema.Union([Text, Schema.Array(Id)]))),
+    }),
+  }),
+  Schema.Struct({
     operation: Schema.Literal("conversation.markRead"),
     agentId: Id,
     throughMessageId: Schema.NullOr(Id),

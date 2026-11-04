@@ -21,7 +21,21 @@ it.effect(
             replyToMessageId: "source",
             senderMember: { id: "member", name: "Human" },
             subagents: [{ title: "Research", status: "completed" }],
-            future: { label: "artifact", access_token: "secret", previewUrl: "http://private" },
+            future: {
+              label: "artifact",
+              access_token: "PRIVATE-CREDENTIAL-FIXTURE",
+              previewUrl: "http://private",
+            },
+            uiBlock: {
+              version: 1,
+              blockId: "form",
+              spec: {
+                type: "form",
+                fields: [{ id: "entry", kind: "text", label: "Access", secret: true }],
+                actions: [{ id: "submit", label: "Submit" }],
+              },
+              state: { status: "pending" },
+            },
           },
         ],
         references: {},
@@ -35,10 +49,11 @@ it.effect(
             senderMember: { name: "Human" },
             subagents: [{ title: "Research" }],
             future: { label: "artifact", previewUrl: null },
+            uiBlock: { spec: { fields: [{ id: "entry", secret: true }] } },
           },
         ],
       });
-      expect(JSON.stringify(value)).not.toContain("secret");
+      expect(JSON.stringify(value)).not.toContain("PRIVATE-CREDENTIAL-FIXTURE");
       expect(
         route({
           operation: "conversation.page",

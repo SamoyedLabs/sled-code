@@ -18,6 +18,18 @@
     "./relay": {
       "types": "./src/relay.ts",
       "import": "./src/relay.ts"
+    },
+    "./openbot-catalog": {
+      "types": "./src/openbotCatalog.ts",
+      "import": "./src/openbotCatalog.ts"
+    },
+    "./openbot-ui-blocks": {
+      "types": "./src/openbotUiBlocks.ts",
+      "import": "./src/openbotUiBlocks.ts"
+    },
+    "./openbot-ui-block-answer": {
+      "types": "./src/openbotUiBlockAnswer.ts",
+      "import": "./src/openbotUiBlockAnswer.ts"
     }
   },
   "scripts": {

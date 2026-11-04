@@ -1,3 +1,4 @@
+import { BotUiBlock } from "./BotUiBlock";
 import { useState } from "react";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { botMessageSections } from "@t3tools/client-runtime/openbot/presentation";
@@ -90,6 +91,16 @@ function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Pro
                 </pre>
               </details>
             ))}
+            <BotUiBlock
+              key={JSON.stringify([message.id, message.uiBlock])}
+              environmentId={environmentId}
+              hostId={hostId}
+              message={message}
+              snapshot={c.snapshot}
+              taskId={taskId}
+              disabled={disabled}
+              respond={c.act}
+            />
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
@@ -209,13 +220,42 @@ function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Pro
         }}
         className="space-y-2"
       >
+        <label>
+          File draft from Files (one file per journaled message)
+          <select
+            aria-label="File draft"
+            disabled={c.busy || Boolean(c.fileAttempt) || Boolean(c.reply)}
+            value={c.selectedDraftId ?? ""}
+            onChange={(e) => c.setSelectedDraftId(e.target.value || null)}
+          >
+            <option value="">No file</option>
+            {c.fileDrafts.map((d) => (
+              <option key={d.attachment.id} value={d.attachment.id}>
+                {d.attachment.name} · {d.state}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p>
+          Upload drafts in Files. Selection is not sending. File replies are unavailable; cancel the
+          reply to send a file.
+        </p>
         <Textarea
+          disabled={Boolean(c.fileAttempt)}
           aria-label="Message to bot"
           maxLength={100000}
           value={c.text}
           onChange={(e) => c.setText(e.target.value)}
         />
-        <Button type="submit" disabled={disabled || !c.text.trim()}>
+        <Button
+          type="submit"
+          disabled={
+            c.busy ||
+            (c.selectedDraftId
+              ? !c.filePermission || Boolean(c.reply)
+              : !c.permission || !c.text.trim())
+          }
+        >
           Send
         </Button>
       </form>
