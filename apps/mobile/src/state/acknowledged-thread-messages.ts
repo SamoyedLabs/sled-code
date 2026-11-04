@@ -5,30 +5,40 @@ import { threadHasCaughtUpTo } from "@t3tools/client-runtime/state/threads";
 import type { AcknowledgedThreadMessage, QueuedThreadMessage } from "./thread-outbox-model";
 import { environmentThreadDetails } from "./threads";
 
-// Keep acknowledged rows until the thread catches up; command receipts can precede messages.
-export const acknowledgedThreadMessagesAtom = Atom.make<ReadonlyArray<AcknowledgedThreadMessage>>(
-  [],
-).pipe(Atom.keepAlive);
+const retainedMessagesAtom = Atom.make<ReadonlyArray<AcknowledgedThreadMessage>>([]).pipe(
+  Atom.keepAlive,
+);
+const echoedMessages = new WeakSet<AcknowledgedThreadMessage>();
 
-// Peeks at a thread only when something already has it in the registry: reading
-// it through the registry would open a snapshot load and a live stream of its own.
-function isEchoedInMountedThread(message: AcknowledgedThreadMessage): boolean {
-  const stateAtom = environmentThreadDetails.stateAtom({
-    environmentId: message.environmentId,
-    threadId: message.threadId,
-  });
-  const node = appAtomRegistry.getNodes().get(stateAtom);
-  if (node === undefined) return false;
-  const loaded: Option.Option<Atom.Type<typeof stateAtom>> = node.valueOption();
-  return Option.match(loaded, {
-    onNone: () => false,
-    onSome: (thread) =>
-      threadHasCaughtUpTo(message, {
-        sequence: thread.sequence,
-        messages: Option.getOrUndefined(thread.data)?.messages,
-      }),
-  });
-}
+export const acknowledgedThreadMessagesAtom = Atom.writable(
+  (get) => {
+    const current = get(retainedMessagesAtom);
+    const next = current.filter((message) => {
+      if (echoedMessages.has(message)) return false;
+      const stateAtom = environmentThreadDetails.stateAtom({
+        environmentId: message.environmentId,
+        threadId: message.threadId,
+      });
+      // Observe an already loaded thread without opening a stream for an offscreen delivery.
+      const node = appAtomRegistry.getNodes().get(stateAtom);
+      if (node === undefined || Option.isNone(node.valueOption())) return true;
+      const thread = get(stateAtom);
+      if (
+        !threadHasCaughtUpTo(message, {
+          sequence: thread.sequence,
+          messages: Option.getOrUndefined(thread.data)?.messages,
+        })
+      )
+        return true;
+      // Paging or reconnecting must never turn an observed echo back into a pending row.
+      echoedMessages.add(message);
+      return false;
+    });
+    return next.length === current.length ? current : next;
+  },
+  (context, messages: ReadonlyArray<AcknowledgedThreadMessage>) =>
+    context.set(retainedMessagesAtom, messages),
+).pipe(Atom.setIdleTTL(0));
 
 function writeAcknowledgedThreadMessages(
   update: (
@@ -36,7 +46,7 @@ function writeAcknowledgedThreadMessages(
   ) => ReadonlyArray<AcknowledgedThreadMessage>,
 ) {
   const current = appAtomRegistry.get(acknowledgedThreadMessagesAtom);
-  const next = update(current).filter((entry) => !isEchoedInMountedThread(entry));
+  const next = update(current);
   if (next.length === current.length && next.every((entry, index) => entry === current[index])) {
     return;
   }

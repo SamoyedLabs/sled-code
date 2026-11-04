@@ -20,6 +20,7 @@ import {
   createOptimisticBlobPreviews,
   emptyOptimisticUserMessages,
   reconcileOptimisticUserMessages,
+  type OptimisticUserMessage,
 } from "./chat/optimisticUserMessages";
 import { useTimelineRewind } from "./chat/useTimelineRewind";
 import { useThreadLifecycle } from "./chat/useThreadLifecycle";
@@ -140,7 +141,7 @@ import {
 } from "../session-logic";
 import { type LegendListRef } from "@legendapp/list/react";
 import { useWorkspaceMutationRefresh } from "../hooks/useWorkspaceMutationRefresh";
-import { DEFAULT_INTERACTION_MODE, type ChatMessage } from "../types";
+import { DEFAULT_INTERACTION_MODE } from "../types";
 import { buildThreadRouteParams } from "../threadRoutes";
 import { useTheme } from "../hooks/useTheme";
 import { copyThreadReference } from "../lib/copyThreadReference";
@@ -251,6 +252,7 @@ import {
   useThreadLastVisitedAt,
   useQuietThreadVisibleTurnItems,
   useThreadStatus,
+  useThreadSequence,
   useThreadHistory,
   useQuietThreadShell,
   useThreadCheckpointSummaries,
@@ -638,11 +640,18 @@ export default function ChatView(props: ChatViewProps) {
   const [heldOptimisticUserMessages, setHeldOptimisticUserMessages] = useState(() =>
     emptyOptimisticUserMessages(threadId),
   );
+  // Stream sequences only matter while a receipt is waiting for its echo.
+  const serverThreadSequence = useThreadSequence(
+    heldOptimisticUserMessages.messages.some((message) => message.deliverySequence !== undefined)
+      ? routeThreadDetailRef
+      : null,
+  );
   // Acknowledged messages leave the timeline in the same render the server's copy enters it.
   const optimisticState = reconcileOptimisticUserMessages(
     heldOptimisticUserMessages,
     threadId,
     serverAcknowledgedUserMessageIds,
+    serverThreadSequence,
   );
   if (optimisticState !== heldOptimisticUserMessages) {
     // Idempotent, and a discarded render only delays revocation to the thread's end.
@@ -650,7 +659,7 @@ export default function ChatView(props: ChatViewProps) {
     setHeldOptimisticUserMessages(optimisticState);
   }
   const optimisticUserMessages = optimisticState.messages;
-  const setOptimisticUserMessages = (action: SetStateAction<ChatMessage[]>) =>
+  const setOptimisticUserMessages = (action: SetStateAction<OptimisticUserMessage[]>) =>
     setHeldOptimisticUserMessages((state) =>
       applyOptimisticUserMessagesAction(state, threadId, action),
     );

@@ -1,3 +1,4 @@
+import type { OptimisticUserMessage } from "./optimisticUserMessages";
 import {
   mergeDirectPreviewAnnotation,
   resolveBackgroundDraftWorkspaceOptions,
@@ -227,7 +228,7 @@ interface ComposerSendInput {
   readonly captureDraftHeroComposerRect: () => void;
   readonly setDockedDraftHeroThreadKey: Dispatch<SetStateAction<string | null>>;
   readonly setSetupQueueSendThreadKey: Dispatch<SetStateAction<string | null>>;
-  readonly setOptimisticUserMessages: Dispatch<SetStateAction<ChatMessage[]>>;
+  readonly setOptimisticUserMessages: Dispatch<SetStateAction<OptimisticUserMessage[]>>;
   /** Takes ownership of, and later releases, an optimistic message's blob previews. */
   readonly optimisticBlobPreviews: {
     readonly track: (message: ChatMessage) => void;
@@ -1396,6 +1397,14 @@ export function useComposerSend(input: ComposerSendInput) {
         failure = startResult;
       } else {
         turnStartSucceeded = true;
+        const deliverySequence = startResult.value.sequence;
+        if (deliverySequence !== undefined) {
+          setOptimisticUserMessages((messages) =>
+            messages.map((message) =>
+              message.id === messageIdForSend ? { ...message, deliverySequence } : message,
+            ),
+          );
+        }
         setKeepFullHistory(routeThreadKey, false);
         clearUsageLimitsFor(routeThreadKey);
         if (turnUsesAttachmentUploads) {

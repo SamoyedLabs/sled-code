@@ -61,6 +61,20 @@ describe("optimistic user messages", () => {
     expect(state.handoff).toEqual({});
   });
 
+  it("retires a delivered message when reconnect skips its echo", () => {
+    let state = applyOptimisticUserMessagesAction(emptyOptimisticUserMessages(threadA), threadA, [
+      { ...message("missed-echo", "blob:skipped"), deliverySequence: 7 },
+      message("still-sending"),
+    ]);
+    state = reconcileOptimisticUserMessages(state, threadA, ids(), 6);
+    expect(state.messages.map((entry) => entry.id)).toEqual(["missed-echo", "still-sending"]);
+    state = reconcileOptimisticUserMessages(state, threadA, ids(), 7);
+    expect(state.messages.map((entry) => entry.id)).toEqual(["still-sending"]);
+    expect(state.handoff).toEqual({ "missed-echo": ["blob:skipped"] });
+    state = reconcileOptimisticUserMessages(state, threadA, ids(), 0);
+    expect(state.messages.map((entry) => entry.id)).toEqual(["still-sending"]);
+  });
+
   it("releases the previous thread's messages when the thread changes", () => {
     let state = applyOptimisticUserMessagesAction(emptyOptimisticUserMessages(threadA), threadA, [
       message("a1"),
