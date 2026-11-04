@@ -56,6 +56,10 @@ it.each([
     const config = await loadConfig(value);
     expect(config.ios?.bundleIdentifier).toBe(identifier);
     expect(config.android?.package).toBe(identifier);
+    expect(config.ios?.associatedDomains).toContain("applinks:app.samoyedlabs.com");
+    expect(config.android?.intentFilters?.[0]?.data).toEqual([
+      { scheme: "https", host: "app.samoyedlabs.com", pathPrefix: "/threads/" },
+    ]);
     expect(resolveMobileStageLabel(config.extra?.appVariant)).toBe(stage);
     expect(usesDarkMobileMascot(config.extra?.appVariant)).toBe(assets === "startup-dev");
     expect(config.plugins).toContainEqual([

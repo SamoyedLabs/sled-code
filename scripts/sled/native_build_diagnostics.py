@@ -2,6 +2,23 @@
 import base64
 import json
 import re
+import subprocess
+
+
+def publish_progress(progress, progress_file, environment):
+    progress_file.parent.mkdir(parents=True, exist_ok=True)
+    progress_file.write_text(json.dumps(progress, indent=2) + '\n')
+    tag = environment.get('SLED_MOBILE_PROGRESS_TAG', '')
+    if not re.fullmatch(r'sled-mobile-[0-9a-f]{40}', tag):
+        return
+    try:
+        result = subprocess.run(['gh', 'release', 'upload', tag, str(progress_file),
+                                 '--repo', 'SamoyedLabs/sled-code', '--clobber'],
+                                env=environment, capture_output=True, timeout=10)
+        if result.returncode:
+            print('[native] Live progress upload failed; build continues', flush=True)
+    except (OSError, subprocess.TimeoutExpired):
+        print('[native] Live progress upload unavailable; build continues', flush=True)
 
 
 def retain_errors(native, environment, credentials):

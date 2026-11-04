@@ -212,6 +212,7 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
           path: |
+            release-mobile/native/native-progress.json
             release-mobile/native/*-diagnostics.json
             release-mobile/native/compilation-cache-statistics.json
             release-mobile/native/phase-timings.jsonl

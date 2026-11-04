@@ -32,7 +32,7 @@ import subprocess
 import sys
 import tempfile
 
-from native_build_diagnostics import retain_errors
+from native_build_diagnostics import publish_progress, retain_errors
 
 ROOT = Path(__file__).resolve().parents[2]
 REPO = 'SamoyedLabs/sled-code'
@@ -47,9 +47,9 @@ SECRETS = ('SLED_IOS_CSC_LINK', 'SLED_IOS_CSC_KEY_PASSWORD',
            'SLED_APPLE_API_KEY_ID', 'SLED_APPLE_API_ISSUER', 'SLED_EXPO_TOKEN')
 
 
-def run(command, cwd=ROOT, capture=False, private=False):
+def run(command, cwd=ROOT, capture=False, private=False, env=None):
     result = subprocess.run(command, cwd=cwd, check=False, text=True,
-                            capture_output=capture or private)
+                            capture_output=capture or private, env=env)
     if result.returncode:
         if private:
             raise RuntimeError('Private signing operation failed (output suppressed)')
@@ -330,18 +330,24 @@ def release():
     else:
         build = str(int(baseline['build']) + 1)
         native = output / 'native'
+        native_environment = dict(os.environ, SLED_MOBILE_PROGRESS_TAG=tag)
         public = output / 'public-config.json'
         write(public, {key: os.environ[key] for key in PUBLIC})
         with tempfile.TemporaryDirectory(prefix='sled-signing-') as temporary:
             credentials = Path(temporary) / 'credentials'
             keychain = None
             try:
+                publish_progress(dict(stage='signing-preparation', status='running',
+                                      updatedAt=datetime.now(timezone.utc).isoformat()),
+                                 native / 'native-progress.json', native_environment)
+                print('[native] signing preparation started', flush=True)
                 keychain = signing(credentials)
+                print('[native] signing preparation finished', flush=True)
                 common = ['--team', TEAM, '--build-number', build, '--public-config', str(public),
                           '--credentials-dir', str(credentials), '--output-dir', str(native)]
                 run([sys.executable, 'scripts/testflight-ios.py', 'archive', *common,
-                     '--prepare', '--skip-prebuild', '--enable-ota', '--ota-channel', CHANNEL, '--manual-signing'])
-                run([sys.executable, 'scripts/testflight-ios.py', 'export', *common])
+                     '--prepare', '--skip-prebuild', '--enable-ota', '--ota-channel', CHANNEL, '--manual-signing'], env=native_environment)
+                run([sys.executable, 'scripts/testflight-ios.py', 'export', *common], env=native_environment)
                 archive_evidence = verify(native / 'T3CodeRemote.xcarchive')
                 ipa = next((native / 'export').glob('*.ipa'))
                 ipa_evidence = verify(ipa)
@@ -354,7 +360,7 @@ def release():
                 packed = output / ('Sled-' + build + '.xcarchive.zip')
                 run(['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', str(native / 'T3CodeRemote.xcarchive'), str(packed)])
                 gh('release', 'upload', tag, str(packed), str(ipa), '--repo', REPO)
-                run([sys.executable, 'scripts/testflight-ios.py', 'upload', *common])
+                run([sys.executable, 'scripts/testflight-ios.py', 'upload', *common], env=native_environment)
                 new_baseline = evidence(native, sha)
                 write(output / 'baseline.json', new_baseline)
                 native_tag = 'sled-ios-native-' + build
