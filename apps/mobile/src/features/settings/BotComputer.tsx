@@ -1,3 +1,4 @@
+import { ComputerView } from "./ComputerView";
 import { useState } from "react";
 import { View } from "react-native";
 import { computerChecks, computerReadiness } from "@t3tools/client-runtime/openbot/presentation";
@@ -63,12 +64,19 @@ function ComputerPanel({ actions }: { actions: ComputerActions }) {
           ))}
         </>
       )}
-      <Button label="Start computer viewer" disabled onPress={() => undefined} />
-      <Button label="Stop my viewer" disabled onPress={() => undefined} />
-      <Text>
-        The authenticated computer viewer is unavailable. No session is opened by these checks.
-        Existing host sessions cannot be stopped from this panel.
-      </Text>
+      <Button
+        label="Start computer viewer"
+        disabled={computer.busy || !!computer.viewer || !actions.viewer?.canOpen}
+        onPress={computer.openViewer}
+      />
+      <Button
+        label="Stop my viewer"
+        disabled={computer.busy || !computer.viewer?.canClose()}
+        onPress={computer.closeViewer}
+      />
+      {computer.viewer && (
+        <ComputerView key={computer.viewer.id} id={computer.viewer.id} url={computer.viewer.url} />
+      )}
     </View>
   );
 }

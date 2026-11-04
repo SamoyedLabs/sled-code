@@ -1,9 +1,15 @@
+import * as ComputerGateway from "./ComputerViewGateway.ts";
+import * as ComputerHost from "./ComputerViewHost.ts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { WebSocket, WebSocketServer } from "@effect/platform-node/NodeWS";
 import { expect, it } from "@effect/vitest";
-import { AuthPreviewOperateScope, AuthSettingsWriteScope } from "@t3tools/contracts";
+import {
+  AuthDesktopOperateScope,
+  AuthPreviewOperateScope,
+  AuthSettingsWriteScope,
+} from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -37,9 +43,13 @@ const authLayer = EnvironmentAuth.layer.pipe(
   Layer.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
 );
 
-it.effect.each([401, 503])(
-  "renews an initialized expired owner only for an explicit create rejection (%s)",
-  (status) =>
+it.effect.each(
+  [401, 503].flatMap((status) =>
+    (["browser", "computer"] as const).map((surface) => ({ status, surface })),
+  ),
+)(
+  "renews an expired $surface owner only for explicit create rejection ($status)",
+  ({ status, surface }) =>
     Effect.gen(function* () {
       let logins = 0;
       let posts = 0;
@@ -82,6 +92,28 @@ it.effect.each([401, 503])(
                     send: () => Effect.die("unused"),
                     discard: () => Effect.die("unused"),
                   },
+                  computer: async () => {
+                    posts++;
+                    if (expired && epoch === 1)
+                      throw new TeamClient.TeamClientError({ reason: "http", status });
+                    return {
+                      upstreamId: `epoch-${epoch}`,
+                      target: "/moonlight/stream.html",
+                      isClosed: () => false,
+                      request: async () => {
+                        throw new Error("unused");
+                      },
+                      dial: () => {
+                        throw new Error("unused");
+                      },
+                      test: async () => {
+                        throw new Error("unused");
+                      },
+                      close: async () => {
+                        closed.push(`${epoch}:epoch-${epoch}`);
+                      },
+                    };
+                  },
                   browser: {
                     create: async (tabId: string) => {
                       posts++;
@@ -106,34 +138,50 @@ it.effect.each([401, 503])(
         ),
       );
       const services = yield* Layer.build(
-        Gateway.layer.pipe(Layer.provide(integration), Layer.provideMerge(authLayer)),
+        Layer.mergeAll(
+          Gateway.layer,
+          ComputerGateway.layer.pipe(Layer.provide(ComputerHost.layer)),
+        ).pipe(Layer.provide(integration), Layer.provideMerge(authLayer)),
       );
       const gateway = Context.get(services, Gateway.BrowserViewGateway);
       const owner = yield* Context.get(services, SessionStore.SessionStore).issue({
         subject: "owner",
-        scopes: [AuthSettingsWriteScope, AuthPreviewOperateScope],
+        scopes: [AuthSettingsWriteScope, AuthPreviewOperateScope, AuthDesktopOperateScope],
       });
-      const first = yield* gateway.command(owner.sessionId, {
-        operation: "open",
-        hostId: "host",
-        tabId: "tab",
-      });
+      const computer = Context.get(services, ComputerGateway.ComputerViewGateway);
+      const open = () =>
+        Effect.gen(function* () {
+          if (surface === "computer") {
+            const grant = yield* computer.command(owner.sessionId, {
+              operation: "open",
+              hostId: "host",
+              frameOrigin: "self",
+            });
+            return grant === null ? null : { id: grant.id };
+          }
+          const grant = yield* gateway.command(owner.sessionId, {
+            operation: "open",
+            hostId: "host",
+            tabId: "tab",
+          });
+          return grant === null ? null : { id: grant.id };
+        });
+      const close = (id: string) =>
+        Effect.gen(function* () {
+          if (surface === "computer")
+            yield* computer.command(owner.sessionId, { operation: "close", hostId: "host", id });
+          else yield* gateway.command(owner.sessionId, { operation: "close", hostId: "host", id });
+        });
+      const first = yield* open();
       if (!first) throw new Error("Missing initial grant");
-      yield* gateway.command(owner.sessionId, { operation: "close", hostId: "host", id: first.id });
+      yield* close(first.id);
       expired = true;
-      const opened = yield* gateway
-        .command(owner.sessionId, { operation: "open", hostId: "host", tabId: "tab" })
-        .pipe(Effect.result);
+      const opened = yield* open().pipe(Effect.result);
       if (status === 401) {
         expect(opened._tag).toBe("Success");
         expect(logins).toBe(2);
         expect(posts).toBe(3);
-        if (opened._tag === "Success" && opened.success)
-          yield* gateway.command(owner.sessionId, {
-            operation: "close",
-            hostId: "host",
-            id: opened.success.id,
-          });
+        if (opened._tag === "Success" && opened.success) yield* close(opened.success.id);
         expect(closed).toEqual(["1:epoch-1", "2:epoch-2"]);
       } else {
         expect(opened._tag).toBe("Failure");

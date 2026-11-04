@@ -13,6 +13,8 @@ export interface CodingBinding {
 export interface CodingReceipt {
   binding: CodingBinding;
   result: null | { messageId: string; text: string };
+  /** Absent on old receipts: old bindings never acquire a lease by replay. */
+  lease?: { reservedAt: number; expiresAt: number; providerCompleted: boolean };
 }
 export interface CodingActor {
   /** Supplied by a trusted, assignment-scoped transport, never by request JSON. */
@@ -21,6 +23,7 @@ export interface CodingActor {
   requesterId: string;
 }
 export interface CodingSnapshot {
+  channelId: string;
   archived: boolean;
   member: boolean;
   task: {
@@ -45,6 +48,7 @@ export interface CodingSnapshot {
 }
 export interface CodingPort {
   read(binding: CodingBinding): CodingSnapshot;
+  now(): number;
   /** Commit receipt and optional assistant result in ONE durable channel transaction. */
   commit(receipt: CodingReceipt, writeResult: boolean): void;
 }
@@ -87,6 +91,23 @@ export function decodeCodingReceipt(value: unknown): CodingReceipt {
       value.result.text.length > 100_000)
   )
     throw new Error("Invalid coding result.");
+  if ("lease" in value) {
+    const lease = value.lease;
+    if (
+      typeof lease !== "object" ||
+      lease === null ||
+      !("reservedAt" in lease) ||
+      !Number.isSafeInteger(lease.reservedAt) ||
+      Number(lease.reservedAt) < 0 ||
+      !("expiresAt" in lease) ||
+      !Number.isSafeInteger(lease.expiresAt) ||
+      Number(lease.expiresAt) <= Number(lease.reservedAt) ||
+      Number(lease.expiresAt) - Number(lease.reservedAt) > 30 * 60_000 ||
+      !("providerCompleted" in lease) ||
+      typeof lease.providerCompleted !== "boolean"
+    )
+      throw new Error("Invalid coding lease.");
+  }
   // Validation is kept independent of the host's Effect major version.
   return value as CodingReceipt;
 }
@@ -105,6 +126,7 @@ export function channelCoding(
   decodeCodingReceipt({ binding, result: null });
   const view = port.read(binding);
   if (
+    view.channelId !== binding.channelId ||
     !view.member ||
     actor.agentId !== binding.agentId ||
     actor.turnId !== binding.turnId ||
@@ -136,10 +158,17 @@ export function channelCoding(
     view.task.requestMessageId !== binding.requestMessageId
   )
     throw new Error("Coding assignment is stale.");
+  const now = port.now();
+  if (receipt?.lease && now >= receipt.lease.expiresAt) throw new Error("Coding lease expired.");
   if (action === "bind") {
     if (receipt) return receipt;
     if (view.result) throw new Error("The assignment already has a result.");
-    const next = { binding, result: null };
+    const next: CodingReceipt = {
+      binding,
+      result: null,
+      lease: { reservedAt: now, expiresAt: now + 30 * 60_000, providerCompleted: false },
+    };
+    decodeCodingReceipt(next);
     port.commit(next, false);
     return next;
   }
@@ -158,7 +187,40 @@ export function channelCoding(
     return receipt;
   }
   if (view.result) throw new Error("The assignment already has a result.");
-  const next = { binding, result: { messageId, text } };
+  const next = { ...receipt, result: { messageId, text } };
   port.commit(next, true);
   return next;
+}
+
+/** Completion/recovery share the same durable decision; no process-local keepalive. */
+export function codingLifetime(
+  view: CodingSnapshot,
+  now: number,
+  status: string,
+): "hold" | "complete" | "interrupt" {
+  const receipt = view.receipt;
+  if (!receipt?.lease || status !== "completed") return "complete";
+  const b = receipt.binding;
+  const a = view.assignment;
+  if (
+    view.channelId !== b.channelId ||
+    view.archived ||
+    !view.member ||
+    view.requesterId !== b.requesterId ||
+    a.id !== b.assignmentId ||
+    a.taskId !== b.taskId ||
+    a.taskRevision !== b.taskRevision ||
+    a.agentId !== b.agentId ||
+    a.turnId !== b.turnId ||
+    a.requestMessageId !== b.requestMessageId ||
+    a.state !== "running" ||
+    view.task.id !== b.taskId ||
+    view.task.revision !== b.taskRevision ||
+    view.task.state !== "running" ||
+    view.task.ownerAgentId !== b.agentId ||
+    view.task.requestMessageId !== b.requestMessageId
+  )
+    return "interrupt";
+  if (receipt.result || view.result) return "complete"; // A provider result always wins its existing slot.
+  return now >= receipt.lease.expiresAt ? "interrupt" : "hold";
 }

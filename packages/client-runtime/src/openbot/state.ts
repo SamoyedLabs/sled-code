@@ -1,3 +1,4 @@
+import { createOpenbotDataAtoms } from "./DataAtoms.ts";
 import {
   type OpenbotCodingListInput,
   type OpenbotReadRequest,
@@ -83,6 +84,7 @@ export function createOpenbotAtoms<R, E>(
     ...createOpenbotFileAtoms(runtime, refreshTrigger),
     ...createOpenbotBrowserAtoms(runtime),
     ...createOpenbotComputerAtoms(runtime),
+    ...createOpenbotDataAtoms(runtime),
     codingPolicy,
     codingPolicyEnable: createEnvironmentRpcCommand(runtime, {
       label: "Enable bot coding delegation",

@@ -1,3 +1,4 @@
+import type { ComputerSession } from "./ComputerViewSession.ts";
 import {
   type OpenbotAgentList,
   type OpenbotHostStatus,
@@ -58,6 +59,9 @@ export class Integration extends Context.Service<
       hostId: string,
       action: (files: TeamClient.Session["files"]) => Effect.Effect<A, TeamClient.TeamClientError>,
     ) => Effect.Effect<A, IntegrationError>;
+    readonly withComputerToHost: (
+      hostId: string,
+    ) => Effect.Effect<ComputerSession, IntegrationError>;
     readonly withBrowserToHost: <A>(
       hostId: string,
       action: (
@@ -89,6 +93,7 @@ export class Integration extends Context.Service<
 >()("t3/openbot/Integration") {}
 
 const isIntegrationError = Schema.is(IntegrationError);
+const isTeamClientError = Schema.is(TeamClient.TeamClientError);
 
 const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string | undefined) {
   const host = yield* ManagedHost.ManagedHost;
@@ -530,6 +535,22 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
           files: TeamClient.Session["files"],
         ) => Effect.Effect<A, TeamClient.TeamClientError>,
       ) => withSession((session) => action(session.files), "Unable to transfer bot files.", hostId),
+    ),
+    withComputerToHost: Effect.fn("OpenbotIntegration.withComputerToHost")((hostId: string) =>
+      withSession(
+        (session) =>
+          session.computer
+            ? Effect.tryPromise({
+                try: session.computer,
+                catch: (cause) =>
+                  isTeamClientError(cause)
+                    ? cause
+                    : new TeamClient.TeamClientError({ reason: "transport", cause }),
+              })
+            : Effect.fail(new TeamClient.TeamClientError({ reason: "closed" })),
+        "Unable to open computer viewer.",
+        hostId,
+      ),
     ),
     withBrowserToHost: Effect.fn("OpenbotIntegration.withBrowserToHost")(
       <A>(

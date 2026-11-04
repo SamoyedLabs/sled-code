@@ -1,3 +1,4 @@
+import { OpenbotDataReadRequest, OpenbotDataAdminRequest } from "./openbotData.ts";
 import { OpenbotVaultRequest } from "./openbotVault.ts";
 import { OpenbotComputerReadRequest, OpenbotComputerAdminRequest } from "./openbotComputer.ts";
 import { OpenbotRoutineSchedule, OpenbotEventAdminRequest } from "./openbotEvents.ts";
@@ -116,6 +117,7 @@ export const OpenbotMessagingOrchestratorRequest = Schema.Union([
 
 export const OpenbotReadRequest = Schema.Union([
   OpenbotComputerReadRequest,
+  OpenbotDataReadRequest,
   OpenbotRoutineFlowReadRequest,
   OpenbotConversationReadRequest,
   OpenbotWorkflowReadRequest,
@@ -203,6 +205,7 @@ export type OpenbotAttentionResponseInput = typeof OpenbotAttentionResponseInput
 export const OpenbotAdminRequest = Schema.Union([
   OpenbotVaultRequest,
   OpenbotComputerAdminRequest,
+  OpenbotDataAdminRequest,
   OpenbotEventAdminRequest,
   OpenbotWriteRequest,
   OpenbotBrowserReadRequest,

@@ -1,3 +1,6 @@
+import * as OpenbotComputerGateway from "./openbot/ComputerViewGateway.ts";
+import * as OpenbotComputerHost from "./openbot/ComputerViewHost.ts";
+import * as OpenbotComputerHttp from "./openbot/ComputerViewHttp.ts";
 import * as OpenbotSledTools from "./openbot/SledTools.ts";
 import * as OpenbotUpstream from "./openbot/UpstreamRuntime.ts";
 import * as OpenbotCodingDelivery from "./openbot/CodingDelivery.ts";
@@ -817,6 +820,7 @@ const layerMakeRoutes = Layer.mergeAll(
     GuestHttp.layer,
     DeviceHubProxy.layer,
     ServerBrowserStream.routeLayer,
+    OpenbotComputerHttp.routeLayer,
     OpenbotBrowserHttp.routeLayer,
     ServerHttp.layerStaticAndDevRoute,
     Ws.layer,
@@ -843,6 +847,7 @@ const layerMakeRoutes = Layer.mergeAll(
     Layer.mergeAll(
       OpenbotCodingPolicy.layer,
       OpenbotMaintenance.layer,
+      OpenbotComputerGateway.layer.pipe(Layer.provide(OpenbotComputerHost.layer)),
       OpenbotBrowserGateway.layer,
     ),
   ),

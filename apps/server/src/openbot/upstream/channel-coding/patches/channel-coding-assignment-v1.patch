@@ -1,23 +1,86 @@
 --- a/src/backend/channel-service.ts
 +++ b/src/backend/channel-service.ts
 @@ -1,3 +1,4 @@
-+import { channelCoding, type CodingActor, type CodingBinding, type CodingReceipt } from "./channel-coding-extension";
++import { channelCoding, type CodingActor, type CodingBinding, type CodingReceipt, codingLifetime, type CodingSnapshot } from "./channel-coding-extension";
  import { randomUUID } from "node:crypto";
  import { realpathSync } from "node:fs";
  import { basename, dirname, isAbsolute, join, normalize, sep } from "node:path";
-@@ -2692,6 +2693,51 @@
+@@ -1050,6 +1051,7 @@
+     (channelId?: string): Effect.Effect<void, ChannelOperationError> =>
+       Effect.gen({ self: this }, function* () {
+         if (this.#stopped) return;
++        yield* this.expireCoding();
+         const archived = yield* channelSync(() => this.store.archivedIds());
+         for (const id of yield* channelSync(() => this.store.ids())) {
+           if (this.#deletedChannels.has(id)) continue;
+@@ -2058,6 +2060,10 @@
+     const archived = yield* channelSync(() => this.store.archivedIds());
+     for (const channelId of yield* channelSync(() => this.store.ids())) {
+       for (let assignment of (yield* channelSync(() => this.store.assignments(channelId))).filter(activeAssignment)) {
++        if (assignment.coding?.lease?.providerCompleted && assignment.turnId) {
++          yield* this.complete(channelId, assignment.turnId, "completed");
++          continue;
++        }
+         const context = assignment.deliveryId
+           ? this.mailbox.getDelivery(assignment.deliveryId)
+           : this.mailbox.deliveryForKey(`channel-assignment:${assignment.id}`);
+@@ -2245,6 +2251,7 @@
+         (item) => item.id === assignment.taskId,
+       );
+       if (!task) return;
++      if (assignment.coding?.lease?.providerCompleted) return;
+       // The drain and the turn start both report the same turn. Only the first report saves the
+       // cursor: a changed message or a compaction can reset it before the second report.
+       const repeated = assignment.state === "running" && assignment.turnId === turnId;
+@@ -2538,10 +2545,14 @@
+
+   private complete(channelId: string, turnId: string, status: string): Effect.Effect<void, ChannelOperationError> {
+     return Effect.gen({ self: this }, function* () {
+-      const assignment = (yield* channelSync(() => this.store.assignments(channelId))).find(
++      let assignment = (yield* channelSync(() => this.store.assignments(channelId))).find(
+         (item) => item.turnId === turnId,
+       );
+       if (!assignment || !activeAssignment(assignment)) return;
++      if (assignment.coding?.lease?.providerCompleted && assignment.pendingRevision !== null) {
++        assignment = { ...assignment, pendingRevision: null, pendingOutcome: null };
++        yield* channelSync(() => this.store.update(this.store.get(channelId), { assignments: [assignment] }));
++      }
+       if (assignment.pendingRevision !== null) {
+         yield* channelSync(() =>
+           this.store.update(this.store.get(channelId), { assignments: [{ ...assignment, pendingOutcome: status }] }),
+@@ -2551,6 +2562,17 @@
+       const tasks = yield* channelSync(() => this.store.tasks(channelId));
+       const task = tasks.find((item) => item.id === assignment.taskId);
+       if (!task) return;
++      const lifetime = yield* channelSync(() => codingLifetime(this.codingView(channelId, assignment, task), Date.now(), status));
++      if (lifetime === "hold") {
++        const coding = assignment.coding!;
++        if (!coding.lease!.providerCompleted)
++          yield* channelSync(() => this.store.update(this.store.get(channelId), {
++            assignments: [{ ...assignment, coding: { ...coding, lease: { ...coding.lease!, providerCompleted: true } } }],
++          }));
++        this.publish(channelId);
++        return;
++      }
++      if (lifetime === "interrupt") status = "interrupted";
+       const newChildren = task.dependencies.filter((id) => !assignment.awaitedTaskIds.includes(id));
+       const pendingChildren = task.dependencies.some(
+         (id) => !tasks.some((item) => item.id === id && item.state === "completed"),
+@@ -2691,6 +2713,78 @@
+       instructions: channel.instructions,
      };
    });
- 
++
 +  /** Internal service seam only. The caller must authenticate an assignment-scoped actor.
-+   * Does not hold a provider turn open or grant Sled approval/launch authority.
++   * Reserves the assignment, not the provider process. Grants no Sled authority.
 +   */
 +  readonly coding = Effect.fn("ChannelService.coding")((
 +    actor: CodingActor,
 +    binding: CodingBinding,
 +    action: "bind" | "receipt" | "submit",
 +    text?: string,
-+  ) => channelSync(() => {
++  ) => Effect.gen({ self: this }, function* () {
++    const receipt = yield* channelSync(() => {
 +    const channel = this.store.get(binding.channelId);
 +    const tasks = this.store.tasks(binding.channelId);
 +    const task = tasks.find((item) => item.id === binding.taskId);
@@ -27,7 +90,9 @@
 +    const messageId = `channel-result-${assignment.id}-revision-${assignment.taskRevision}`;
 +    const existing = this.store.message(binding.channelId, messageId);
 +    return channelCoding({
++      now: () => Date.now(),
 +      read: () => ({
++        channelId: channel.id,
 +        archived: channel.archived,
 +        member: channel.members.some((item) => item.agentId === binding.agentId),
 +        task,
@@ -52,11 +117,63 @@
 +        this.publish(binding.channelId);
 +      },
 +    }, actor, binding, action, text);
++    });
++    if (action === "submit" && receipt?.result && receipt.lease?.providerCompleted)
++      yield* this.complete(binding.channelId, binding.turnId, "completed");
++    return receipt;
 +  }));
 +
++  private codingView(channelId: string, assignment: ChannelAssignment, task: ChannelTask): CodingSnapshot {
++    const channel = this.store.get(channelId);
++    const person = channelRequester(task, this.store.tasks(channelId), (id) => this.store.message(channelId, id));
++    const existing = this.store.message(channelId, `channel-result-${assignment.id}-revision-${assignment.taskRevision}`);
++    return { channelId: channel.id, archived: channel.archived, member: channel.members.some((m) => m.agentId === assignment.agentId),
++      task, assignment, requesterId: person?.id ?? null, receipt: assignment.coding ?? null,
++      result: existing ? { messageId: existing.id, text: existing.message.text } : null };
++  }
++
++  /** Owner's durable scheduler must also invoke this at the persisted deadline when idle. */
++  readonly expireCoding = Effect.fn("ChannelService.expireCoding")(function* (this: ChannelService) {
++    for (const id of yield* channelSync(() => this.store.ids())) {
++      for (const assignment of yield* channelSync(() => this.store.assignments(id))) {
++        if (activeAssignment(assignment) && assignment.turnId && assignment.coding?.lease?.providerCompleted &&
++          !assignment.coding.result && Date.now() >= assignment.coding.lease.expiresAt)
++          yield* this.complete(id, assignment.turnId, "interrupted");
++      }
++    }
++  }).bind(this);
+
    readonly tool = Effect.fn("ChannelService.tool")(function* (
      this: ChannelService,
-     channelId: string,
+@@ -2947,7 +3041,7 @@
+         // A turn of this revision already has the correction in its packet.
+         item.taskRevision < task.revision,
+     );
+-    if (!assignment?.turnId) return false;
++    if (!assignment?.turnId || assignment.coding?.lease?.providerCompleted) return false;
+     const turnId = assignment.turnId;
+     const agent = this.hooks.agents().find((item) => item.id === assignment.agentId);
+     if (!agent) return false;
+@@ -2982,7 +3076,7 @@
+     const current = (yield* channelSync(() => this.store.assignments(channelId))).find(
+       (item) => item.id === assignment.id,
+     );
+-    if (current?.state !== "running") return false;
++    if (current?.state !== "running" || current.coding?.lease?.providerCompleted) return false;
+     yield* channelSync(() =>
+       this.store.update(this.store.get(channelId), { assignments: [{ ...current, pendingRevision: task.revision }] }),
+     );
+@@ -3068,6 +3162,10 @@
+       const task = tasks.find((item) => item.id === assignment.taskId);
+       if (!task || !activeAssignment(assignment)) continue;
+       if (options.staleOnly && assignment.taskRevision >= task.revision) continue;
++      if (assignment.coding?.lease?.providerCompleted && assignment.turnId) {
++        yield* this.complete(channelId, assignment.turnId, "interrupted");
++        continue;
++      }
+       if (assignment.pendingRevision !== null) {
+         const pendingOutcome = assignment.pendingOutcome;
+         assignment = { ...assignment, pendingRevision: null, pendingOutcome: null };
 --- a/src/backend/channel-store.ts
 +++ b/src/backend/channel-store.ts
 @@ -1,3 +1,4 @@
@@ -66,7 +183,7 @@
  import {
 @@ -31,6 +32,8 @@
  import { revokeRoutineWebhooks } from "./webhook-route-store";
- 
+
  export interface ChannelAssignment {
 +  /** Retained in channel events and rebuilt with the assignment projection. */
 +  coding?: CodingReceipt;
@@ -83,7 +200,7 @@
      taskId: value.taskId,
 --- /dev/null
 +++ b/src/backend/channel-coding-extension.ts
-@@ -0,0 +1,164 @@
+@@ -0,0 +1,226 @@
 +/** Maintained Openbot service extension. No HTTP route or runtime capability is implied. */
 +export interface CodingBinding {
 +  channelId: string;
@@ -99,6 +216,8 @@
 +export interface CodingReceipt {
 +  binding: CodingBinding;
 +  result: null | { messageId: string; text: string };
++  /** Absent on old receipts: old bindings never acquire a lease by replay. */
++  lease?: { reservedAt: number; expiresAt: number; providerCompleted: boolean };
 +}
 +export interface CodingActor {
 +  /** Supplied by a trusted, assignment-scoped transport, never by request JSON. */
@@ -107,6 +226,7 @@
 +  requesterId: string;
 +}
 +export interface CodingSnapshot {
++  channelId: string;
 +  archived: boolean;
 +  member: boolean;
 +  task: {
@@ -131,6 +251,7 @@
 +}
 +export interface CodingPort {
 +  read(binding: CodingBinding): CodingSnapshot;
++  now(): number;
 +  /** Commit receipt and optional assistant result in ONE durable channel transaction. */
 +  commit(receipt: CodingReceipt, writeResult: boolean): void;
 +}
@@ -173,6 +294,23 @@
 +      value.result.text.length > 100_000)
 +  )
 +    throw new Error("Invalid coding result.");
++  if ("lease" in value) {
++    const lease = value.lease;
++    if (
++      typeof lease !== "object" ||
++      lease === null ||
++      !("reservedAt" in lease) ||
++      !Number.isSafeInteger(lease.reservedAt) ||
++      Number(lease.reservedAt) < 0 ||
++      !("expiresAt" in lease) ||
++      !Number.isSafeInteger(lease.expiresAt) ||
++      Number(lease.expiresAt) <= Number(lease.reservedAt) ||
++      Number(lease.expiresAt) - Number(lease.reservedAt) > 30 * 60_000 ||
++      !("providerCompleted" in lease) ||
++      typeof lease.providerCompleted !== "boolean"
++    )
++      throw new Error("Invalid coding lease.");
++  }
 +  // Validation is kept independent of the host's Effect major version.
 +  return value as CodingReceipt;
 +}
@@ -191,6 +329,7 @@
 +  decodeCodingReceipt({ binding, result: null });
 +  const view = port.read(binding);
 +  if (
++    view.channelId !== binding.channelId ||
 +    !view.member ||
 +    actor.agentId !== binding.agentId ||
 +    actor.turnId !== binding.turnId ||
@@ -222,10 +361,17 @@
 +    view.task.requestMessageId !== binding.requestMessageId
 +  )
 +    throw new Error("Coding assignment is stale.");
++  const now = port.now();
++  if (receipt?.lease && now >= receipt.lease.expiresAt) throw new Error("Coding lease expired.");
 +  if (action === "bind") {
 +    if (receipt) return receipt;
 +    if (view.result) throw new Error("The assignment already has a result.");
-+    const next = { binding, result: null };
++    const next: CodingReceipt = {
++      binding,
++      result: null,
++      lease: { reservedAt: now, expiresAt: now + 30 * 60_000, providerCompleted: false },
++    };
++    decodeCodingReceipt(next);
 +    port.commit(next, false);
 +    return next;
 +  }
@@ -244,7 +390,40 @@
 +    return receipt;
 +  }
 +  if (view.result) throw new Error("The assignment already has a result.");
-+  const next = { binding, result: { messageId, text } };
++  const next = { ...receipt, result: { messageId, text } };
 +  port.commit(next, true);
 +  return next;
++}
++
++/** Completion/recovery share the same durable decision; no process-local keepalive. */
++export function codingLifetime(
++  view: CodingSnapshot,
++  now: number,
++  status: string,
++): "hold" | "complete" | "interrupt" {
++  const receipt = view.receipt;
++  if (!receipt?.lease || status !== "completed") return "complete";
++  const b = receipt.binding;
++  const a = view.assignment;
++  if (
++    view.channelId !== b.channelId ||
++    view.archived ||
++    !view.member ||
++    view.requesterId !== b.requesterId ||
++    a.id !== b.assignmentId ||
++    a.taskId !== b.taskId ||
++    a.taskRevision !== b.taskRevision ||
++    a.agentId !== b.agentId ||
++    a.turnId !== b.turnId ||
++    a.requestMessageId !== b.requestMessageId ||
++    a.state !== "running" ||
++    view.task.id !== b.taskId ||
++    view.task.revision !== b.taskRevision ||
++    view.task.state !== "running" ||
++    view.task.ownerAgentId !== b.agentId ||
++    view.task.requestMessageId !== b.requestMessageId
++  )
++    return "interrupt";
++  if (receipt.result || view.result) return "complete"; // A provider result always wins its existing slot.
++  return now >= receipt.lease.expiresAt ? "interrupt" : "hold";
 +}

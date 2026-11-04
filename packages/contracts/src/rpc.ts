@@ -1,3 +1,4 @@
+import { OpenbotComputerViewCommand, OpenbotComputerViewerGrant } from "./openbotComputer.ts";
 import { OpenbotMaintenanceState, OpenbotMaintenanceCommand } from "./openbotMaintenance.ts";
 import { OpenbotBrowserViewCommand, OpenbotBrowserViewerGrant } from "./openbotBrowser.ts";
 import { OpenbotSledToolsStatus, OpenbotSledToolsConnectInput } from "./openbotSledTools.ts";
@@ -610,6 +611,7 @@ export const WS_METHODS = {
   serverRefreshUsageRates: "server.refreshUsageRates",
 
   openbotRead: "openbot.read",
+  openbotComputerViewCommand: "openbot.computerViewCommand",
   openbotBrowserViewCommand: "openbot.browserViewCommand",
   openbotAttention: "openbot.attention",
   openbotAttentionRespond: "openbot.attention.respond",
@@ -2056,6 +2058,11 @@ const WsOpenbotMaintenanceStatusRpc = Rpc.make(WS_METHODS.openbotMaintenanceStat
   success: OpenbotMaintenanceState,
   error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
 });
+const WsOpenbotComputerViewCommandRpc = Rpc.make(WS_METHODS.openbotComputerViewCommand, {
+  payload: OpenbotComputerViewCommand,
+  success: Schema.NullOr(OpenbotComputerViewerGrant),
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
 const WsOpenbotBrowserViewCommandRpc = Rpc.make(WS_METHODS.openbotBrowserViewCommand, {
   payload: OpenbotBrowserViewCommand,
   success: Schema.NullOr(OpenbotBrowserViewerGrant),
@@ -2391,6 +2398,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOpenbotAttentionRespondRpc,
   WsOpenbotSubscribeChangesRpc,
   WsOpenbotMaintenanceStatusRpc,
+  WsOpenbotComputerViewCommandRpc,
   WsOpenbotBrowserViewCommandRpc,
   WsOpenbotMaintenanceCommandRpc,
   WsOpenbotUpstreamStatusRpc,

@@ -89,6 +89,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.serverSignalProcess]: "server",
   [WS_METHODS.serverReportClientActivity]: "server",
   [WS_METHODS.openbotRead]: "openbot",
+  [WS_METHODS.openbotComputerViewCommand]: "openbot",
   [WS_METHODS.openbotBrowserViewCommand]: "openbot",
   [WS_METHODS.openbotReadToHost]: "openbot",
   [WS_METHODS.openbotAttention]: "openbot",

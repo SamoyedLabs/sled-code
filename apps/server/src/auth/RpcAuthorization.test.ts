@@ -141,11 +141,48 @@ describe("RPC authorization scopes", () => {
         AuthOrchestrationOperateScope,
       ]);
   });
-  it("requires settings and browser authority for private bot browser supervision", () => {
+  it("requires the matching authority for private bot browser and computer supervision", () => {
     expect(
       clientRpcRequiredScopes(WS_METHODS.openbotBrowserViewCommand, { operation: "open" }),
     ).toEqual([AuthSettingsWriteScope, AuthPreviewOperateScope]);
+    expect(requiredScopeForRpcMethod(WS_METHODS.openbotComputerViewCommand)).toBe(
+      AuthDesktopOperateScope,
+    );
+    for (const operation of ["open", "close"])
+      expect(
+        clientRpcRequiredScopes(WS_METHODS.openbotComputerViewCommand, {
+          operation,
+          hostId: "host",
+          id: "view",
+        }),
+      ).toEqual([AuthDesktopOperateScope]);
+    for (const method of [WS_METHODS.openbotRead, WS_METHODS.openbotReadToHost]) {
+      const payload = (operation: string) =>
+        method === WS_METHODS.openbotReadToHost
+          ? { hostId: "host", request: { operation } }
+          : { operation };
+      expect(clientRpcRequiredScopes(method, payload("tables.list"))).toEqual([
+        AuthSettingsWriteScope,
+        AuthOrchestrationReadScope,
+      ]);
+      expect(clientRpcRequiredScopes(method, payload("sites.list"))).toEqual([
+        AuthOrchestrationReadScope,
+      ]);
+    }
     for (const method of [WS_METHODS.openbotAdmin, WS_METHODS.openbotAdminToHost]) {
+      for (const operation of ["tables.delete", "sites.delete"])
+        expect(
+          clientRpcRequiredScopes(
+            method,
+            method === WS_METHODS.openbotAdminToHost
+              ? { hostId: "host", request: { operation } }
+              : { operation },
+          ),
+        ).toEqual([
+          AuthSettingsWriteScope,
+          AuthOrchestrationReadScope,
+          AuthOrchestrationOperateScope,
+        ]);
       const request = { operation: "browser.display" };
       expect(
         clientRpcRequiredScopes(

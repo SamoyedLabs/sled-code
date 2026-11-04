@@ -1,3 +1,4 @@
+import { DataEnvironment } from "../settings/DataEnvironment";
 import { BotEvents } from "./BotEvents";
 import { BotRoutineFlows } from "./BotRoutineFlows";
 import { BotConversationPanel } from "../settings/BotConversationPanel";
@@ -738,6 +739,11 @@ function BotDetail({
       </details>
       {host.data?.state === "ready" && host.data.hostId === expectedHostId && (
         <>
+          <DataEnvironment
+            key={`data:${environmentId}:${expectedHostId}`}
+            environmentId={environmentId}
+            hostId={expectedHostId}
+          />
           <ComputerEnvironment
             key={`${environmentId}:${expectedHostId}`}
             environmentId={environmentId}

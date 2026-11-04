@@ -1490,6 +1490,7 @@ it.effect(
   "dispatches events, flows, vault and computer commands through the pinned capability boundary",
   () => {
     const paths: string[] = [];
+    let tableStatus = 200;
     const http = HttpClient.make((request) =>
       Effect.sync(() => {
         const path = new URL(request.url).pathname;
@@ -1500,6 +1501,8 @@ it.effect(
             Response.json({ sessionToken: "fixture", sessionExpiresAt: "2027-01-01" }),
           );
         for (const capability of [
+          "shared-tables-v1",
+          "hosted-sites-v1",
           "vault-v1",
           "vault-v2",
           "vault-import-v1",
@@ -1508,6 +1511,31 @@ it.effect(
           "remote-desktop-setup",
         ])
           expect(request.headers["openbot-capabilities"]).toContain(capability);
+        if (path === "/v1/admin/shared-tables/list")
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json(
+              tableStatus === 200
+                ? [
+                    {
+                      name: "owned",
+                      ownerAgentId: null,
+                      rowCount: 2,
+                      rows: ["private"],
+                      sql: "private",
+                    },
+                  ]
+                : { private: "must not escape" },
+              { status: tableStatus },
+            ),
+          );
+        if (path === "/v1/hosted-sites/list")
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({ sites: [], used: 0, limit: 0, credential: "private" }),
+          );
+        if (path === "/v1/admin/shared-tables/delete" || path === "/v1/hosted-sites/delete")
+          return HttpClientResponse.fromWeb(request, Response.json({}));
         if (path === "/v1/admin/vault/v2/list")
           return HttpClientResponse.fromWeb(request, Response.json({ status: "ready", items: [] }));
         if (path === "/v1/remote-screen/setup")
@@ -1588,6 +1616,30 @@ it.effect(
         "/v1/remote-screen/setup",
         "/v1/remote-screen/display",
       ]);
+      expect(yield* session.apiRead({ operation: "tables.list" })).toEqual([
+        { name: "owned", ownerAgentId: null, rowCount: 2 },
+      ]);
+      expect(yield* session.apiRead({ operation: "sites.list" })).toEqual({
+        sites: [],
+        used: 0,
+        limit: 0,
+      });
+      expect(yield* session.apiAdmin({ operation: "tables.delete", name: "owned" })).toEqual({});
+      expect(yield* session.apiAdmin({ operation: "sites.delete", siteId: "owned" })).toEqual({});
+      for (const [status, error] of [
+        [400, "unsupported"],
+        [403, "forbidden"],
+        [409, "account-or-conflict"],
+        [500, "request-failed"],
+      ] as const) {
+        tableStatus = status;
+        expect(yield* session.apiRead({ operation: "tables.list" })).toEqual({ dataError: error });
+      }
+      tableStatus = 401;
+      const expired = yield* session.apiRead({ operation: "tables.list" }).pipe(Effect.result);
+      expect(expired._tag).toBe("Failure");
+      if (expired._tag === "Failure")
+        expect(expired.failure).toMatchObject({ reason: "http", status: 401 });
     }).pipe(Effect.provide(TeamClient.layer), Effect.provideService(HttpClient.HttpClient, http));
   },
 );

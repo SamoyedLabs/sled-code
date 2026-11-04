@@ -110,6 +110,18 @@ export const OpenbotChannelCodingBinding = Schema.Struct({
 export type OpenbotChannelCodingBinding = typeof OpenbotChannelCodingBinding.Type;
 export const OpenbotChannelCodingReceipt = Schema.Struct({
   binding: OpenbotChannelCodingBinding,
+  lease: Schema.optional(
+    Schema.Struct({
+      reservedAt: NonNegativeInt,
+      expiresAt: NonNegativeInt,
+      providerCompleted: Schema.Boolean,
+    }).check(
+      Schema.makeFilter(
+        (lease) =>
+          lease.expiresAt > lease.reservedAt && lease.expiresAt - lease.reservedAt <= 30 * 60_000,
+      ),
+    ),
+  ),
   result: Schema.NullOr(
     Schema.Struct({
       // Includes the deterministic prefix, assignment ID and revision.

@@ -1,3 +1,4 @@
+import { ComputerView } from "./ComputerView";
 import { useState } from "react";
 import { computerChecks, computerReadiness } from "@t3tools/client-runtime/openbot/presentation";
 import type { ComputerActions } from "@t3tools/client-runtime/openbot/presentation";
@@ -76,13 +77,22 @@ function ComputerPanel({ actions }: { actions: ComputerActions }) {
         </>
       )}
       <div className="flex gap-2">
-        <Button disabled>Start computer viewer</Button>
-        <Button disabled>Stop my viewer</Button>
+        <Button
+          disabled={computer.busy || !!computer.viewer || !actions.viewer?.canOpen}
+          onClick={computer.openViewer}
+        >
+          Start computer viewer
+        </Button>
+        <Button
+          disabled={computer.busy || !computer.viewer?.canClose()}
+          onClick={computer.closeViewer}
+        >
+          Stop my viewer
+        </Button>
       </div>
-      <p>
-        The authenticated computer viewer is unavailable. No session is opened by these checks.
-        Existing host sessions cannot be stopped from this panel.
-      </p>
+      {computer.viewer && (
+        <ComputerView key={computer.viewer.id} id={computer.viewer.id} url={computer.viewer.url} />
+      )}
     </div>
   );
 }

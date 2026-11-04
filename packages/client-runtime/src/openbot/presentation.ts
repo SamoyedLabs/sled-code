@@ -150,3 +150,7 @@ export * from "./vault.ts";
 
 export * from "./computer.ts";
 export type { ComputerActions } from "./computerController.ts";
+
+export * from "./data.ts";
+
+export { computerViewerUrl } from "./computerViewer.ts";

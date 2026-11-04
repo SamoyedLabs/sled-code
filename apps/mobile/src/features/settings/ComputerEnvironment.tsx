@@ -3,6 +3,7 @@ import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { openbot } from "../../state/openbot";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { useComputerViewActions } from "./ComputerViewActions";
 import { BotComputer } from "./BotComputer";
 export function ComputerEnvironment({
   environmentId,
@@ -11,6 +12,7 @@ export function ComputerEnvironment({
   environmentId: EnvironmentId;
   hostId: string;
 }) {
+  const viewer = useComputerViewActions(environmentId, hostId);
   const registry = useContext(RegistryContext);
   const canCheckSetup = useAtomValue(
     openbot.adminToHost.permissionAtom(environmentId, {
@@ -23,6 +25,7 @@ export function ComputerEnvironment({
   return (
     <BotComputer
       actions={{
+        viewer,
         canCheckSetup,
         canSelectDisplay: (displayId) =>
           registry.get(

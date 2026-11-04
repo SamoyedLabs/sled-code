@@ -1,3 +1,4 @@
+import * as OpenbotComputerGateway from "./openbot/ComputerViewGateway.ts";
 import * as OpenbotMaintenance from "./openbot/Maintenance.ts";
 import * as OpenbotBrowserGateway from "./openbot/BrowserViewGateway.ts";
 import * as OpenbotSledTools from "./openbot/SledTools.ts";
@@ -1383,6 +1384,9 @@ export const layerWsRpc = (
       const sledTools = yield* Effect.serviceOption(OpenbotSledTools.SledTools);
       const openbot = yield* Effect.serviceOption(Openbot.Integration);
       const openbotMaintenance = yield* Effect.serviceOption(OpenbotMaintenance.Maintenance);
+      const openbotComputerGateway = yield* Effect.serviceOption(
+        OpenbotComputerGateway.ComputerViewGateway,
+      );
       const openbotBrowserGateway = yield* Effect.serviceOption(
         OpenbotBrowserGateway.BrowserViewGateway,
       );
@@ -2299,6 +2303,12 @@ export const layerWsRpc = (
                 Effect.mapError((error) => new OpenbotError({ message: error.message })),
               )
             : Effect.fail(new OpenbotError({ message: "Upstream maintenance is unavailable." })),
+        [WS_METHODS.openbotComputerViewCommand]: (input) =>
+          Option.isSome(openbotComputerGateway)
+            ? openbotComputerGateway.value
+                .command(currentSessionId, input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "The computer viewer is unavailable." })),
         [WS_METHODS.openbotBrowserViewCommand]: (input) =>
           Option.isSome(openbotBrowserGateway)
             ? openbotBrowserGateway.value
@@ -3682,6 +3692,7 @@ export const layer = Layer.unwrap(
     const sledTools = yield* Effect.serviceOption(OpenbotSledTools.SledTools);
     const upstream = yield* Effect.serviceOption(OpenbotUpstream.UpstreamRuntime);
     const maintenance = yield* Effect.serviceOption(OpenbotMaintenance.Maintenance);
+    const computerGateway = yield* Effect.serviceOption(OpenbotComputerGateway.ComputerViewGateway);
     const browserGateway = yield* Effect.serviceOption(OpenbotBrowserGateway.BrowserViewGateway);
     const remoteDesktop = yield* RemoteDesktop.Service;
     const serverBrowser = yield* ServerBrowser.ServerBrowser;
@@ -3760,6 +3771,11 @@ export const layer = Layer.unwrap(
                   Option.match(openbotFiles, {
                     onNone: () => Layer.empty,
                     onSome: (service) => Layer.succeed(OpenbotFiles.Files, service),
+                  }),
+                  Option.match(computerGateway, {
+                    onNone: () => Layer.empty,
+                    onSome: (service) =>
+                      Layer.succeed(OpenbotComputerGateway.ComputerViewGateway, service),
                   }),
                   Option.match(browserGateway, {
                     onNone: () => Layer.empty,

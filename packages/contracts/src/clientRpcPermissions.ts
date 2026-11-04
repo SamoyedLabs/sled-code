@@ -21,6 +21,7 @@ import { WS_METHODS } from "./rpc.ts";
 
 /** Incremental client enforcement; the server still authorizes every request. */
 export const CLIENT_GUARDED_RPC_SCOPES = {
+  [WS_METHODS.openbotComputerViewCommand]: AuthDesktopOperateScope,
   [WS_METHODS.openbotBrowserViewCommand]: AuthSettingsWriteScope,
   [WS_METHODS.openbotAttentionRespond]: AuthSettingsWriteScope,
   [WS_METHODS.openbotMaintenanceStatus]: AuthEnvironmentMaintainScope,
@@ -118,6 +119,21 @@ export function clientRpcRequiredScopes(
   method: string,
   input: unknown,
 ): readonly AuthEnvironmentScope[] {
+  if (method === WS_METHODS.openbotRead || method === WS_METHODS.openbotReadToHost) {
+    const request =
+      method === WS_METHODS.openbotReadToHost &&
+      typeof input === "object" &&
+      input !== null &&
+      "request" in input
+        ? input.request
+        : input;
+    if (typeof request === "object" && request !== null && "operation" in request) {
+      if (request.operation === "tables.list")
+        return [AuthSettingsWriteScope, AuthOrchestrationReadScope];
+      if (request.operation === "sites.list") return [AuthOrchestrationReadScope];
+    }
+  }
+  if (method === WS_METHODS.openbotComputerViewCommand) return [AuthDesktopOperateScope];
   if (method === WS_METHODS.openbotBrowserViewCommand)
     return [AuthSettingsWriteScope, AuthPreviewOperateScope];
   if (
@@ -144,6 +160,8 @@ export function clientRpcRequiredScopes(
       "operation" in request &&
       typeof request.operation === "string"
     ) {
+      if (request.operation === "tables.delete" || request.operation === "sites.delete")
+        return [AuthSettingsWriteScope, AuthOrchestrationReadScope, AuthOrchestrationOperateScope];
       if (request.operation === "computer.setup" || request.operation === "computer.display")
         return [AuthDesktopOperateScope];
       if (request.operation.startsWith("provider."))

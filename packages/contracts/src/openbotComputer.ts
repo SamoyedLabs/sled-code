@@ -60,3 +60,20 @@ export const OpenbotComputerAdminRequest = Schema.Union([
 ]);
 export type OpenbotComputerReadRequest = typeof OpenbotComputerReadRequest.Type;
 export type OpenbotComputerAdminRequest = typeof OpenbotComputerAdminRequest.Type;
+
+export const OpenbotComputerViewCommand = Schema.Union([
+  Schema.Struct({
+    operation: Schema.Literal("open"),
+    hostId: Id,
+    frameOrigin: Schema.String.check(Schema.isMaxLength(512)),
+  }),
+  Schema.Struct({ operation: Schema.Literal("close"), hostId: Id, id: Id }),
+]);
+export type OpenbotComputerViewCommand = typeof OpenbotComputerViewCommand.Type;
+export const OpenbotComputerViewerGrant = Schema.Struct({
+  id: Id,
+  hostId: Id,
+  ticket: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+  expiresAt: Schema.Number.check(Schema.isFinite()),
+});
+export type OpenbotComputerViewerGrant = typeof OpenbotComputerViewerGrant.Type;
