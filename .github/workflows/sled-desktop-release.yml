@@ -58,8 +58,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { runner: macos-15, platform: mac, arch: arm64, target: zip }
-          - { runner: windows-2025, platform: win, arch: x64, target: nsis }
+          - {
+              runner: macos-15,
+              platform: mac,
+              arch: arm64,
+              target: zip,
+              rust: aarch64-apple-darwin,
+            }
+          - {
+              runner: windows-2025,
+              platform: win,
+              arch: x64,
+              target: nsis,
+              rust: x86_64-pc-windows-msvc,
+            }
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     env:
@@ -116,13 +128,12 @@ jobs:
             { xcodebuild -version; xcrun --sdk macosx --show-sdk-build-version; swift --version; } > "$RUNNER_TEMP/swift-toolchain.txt"
             echo "swift=$(git hash-object "$RUNNER_TEMP/swift-toolchain.txt")" >> "$GITHUB_OUTPUT"
           fi
-      - name: Cache resource monitor compilation
+      - name: Reuse the exact resource monitor binary
+        id: resource-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
-          path: native/resource-monitor/target
-          key: sled-resource-monitor-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.native-cache.outputs.rust }}-${{ hashFiles('native/resource-monitor/Cargo.lock', 'native/resource-monitor/Cargo.toml', 'native/resource-monitor/src/**') }}
-          restore-keys: |
-            sled-resource-monitor-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.native-cache.outputs.rust }}-
+          path: native/resource-monitor/target/${{ matrix.rust }}/release/t3-resource-monitor${{ matrix.platform == 'win' && '.exe' || '' }}
+          key: sled-resource-monitor-binary-v2-${{ matrix.rust }}-${{ steps.native-cache.outputs.rust }}-${{ hashFiles('native/resource-monitor/Cargo.lock', 'native/resource-monitor/Cargo.toml', 'native/resource-monitor/src/**') }}
       - name: Cache Mac host compilation
         if: matrix.platform == 'mac'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
@@ -160,6 +171,7 @@ jobs:
         run: python3 scripts/sled/ci_progress.py run --phase "Build desktop" -- vp run build:desktop
       - name: Build signed final installer and updater metadata
         env:
+          T3CODE_DESKTOP_REUSE_RESOURCE_MONITOR: ${{ steps.resource-cache.outputs.cache-hit == 'true' }}
           CSC_LINK: ${{ secrets.SLED_MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.SLED_MAC_CSC_KEY_PASSWORD }}
           WIN_CSC_LINK: ${{ secrets.SLED_WIN_CSC_LINK }}
@@ -279,7 +291,11 @@ jobs:
         run: python3 scripts/sled/ci_progress.py run --phase "Prepare native dependencies" -- python3 scripts/sled/prepare-native.py
       - name: Compile native host
         if: runner.os == 'macOS'
-        run: python3 scripts/sled/ci_progress.py run --phase "Compile native host" -- swift build --package-path native/remote-desktop --product T3RemoteHost -c debug
+        run: python3 scripts/sled/ci_progress.py run --phase "Compile native host" -- python3 scripts/build-host.py
+      - name: Verify actual desktop packaging
+        if: runner.os != 'Linux'
+        run: |
+          python3 scripts/sled/ci_progress.py run --phase "Package desktop" -- vp run dist:desktop:artifact --platform '${{ runner.os == 'macOS' && 'mac' || 'win' }}' --target '${{ runner.os == 'macOS' && 'zip' || 'nsis' }}' --arch '${{ runner.os == 'macOS' && 'arm64' || 'x64' }}' --build-version 0.2.999 --skip-build --output-dir "$RUNNER_TEMP/desktop-verify"
       - name: Retain phase timing records
         if: always()
         uses: actions/upload-artifact@v7
