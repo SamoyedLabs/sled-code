@@ -53,25 +53,17 @@ const WEB_ICON_TARGET_FILENAMES = {
   appleTouchIconPng: "apple-touch-icon.png",
 } as const;
 
+const SLED_WEB_ICON_SOURCE_PATHS = {
+  faviconIco: "assets/branding/sled-favicon.ico",
+  favicon16Png: "assets/branding/sled-favicon-16x16.png",
+  favicon32Png: "assets/branding/sled-favicon-32x32.png",
+  appleTouchIconPng: "assets/branding/sled-apple-touch-icon.png",
+} as const;
+
 const WEB_ICON_SOURCE_PATHS_BY_BRAND = {
-  development: {
-    faviconIco: BRAND_ASSET_PATHS.developmentWebFaviconIco,
-    favicon16Png: BRAND_ASSET_PATHS.developmentWebFavicon16Png,
-    favicon32Png: BRAND_ASSET_PATHS.developmentWebFavicon32Png,
-    appleTouchIconPng: BRAND_ASSET_PATHS.developmentWebAppleTouchIconPng,
-  },
-  nightly: {
-    faviconIco: BRAND_ASSET_PATHS.nightlyWebFaviconIco,
-    favicon16Png: BRAND_ASSET_PATHS.nightlyWebFavicon16Png,
-    favicon32Png: BRAND_ASSET_PATHS.nightlyWebFavicon32Png,
-    appleTouchIconPng: BRAND_ASSET_PATHS.nightlyWebAppleTouchIconPng,
-  },
-  production: {
-    faviconIco: BRAND_ASSET_PATHS.productionWebFaviconIco,
-    favicon16Png: BRAND_ASSET_PATHS.productionWebFavicon16Png,
-    favicon32Png: BRAND_ASSET_PATHS.productionWebFavicon32Png,
-    appleTouchIconPng: BRAND_ASSET_PATHS.productionWebAppleTouchIconPng,
-  },
+  development: SLED_WEB_ICON_SOURCE_PATHS,
+  nightly: SLED_WEB_ICON_SOURCE_PATHS,
+  production: SLED_WEB_ICON_SOURCE_PATHS,
 } as const satisfies Record<WebAssetBrand, Record<keyof typeof WEB_ICON_TARGET_FILENAMES, string>>;
 
 export function resolveWebIconOverrides(

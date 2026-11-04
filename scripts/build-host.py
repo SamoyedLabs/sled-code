@@ -34,14 +34,14 @@ subprocess.run(['install_name_tool', '-add_rpath', '@executable_path/../Framewor
 with (contents / 'Info.plist').open('wb') as output:
     plistlib.dump({
         'CFBundleIdentifier': 'com.t3tools.remote-desktop.host',
-        'CFBundleName': 'T3 Remote Desktop',
+        'CFBundleName': 'Sled Remote Desktop',
         'CFBundleExecutable': 'T3RemoteHost',
         'CFBundlePackageType': 'APPL',
         'CFBundleShortVersionString': '0.0.1',
         'CFBundleVersion': '1',
         'LSMinimumSystemVersion': '14.0',
         'LSUIElement': True,
-        'NSScreenCaptureUsageDescription': 'Share this Mac with your paired T3 Code devices.',
+        'NSScreenCaptureUsageDescription': 'Share this Mac with your paired Sled Code devices.',
     }, output)
 identity = os.environ.get('T3_REMOTE_SIGNING_IDENTITY', '-')
 # Ad-hoc signatures have no Team ID, so hardened library validation cannot bind

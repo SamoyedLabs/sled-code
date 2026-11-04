@@ -126,10 +126,10 @@ it.layer(NodeServices.layer)("host CLI commands", (it) => {
       yield* fs.writeFileString(shim, "@echo off\r\n");
       const hostCommand = (platform: NodeJS.Platform, env: Record<string, string>) =>
         resolveHostCliCommand("doctor", ["--base-dir", "C:\\Users\\Jane Doe\\.t3"]).pipe(
-          Effect.provideService(HostProcess.ExecutablePath, "C:\\Program Files\\T3 Code\\t3.exe"),
+          Effect.provideService(HostProcess.ExecutablePath, "C:\\Program Files\\Sled Code\\t3.exe"),
           Effect.provideService(HostProcess.Arguments, [
-            "C:\\Program Files\\T3 Code\\t3.exe",
-            "C:\\Program Files\\T3 Code\\resources\\app.asar\\apps\\server\\dist\\bin.mjs",
+            "C:\\Program Files\\Sled Code\\t3.exe",
+            "C:\\Program Files\\Sled Code\\resources\\app.asar\\apps\\server\\dist\\bin.mjs",
           ]),
           Effect.provideService(HostProcess.IsExecutable, false),
           Effect.provideService(HostProcess.Platform, platform),
@@ -217,7 +217,7 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       );
       expect(yield* resolve).toBeNull();
       yield* fs.symlink(entry, globalBin);
-      expect(yield* resolve).toEqual({ kind: "npm-global", prefix });
+      expect(yield* resolve).toEqual({ kind: "npm-global", prefix: yield* fs.realPath(prefix) });
       yield* fs.remove(globalBin);
       yield* fs.writeFileString(globalBin, "an unrelated t3 command");
       expect(yield* resolve).toBeNull();
@@ -249,7 +249,7 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       );
       for (const [version, expected] of [
         ["0.0.1", null],
-        [packageJson.version, { kind: "npm-global", prefix }],
+        [packageJson.version, { kind: "npm-global", prefix: yield* fs.realPath(prefix) }],
       ] as const) {
         yield* fs.writeFileString(
           path.join(packageRoot, "package.json"),

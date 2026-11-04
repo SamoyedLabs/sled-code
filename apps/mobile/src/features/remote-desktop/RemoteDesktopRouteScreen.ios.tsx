@@ -144,7 +144,7 @@ export function RemoteDesktopRouteScreen() {
     );
     if (hosts.length === 0) {
       setSelectionError(
-        "Connect your development Mac to T3 Code first. You can pair a nearby Mac below.",
+        "Connect your development Mac to Sled Code first. You can pair a nearby Mac below.",
       );
       return;
     }

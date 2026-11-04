@@ -1,4 +1,4 @@
-// Modified for T3 Code remote desktop; based on Sill 6c5b5d249602ad60ebda79d384698909f2c5e7d7 (Apache-2.0). See MODIFICATIONS.md.
+// Modified for Sled Code remote desktop; based on Sill 6c5b5d249602ad60ebda79d384698909f2c5e7d7 (Apache-2.0). See MODIFICATIONS.md.
 import Foundation
 
 /// What the connect screen says, and whether this device reconnects, when a session ends: with the
@@ -22,7 +22,7 @@ enum GoodbyePolicy {
         var reconnect: Bool
         /// That reconnect may dial the saved Mac through the remote door (only a saved Mac).
         var remoteAllowed: Bool
-        /// "Update T3 Code in the App Store" under the status line ("update" only).
+        /// "Update Sled Code in the App Store" under the status line ("update" only).
         var storeLink = false
         /// The Mac's own words: a goodbye this build shows as the host wrote it. Looked at before a
         /// remote dial's failure rules (RemoteDialPolicy), which know only the older reasons.
@@ -72,7 +72,7 @@ enum GoodbyePolicy {
                            reconnect: false, remoteAllowed: false, isNotice: false)
         case Goodbye.update:
             // The host always sends its message; these words are for one that does not.
-            var own = "Update T3 Code on this \(device) to keep using \(mac)."
+            var own = "Update Sled Code on this \(device) to keep using \(mac)."
             if let floor = goodbye.minimumVersion.flatMap({ SillVersion($0) }) { own += " It needs version \(floor) or later." }
             return Outcome(text: message(goodbye) ?? own, reconnect: goodbye.reconnect == true, remoteAllowed: saved,
                            storeLink: true, isNotice: true)

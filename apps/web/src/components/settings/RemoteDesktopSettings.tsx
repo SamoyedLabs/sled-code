@@ -22,7 +22,7 @@ const networking = [
   [
     "internet",
     "Internet access",
-    "Connect from outside your local network using your paired T3 connection.",
+    "Connect from outside your local network using your paired Sled connection.",
   ],
   [
     "direct-wireless",
@@ -100,13 +100,13 @@ export function RemoteDesktopSettings() {
           [
             [
               "with-t3",
-              "With T3 Code",
-              "Default · Quitting T3 Code stops remote access. Closing the window keeps it available.",
+              "With Sled Code",
+              "Default · Quitting Sled Code stops remote access. Closing the window keeps it available.",
             ],
             [
               "persistent",
               "Persistent remote desktop",
-              "Keep remote access on after quitting T3 Code. Stop it from the menu bar; opening T3 Code starts it again.",
+              "Keep remote access on after quitting Sled Code. Stop it from the menu bar; opening Sled Code starts it again.",
             ],
           ] as const
         ).map(([value, label, description]) => (

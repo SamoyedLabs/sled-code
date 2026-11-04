@@ -677,8 +677,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     background-color: color-mix(in oklab, var(--primary) 45%, transparent);
   }
   :root {
-    /* Keep the original T3 Code artwork palettes as the defaults. Built-in
-       themes override them with their own pigments in the components layer. */
+    /* Built-in themes override these stage pigments in the components layer. */
     --stage-art-top: oklch(0.782169 0.123386 240.226);
     --stage-art-mid: oklch(0.616111 0.195824 259.735);
     --stage-art-bottom: oklch(0.441553 0.232394 265.474);
@@ -690,18 +689,18 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     --stage-art-celeste-secondary: oklch(0.827395 0.126071 211.26);
     --stage-art-violet-highlight: oklch(0.895381 0.053248 286.447);
     --stage-art-grid-line: oklch(0.966822 0.01757 239.99);
-    --stage-night-base-top: oklch(0.283792 0.117327 297.201);
-    --stage-night-base-mid: oklch(0.227147 0.086086 277.99);
-    --stage-night-base-bottom: oklch(0.200528 0.055699 261.216);
+    --stage-night-base-top: oklch(0.27 0.038 295);
+    --stage-night-base-mid: oklch(0.22 0.028 280);
+    --stage-night-base-bottom: oklch(0.17 0.016 270);
     --stage-night-top: var(--stage-night-base-top);
     --stage-night-mid: var(--stage-night-base-mid);
     --stage-night-bottom: var(--stage-night-base-bottom);
-    --stage-night-highlight: oklch(0.707246 0.157418 252.091);
-    --stage-night-secondary: oklch(0.600473 0.182225 277.296);
-    --stage-night-tertiary: oklch(0.62583 0.210886 305.994);
+    --stage-night-highlight: oklch(0.69 0.055 270);
+    --stage-night-secondary: oklch(0.51 0.055 285);
+    --stage-night-tertiary: oklch(0.55 0.065 300);
     --stage-night-line: oklch(0.938794 0.029114 273.103);
-    --stage-night-glow-highlight: oklch(0.553749 0.176543 271.958);
-    --stage-night-glow-secondary: oklch(0.345571 0.117466 273.568);
+    --stage-night-glow-highlight: oklch(0.49 0.06 280);
+    --stage-night-glow-secondary: oklch(0.32 0.045 285);
     --stage-night-sparkle: oklch(0.880867 0.057747 269.011);
 
     @variant dark {

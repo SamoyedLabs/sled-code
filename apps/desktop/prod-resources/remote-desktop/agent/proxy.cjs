@@ -8,7 +8,7 @@ const { endpoint, secureDirectory, frames, send } = require("./protocol.cjs");
 const bootstrap = JSON.parse(fs.readFileSync(3, "utf8"));
 const home = bootstrap.t3Home;
 if (typeof home !== "string" || !path.isAbsolute(home))
-  throw new Error("Remote host requires an absolute T3 home");
+  throw new Error("Remote host requires an absolute Sled home");
 const serverEntry = process.argv[2];
 const location = endpoint(home);
 secureDirectory(location.dir);

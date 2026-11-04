@@ -1,4 +1,4 @@
-// Modified for T3 Code remote desktop; based on Sill 6c5b5d249602ad60ebda79d384698909f2c5e7d7 (Apache-2.0). See MODIFICATIONS.md.
+// Modified for Sled Code remote desktop; based on Sill 6c5b5d249602ad60ebda79d384698909f2c5e7d7 (Apache-2.0). See MODIFICATIONS.md.
 #if DEBUG
 import UIKit
 
@@ -327,7 +327,7 @@ enum MockCatalog {
         case sound           // the Mac sends its sound: the Send Audio row on, and Mute under it
         case soundoff        // a Mac with sound, Send Audio off: the row off (as `default`), and Mute
         case soundnote       // on, and the Mac could not capture it: the note under the row
-        case nosound         // a Mac without sound (Sill for Mac 0.5.1): the row off and disabled, "Update T3 Code…", no Mute
+        case nosound         // a Mac without sound (Sill for Mac 0.5.1): the row off and disabled, "Update Sled Code…", no Mute
     }
 
     /// The away and link cases: the Mac's two qualities (home Pro · Retina, away Low · Standard unless
@@ -527,16 +527,16 @@ enum MockCatalog {
         case camera        // Add a Mac with the camera refused
         case externalpair  // an outside sill://pair link waiting for its confirmation
         // Pairing at home (docs/home-pairing-plan.md §7.3–7.9). Each row's word is DiscoveryPolicy.rowWord's.
-        case homerows        // a saved Wi-Fi row, Not paired, an unpaired Wired (the cable), a Wired row through a USB Ethernet adapter (Not paired), an open door's (Not paired), Update T3 Code, long names
+        case homerows        // a saved Wi-Fi row, Not paired, an unpaired Wired (the cable), a Wired row through a USB Ethernet adapter (Not paired), an open door's (Not paired), Update Sled Code, long names
         case homeasking      // a tap on a Not paired row: "Pairing with Mac mini…", the row lit
         case homecard        // the Mac shows its code: the home card, scanning (a drawn viewfinder)
         case homecode        // the home card's typed path, empty
         case homecodeerror   // the typed path after a wrong code: "That code didn’t work… 4 tries left."
         case homelocked      // the Mac is locked (a Wired row over the cable): "Unlock Mac mini, then tap it again."
-        case homeopenonmac   // the Mac showed no code by itself: "…choose Pair iPhone or iPad… in T3 Code’s Remote Desktop menu…"
+        case homeopenonmac   // the Mac showed no code by itself: "…choose Pair iPhone or iPad… in Sled Code’s Remote Desktop menu…"
         case homerevoked     // the Mac removed this device: its row reads Not paired
         case homecabledone   // paired over the cable, the session on its way: "Paired with Mac mini over the cable."
-        case homeolder       // a tap on an Update T3 Code row: "Mac mini runs an older Sill…"
+        case homeolder       // a tap on an Update Sled Code row: "Mac mini runs an older Sill…"
         case pairingrequired // Require pairing turned on while this device was connected without pairing
         case asleep          // the automatic reconnect's dials of a listed row not answered: "Mac mini isn’t answering. It may be asleep…" (issue #69)
         case tiles           // tiles with stored preview pictures and Home / Work / Other groups
@@ -628,7 +628,7 @@ enum MockCatalog {
             // the notice beside them. The message is the host's (DeviceGate's), for this device.
             client.macs = [mac("Mac mini", .wifi)]
             let goodbye = c == .update
-                ? Goodbye(reason: Goodbye.update, message: "Update T3 Code on your \(StreamClient.deviceWord) to keep using Mac mini. It needs version 1.2 or later.",
+                ? Goodbye(reason: Goodbye.update, message: "Update Sled Code on your \(StreamClient.deviceWord) to keep using Mac mini. It needs version 1.2 or later.",
                           minimumVersion: "1.2", reconnect: false)
                 // A reason this build does not know ("pairingRequired" is pairing at home's own now).
                 : Goodbye(reason: "pairAgain",
@@ -655,7 +655,7 @@ enum MockCatalog {
         case .externalpair:
             client.pendingLink = mockLink
         case .homerows:
-            // The long names check that "Not paired" and "Update T3 Code" never truncate or wrap: the
+            // The long names check that "Not paired" and "Update Sled Code" never truncate or wrap: the
             // title does.
             client.macs = [home("Mac mini", .wifi, saved: true, homeTLS: true),
                            home("Studio", .wifi),
