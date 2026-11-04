@@ -13,7 +13,13 @@ concurrency:
   cancel-in-progress: false
 jobs:
   resolve:
-    if: github.repository == 'SamoyedLabs/sled-code' && vars.SLED_DESKTOP_RELEASE_ENABLED == 'true'
+    if: >-
+      github.repository == 'SamoyedLabs/sled-code' &&
+      vars.SLED_DESKTOP_RELEASE_ENABLED == 'true' &&
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
+        github.event.workflow_run.head_branch == 'main'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -73,7 +79,8 @@ jobs:
           WIN_CSC_LINK: ${{ secrets.SLED_WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.SLED_WIN_CSC_KEY_PASSWORD }}
         run: python3 scripts/sled/hosted-desktop-release.py credentials --platform '${{ matrix.platform }}'
-      - name: Install required Windows Spectre libraries on the hosted VM
+      - name: Resolve the Windows compiler cache
+        id: msvc
         if: matrix.platform == 'win'
         shell: pwsh
         run: |
@@ -81,16 +88,97 @@ jobs:
           $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
           $install = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
           if (!$install) { throw 'Visual C++ tools are missing on the hosted image' }
-          $setup = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\setup.exe'
-          $process = Start-Process -FilePath $setup -ArgumentList @('modify', '--installPath', "`"$install`"", '--add', 'Microsoft.VisualStudio.Component.VC.Runtimes.x86.x64.Spectre', '--quiet', '--norestart') -Wait -PassThru
-          if ($process.ExitCode -notin @(0, 3010)) { throw "Visual Studio component installation failed: $($process.ExitCode)" }
           $toolset = Get-ChildItem (Join-Path $install 'VC\Tools\MSVC') -Directory | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
-          if (!(Test-Path (Join-Path $toolset.FullName 'lib\spectre\x64'))) { throw 'Required x64 Spectre libraries are still missing' }
+          $compiler = Get-FileHash (Join-Path $toolset.FullName 'bin\Hostx64\x64\cl.exe') -Algorithm SHA256
+          "path=$(Join-Path $toolset.FullName 'lib\spectre\x64')" >> $env:GITHUB_OUTPUT
+          "key=msvc-spectre-x64-v1-$($toolset.Name)-$($compiler.Hash)" >> $env:GITHUB_OUTPUT
+          "MSVC_INSTALL=$install" >> $env:GITHUB_ENV
+      - name: Restore matching Windows Spectre libraries
+        id: spectre
+        if: matrix.platform == 'win'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ steps.msvc.outputs.path }}
+          key: ${{ steps.msvc.outputs.key }}
+      - name: Ensure required Windows Spectre libraries
+        id: installed_msvc
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $install = $env:MSVC_INSTALL
+          $toolset = Get-ChildItem (Join-Path $install 'VC\Tools\MSVC') -Directory | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
+          if (!(Test-Path (Join-Path $toolset.FullName 'lib\spectre\x64\libcmt.lib'))) {
+            $setup = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\setup.exe'
+            $process = Start-Process -FilePath $setup -ArgumentList @('modify', '--installPath', "`"$install`"", '--add', 'Microsoft.VisualStudio.Component.VC.Runtimes.x86.x64.Spectre', '--quiet', '--norestart') -Wait -PassThru
+            if ($process.ExitCode -notin @(0, 3010)) { throw "Visual Studio component installation failed: $($process.ExitCode)" }
+          }
+          # The installer may update MSVC; never save new libraries under the old compiler key.
+          $toolset = Get-ChildItem (Join-Path $install 'VC\Tools\MSVC') -Directory | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
+          $libraryPath = Join-Path $toolset.FullName 'lib\spectre\x64'
+          if (!(Test-Path (Join-Path $libraryPath 'libcmt.lib'))) { throw 'Required x64 Spectre libraries are still missing' }
+          $compiler = Get-FileHash (Join-Path $toolset.FullName 'bin\Hostx64\x64\cl.exe') -Algorithm SHA256
+          "path=$libraryPath" >> $env:GITHUB_OUTPUT
+          "key=msvc-spectre-x64-v1-$($toolset.Name)-$($compiler.Hash)" >> $env:GITHUB_OUTPUT
+      - name: Cache installed Windows Spectre libraries
+        if: matrix.platform == 'win' && steps.spectre.outputs.cache-matched-key != steps.installed_msvc.outputs.key
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ steps.installed_msvc.outputs.path }}
+          key: ${{ steps.installed_msvc.outputs.key }}
       - name: Select the native SDK used by CI
         if: matrix.platform == 'mac'
         run: echo "DEVELOPER_DIR=/Applications/Xcode_26.3.app/Contents/Developer" >> "$GITHUB_ENV"
       - uses: ./.github/actions/setup-ci-deps
+        with:
+          install-args: --filter @t3tools/monorepo --filter @t3tools/desktop... --filter @t3tools/web... --filter t3... --filter @t3tools/scripts...
+          restore-full-store: "false"
       - uses: dtolnay/rust-toolchain@stable
+      - name: Resolve native build cache identity
+        id: native-cache
+        shell: bash
+        run: |
+          rustc -vV > "$RUNNER_TEMP/rust-toolchain.txt"
+          echo "rust=$(git hash-object "$RUNNER_TEMP/rust-toolchain.txt")" >> "$GITHUB_OUTPUT"
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            { xcodebuild -version; xcrun --sdk macosx --show-sdk-build-version; swift --version; } > "$RUNNER_TEMP/swift-toolchain.txt"
+            echo "swift=$(git hash-object "$RUNNER_TEMP/swift-toolchain.txt")" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Cache resource monitor compilation
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: native/resource-monitor/target
+          key: sled-resource-monitor-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.native-cache.outputs.rust }}-${{ hashFiles('native/resource-monitor/Cargo.lock', 'native/resource-monitor/Cargo.toml', 'native/resource-monitor/src/**') }}
+          restore-keys: |
+            sled-resource-monitor-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.native-cache.outputs.rust }}-
+      - name: Cache Mac host compilation
+        if: matrix.platform == 'mac'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: native/remote-desktop/.build
+          key: sled-mac-host-v1-${{ runner.arch }}-${{ steps.native-cache.outputs.swift }}-${{ hashFiles('native/remote-desktop/Package.*', 'native/remote-desktop/Sources/**', 'third-party/webrtc/manifest.json') }}
+          restore-keys: |
+            sled-mac-host-v1-${{ runner.arch }}-${{ steps.native-cache.outputs.swift }}-
+      - name: Select Electron download caches
+        shell: bash
+        run: |
+          echo "ELECTRON_CACHE=$RUNNER_TEMP/electron" >> "$GITHUB_ENV"
+          echo "ELECTRON_BUILDER_CACHE=$RUNNER_TEMP/electron-builder" >> "$GITHUB_ENV"
+      - name: Cache Electron and packaging tools
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ${{ runner.temp }}/electron
+            ${{ runner.temp }}/electron-builder
+          key: sled-electron-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('apps/desktop/package.json', 'pnpm-lock.yaml') }}
+          restore-keys: |
+            sled-electron-v1-${{ runner.os }}-${{ runner.arch }}-
+      - name: Reuse the pinned WebRTC binary from CI
+        if: matrix.platform == 'mac'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: .tools/webrtc/*.zip
+          key: webrtc-archive-macos-v1-${{ hashFiles('third-party/webrtc/manifest.json') }}
       - name: Prepare and sign the Mac native host
         if: matrix.platform == 'mac'
         run: |
@@ -131,6 +219,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: sled-desktop-${{ matrix.platform }}
+          retention-days: 7
+          compression-level: 0
           path: release-desktop/*
           if-no-files-found: error
   publish:

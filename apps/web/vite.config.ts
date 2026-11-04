@@ -20,6 +20,8 @@ import {
 
 import { loadRepoEnv } from "../../scripts/lib/public-config";
 import { thirdPartyLicensesPlugin } from "../../scripts/lib/third-party-licenses";
+import { weightedShardSequencer } from "../../scripts/lib/weighted-shard-sequencer";
+import browserShardWeights from "./test/browserShardWeights.json" with { type: "json" };
 import { tailwindPlugins } from "./vite/tailwind";
 import { warmBundledDevPlugin } from "./vite/warmBundledDev";
 
@@ -399,6 +401,7 @@ export default defineConfig(({ command }) => {
     },
     worker: { format: "es" },
     test: {
+      sequence: { sequencer: weightedShardSequencer(browserShardWeights) },
       projects: [
         defineProject(unitTestProject),
         defineProject(browserTestProject),

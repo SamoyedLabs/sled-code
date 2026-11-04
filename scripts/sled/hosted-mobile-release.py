@@ -237,18 +237,31 @@ def prepare_runtime(sha, output, reuse=False):
     return runtime()
 
 
+def pending_release(sha, items):
+    existing = next((r for r in items if r['tag_name'] == 'sled-mobile-' + sha), None)
+    if existing and not existing['draft']:
+        return False
+    if any(r['draft'] and r['tag_name'].startswith('sled-mobile-') for r in items):
+        raise ValueError('An earlier mobile release is unresolved; reconcile it before continuing')
+    return True
+
+
+def resolve():
+    sha = checked_main()
+    if pending_release(sha, releases()) and os.environ.get('GITHUB_OUTPUT'):
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+            stream.write('sha=' + sha + '\n')
+
+
 def plan():
     sha = checked_main()
     configure(require_signing=False)
     output = ROOT / 'release-mobile'
     output.mkdir(exist_ok=False)
     items = releases()
-    existing = next((r for r in items if r['tag_name'] == 'sled-mobile-' + sha), None)
-    if existing and not existing['draft']:
+    if not pending_release(sha, items):
         mode = 'skip'
     else:
-        if any(r['draft'] and r['tag_name'].startswith('sled-mobile-') for r in items):
-            raise ValueError('An earlier mobile release is unresolved; reconcile it before continuing')
         baseline = baseline_from_releases(items, output)
         source_runtime = prepare_runtime(sha, output)
         mode = decide(source_runtime, baseline)
@@ -363,6 +376,7 @@ def main():
     commands = parser.add_subparsers(dest='command', required=True)
     commands.add_parser('release')
     commands.add_parser('plan')
+    commands.add_parser('resolve')
     check = commands.add_parser('check-environment')
     check.add_argument('--manifest', type=Path, required=True)
     seed = commands.add_parser('seed')
@@ -380,6 +394,8 @@ def main():
         check_environment(args.manifest)
     elif args.command == 'plan':
         plan()
+    elif args.command == 'resolve':
+        resolve()
     else:
         release()
 

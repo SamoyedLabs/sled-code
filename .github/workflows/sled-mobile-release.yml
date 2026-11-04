@@ -12,7 +12,7 @@ concurrency:
   group: sled-mobile-release
   cancel-in-progress: false
 jobs:
-  release:
+  resolve:
     if: >-
       github.repository == 'SamoyedLabs/sled-code' &&
       github.ref == 'refs/heads/main' &&
@@ -21,6 +21,26 @@ jobs:
        (github.event.workflow_run.conclusion == 'success' &&
         github.event.workflow_run.head_repository.full_name == github.repository &&
         github.event.workflow_run.head_branch == 'main'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      checks: read
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Select an unreleased checked commit before allocating macOS
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/sled/hosted-mobile-release.py resolve
+  release:
+    needs: resolve
+    if: needs.resolve.outputs.sha != ''
     runs-on: macos-15
     timeout-minutes: 90
     env:
@@ -37,7 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: main
+          ref: ${{ needs.resolve.outputs.sha }}
           persist-credentials: false
       - name: Select release cache directories
         run: |
@@ -49,6 +69,11 @@ jobs:
         with:
           install-args: --filter @t3tools/mobile... --filter @t3tools/scripts...
           restore-full-store: "false"
+      - name: Reuse the pinned WebRTC binary from CI
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: .tools/webrtc/*.zip
+          key: webrtc-archive-macos-v1-${{ hashFiles('third-party/webrtc/manifest.json') }}
       - name: Plan a fingerprint-compatible update
         id: plan
         env:
@@ -120,6 +145,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sled-mobile-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 7
           if-no-files-found: ignore
           path: |
             release-mobile/native/*-diagnostics.json

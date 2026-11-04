@@ -26,6 +26,27 @@ def baseline():
 
 
 class MobileReleaseTest(unittest.TestCase):
+    def test_resolve_skips_released_commits_and_blocks_unresolved_uploads_without_native_setup(self):
+        sha = 'd' * 40
+        for items, expected in [([], sha), ([{'tag_name': 'sled-mobile-' + sha, 'draft': False}], ''),
+                                ([{'tag_name': 'sled-mobile-' + sha, 'draft': True}], None),
+                                ([{'tag_name': 'sled-mobile-' + 'e' * 40, 'draft': True}], None)]:
+            with self.subTest(items=items), tempfile.TemporaryDirectory() as temp:
+                output = Path(temp) / 'output'
+                output.touch()
+                with patch.dict(os.environ, GITHUB_OUTPUT=str(output)), \
+                        patch.object(m, 'checked_main', return_value=sha), \
+                        patch.object(m, 'releases', return_value=items), \
+                        patch.object(m, 'configure') as configure, patch.object(m, 'prepare_runtime') as prepare:
+                    if expected is None:
+                        with self.assertRaisesRegex(ValueError, 'reconcile'):
+                            m.resolve()
+                    else:
+                        m.resolve()
+                    self.assertEqual(output.read_text(), f'sha={sha}\n' if expected else '')
+                    configure.assert_not_called()
+                    prepare.assert_not_called()
+
     def test_native_diagnostics_redact_credentials_and_retain_error_context(self):
         with tempfile.TemporaryDirectory() as temp:
             folder = Path(temp)

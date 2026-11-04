@@ -653,8 +653,6 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.test_server != 'false' }}
     runs-on: ubuntu-24.04
-    # Shards take 2-5 minutes. When the shared task cache throttles reads, each
-    # failed fetch stalls vp for 15-90s, which pushed shards past 10 minutes.
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -710,21 +708,24 @@ jobs:
           fi
 
       - name: Test
+        id: tests
         if: needs.changes.outputs.test_server != 'false'
+        working-directory: apps/server
         env:
           T3CODE_TRANSFER_BUDGET_REPORT_PATH: ${{ runner.temp }}/t3code-transfer-budget.md
           T3CODE_TRANSFER_BUDGET_RESULT_PATH: ${{ runner.temp }}/thread-transfer-result.json
+        # Remote task caching is disabled; one invocation avoids a cold task runner per file.
         run: >-
-          vp run test:cached -- --shard ${{ matrix.shard }}/${{ strategy.job-total }}
-          --uncached apps/server/integration/transferBudgetV2.integration.test.ts
-          --verify-hits 1 --report "${{ runner.temp }}/test-cache-${{ matrix.shard }}.json" apps/server
+          vp test run --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
 
-      - name: Upload test cache measurements
-        if: always() && needs.changes.outputs.test_server != 'false'
+      - name: Upload test timings
+        if: always() && steps.tests.outcome != 'skipped'
         uses: actions/upload-artifact@v7
         with:
-          name: test-cache-${{ matrix.shard }}
-          path: ${{ runner.temp }}/test-cache-${{ matrix.shard }}.json
+          name: test-timings-server-${{ matrix.shard }}
+          retention-days: 7
+          path: ${{ runner.temp }}/test-results.json
           if-no-files-found: error
 
       # integration/transferBudgetV2.integration.test.ts writes the report; exactly one shard
@@ -856,8 +857,8 @@ jobs:
       - name: Cache pinned WebRTC binary
         uses: actions/cache@v6
         with:
-          path: .tools/webrtc
-          key: webrtc-macos-${{ hashFiles('third-party/webrtc/manifest.json') }}
+          path: .tools/webrtc/*.zip
+          key: webrtc-archive-macos-v1-${{ hashFiles('third-party/webrtc/manifest.json') }}
       - name: Prepare pinned native dependencies
         run: python3 scripts/sled/prepare-native.py
       - name: Report native build toolchain
