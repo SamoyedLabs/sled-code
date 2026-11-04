@@ -1,3 +1,4 @@
+import { DEFAULT_HOSTED_APP_URL } from "@t3tools/shared/connectAuth";
 import { threadChipCopyTarget } from "@t3tools/client-runtime/thread-reference";
 import { type ComposerContextClipboardFragment, EnvironmentId, ThreadId } from "@t3tools/contracts";
 import {
@@ -51,7 +52,7 @@ describe("importPastedComposerText", () => {
   });
 
   it("keeps the link when the composer cannot take the thread", () => {
-    const pasted = "https://app.t3.codes/threads/env-1/thread-1";
+    const pasted = `${DEFAULT_HOSTED_APP_URL}/threads/env-1/thread-1`;
     expect(importPastedComposerText(clipboard({ "text/plain": pasted }), () => new Map())).toBe(
       pasted,
     );
