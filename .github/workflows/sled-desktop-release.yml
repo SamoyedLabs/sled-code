@@ -86,6 +86,9 @@ jobs:
           if ($process.ExitCode -notin @(0, 3010)) { throw "Visual Studio component installation failed: $($process.ExitCode)" }
           $toolset = Get-ChildItem (Join-Path $install 'VC\Tools\MSVC') -Directory | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
           if (!(Test-Path (Join-Path $toolset.FullName 'lib\spectre\x64'))) { throw 'Required x64 Spectre libraries are still missing' }
+      - name: Select the native SDK used by CI
+        if: matrix.platform == 'mac'
+        run: echo "DEVELOPER_DIR=/Applications/Xcode_26.3.app/Contents/Developer" >> "$GITHUB_ENV"
       - uses: ./.github/actions/setup-ci-deps
       - uses: dtolnay/rust-toolchain@stable
       - name: Prepare and sign the Mac native host

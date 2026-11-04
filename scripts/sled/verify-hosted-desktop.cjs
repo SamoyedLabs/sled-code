@@ -107,7 +107,7 @@ async function main() {
       assert(executable, "Expected private Sled executable");
       for (const file of [artifact, executable]) {
         const result = cp.execFileSync(
-          "powershell.exe",
+          "pwsh",
           [
             "-NoProfile",
             "-NonInteractive",
