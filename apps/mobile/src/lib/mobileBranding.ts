@@ -5,3 +5,7 @@ export function resolveMobileStageLabel(appVariant: unknown): MobileStageLabel {
   if (appVariant === "preview") return "Nightly";
   return "Beta";
 }
+
+export function usesDarkMobileMascot(appVariant: unknown) {
+  return appVariant === "development";
+}

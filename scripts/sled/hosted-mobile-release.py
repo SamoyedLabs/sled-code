@@ -100,7 +100,7 @@ def baseline_from_releases(items, output):
     if not candidates:
         raise ValueError('Missing verified native baseline: seed the retained uploaded release first')
     latest = max(candidates, key=lambda r: int(r['tag_name'].rsplit('-', 1)[1]))
-    gh('release', 'download', latest['tag_name'], '--repo', REPO, '--pattern', 'baseline.json', '--dir', str(output))
+    gh('release', 'download', latest['tag_name'], '--repo', REPO, '--pattern', 'baseline.json', '--dir', str(output), '--clobber')
     baseline = validate_baseline(json.loads((output / 'baseline.json').read_text()))
     if latest['tag_name'] != 'sled-ios-native-' + str(baseline['build']):
         raise ValueError('Baseline tag/build mismatch')
@@ -123,15 +123,16 @@ def checked_main():
     return sha
 
 
-def configure():
-    missing = [k for k in (*PUBLIC, *SECRETS[:-1]) if not os.environ.get(k)]
+def configure(require_signing=True):
+    required = (*PUBLIC, *SECRETS[:-1]) if require_signing else PUBLIC
+    missing = [k for k in required if not os.environ.get(k)]
     if missing:
         raise ValueError('Missing release settings: ' + ', '.join(missing))
     if os.environ.get('SLED_APPLE_TEAM_ID') != TEAM:
         raise ValueError('Unexpected Apple team variable')
     for key in ('EXPO_UPDATES_FINGERPRINT_OVERRIDE', 'EXPO_UPDATES_WORKFLOW_OVERRIDE'):
         os.environ.pop(key, None)
-    os.environ.update(APP_VARIANT='development', MOBILE_VERSION_POLICY='fingerprint',
+    os.environ.update(APP_VARIANT='preview', MOBILE_VERSION_POLICY='fingerprint',
                       T3CODE_MOBILE_UPDATES_ENABLED='1', T3CODE_IOS_TEAM_ID=TEAM,
                       T3CODE_IOS_PERSONAL_TEAM='1', T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID=BUNDLE,
                       SLED_EXPO_PROJECT_ID=PROJECT, SLED_EXPO_OWNER='samoyed-labs',
@@ -221,11 +222,50 @@ def signing(directory):
     return keychain
 
 
+def prepare_runtime(sha, output, reuse=False):
+    prepared = output / 'plan.json'
+    if reuse and prepared.is_file():
+        previous = json.loads(prepared.read_text())
+        if previous['sourceSha'] != sha:
+            raise ValueError('Prepared native configuration belongs to another commit')
+        current = runtime()
+        if current != previous['runtimeVersion']:
+            raise ValueError('Prepared native runtime changed; generate a fresh release plan')
+        return current
+    run([sys.executable, 'scripts/sled/prepare-native.py'])
+    run(['pnpm', 'exec', 'expo', 'prebuild', '--platform', 'ios', '--no-install'], cwd=ROOT / 'apps/mobile')
+    return runtime()
+
+
+def plan():
+    sha = checked_main()
+    configure(require_signing=False)
+    output = ROOT / 'release-mobile'
+    output.mkdir(exist_ok=False)
+    items = releases()
+    existing = next((r for r in items if r['tag_name'] == 'sled-mobile-' + sha), None)
+    if existing and not existing['draft']:
+        mode = 'skip'
+    else:
+        if any(r['draft'] and r['tag_name'].startswith('sled-mobile-') for r in items):
+            raise ValueError('An earlier mobile release is unresolved; reconcile it before continuing')
+        baseline = baseline_from_releases(items, output)
+        source_runtime = prepare_runtime(sha, output)
+        mode = decide(source_runtime, baseline)
+        write(output / 'plan.json', dict(sourceSha=sha, runtimeVersion=source_runtime, mode=mode,
+                                        baselineBuild=baseline['build']))
+    if os.environ.get('GITHUB_OUTPUT'):
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+            stream.write('mode=' + mode + '\n')
+    print('Release plan: ' + mode, flush=True)
+    return mode
+
+
 def release():
     sha = checked_main()
     configure()
     output = ROOT / 'release-mobile'
-    output.mkdir(exist_ok=False)
+    output.mkdir(exist_ok=(output / 'plan.json').is_file())
     items = releases()
     tag = 'sled-mobile-' + sha
     existing = next((r for r in items if r['tag_name'] == tag), None)
@@ -238,11 +278,8 @@ def release():
     unresolved = [r for r in items if r['draft'] and r['tag_name'].startswith('sled-mobile-')]
     if unresolved:
         raise ValueError('An earlier mobile release is unresolved; reconcile it before continuing')
-    run([sys.executable, 'scripts/sled/prepare-native.py'])
     mobile = ROOT / 'apps/mobile'
-    # Reconstruct managed native config on every run; never copy a runtime override.
-    run(['pnpm', 'exec', 'expo', 'prebuild', '--platform', 'ios', '--no-install'], cwd=mobile)
-    source_runtime = runtime()
+    source_runtime = prepare_runtime(sha, output, reuse=True)
     mode = decide(source_runtime, baseline)
     if mode == 'ota' and not os.environ.get('SLED_EXPO_TOKEN'):
         raise ValueError('OTA requires dedicated SLED_EXPO_TOKEN; local OAuth sessions are forbidden')
@@ -288,7 +325,7 @@ def release():
                 common = ['--team', TEAM, '--build-number', build, '--public-config', str(public),
                           '--credentials-dir', str(credentials), '--output-dir', str(native)]
                 run([sys.executable, 'scripts/testflight-ios.py', 'archive', *common,
-                     '--prepare', '--enable-ota', '--ota-channel', CHANNEL, '--manual-signing'])
+                     '--prepare', '--skip-prebuild', '--enable-ota', '--ota-channel', CHANNEL, '--manual-signing'])
                 run([sys.executable, 'scripts/testflight-ios.py', 'export', *common])
                 archive_evidence = verify(native / 'T3CodeRemote.xcarchive')
                 ipa = next((native / 'export').glob('*.ipa'))
@@ -325,6 +362,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest='command', required=True)
     commands.add_parser('release')
+    commands.add_parser('plan')
     check = commands.add_parser('check-environment')
     check.add_argument('--manifest', type=Path, required=True)
     seed = commands.add_parser('seed')
@@ -340,6 +378,8 @@ def main():
         write(args.output, value)
     elif args.command == 'check-environment':
         check_environment(args.manifest)
+    elif args.command == 'plan':
+        plan()
     else:
         release()
 

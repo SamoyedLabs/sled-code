@@ -29,10 +29,7 @@ export function CompactBrandTitle(
     readonly fit?: boolean;
   } = {},
 ) {
-  const privateBrand = Constants.expoConfig?.extra?.iosPersonalTeamBuild === true;
-  const stageLabel = privateBrand
-    ? "Beta"
-    : resolveMobileStageLabel(Constants.expoConfig?.extra?.appVariant);
+  const stageLabel = resolveMobileStageLabel(Constants.expoConfig?.extra?.appVariant);
   const titleOffset = brandTitleOffset();
   const { scale } = useAndroidControlSizing();
   const activity = useAtomValue(mascotActivityAtom);

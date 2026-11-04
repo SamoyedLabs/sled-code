@@ -53,6 +53,8 @@ parser.add_argument('--build-number', default='1')
 parser.add_argument('--bundle-id', default='com.samoyedlabs.sled')
 parser.add_argument('--manual-signing', action='store_true', help='Use the supplied distribution profile for the archive as well as export.')
 parser.add_argument('--prepare', action='store_true', help='Apply source integration and regenerate iOS configuration.')
+parser.add_argument('--skip-prebuild', action='store_true',
+                    help='Reuse caller-prepared native configuration; still install Pods and resolve Swift packages.')
 parser.add_argument('--enable-ota', action='store_true',
                     help='Embed a Sled-owned Expo update project in a new native archive.')
 parser.add_argument('--ota-channel', help='Explicit Sled EAS channel for a new OTA-capable native archive.')
@@ -62,6 +64,8 @@ parser.add_argument('--derived-data-path', type=Path, default=root / '.tools/ios
 parser.add_argument('--tools-bin', type=Path, default=root / '.tools/bin')
 parser.add_argument('--output-dir', type=Path, help='Use a distinct directory to retain previous native releases.')
 args = parser.parse_args()
+if args.skip_prebuild and (args.action != 'archive' or not args.prepare):
+    parser.error('--skip-prebuild requires archive --prepare')
 if args.enable_ota:
     project = os.environ.get('SLED_EXPO_PROJECT_ID', '').strip()
     owner = os.environ.get('SLED_EXPO_OWNER', '').strip()
@@ -80,7 +84,7 @@ output.mkdir(parents=True, exist_ok=True)
 archive = output / 'T3CodeRemote.xcarchive'
 env = dict(os.environ)
 env.pop('ELECTRON_RUN_AS_NODE', None)
-env.update(APP_VARIANT='development', MOBILE_VERSION_POLICY='fingerprint',
+env.update(APP_VARIANT='preview', MOBILE_VERSION_POLICY='fingerprint',
            T3CODE_MOBILE_UPDATES_ENABLED='0', T3CODE_IOS_TEAM_ID=args.team,
            T3CODE_IOS_PERSONAL_TEAM='1', T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID=args.bundle_id,
            EXPO_NO_GIT_STATUS='1', CI='1',
@@ -110,8 +114,27 @@ if public_config.exists():
     if set(public) != allowed or not all(isinstance(v, str) for v in public.values()):
         raise SystemExit('Expected only the four public connection settings')
     env.update(public)
+package_cache_flags = []
+for variable, option in (('SLED_IOS_SWIFT_PACKAGE_DIR', '-clonedSourcePackagesDirPath'),
+                         ('SLED_IOS_SWIFT_PACKAGE_CACHE_DIR', '-packageCachePath')):
+    if env.get(variable):
+        directory = Path(env[variable]).resolve()
+        directory.mkdir(parents=True, exist_ok=True)
+        package_cache_flags.extend([option, str(directory)])
+compiler_cache_flags = []
+if env.get('SLED_IOS_COMPILER_CACHE_DIR'):
+    compiler_cache = Path(env['SLED_IOS_COMPILER_CACHE_DIR']).resolve()
+    compiler_cache.mkdir(parents=True, exist_ok=True)
+    compiler_cache_flags = [
+        'COMPILATION_CACHE_ENABLE_CACHING=YES',
+        'COMPILATION_CACHE_ENABLE_DIAGNOSTIC_REMARKS=YES',
+        'COMPILATION_CACHE_CAS_PATH=' + str(compiler_cache),
+        'COMPILATION_CACHE_KEEP_CAS_DIRECTORY=YES',
+        'COMPILATION_CACHE_ENABLE_PLUGIN=NO',
+        'COMPILATION_CACHE_LIMIT_SIZE=2G',
+    ]
 if args.action == 'archive':
-    if args.prepare:
+    if args.prepare and not args.skip_prebuild:
         import sys
         subprocess.run([sys.executable, 'scripts/sled/prepare-native.py'], cwd=root, env=env, check=True)
         run_logged(['pnpm', 'exec', 'expo', 'prebuild', '--platform', 'ios', '--no-install'],
@@ -132,7 +155,8 @@ if args.action == 'archive':
                    log=output / 'pods.log', check=True)
     if args.prepare:
         run_logged(['xcodebuild', '-resolvePackageDependencies', '-workspace', str(workspace),
-                    '-scheme', project_name, '-derivedDataPath', str(args.derived_data_path.resolve())],
+                    '-scheme', project_name, '-derivedDataPath', str(args.derived_data_path.resolve()),
+                    *package_cache_flags],
                    cwd=mobile, env=env, log=output / 'packages.log', check=True)
     command = ['xcodebuild', 'archive', '-workspace', str(workspace),
                '-scheme', project_name, '-configuration', 'Release', '-sdk', 'iphoneos',
@@ -141,7 +165,8 @@ if args.action == 'archive':
                '-derivedDataPath', str(args.derived_data_path.resolve()),
                '-archivePath', str(archive), '-allowProvisioningUpdates',
                'DEVELOPMENT_TEAM=' + args.team, 'CODE_SIGN_STYLE=Automatic',
-               'CURRENT_PROJECT_VERSION=' + args.build_number]
+               'CURRENT_PROJECT_VERSION=' + args.build_number,
+               *package_cache_flags, *compiler_cache_flags]
     if args.manual_signing:
         # Profile overrides belong on the app target; applying them to Pods breaks resource bundles.
         subprocess.run(['ruby', '-rxcodeproj', '-e',
@@ -187,6 +212,16 @@ try:
             if private_result.returncode:
                 raise SystemExit('Could not prepare the private distribution keychain')
     result = run_logged(command, cwd=mobile, env=env, log=log)
+    if args.action == 'archive' and compiler_cache_flags:
+        counts = {'hits': 0, 'misses': 0}
+        with log.open(errors='replace') as stream:
+            for line in stream:
+                if line.strip() == 'Cache hit':
+                    counts['hits'] += 1
+                elif line.strip() == 'Cache miss':
+                    counts['misses'] += 1
+        (output / 'compilation-cache-statistics.json').write_text(json.dumps(counts, indent=2) + '\n')
+        print('[native] compilation cache: ' + json.dumps(counts), flush=True)
 finally:
     if previous_keychains is not None:
         subprocess.run(['security', 'list-keychains', '-d', 'user', '-s', *previous_keychains], capture_output=True)
