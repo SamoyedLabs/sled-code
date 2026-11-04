@@ -11,6 +11,7 @@ import { BotAttention } from "../settings/BotAttention";
 import { SledToolsConnection } from "../settings/SledToolsConnection";
 import { BotConfiguration } from "../settings/BotConfiguration";
 import { BotFiles } from "../settings/BotFiles";
+import { ComputerEnvironment } from "../settings/ComputerEnvironment";
 import { BotBrowser } from "../settings/BotBrowser";
 import { BotCodingPolicy } from "../settings/BotCodingPolicy";
 import { BotWorkflows } from "../settings/BotWorkflows";
@@ -736,12 +737,19 @@ function BotDetail({
         />
       </details>
       {host.data?.state === "ready" && host.data.hostId === expectedHostId && (
-        <BotBrowser
-          key={`${environmentId}:${expectedHostId}:${agentId}`}
-          environmentId={environmentId}
-          agentId={agentId}
-          hostId={expectedHostId}
-        />
+        <>
+          <ComputerEnvironment
+            key={`${environmentId}:${expectedHostId}`}
+            environmentId={environmentId}
+            hostId={expectedHostId}
+          />
+          <BotBrowser
+            key={`${environmentId}:${expectedHostId}:${agentId}`}
+            environmentId={environmentId}
+            agentId={agentId}
+            hostId={expectedHostId}
+          />
+        </>
       )}
       <BotFiles
         key={`${expectedHostId}:${agentId}`}

@@ -144,11 +144,16 @@ export function clientRpcRequiredScopes(
       "operation" in request &&
       typeof request.operation === "string"
     ) {
+      if (request.operation === "computer.setup" || request.operation === "computer.display")
+        return [AuthDesktopOperateScope];
       if (request.operation.startsWith("provider."))
         return [AuthSettingsWriteScope, AuthProvidersManageScope];
       if (request.operation.startsWith("browser."))
         return [AuthSettingsWriteScope, AuthPreviewOperateScope];
       if (
+        request.operation.startsWith("vault.onepassword.") ||
+        request.operation === "vault.bitwarden.connect" ||
+        request.operation === "vault.bitwarden.disconnect" ||
         request.operation.startsWith("conversation.") ||
         request.operation.startsWith("queue.") ||
         request.operation.startsWith("thread.") ||

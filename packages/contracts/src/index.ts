@@ -106,3 +106,7 @@ export {
 export * from "./openbotConversation.ts";
 
 export * from "./openbotRoutineFlows.ts";
+
+export * from "./openbotComputer.ts";
+
+export * from "./openbotVault.ts";

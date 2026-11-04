@@ -4,6 +4,7 @@ import {
   AuthFilesystemReadScope,
   AuthProvidersManageScope,
   AuthSettingsWriteScope,
+  AuthDesktopOperateScope,
   AuthPreviewOperateScope,
   AuthAccessWriteScope,
   clientRpcRequiredScopes,
@@ -152,6 +153,15 @@ describe("RPC authorization scopes", () => {
           method === WS_METHODS.openbotAdminToHost ? { hostId: "host", request } : request,
         ),
       ).toEqual([AuthSettingsWriteScope, AuthPreviewOperateScope]);
+      for (const operation of ["computer.setup", "computer.display"]) {
+        const request = { operation, displayId: "display" };
+        expect(
+          clientRpcRequiredScopes(
+            method,
+            method === WS_METHODS.openbotAdminToHost ? { hostId: "host", request } : request,
+          ),
+        ).toEqual([AuthDesktopOperateScope]);
+      }
     }
   });
 
@@ -167,6 +177,11 @@ describe("RPC authorization scopes", () => {
         AuthOrchestrationOperateScope,
       ]);
       for (const operation of [
+        "vault.onepassword.status",
+        "vault.onepassword.connect",
+        "vault.onepassword.disconnect",
+        "vault.bitwarden.connect",
+        "vault.bitwarden.disconnect",
         "workflow.startRun",
         "workflow.runStep",
         "workflow.stopRun",
@@ -213,7 +228,18 @@ describe("RPC authorization scopes", () => {
       expect(clientRpcRequiredScopes(method, payload({ operation: "memory.create" }))).toEqual([
         AuthSettingsWriteScope,
       ]);
-      for (const operation of ["events.status", "events.list", "events.rotateSecret"])
+      for (const operation of [
+        "events.status",
+        "events.list",
+        "events.rotateSecret",
+        "vault.list",
+        "vault.save",
+        "vault.delete",
+        "vault.reset",
+        "vault.reveal",
+        "vault.import",
+        "vault.bitwarden.status",
+      ])
         expect(clientRpcRequiredScopes(method, payload({ operation }))).toEqual([
           AuthSettingsWriteScope,
         ]);

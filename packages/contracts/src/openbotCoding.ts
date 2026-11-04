@@ -94,3 +94,31 @@ export const OpenbotCodingTask = Schema.Struct({
 });
 export type OpenbotCodingTask = typeof OpenbotCodingTask.Type;
 export const OpenbotCodingTaskList = Schema.Array(OpenbotCodingTask);
+
+/** Internal extension contract. Presence of this schema never advertises engine support. */
+export const OpenbotChannelCodingBinding = Schema.Struct({
+  channelId: ExternalId,
+  taskId: ExternalId,
+  taskRevision: NonNegativeInt,
+  assignmentId: ExternalId,
+  agentId: ExternalId,
+  turnId: ExternalId,
+  requestMessageId: ExternalId,
+  requesterId: ExternalId,
+  operationId: ExternalId,
+});
+export type OpenbotChannelCodingBinding = typeof OpenbotChannelCodingBinding.Type;
+export const OpenbotChannelCodingReceipt = Schema.Struct({
+  binding: OpenbotChannelCodingBinding,
+  result: Schema.NullOr(
+    Schema.Struct({
+      // Includes the deterministic prefix, assignment ID and revision.
+      messageId: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,1199}$/)),
+      text: Schema.String.check(
+        Schema.isMaxLength(100_000),
+        Schema.makeFilter((value: string) => value.trim().length > 0),
+      ),
+    }),
+  ),
+});
+export type OpenbotChannelCodingReceipt = typeof OpenbotChannelCodingReceipt.Type;

@@ -28,6 +28,7 @@ import {
   readCodingPolicy,
 } from "./rpc/index.ts";
 import { createOpenbotFileAtoms } from "./files.ts";
+import { createOpenbotComputerAtoms } from "./ComputerAtoms.ts";
 import { createOpenbotBrowserAtoms } from "./browserAtoms.ts";
 
 export function createOpenbotAtoms<R, E>(
@@ -81,6 +82,7 @@ export function createOpenbotAtoms<R, E>(
     }),
     ...createOpenbotFileAtoms(runtime, refreshTrigger),
     ...createOpenbotBrowserAtoms(runtime),
+    ...createOpenbotComputerAtoms(runtime),
     codingPolicy,
     codingPolicyEnable: createEnvironmentRpcCommand(runtime, {
       label: "Enable bot coding delegation",

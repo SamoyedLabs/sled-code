@@ -1,0 +1,27 @@
+{
+  "upstream": {
+    "repository": "https://github.com/nightly-labs/openbot",
+    "version": "0.60.0",
+    "commit": "0c7753fa622c38419939cd230657f40e5883d098"
+  },
+  "capability": "sled-channel-coding-assignment-v1",
+  "status": "internal-service-only",
+  "advertiseByDefault": false,
+  "runtimeVerified": false,
+  "patchSha256": "750b611c5ade044defe163c6d4a9c7f2e4f91324cd825cea9072ef4779b222bf",
+  "baseFiles": {
+    "src/backend/channel-service.ts": "81d26abc2278fb6ae56714b40f24cdb5f3cfb66a1e56e65463e5a6ae189377e5",
+    "src/backend/channel-store.ts": "4d95139e14f72e65e11622aa5e7498056ad2b16ebc6c728e25c1359937efd109"
+  },
+  "patchedFiles": {
+    "src/backend/channel-service.ts": "43efd26d14264ab551d2b5b2b5d43d252747bfc369807e496997e4938074f156",
+    "src/backend/channel-store.ts": "71413a394398150bbfd956fb0c2a21c20a66b4eba7ce8a2339ade41e64b3b315",
+    "src/backend/channel-coding-extension.ts": "185e222e88786aaa3a2bb287b165df4f663541128d27ca5efda1f28a824d6553"
+  },
+  "promotionRequires": [
+    "assignment-scoped authenticated transport and capability negotiation",
+    "original Sled approval owner and host-bound configured grant enforcement",
+    "provider turn lifetime or durable external assignment lease",
+    "patched engine build and runtime verification by root"
+  ]
+}

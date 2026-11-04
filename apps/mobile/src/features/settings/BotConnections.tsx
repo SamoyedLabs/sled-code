@@ -1,3 +1,4 @@
+import { BotVault } from "./BotVault";
 import { useState } from "react";
 import { View } from "react-native";
 import { useAtomValue } from "@effect/atom-react";
@@ -15,6 +16,7 @@ import { Button } from "../../components/ui/Button";
 import { AppText as Text } from "../../components/ui/AppText";
 
 const choices = [
+  { id: "vault", name: "Vault and password managers" },
   { id: "mcp", name: "MCP servers" },
   { id: "github", name: "GitHub" },
   { id: "messaging", name: "Messaging" },
@@ -67,6 +69,7 @@ function ConnectionsPanel({
           Settings permission is required to manage these connections.
         </Text>
       )}
+      {selected === "vault" && <BotVault environmentId={environmentId} hostId={hostId} />}
       {selected === "mcp" && <McpPanel controller={controller} allowed={allowed} />}
       {selected === "github" && <GitHubPanel controller={controller} allowed={allowed} />}
       {selected === "messaging" && (

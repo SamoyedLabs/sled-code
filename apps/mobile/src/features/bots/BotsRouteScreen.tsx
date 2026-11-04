@@ -6,6 +6,7 @@ import { BotProviderChoice } from "../settings/BotProviderChoice";
 import { BotRuntimeControls } from "../settings/BotRuntimeControls";
 import { OpenbotMaintenance } from "../settings/OpenbotMaintenance";
 import { BotFiles } from "../settings/BotFiles";
+import { ComputerEnvironment } from "../settings/ComputerEnvironment";
 import { BotBrowser } from "../settings/BotBrowser";
 import { BotCodingPolicy } from "../settings/BotCodingPolicy";
 import { BotWorkflows } from "../settings/BotWorkflows";
@@ -798,12 +799,19 @@ function BotDetail({
           </View>
         )}
         {hostId && (
-          <BotBrowser
-            key={`${environmentId}:${hostId}:${agentId}`}
-            environmentId={environmentId}
-            agentId={agentId}
-            hostId={hostId}
-          />
+          <>
+            <ComputerEnvironment
+              key={`${environmentId}:${hostId}`}
+              environmentId={environmentId}
+              hostId={hostId}
+            />
+            <BotBrowser
+              key={`${environmentId}:${hostId}:${agentId}`}
+              environmentId={environmentId}
+              agentId={agentId}
+              hostId={hostId}
+            />
+          </>
         )}
         {hostId && (
           <BotFiles

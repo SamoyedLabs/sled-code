@@ -145,3 +145,8 @@ export { BrowserKeyboard } from "./browserKeyboard.ts";
 export * from "./conversation.ts";
 export { BotQueueEditSession, type BotQueueEdit } from "./queueEdit.ts";
 export * from "./routineEvents.ts";
+
+export * from "./vault.ts";
+
+export * from "./computer.ts";
+export type { ComputerActions } from "./computerController.ts";

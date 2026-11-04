@@ -1487,7 +1487,7 @@ it.live(
 );
 
 it.effect(
-  "dispatches event recovery and flow commands through the pinned capability boundary",
+  "dispatches events, flows, vault and computer commands through the pinned capability boundary",
   () => {
     const paths: string[] = [];
     const http = HttpClient.make((request) =>
@@ -1499,6 +1499,39 @@ it.effect(
             request,
             Response.json({ sessionToken: "fixture", sessionExpiresAt: "2027-01-01" }),
           );
+        for (const capability of [
+          "vault-v1",
+          "vault-v2",
+          "vault-import-v1",
+          "onepassword-connector-v1",
+          "bitwarden-connector-v1",
+          "remote-desktop-setup",
+        ])
+          expect(request.headers["openbot-capabilities"]).toContain(capability);
+        if (path === "/v1/admin/vault/v2/list")
+          return HttpClientResponse.fromWeb(request, Response.json({ status: "ready", items: [] }));
+        if (path === "/v1/remote-screen/setup")
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              platform: "darwin",
+              hostName: "fixture",
+              username: "fixture",
+              checkedAt: null,
+              screenRecording: "not-checked",
+              accessibility: "not-checked",
+              service: "not-checked",
+              displays: "not-checked",
+              guiSession: "not-checked",
+              restartRequired: false,
+              activeSessions: 0,
+              message: null,
+            }),
+          );
+        if (path === "/v1/remote-screen/display") {
+          expect(request.method).toBe("PUT");
+          return HttpClientResponse.fromWeb(request, new Response(null, { status: 204 }));
+        }
         expect(request.headers["openbot-capabilities"]).toContain("routine-recovery-v1");
         expect(request.headers["openbot-capabilities"]).toContain("routine-flows-v1");
         if (path === "/v1/admin/events/status")
@@ -1537,11 +1570,23 @@ it.effect(
         x: 10,
         y: 20,
       });
+      expect(yield* session.apiAdmin({ operation: "vault.list", version: "v2" })).toEqual({
+        status: "ready",
+        items: [],
+      });
+      expect(yield* session.apiAdmin({ operation: "computer.setup" })).toMatchObject({
+        hostName: "fixture",
+        activeSessions: 0,
+      });
+      expect(yield* session.apiAdmin({ operation: "computer.display", displayId: "1" })).toBeNull();
       expect(paths).toEqual([
         "/v1/auth/login",
         "/v1/admin/events/status",
         "/v1/admin/routine-recovery/runs",
         "/v1/routine-flows/positions/save",
+        "/v1/admin/vault/v2/list",
+        "/v1/remote-screen/setup",
+        "/v1/remote-screen/display",
       ]);
     }).pipe(Effect.provide(TeamClient.layer), Effect.provideService(HttpClient.HttpClient, http));
   },
