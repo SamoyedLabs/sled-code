@@ -19,7 +19,7 @@ const personalTeamBundleIdentifier = repoEnv.T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID?
 const sledExpoProjectId = repoEnv.SLED_EXPO_PROJECT_ID?.trim();
 const sledExpoOwner = repoEnv.SLED_EXPO_OWNER?.trim();
 const wantsOtaUpdates = repoEnv.T3CODE_MOBILE_UPDATES_ENABLED === "1";
-if (sledExpoProjectId === "d763fcb8-d37c-41ea-a773-b54a0ab4a454") {
+if (sledExpoProjectId?.toLowerCase() === "d763fcb8-d37c-41ea-a773-b54a0ab4a454") {
   throw new Error("Sled must use its own Expo project, not T3 Code's upstream project.");
 }
 if (
@@ -269,6 +269,11 @@ const config: ExpoConfig = {
   userInterfaceStyle: "automatic",
   updates: {
     enabled: wantsOtaUpdates,
+    ...(wantsOtaUpdates
+      ? {
+          requestHeaders: { "expo-channel-name": repoEnv.SLED_EXPO_CHANNEL?.trim() || APP_VARIANT },
+        }
+      : {}),
     ...(sledExpoProjectId ? { url: `https://u.expo.dev/${sledExpoProjectId}` } : {}),
     checkAutomatically: "ON_LOAD",
     fallbackToCacheTimeout: 0,

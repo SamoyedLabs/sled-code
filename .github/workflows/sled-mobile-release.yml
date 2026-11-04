@@ -1,0 +1,66 @@
+name: Sled Mobile Release
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  schedule:
+    - cron: "7,27,47 * * * *"
+permissions:
+  contents: read
+concurrency:
+  group: sled-mobile-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: >-
+      github.repository == 'SamoyedLabs/sled-code' &&
+      github.ref == 'refs/heads/main' &&
+      vars.SLED_MOBILE_RELEASE_ENABLED == 'true' &&
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
+        github.event.workflow_run.head_branch == 'main'))
+    runs-on: macos-15
+    timeout-minutes: 90
+    permissions:
+      contents: write
+      checks: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Test mobile release decisions
+        run: python3 scripts/sled/hosted-mobile-release-test.py
+      - uses: ./.github/actions/setup-ci-deps
+      - name: Install the app-target signing editor
+        run: gem install xcodeproj --version 1.27.0 --no-document
+      - name: Release checked main to the private Sled phone channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLED_APPLE_TEAM_ID: ${{ vars.SLED_APPLE_TEAM_ID }}
+          T3CODE_RELAY_URL: ${{ vars.T3CODE_RELAY_URL }}
+          T3CODE_CLERK_PUBLISHABLE_KEY: ${{ vars.T3CODE_CLERK_PUBLISHABLE_KEY }}
+          T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ vars.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID }}
+          T3CODE_CLERK_JWT_TEMPLATE: ${{ vars.T3CODE_CLERK_JWT_TEMPLATE }}
+          SLED_IOS_CSC_LINK: ${{ secrets.SLED_IOS_CSC_LINK }}
+          SLED_IOS_CSC_KEY_PASSWORD: ${{ secrets.SLED_IOS_CSC_KEY_PASSWORD }}
+          SLED_IOS_PROVISIONING_PROFILE: ${{ secrets.SLED_IOS_PROVISIONING_PROFILE }}
+          SLED_APPLE_API_KEY: ${{ secrets.SLED_APPLE_API_KEY }}
+          SLED_APPLE_API_KEY_ID: ${{ secrets.SLED_APPLE_API_KEY_ID }}
+          SLED_APPLE_API_ISSUER: ${{ secrets.SLED_APPLE_API_ISSUER }}
+          SLED_EXPO_TOKEN: ${{ secrets.SLED_EXPO_TOKEN }}
+        run: python3 scripts/sled/hosted-mobile-release.py release
+      - name: Retain nonsecret validation evidence on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sled-mobile-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          path: |
+            release-mobile/plan.json
+            release-mobile/baseline.json
+            release-mobile/archive-validation.json
+            release-mobile/ipa-validation.json
+            release-mobile/ota-receipt.json

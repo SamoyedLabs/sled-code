@@ -5,8 +5,9 @@ import * as NodePath from "node:path";
 export function privateDesktopLaunchEnvironment(
   home: string,
   publicSettings: Readonly<Record<string, string>>,
+  options: { automaticUpdates?: boolean; portable?: boolean } = {},
 ) {
-  const profile = home.trim();
+  const profile = options.portable ? NodePath.join(NodeOS.homedir(), ".sled") : home.trim();
   const liveHome = NodePath.join(NodeOS.homedir(), ".t3");
   const relativeToLive = NodePath.relative(NodePath.join(liveHome, "userdata"), profile);
   if (
@@ -20,8 +21,8 @@ export function privateDesktopLaunchEnvironment(
     throw new Error("The private desktop needs an absolute profile outside the installed T3 home.");
   }
   const environment: Record<string, string> = {
-    T3CODE_HOME: profile,
-    T3CODE_DISABLE_AUTO_UPDATE: "true",
+    ...(options.portable ? { SLED_PORTABLE_PROFILE: "true" } : { T3CODE_HOME: profile }),
+    T3CODE_DISABLE_AUTO_UPDATE: options.automaticUpdates ? "false" : "true",
   };
   for (const key of [
     "T3CODE_RELAY_URL",

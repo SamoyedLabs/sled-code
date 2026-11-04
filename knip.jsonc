@@ -41,6 +41,9 @@
         // Python desktop packaging invokes these directly.
         "sign-private-desktop.cjs",
         "verify-desktop-package.cjs",
+        // Private release certification is invoked directly by the owner.
+        "sled/desktop-update-release.cjs",
+        "sled/verify-mac-updater.cjs",
         // Retained CLI release tools are invoked by archived upstream workflows.
         "build-cli-archive.ts",
         "resolve-nightly-release.ts",

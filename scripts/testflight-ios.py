@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import re
 import shlex
 import subprocess
 
@@ -15,10 +16,31 @@ parser.add_argument('action', choices=['archive', 'export', 'upload'])
 parser.add_argument('--team', required=True)
 parser.add_argument('--build-number', default='1')
 parser.add_argument('--bundle-id', default='com.samoyedlabs.sled')
+parser.add_argument('--manual-signing', action='store_true', help='Use the supplied distribution profile for the archive as well as export.')
 parser.add_argument('--prepare', action='store_true', help='Apply source integration and regenerate iOS configuration.')
+parser.add_argument('--enable-ota', action='store_true',
+                    help='Embed a Sled-owned Expo update project in a new native archive.')
+parser.add_argument('--ota-channel', help='Explicit Sled EAS channel for a new OTA-capable native archive.')
+parser.add_argument('--credentials-dir', type=Path, default=root / '.tools/apple-credentials')
+parser.add_argument('--public-config', type=Path, default=root / '.tools/desktop-review/connect-public-config.json')
+parser.add_argument('--derived-data-path', type=Path, default=root / '.tools/ios-device-build')
+parser.add_argument('--tools-bin', type=Path, default=root / '.tools/bin')
+parser.add_argument('--output-dir', type=Path, help='Use a distinct directory to retain previous native releases.')
 args = parser.parse_args()
+if args.enable_ota:
+    project = os.environ.get('SLED_EXPO_PROJECT_ID', '').strip()
+    owner = os.environ.get('SLED_EXPO_OWNER', '').strip()
+    if (not re.fullmatch(r'[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}', project)
+            or project.lower() == 'd763fcb8-d37c-41ea-a773-b54a0ab4a454' or not owner):
+        parser.error('--enable-ota requires your SLED_EXPO_PROJECT_ID and SLED_EXPO_OWNER; upstream is forbidden')
+    if args.action != 'archive' or not args.prepare or not args.ota_channel:
+        parser.error('--enable-ota requires archive --prepare --ota-channel CHANNEL; existing native builds cannot gain OTA remotely')
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', args.ota_channel):
+        parser.error('--ota-channel must be a simple EAS channel name')
+if args.ota_channel and not args.enable_ota:
+    parser.error('--ota-channel requires --enable-ota')
 mobile = root / 'apps/mobile'
-output = root / '.tools/testflight' / args.bundle_id
+output = (args.output_dir or root / '.tools/testflight' / args.bundle_id).resolve()
 output.mkdir(parents=True, exist_ok=True)
 archive = output / 'T3CodeRemote.xcarchive'
 env = dict(os.environ)
@@ -27,19 +49,26 @@ env.update(APP_VARIANT='development', MOBILE_VERSION_POLICY='fingerprint',
            T3CODE_MOBILE_UPDATES_ENABLED='0', T3CODE_IOS_TEAM_ID=args.team,
            T3CODE_IOS_PERSONAL_TEAM='1', T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID=args.bundle_id,
            EXPO_NO_GIT_STATUS='1', CI='1',
-           PATH=str(root / '.tools/bin') + os.pathsep + env.get('PATH', ''))
-api_auth_path = root / '.tools/apple-credentials/app-store-connect.json'
+           PATH=str(args.tools_bin.resolve()) + os.pathsep + env.get('PATH', ''))
+if args.enable_ota:
+    env.update(T3CODE_MOBILE_UPDATES_ENABLED='1', SLED_EXPO_PROJECT_ID=project,
+               SLED_EXPO_OWNER=owner, SLED_EXPO_CHANNEL=args.ota_channel)
+api_auth_path = args.credentials_dir / 'app-store-connect.json'
 api_auth = json.loads(api_auth_path.read_text()) if api_auth_path.exists() else None
 api_auth_flags = []
 if api_auth:
     api_auth_flags = ['-authenticationKeyPath', api_auth['privateKeyPath'],
                       '-authenticationKeyID', api_auth['keyId'],
                       '-authenticationKeyIssuerID', api_auth['issuerId']]
-signing_path = root / '.tools/apple-credentials/distribution-signing.json'
+signing_path = args.credentials_dir / 'distribution-signing.json'
 signing = json.loads(signing_path.read_text()) if signing_path.exists() else None
 if signing and signing['bundleIdentifier'] != args.bundle_id:
     raise SystemExit('Local distribution profile does not match the requested bundle ID')
-public_config = root / '.tools/physical-device-control/connect-public-config.json'
+if args.manual_signing and not signing:
+    parser.error('--manual-signing requires distribution-signing.json')
+public_config = args.public_config
+if not public_config.is_file():
+    raise SystemExit('A validated public connection configuration is required')
 if public_config.exists():
     public = json.loads(public_config.read_text())
     allowed = {'T3CODE_RELAY_URL', 'T3CODE_CLERK_PUBLISHABLE_KEY', 'T3CODE_CLERK_CLI_OAUTH_CLIENT_ID', 'T3CODE_CLERK_JWT_TEMPLATE'}
@@ -57,19 +86,41 @@ if args.action == 'archive':
     if len(projects) != 1:
         raise SystemExit('Expected one generated iOS application project')
     project_name = projects[0].stem
+    info_path = mobile / 'ios' / project_name / 'Info.plist'
+    with info_path.open('rb') as stream:
+        app_info = plistlib.load(stream)
+    app_info['CFBundleVersion'] = '$(CURRENT_PROJECT_VERSION)'
+    with info_path.open('wb') as stream:
+        plistlib.dump(app_info, stream)
     workspace = mobile / 'ios' / (project_name + '.xcworkspace')
-    if not workspace.exists():
+    if args.prepare or not workspace.exists():
         with (output / 'pods.log').open('w') as stream:
             subprocess.run(['pod', 'install', '--no-repo-update'], cwd=mobile / 'ios', env=env,
                            stdout=stream, stderr=subprocess.STDOUT, check=True)
+    if args.prepare:
+        with (output / 'packages.log').open('w') as stream:
+            subprocess.run(['xcodebuild', '-resolvePackageDependencies', '-workspace', str(workspace),
+                            '-scheme', project_name, '-derivedDataPath', str(args.derived_data_path.resolve())],
+                           cwd=mobile, env=env, stdout=stream, stderr=subprocess.STDOUT, check=True)
     command = ['xcodebuild', 'archive', '-workspace', str(workspace),
                '-scheme', project_name, '-configuration', 'Release', '-sdk', 'iphoneos',
                '-destination', 'generic/platform=iOS', '-jobs', '4',
                '-disableAutomaticPackageResolution', '-skipPackageUpdates',
-               '-derivedDataPath', str(root / '.tools/ios-device-build'),
+               '-derivedDataPath', str(args.derived_data_path.resolve()),
                '-archivePath', str(archive), '-allowProvisioningUpdates',
                'DEVELOPMENT_TEAM=' + args.team, 'CODE_SIGN_STYLE=Automatic',
                'CURRENT_PROJECT_VERSION=' + args.build_number]
+    if args.manual_signing:
+        # Profile overrides belong on the app target; applying them to Pods breaks resource bundles.
+        subprocess.run(['ruby', '-rxcodeproj', '-e',
+                        'p = Xcodeproj::Project.open(ARGV[0]); '
+                        'p.targets.select { |t| t.product_type == "com.apple.product-type.application" }.each { |t| '
+                        't.build_configurations.each { |c| c.build_settings.merge!('
+                        '"CODE_SIGN_STYLE" => "Manual", "CODE_SIGN_IDENTITY" => ARGV[1], '
+                        '"PROVISIONING_PROFILE_SPECIFIER" => ARGV[2]) } }; p.save',
+                        str(projects[0]), signing['certificateSha1'], signing['profileUuid']],
+                       cwd=mobile, env=env, check=True)
+        command = [part for part in command if part not in ('CODE_SIGN_STYLE=Automatic', '-allowProvisioningUpdates')]
 else:
     if not archive.exists():
         raise SystemExit('Create the native archive first')
@@ -80,7 +131,7 @@ else:
     options = output / ('UploadOptions.plist' if args.action == 'upload' else 'ExportOptions.plist')
     export_options = {'method': 'app-store-connect', 'destination': 'upload' if args.action == 'upload' else 'export',
                       'teamID': args.team, 'signingStyle': 'automatic', 'uploadSymbols': True,
-                      'manageAppVersionAndBuildNumber': True, 'testFlightInternalTestingOnly': True}
+                      'manageAppVersionAndBuildNumber': False, 'testFlightInternalTestingOnly': True}
     if signing:
         export_options.update(signingStyle='manual', signingCertificate=signing['certificateSha1'],
                               provisioningProfiles={args.bundle_id: signing['profileUuid']})
@@ -93,7 +144,7 @@ log = output / (args.action + '.log')
 command += api_auth_flags
 previous_keychains = None
 try:
-    if signing and args.action != 'archive':
+    if signing and (args.action != 'archive' or args.manual_signing):
         previous_keychains = shlex.split(subprocess.check_output(['security', 'list-keychains', '-d', 'user'], text=True))
         password = Path(signing['passwordFile']).read_text()
         for keychain_command in [
@@ -115,8 +166,10 @@ if result.returncode == 0:
         metadata = plistlib.load(stream)['ApplicationProperties']
     if metadata.get('CFBundleIdentifier') != args.bundle_id or metadata.get('Team') != args.team:
         raise SystemExit('Built archive identity does not match the requested TestFlight target')
+    if args.action == 'archive' and metadata['CFBundleVersion'] != args.build_number:
+        raise SystemExit('Archive did not embed the requested build number; do not upload')
     status_path = output / 'status.json'
-    status = json.loads(status_path.read_text()) if status_path.exists() else {}
+    status = json.loads(status_path.read_text()) if status_path.exists() and args.action != 'archive' else {}
     status.update(updatedAt=datetime.now(timezone.utc).isoformat(), team=args.team,
                   bundleIdentifier=args.bundle_id, version=metadata['CFBundleShortVersionString'],
                   build=metadata['CFBundleVersion'], internalTestFlightOnly=True)
