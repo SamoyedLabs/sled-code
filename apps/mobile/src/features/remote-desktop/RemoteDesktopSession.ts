@@ -105,7 +105,7 @@ function retryable(error: unknown): boolean {
   return transientSignaling(error);
 }
 const initialFailure =
-  "Couldn't connect. Enable Remote Desktop on this Mac, pair it below, and grant Control desktop in its T3 connection permissions.";
+  "Couldn't connect. Enable Remote Desktop on this Mac, pair it below, and grant Control desktop in its Sled connection permissions.";
 const recoveryFailure =
   "The connection couldn't recover. Check the Mac's connection and reconnect.";
 const refreshAt = (connectivity: RemoteDesktopStatus["connectivity"]) =>

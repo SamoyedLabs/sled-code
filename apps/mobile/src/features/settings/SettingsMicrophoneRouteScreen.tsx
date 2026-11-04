@@ -108,7 +108,7 @@ function VoiceInputUnavailable() {
           <ListRowLayout icon="mic" label="Not available on this device" />
         </SettingsSection>
         <Text className="px-2 text-sm text-foreground-muted">
-          T3 Code's voice input uses Apple's on-device speech transcription, which needs iOS 26 or
+          Sled Code's voice input uses Apple's on-device speech transcription, which needs iOS 26 or
           later on a device that supports it. Without it, the composer has no microphone button, and
           allowing microphone access won't add one. Apple keyboard dictation is separate and isn't
           affected.
@@ -188,7 +188,7 @@ function MicrophoneSettings() {
             <Text className="px-2 text-sm text-foreground-muted">
               {permission === "ask"
                 ? "Voice input needs microphone access before it can record or list your microphones."
-                : "Microphone access is off for T3 Code. Turn it on in Settings to use voice input."}
+                : "Microphone access is off for Sled Code. Turn it on in Settings to use voice input."}
             </Text>
           </>
         ) : null}

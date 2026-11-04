@@ -41,7 +41,7 @@ with (contents / 'Info.plist').open('wb') as output:
         'CFBundleVersion': '1',
         'LSMinimumSystemVersion': '14.0',
         'LSUIElement': True,
-        'NSScreenCaptureUsageDescription': 'Share this Mac with your paired T3 Code devices.',
+        'NSScreenCaptureUsageDescription': 'Share this Mac with your paired Sled Code devices.',
     }, output)
 identity = os.environ.get('T3_REMOTE_SIGNING_IDENTITY', '-')
 # Ad-hoc signatures have no Team ID, so hardened library validation cannot bind

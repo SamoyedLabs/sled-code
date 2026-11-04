@@ -1,4 +1,4 @@
-// Modified for T3 Code remote desktop; based on Sill 6c5b5d249602ad60ebda79d384698909f2c5e7d7 (Apache-2.0). See MODIFICATIONS.md.
+// Modified for Sled Code remote desktop; based on Sill 6c5b5d249602ad60ebda79d384698909f2c5e7d7 (Apache-2.0). See MODIFICATIONS.md.
 import Foundation
 import Network
 import QuartzCore
@@ -46,7 +46,7 @@ struct FoundMac: Identifiable, Hashable {
     /// the automatic reconnect do follows from it (DiscoveryPolicy.homeDial). `.plain` for a Remote row.
     let door: DiscoveryPolicy.HomeDoor
     /// The row's word, and VoiceOver's label and hint for it (DiscoveryPolicy.rowWord): how the Mac is
-    /// reachable, as before, or "Not paired", "Wired" for an unpaired Mac over the cable, "Update T3 Code".
+    /// reachable, as before, or "Not paired", "Wired" for an unpaired Mac over the cable, "Update Sled Code".
     let homeWord: DiscoveryPolicy.RowWord
 
     init(name: String, endpoint: NWEndpoint?, route: Route, macID: String? = nil, savedByName: String? = nil,
@@ -66,7 +66,7 @@ struct FoundMac: Identifiable, Hashable {
     /// (DiscoveryPolicy.rows lists a name once), Mac IDs among Remote rows.
     var id: String { route == .remote ? "remote:\(macID ?? name)" : "\(route.rawValue):\(name)" }
     /// The word at the end of its row: "Remote" for a saved Mac dialed away from home, else its home
-    /// word (`homeWord`): how its Mac is reachable (`method`), "Not paired" or "Update T3 Code", or nil.
+    /// word (`homeWord`): how its Mac is reachable (`method`), "Not paired" or "Update Sled Code", or nil.
     var word: String? { route == .remote ? "Remote" : homeWord.word }
 }
 
@@ -224,7 +224,7 @@ final class StreamClient: ObservableObject {
     /// access (updateDiscovery); any other status (a disconnect, a failure) stays as it was set.
     static let lookingOnNetwork = "Looking for Macs on this network"
     static let lookingNearby = "Looking for Macs on this network and nearby"
-    static let allowLocalNetwork = "To find your Mac, allow Local Network for T3 Code in Settings."
+    static let allowLocalNetwork = "To find your Mac, allow Local Network for Sled Code in Settings."
 
     // Switcher catalog, as the host sends it. Published on main.
     @Published var macName = ""
@@ -1338,11 +1338,11 @@ final class StreamClient: ObservableObject {
     /// reconnect still finds it by the Bonjour name last used with it). A result without a TXT
     /// record at all is read with the last one it carried while its browser has listed it
     /// (DiscoveryPolicy.rowRecords): with the USB cable pulled, iPadOS listed the Mac on its other
-    /// interfaces with none, and its row read "Update T3 Code" (2026-10-27). A browser made again starts
+    /// interfaces with none, and its row read "Update Sled Code" (2026-10-27). A browser made again starts
     /// afresh: a name it lists is read with what it delivers itself. Then a Remote row for each
     /// saved Mac neither browser lists, once the network has had its 3 s. Each row also carries its
     /// home door, from its TXT record's `p`, and the word that follows from it and from what this
-    /// device knows of that Mac (DiscoveryPolicy.rowWord: "Not paired", "Update T3 Code"…); a saved Mac
+    /// device knows of that Mac (DiscoveryPolicy.rowWord: "Not paired", "Update Sled Code"…); a saved Mac
     /// seen with `p` is remembered as one whose door speaks TLS (`homeTLS`, docs/home-pairing-plan.md
     /// §7.3). Main thread.
     func recomputeMacs() {
@@ -1395,7 +1395,7 @@ final class StreamClient: ObservableObject {
         let records = rowRecordMemory
         let record = { (row: (name: String, direct: Bool)) in (row.direct ? nearby : network).first { $0.name == row.name }.flatMap { records[$0.key] } }
         // A saved Mac seen with `p` has a door that speaks TLS: remembered first, so a row of it
-        // without `p` (a replayed tag, or an older Sill.app put back) reads "Update T3 Code" at once.
+        // without `p` (a replayed tag, or an older Sill.app put back) reads "Update Sled Code" at once.
         let seenTLS = Set(rows.compactMap(record).filter { $0.door != .plain }.compactMap { SavedMacs.recognize(tag: $0.tag, in: savedMacs) })
         if let marked = SavedMacs.seenOverTLS(seenTLS, in: savedMacs) {
             savedMacs = marked
@@ -3263,7 +3263,7 @@ final class StreamClient: ObservableObject {
     /// the session ends when it comes or after 300 ms, whichever is first (ConnectionList.freshPicture);
     /// meanwhile the stream screen stays, and a second tap does nothing. A Mac from before kind 44 skips
     /// the ask: its picture is the keyframe kept, 300 ms later.
-    // The enclosing T3 session owns teardown; a preview-photo delay must not
+    // The enclosing Sled session owns teardown; a preview-photo delay must not
     // keep the previous connection alive while a new native session starts.
     var t3ManagedSession = false
     var t3PathChanged: ((Bool) -> Void)?

@@ -1,4 +1,4 @@
-// Modified for T3 Code remote desktop; based on Sill 6c5b5d249602ad60ebda79d384698909f2c5e7d7 (Apache-2.0). See MODIFICATIONS.md.
+// Modified for Sled Code remote desktop; based on Sill 6c5b5d249602ad60ebda79d384698909f2c5e7d7 (Apache-2.0). See MODIFICATIONS.md.
 import Foundation
 import Network
 import CryptoKit
@@ -80,9 +80,9 @@ enum PairingProblem: Equatable {
         case .expired: return "This code expired. Choose Pair iPhone or iPad… on your Mac for a new one."
         case .proofFailed(let host):
             return "Pairing didn’t finish: the Mac at \(host) couldn’t show it knows the code. Pair from the same network as your Mac, or scan the code instead."
-        case .nothingAnswered(let host): return "Nothing answered at \(host). Check the address, and that T3 Code Remote Desktop is enabled on your Mac."
+        case .nothingAnswered(let host): return "Nothing answered at \(host). Check the address, and that Sled Code Remote Desktop is enabled on your Mac."
         case .notSill(let host): return "Something answered at \(host), but it isn’t Sill, or its Sill is too old to pair."
-        case .localNetwork(let host): return "To reach \(host), allow Local Network for T3 Code in Settings."
+        case .localNetwork(let host): return "To reach \(host), allow Local Network for Sled Code in Settings."
         case .notALink: return "That’s not a Sill code."
         case .noKey(let reason): return "This \(StreamClient.deviceWord) couldn’t make its key (\(reason))."
         case .homeStopped(let mac): return DiscoveryPolicy.HomeCopy.stopped(mac: mac)
@@ -106,13 +106,13 @@ enum RemoteCopy {
         case .wrongMac:
             return "This isn’t the \(mac) this \(device) paired with. If Sill was set up again on it, forget it here and pair again."
         case .revoked:
-            return "\(mac) no longer accepts this \(device). Pair it again from T3 Code’s Remote Desktop menu on the Mac."
+            return "\(mac) no longer accepts this \(device). Pair it again from Sled Code’s Remote Desktop menu on the Mac."
         case .remoteOff:
             return "\(mac) turned off Remote Access."
         case .busy:
             return "\(mac) is already serving 8 devices."
         case .refused:
-            return "\(mac) answered, but T3 Code isn’t accepting remote connections there. Check that T3 Code Remote Desktop is enabled and Remote Access is on. If you changed its port, connect at home once."
+            return "\(mac) answered, but Sled Code isn’t accepting remote connections there. Check that Sled Code Remote Desktop is enabled and Remote Access is on. If you changed its port, connect at home once."
         case .vpnOff:
             let name = candidate.flatMap { vpnLabel($0) }
             return name.map { "\($0) looks off on this \(device). Turn it on, then tap \(mac)." }
@@ -122,7 +122,7 @@ enum RemoteCopy {
             return RemoteDialPolicy.isTailscaleName(host) ? "This \(device) can’t look up \(host). Is Tailscale on?"
                                                         : "This \(device) can’t look up \(host)."
         case .localNetwork:
-            return "To reach \(at), allow Local Network for T3 Code in Settings."
+            return "To reach \(at), allow Local Network for Sled Code in Settings."
         case .notSill:
             return "Something answered at \(at), but it isn’t Sill. Your home’s internet address may have changed."
         case .noAnswer:
@@ -191,7 +191,7 @@ extension StreamClient {
         setGroup(nil, for: macID)
         removePreview(for: macID)
         persistSavedMacs()
-        status = "Forgot \(name). It still lists this \(Self.deviceWord) until you remove it in T3 Code’s Remote Desktop menu on the Mac."
+        status = "Forgot \(name). It still lists this \(Self.deviceWord) until you remove it in Sled Code’s Remote Desktop menu on the Mac."
     }
 
     // MARK: Connection groups and preview pictures (ConnectionList)

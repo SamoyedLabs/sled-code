@@ -366,7 +366,7 @@ const server = net.createServer((s) => {
       if (config && message.serverEntry !== config.serverEntry) {
         send(s, {
           type: "result",
-          error: "Reopen T3 Code after stopping the previous host version",
+          error: "Reopen Sled Code after stopping the previous host version",
         });
         s.destroy();
         return;
