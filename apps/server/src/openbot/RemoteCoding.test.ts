@@ -92,6 +92,10 @@ function harness(uncertainLaunch = false) {
     stops: 0,
     failNextSend: false,
     operatorActive: true,
+    destinationAccepted: false,
+    receiptAvailable: true,
+    destinationCancelled: false,
+    rejectFirstLaunch: false,
   };
   const detail = () => ({
     threadId: remoteThreadId,
@@ -165,6 +169,14 @@ function harness(uncertainLaunch = false) {
           let value: unknown;
           switch (request.tool) {
             case "t3_thread_launch":
+              if (state.rejectFirstLaunch) {
+                state.rejectFirstLaunch = false;
+                return yield* new OrchestratorMcpFailure({
+                  code: "orchestration_error",
+                  message: "Launch response lost before acceptance",
+                });
+              }
+              state.destinationAccepted = true;
               if (
                 uncertainLaunch &&
                 calls.filter((call) => call.tool === request.tool).length === 1
@@ -177,6 +189,32 @@ function harness(uncertainLaunch = false) {
                 threadId: remoteThreadId,
                 runId: "provider-turn",
                 link: "https://fixture.invalid/thread/destination-thread",
+              };
+              break;
+            case "t3_thread_launch_receipt":
+              if (!state.receiptAvailable)
+                return yield* new OrchestratorMcpFailure({
+                  code: "orchestration_error",
+                  message: "Destination unavailable",
+                });
+              if (request.arguments.action === "cancel") {
+                state.destinationCancelled = true;
+                if (state.destinationAccepted) state.stops++;
+              }
+              value = {
+                state: state.destinationCancelled
+                  ? "cancelled"
+                  : state.destinationAccepted
+                    ? "accepted"
+                    : "unknown",
+                threadId: state.destinationAccepted ? remoteThreadId : null,
+                projectId: state.destinationAccepted ? input.projectId : null,
+                cancelRequested: state.destinationCancelled,
+                stopState: state.destinationCancelled
+                  ? state.destinationAccepted
+                    ? "requested"
+                    : "not-needed"
+                  : null,
               };
               break;
             case "t3_thread_wait":
@@ -285,8 +323,10 @@ it.effect(
         expect(task.pendingRequestIds).toEqual([]);
         expect(task.pendingRequestCount).toBe(1);
         const launches = h.calls.filter((call) => call.tool === "t3_thread_launch");
-        expect(launches).toHaveLength(2);
-        expect(launches[0]!.args.clientRequestId).toBe(launches[1]!.args.clientRequestId);
+        expect(launches).toHaveLength(1);
+        expect(
+          h.calls.find((call) => call.tool === "t3_thread_launch_receipt")?.args.clientRequestId,
+        ).toBe(launches[0]!.args.clientRequestId);
         h.state.settled = true;
         yield* remote.reconcile();
         task = yield* remote.snapshot(yield* row);
@@ -314,14 +354,14 @@ it.effect(
 );
 
 it.effect(
-  "keeps unknown-launch cancellation unresolved without replaying launch and safely cancels an unattempted receipt",
+  "reconciles uncertain launch cancellation with its destination receipt without relaunching work",
   () => {
     const h = harness(true);
     return Effect.gen(function* () {
       const remote = yield* RemoteCoding.RemoteCoding;
       yield* seed;
       yield* remote.launch(yield* row, input).pipe(Effect.ignore);
-      const before = h.calls.length;
+      h.state.receiptAvailable = false;
       const cancelled = yield* remote.cancel(yield* row, {
         ...input,
         commandId: CommandId.make("stop"),
@@ -329,14 +369,49 @@ it.effect(
       expect(cancelled.cancelRequested).toBe(true);
       expect(cancelled.state).toBe("launch_pending");
       expect(cancelled.remoteState).toBe("reconciliation-required");
+      h.state.receiptAvailable = true;
       yield* remote.reconcile();
-      expect(h.calls).toHaveLength(before);
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`UPDATE openbot_coding_tasks SET remote_launch_attempted = 0, remote_snapshot_json = NULL`;
+      const recovered = yield* remote.snapshot(yield* row);
+      expect(recovered.threadId).toBe(remoteThreadId);
+      expect(recovered.cancelRequested).toBe(true);
+      expect(recovered.state).toBe("waiting");
+      expect(recovered.remoteState).toBe("following");
+      expect(h.state.stops).toBe(1);
+      expect(h.calls.filter((call) => call.tool === "t3_thread_launch")).toHaveLength(1);
       expect(
-        (yield* remote.cancel(yield* row, { ...input, commandId: CommandId.make("stop") })).state,
-      ).toBe("cancelled");
-      expect(h.calls).toHaveLength(before);
+        h.calls.some(
+          (call) => call.tool === "t3_thread_launch_receipt" && call.args.action === "cancel",
+        ),
+      ).toBe(true);
+    }).pipe(
+      Effect.provide(RemoteCoding.layer),
+      Effect.provideService(RemoteCoding.Caller, caller),
+      Effect.provide(h.dependencies),
+    );
+  },
+);
+
+it.effect(
+  "records a destination cancellation tombstone when the uncertain launch never arrived",
+  () => {
+    const h = harness();
+    h.state.rejectFirstLaunch = true;
+    return Effect.gen(function* () {
+      const remote = yield* RemoteCoding.RemoteCoding;
+      yield* seed;
+      yield* remote.launch(yield* row, input).pipe(Effect.ignore);
+      const cancelled = yield* remote.cancel(yield* row, {
+        ...input,
+        commandId: CommandId.make("cancel-undelivered"),
+      });
+      expect(cancelled.state).toBe("cancelled");
+      expect(cancelled.cancelRequested).toBe(true);
+      expect(cancelled.remoteState).toBe("settled");
+      expect(h.state.destinationCancelled).toBe(true);
+      yield* remote.reconcile();
+      yield* remote.launch(yield* row, input);
+      expect(h.calls.filter((call) => call.tool === "t3_thread_launch")).toHaveLength(1);
+      expect(h.state.destinationAccepted).toBe(false);
     }).pipe(
       Effect.provide(RemoteCoding.layer),
       Effect.provideService(RemoteCoding.Caller, caller),

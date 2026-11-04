@@ -80,11 +80,16 @@ export * from "./desktopVoiceInput.ts";
 export * from "./openbot.ts";
 
 export * from "./openbotApi.ts";
+export * from "./openbotWorkflows.ts";
 
 export * from "./openbotCoding.ts";
+export * from "./openbotCodingPolicy.ts";
 
 export * from "./openbotSledTools.ts";
 
 export * from "./openbotEvents.ts";
 
 export * from "./openbotUpstream.ts";
+export * from "./openbotFiles.ts";
+
+export * from "./threadLaunchReceipt.ts";

@@ -31,6 +31,180 @@ const fixture = Effect.fnUntraced(function* (handle: NodeHttp.RequestListener) {
   return `http://127.0.0.1:${address.port}`;
 });
 
+it.live("preserves workflow graph content through revision conflicts and stable run retries", () =>
+  Effect.gen(function* () {
+    const graph = {
+      nodes: [
+        {
+          id: "future-node",
+          kind: "trigger",
+          at: { x: 10, y: 20 },
+          fields: { trigger: "manual", futureOption: "keep this", count: 2, enabled: true },
+          locked: true,
+          size: { width: 200 },
+          schedule: { kind: "once", date: "2027-01-01", time: "09:00" },
+        },
+      ],
+      edges: [],
+      strokes: [{ id: "drawing", brush: "pen", color: "blue", width: 2, points: [{ x: 0, y: 1 }] }],
+    };
+    const detail = {
+      summary: {
+        id: "workflow-1",
+        title: "Triage",
+        steps: 1,
+        updatedAt: "2026-11-04T00:00:00Z",
+        lastRun: null,
+      },
+      graph,
+      revision: 7,
+      triggers: [
+        {
+          nodeId: "future-node",
+          type: "webhook",
+          nextDueAt: null,
+          webhookUrl: "https://example.invalid/hooks/private-fixture-secret",
+        },
+      ],
+    };
+    const publicDetail = {
+      ...detail,
+      triggers: detail.triggers.map((trigger) => ({ ...trigger, webhookUrl: null })),
+    };
+    const step = {
+      id: "step-1",
+      workflowId: "workflow-1",
+      runId: "run-1",
+      nodeId: "future-node",
+      attempt: 1,
+      agentId: null,
+      status: "approval",
+      output: null,
+      branch: null,
+      error: null,
+      startedAt: null,
+      endedAt: null,
+    };
+    const run = {
+      id: "run-1",
+      workflowId: "workflow-1",
+      number: 1,
+      triggerNodeId: null,
+      source: "manual",
+      status: "approval",
+      error: null,
+      startedAt: "2026-11-04T00:00:00Z",
+      endedAt: null,
+    };
+    let starts = 0;
+    let seenRequestId: string | null = null;
+    let savedGraph: unknown;
+    const apiUrl = yield* fixture(async (request, response) => {
+      let text = "";
+      for await (const chunk of request) text += chunk.toString();
+      const body: unknown = text ? JSON.parse(text) : {};
+      response.setHeader("content-type", "application/json");
+      if (request.url === "/v1/auth/login") {
+        response.end(
+          JSON.stringify({ sessionToken: "private-token", sessionExpiresAt: "2027-01-01" }),
+        );
+        return;
+      }
+      if (request.url === "/v1/auth/logout") {
+        response.writeHead(204).end();
+        return;
+      }
+      if (!String(request.headers["openbot-capabilities"]).split(",").includes("workflows-v1")) {
+        response.writeHead(400).end("{}");
+        return;
+      }
+      if (request.url === "/v1/workflows/get") response.end(JSON.stringify(detail));
+      else if (request.url === "/v1/workflows/save-graph") {
+        if (
+          typeof body !== "object" ||
+          body === null ||
+          !("baseRevision" in body) ||
+          !("graph" in body)
+        ) {
+          response.writeHead(400).end("{}");
+          return;
+        }
+        savedGraph = body.graph;
+        response.end(
+          JSON.stringify(
+            body.baseRevision === 7 ? { ok: true, revision: 8 } : { ok: false, conflict: detail },
+          ),
+        );
+      } else if (request.url === "/v1/workflows/start-run") {
+        if (
+          typeof body !== "object" ||
+          body === null ||
+          !("requestId" in body) ||
+          typeof body.requestId !== "string"
+        ) {
+          response.writeHead(400).end("{}");
+          return;
+        }
+        if (body.requestId !== seenRequestId) {
+          starts++;
+          seenRequestId = body.requestId;
+        }
+        response.end(JSON.stringify({ run, steps: [step] }));
+      } else if (request.url === "/v1/workflows/decide") {
+        if (
+          typeof body === "object" &&
+          body !== null &&
+          "approved" in body &&
+          body.approved === true
+        )
+          step.status = "done";
+        response.end("{}");
+      } else if (request.url === "/v1/workflows/run")
+        response.end(JSON.stringify({ run, steps: [step] }));
+      else response.writeHead(404).end("{}");
+    });
+    const client = yield* TeamClient.TeamClient;
+    const session = yield* client.connect({ apiUrl, ownerSecret: "private-password" });
+    expect(yield* session.apiRead({ operation: "workflow.get", workflowId: "workflow-1" })).toEqual(
+      publicDetail,
+    );
+    expect(
+      yield* session.apiAdmin({
+        operation: "workflow.saveGraph",
+        workflowId: "workflow-1",
+        baseRevision: 6,
+        graph,
+      }),
+    ).toEqual({ ok: false, conflict: publicDetail });
+    expect(savedGraph).toEqual(graph);
+    expect(
+      yield* session.apiAdmin({
+        operation: "workflow.saveGraph",
+        workflowId: "workflow-1",
+        baseRevision: 7,
+        graph,
+      }),
+    ).toEqual({ ok: true, revision: 8 });
+    const launch = {
+      operation: "workflow.startRun",
+      workflowId: "workflow-1",
+      requestId: "stable-start",
+    } as const;
+    expect(yield* session.apiAdmin(launch)).toEqual({ run, steps: [step] });
+    yield* session.apiAdmin(launch);
+    expect(starts).toBe(1);
+    yield* session.apiAdmin({ operation: "workflow.decide", stepId: "step-1", approved: true });
+    expect(yield* session.apiRead({ operation: "workflow.run", runId: "run-1" })).toEqual({
+      run,
+      steps: [{ ...step, status: "done" }],
+    });
+    yield* session.close;
+  }).pipe(
+    Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+    Effect.scoped,
+  ),
+);
+
 it.live("authenticates the local owner, lists a projected roster, and revokes the session", () =>
   Effect.gen(function* () {
     const requests: Array<{ path: string; authorization: string | undefined; body: string }> = [];
@@ -189,6 +363,35 @@ it.live("routes typed bot work through fixed endpoints with source-compatible bo
         response.writeHead(204).end();
       } else if (request.url === "/v1/agent-tasks/start") {
         response.end(JSON.stringify({ id: "task1", agentId: "bot1", state: "queued" }));
+      } else if (request.url === "/v1/agents/bot1/conversation") {
+        response.end(
+          JSON.stringify({
+            botId: "bot1",
+            threadId: null,
+            messages: [],
+            references: { botId: { text: "literal reference key" } },
+          }),
+        );
+      } else if (request.url === "/v1/agents/bot1/messages") {
+        response.end(
+          JSON.stringify({
+            messageId: "accepted",
+            deliveries: [{ recipientBotId: "bot1", status: "queued" }],
+          }),
+        );
+      } else if (request.url === "/v1/agents/bot1/queue") {
+        response.end(
+          JSON.stringify({
+            botId: "bot1",
+            deliveries: [
+              {
+                recipientBotId: "bot1",
+                sender: { kind: "bot", botId: "sender" },
+                text: "botId is literal text",
+              },
+            ],
+          }),
+        );
       } else {
         response.end("{}");
       }
@@ -206,12 +409,32 @@ it.live("routes typed bot work through fixed endpoints with source-compatible bo
         provider: "codex",
       },
     });
-    yield* session.apiRead({ operation: "conversation.read", agentId: "bot1" });
-    yield* session.apiWrite({
-      operation: "conversation.send",
+    expect(yield* session.apiRead({ operation: "conversation.read", agentId: "bot1" })).toEqual({
       agentId: "bot1",
-      text: "Check Canvas",
-      clientMessageId: "message1",
+      threadId: null,
+      messages: [],
+      references: { botId: { text: "literal reference key" } },
+    });
+    expect(
+      yield* session.apiWrite({
+        operation: "conversation.send",
+        agentId: "bot1",
+        text: "Check Canvas",
+        clientMessageId: "message1",
+      }),
+    ).toEqual({
+      messageId: "accepted",
+      deliveries: [{ recipientAgentId: "bot1", status: "queued" }],
+    });
+    expect(yield* session.apiRead({ operation: "queue.read", agentId: "bot1" })).toEqual({
+      agentId: "bot1",
+      deliveries: [
+        {
+          recipientAgentId: "bot1",
+          sender: { kind: "agent", agentId: "sender" },
+          text: "botId is literal text",
+        },
+      ],
     });
     expect(
       yield* session.apiWrite({
@@ -266,6 +489,7 @@ it.live("routes typed bot work through fixed endpoints with source-compatible bo
           replyToMessageId: null,
         },
       },
+      { method: "GET", path: "/v1/agents/bot1/queue", body: null },
       {
         method: "POST",
         path: "/v1/agent-tasks/start",
@@ -315,10 +539,11 @@ it.live(
   "projects stored MCP credentials and private server errors out of administration results",
   () =>
     Effect.gen(function* () {
+      const privateTargets: unknown[] = [];
+      const signInTargets: Array<{ path: string; body: unknown }> = [];
       const apiUrl = yield* fixture(async (request, response) => {
-        for await (const _chunk of request) {
-          /* Drain the fixture request. */
-        }
+        let body = "";
+        for await (const chunk of request) body += chunk.toString();
         response.setHeader("content-type", "application/json");
         if (request.url === "/v1/auth/login") {
           response.end(
@@ -327,8 +552,22 @@ it.live(
         } else if (request.url === "/v1/auth/logout") {
           response.writeHead(204).end();
         } else if (request.url === "/v1/mcp-servers/test") {
+          privateTargets.push(JSON.parse(body).config);
           response.end(JSON.stringify({ toolCount: 0, error: "private-header-value" }));
+        } else if (request.url?.startsWith("/v1/admin/mcp-servers/sign-in/")) {
+          signInTargets.push({ path: request.url, body: body ? JSON.parse(body) : null });
+          response.end(
+            JSON.stringify(
+              request.url.endsWith("status")
+                ? {
+                    tabId: "host-private-tab",
+                    result: { toolCount: 1, error: "private-header-value" },
+                  }
+                : { credentials: "private-header-value" },
+            ),
+          );
         } else {
+          if (request.url === "/v1/mcp-servers/save") privateTargets.push(JSON.parse(body).config);
           response.end(
             JSON.stringify([
               {
@@ -341,6 +580,7 @@ it.live(
                 headers: [{ key: "Authorization", value: "private-token" }],
                 command: "private-command",
                 args: ["private-argument"],
+                envPassthrough: [],
                 workingDirectory: "/private/folder",
               },
             ]),
@@ -384,6 +624,142 @@ it.live(
         toolCount: 0,
         error: "The host MCP connection failed.",
       });
+      expect(yield* session.apiAdmin({ operation: "mcp.testById", mcpServerId: "sled" })).toEqual({
+        toolCount: 0,
+        error: "The host MCP connection failed.",
+      });
+      expect(privateTargets.at(-1)).toMatchObject({
+        url: "https://user:private-password@example.com/mcp?key=private-key",
+        headers: [{ key: "Authorization", value: "private-token" }],
+        env: [{ key: "API_KEY", value: "private-env" }],
+      });
+      expect(
+        yield* session.apiAdmin({
+          operation: "mcp.updateById",
+          mcpServerId: "sled",
+          patch: { name: "Renamed" },
+        }),
+      ).toEqual([
+        { id: "sled", name: "Sled", transport: "http", enabled: true, url: "https://example.com" },
+      ]);
+      expect(privateTargets.at(-1)).toMatchObject({
+        name: "Renamed",
+        url: "https://user:private-password@example.com/mcp?key=private-key",
+        env: [{ key: "API_KEY", value: "private-env" }],
+        headers: [{ key: "Authorization", value: "private-token" }],
+      });
+      expect(
+        yield* session.apiAdmin({ operation: "mcp.signIn.startById", mcpServerId: "sled" }),
+      ).toEqual({});
+      expect(
+        yield* session.apiAdmin({ operation: "mcp.signIn.statusById", mcpServerId: "sled" }),
+      ).toEqual({
+        tabId: "host-private-tab",
+        result: { toolCount: 1, error: "The host MCP connection failed." },
+      });
+      expect(
+        yield* session.apiAdmin({ operation: "mcp.signIn.cancelById", mcpServerId: "sled" }),
+      ).toEqual({});
+      expect(signInTargets.map((entry) => entry.body)).toEqual([
+        {
+          config: expect.objectContaining({
+            url: "https://user:private-password@example.com/mcp?key=private-key",
+          }),
+        },
+        { url: "https://user:private-password@example.com/mcp?key=private-key" },
+        { url: "https://user:private-password@example.com/mcp?key=private-key" },
+      ]);
+      yield* session.close;
+    }).pipe(
+      Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+      Effect.scoped,
+    ),
+);
+
+it.live(
+  "ensures messaging orchestrators with source-compatible scope and private response projection",
+  () =>
+    Effect.gen(function* () {
+      const requests: Array<{ path: string; body: unknown; authorization: string | undefined }> =
+        [];
+      const apiUrl = yield* fixture(async (request, response) => {
+        let body = "";
+        for await (const chunk of request) body += chunk.toString();
+        requests.push({
+          path: request.url ?? "",
+          body: body ? JSON.parse(body) : null,
+          authorization: request.headers.authorization,
+        });
+        response.setHeader("content-type", "application/json");
+        if (request.url === "/v1/auth/login")
+          response.end(
+            JSON.stringify({ sessionToken: "private-token", sessionExpiresAt: "2027-01-01" }),
+          );
+        else if (request.url === "/v1/auth/logout") response.writeHead(204).end();
+        else if (request.url === "/v1/admin/connectors/messaging/disconnect") response.end("{}");
+        else
+          response.end(
+            JSON.stringify({
+              agentId: "shared-orchestrator",
+              sectionId: null,
+              privateToken: "must-not-leave-host",
+            }),
+          );
+      });
+      const session = yield* (yield* TeamClient.TeamClient).connect({
+        apiUrl,
+        ownerSecret: "private-password",
+      });
+      for (const request of [
+        {
+          operation: "connector.messaging.orchestrator",
+          platform: "slack",
+          workspaceId: "workspace-one",
+        } as const,
+        {
+          operation: "connector.messaging.orchestrator",
+          platform: "discord",
+          workspaceId: "guild-one",
+        } as const,
+        {
+          operation: "connector.messaging.orchestrator",
+          platform: "telegram",
+          workspaceId: null,
+        } as const,
+      ])
+        expect(yield* session.apiAdmin(request)).toEqual({
+          agentId: "shared-orchestrator",
+          sectionId: null,
+        });
+      expect(
+        yield* session.apiAdmin({
+          operation: "connector.messaging.disconnect",
+          platform: "telegram",
+          workspaceId: "-10012345",
+        }),
+      ).toEqual({});
+      expect(requests.slice(1)).toEqual([
+        {
+          path: "/v1/admin/connectors/messaging/orchestrator",
+          body: { platform: "slack", workspaceId: "workspace-one" },
+          authorization: "Bearer private-token",
+        },
+        {
+          path: "/v1/admin/connectors/messaging/orchestrator",
+          body: { platform: "discord", workspaceId: "guild-one" },
+          authorization: "Bearer private-token",
+        },
+        {
+          path: "/v1/admin/connectors/messaging/orchestrator",
+          body: { platform: "telegram", workspaceId: null },
+          authorization: "Bearer private-token",
+        },
+        {
+          path: "/v1/admin/connectors/messaging/disconnect",
+          body: { platform: "telegram", workspaceId: "-10012345" },
+          authorization: "Bearer private-token",
+        },
+      ]);
       yield* session.close;
     }).pipe(
       Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),

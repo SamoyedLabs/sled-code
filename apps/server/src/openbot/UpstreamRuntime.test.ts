@@ -11,6 +11,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as UpstreamRuntime from "./UpstreamRuntime.ts";
+import * as RuntimeInstallation from "./RuntimeInstallation.ts";
 
 const fixtureBytes = new TextEncoder().encode("isolated release artifact fixture\n");
 const commit = "b".repeat(40);
@@ -100,6 +101,7 @@ const fixture = Effect.fn("test.upstreamFixture")(function* (
   const stateDirectory = yield* fs.makeTempDirectoryScoped({ prefix: "sled-upstream-test-" });
   const layer = UpstreamRuntime.layer({ stateDirectory }).pipe(
     Layer.provide(Layer.succeed(HttpClient.HttpClient, transport)),
+    Layer.provide(RuntimeInstallation.layer({ stateDirectory })),
   );
   return { stateDirectory, fs, path, layer, requests };
 });

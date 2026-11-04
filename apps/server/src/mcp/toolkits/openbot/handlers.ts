@@ -11,9 +11,21 @@ import {
   OpenbotCodingCancelInput,
   OpenbotRuntimeVersion,
   OpenbotUpstreamStageInput,
+  OpenbotUpstreamInstallInput,
   OpenbotAttentionResponseInput,
   OpenbotHostAdminInput,
   OpenbotHostReadInput,
+  OpenbotWorkspaceListInput,
+  OpenbotConversationFileSearchInput,
+  OpenbotFileMaterializeInput,
+  OpenbotFileScope,
+  OpenbotFileUploadInput,
+  OpenbotFileSendInput,
+  OpenbotFileDiscardInput,
+  type OpenbotFilesError,
+  OpenbotCodingPolicyScope,
+  OpenbotCodingPolicyEnableInput,
+  OpenbotCodingPolicyDisableInput,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -22,6 +34,8 @@ import * as Integration from "../../../openbot/Integration.ts";
 import * as CodingBridge from "../../../openbot/CodingBridge.ts";
 import * as RemoteCoding from "../../../openbot/RemoteCoding.ts";
 import * as UpstreamRuntime from "../../../openbot/UpstreamRuntime.ts";
+import * as Files from "../../../openbot/Files.ts";
+import * as CodingPolicy from "../../../openbot/CodingPolicy.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { OpenbotToolkit } from "./tools.ts";
 
@@ -34,6 +48,7 @@ const decodeAttentionResponse = Schema.decodeUnknownEffect(OpenbotAttentionRespo
 const UpstreamCheckInput = Schema.Struct({ version: Schema.optional(OpenbotRuntimeVersion) });
 const decodeUpstreamCheck = Schema.decodeUnknownEffect(UpstreamCheckInput);
 const decodeUpstreamStage = Schema.decodeUnknownEffect(OpenbotUpstreamStageInput);
+const decodeUpstreamInstall = Schema.decodeUnknownEffect(OpenbotUpstreamInstallInput);
 const description = {
   upstreamVersion: "0.60.0",
   read: Schema.toJsonSchemaDocument(OpenbotReadRequest),
@@ -44,6 +59,8 @@ const description = {
   "attention.respond": Schema.toJsonSchemaDocument(OpenbotAttentionResponseInput),
   "upstream.check": Schema.toJsonSchemaDocument(UpstreamCheckInput),
   "upstream.stage": Schema.toJsonSchemaDocument(OpenbotUpstreamStageInput),
+  "upstream.install": Schema.toJsonSchemaDocument(OpenbotUpstreamInstallInput),
+  "runtime.activate": Schema.toJsonSchemaDocument(OpenbotUpstreamInstallInput),
 };
 const integration = Effect.gen(function* () {
   const service = yield* Effect.serviceOption(Integration.Integration);
@@ -96,8 +113,154 @@ const upstream = Effect.gen(function* () {
 });
 const upstreamFailed = (error: UpstreamRuntime.UpstreamRuntimeError) =>
   new OrchestratorMcpFailure({ code: "orchestration_error", message: error.message });
+const decodeFileList = Schema.decodeUnknownEffect(OpenbotWorkspaceListInput);
+const decodeFileSearch = Schema.decodeUnknownEffect(OpenbotConversationFileSearchInput);
+const decodeFileDownload = Schema.decodeUnknownEffect(OpenbotFileMaterializeInput);
+const decodeFileDrafts = Schema.decodeUnknownEffect(OpenbotFileScope);
+const decodeFileUpload = Schema.decodeUnknownEffect(OpenbotFileUploadInput);
+const decodeFileSend = Schema.decodeUnknownEffect(OpenbotFileSendInput);
+const decodeFileDiscard = Schema.decodeUnknownEffect(OpenbotFileDiscardInput);
+const fileDescription = {
+  list: Schema.toJsonSchemaDocument(OpenbotWorkspaceListInput),
+  search: Schema.toJsonSchemaDocument(OpenbotConversationFileSearchInput),
+  download: Schema.toJsonSchemaDocument(OpenbotFileMaterializeInput),
+  drafts: Schema.toJsonSchemaDocument(OpenbotFileScope),
+  upload: Schema.toJsonSchemaDocument(OpenbotFileUploadInput),
+  send: Schema.toJsonSchemaDocument(OpenbotFileSendInput),
+  discard: Schema.toJsonSchemaDocument(OpenbotFileDiscardInput),
+};
+const files = Effect.gen(function* () {
+  const service = yield* Effect.serviceOption(Files.Files);
+  if (Option.isNone(service))
+    return yield* new OrchestratorMcpFailure({
+      code: "orchestration_error",
+      message: "Bot files are unavailable on this environment.",
+    });
+  return service.value;
+});
+const fileFailed = (error: OpenbotFilesError) =>
+  new OrchestratorMcpFailure({ code: "orchestration_error", message: error.message });
+const decodePolicyScope = Schema.decodeUnknownEffect(OpenbotCodingPolicyScope);
+const decodePolicyEnable = Schema.decodeUnknownEffect(OpenbotCodingPolicyEnableInput);
+const decodePolicyDisable = Schema.decodeUnknownEffect(OpenbotCodingPolicyDisableInput);
+const policyDescription = {
+  get: Schema.toJsonSchemaDocument(OpenbotCodingPolicyScope),
+  enable: Schema.toJsonSchemaDocument(OpenbotCodingPolicyEnableInput),
+  disable: Schema.toJsonSchemaDocument(OpenbotCodingPolicyDisableInput),
+};
+const codingPolicy = Effect.gen(function* () {
+  const service = yield* Effect.serviceOption(CodingPolicy.CodingPolicy);
+  if (Option.isNone(service))
+    return yield* new OrchestratorMcpFailure({
+      code: "orchestration_error",
+      message: "Bot coding policy is unavailable.",
+    });
+  return service.value;
+});
+const policyFailed = (error: CodingPolicy.CodingPolicyError) =>
+  new OrchestratorMcpFailure({ code: "orchestration_error", message: error.message });
 
 export const layer = McpToolAccess.toLayer(OpenbotToolkit, {
+  openbot_coding_policy: McpToolAccess.either(
+    (input) => input.action === "describe" || input.action === "get",
+    McpToolAccess.reads((input) =>
+      Effect.gen(function* () {
+        if (input.action === "describe") return policyDescription;
+        const service = yield* codingPolicy;
+        return yield* service
+          .get(yield* decodePolicyScope(input.request).pipe(Effect.mapError(invalidRequest)))
+          .pipe(Effect.mapError(policyFailed));
+      }),
+    ),
+    McpToolAccess.writesEnvironment((input, check) =>
+      Effect.gen(function* () {
+        yield* check;
+        const service = yield* codingPolicy;
+        switch (input.action) {
+          case "enable":
+            return yield* service
+              .enable(
+                yield* decodePolicyEnable(input.request).pipe(Effect.mapError(invalidRequest)),
+              )
+              .pipe(Effect.mapError(policyFailed));
+          case "disable":
+            return yield* service
+              .disable(
+                yield* decodePolicyDisable(input.request).pipe(Effect.mapError(invalidRequest)),
+              )
+              .pipe(Effect.mapError(policyFailed));
+          default:
+            return yield* invalidRequest();
+        }
+      }),
+    ),
+  ),
+  openbot_files: McpToolAccess.either(
+    (input) =>
+      input.action === "describe" ||
+      input.action === "list" ||
+      input.action === "search" ||
+      input.action === "download" ||
+      input.action === "drafts",
+    McpToolAccess.reads((input) =>
+      Effect.gen(function* () {
+        if (input.action === "describe") return fileDescription;
+        const service = yield* files;
+        switch (input.action) {
+          case "list":
+            return yield* service
+              .listWorkspace(
+                yield* decodeFileList(input.request).pipe(Effect.mapError(invalidRequest)),
+              )
+              .pipe(Effect.mapError(fileFailed));
+          case "search":
+            return yield* service
+              .search(yield* decodeFileSearch(input.request).pipe(Effect.mapError(invalidRequest)))
+              .pipe(Effect.mapError(fileFailed));
+          case "download":
+            return yield* service
+              .materialize(
+                yield* decodeFileDownload(input.request).pipe(Effect.mapError(invalidRequest)),
+              )
+              .pipe(Effect.mapError(fileFailed));
+          case "drafts":
+            return yield* service
+              .listDrafts(
+                yield* decodeFileDrafts(input.request).pipe(Effect.mapError(invalidRequest)),
+              )
+              .pipe(Effect.mapError(fileFailed));
+          default:
+            return yield* invalidRequest();
+        }
+      }),
+    ),
+    McpToolAccess.writesEnvironment((input, check) =>
+      Effect.gen(function* () {
+        yield* check;
+        const service = yield* files;
+        switch (input.action) {
+          case "upload":
+            return yield* service
+              .uploadDraft(
+                yield* decodeFileUpload(input.request).pipe(Effect.mapError(invalidRequest)),
+              )
+              .pipe(Effect.mapError(fileFailed));
+          case "send":
+            return yield* service
+              .sendDraft(yield* decodeFileSend(input.request).pipe(Effect.mapError(invalidRequest)))
+              .pipe(Effect.mapError(fileFailed));
+          case "discard":
+            return yield* service
+              .discardDraft(
+                yield* decodeFileDiscard(input.request).pipe(Effect.mapError(invalidRequest)),
+              )
+              .pipe(Effect.as({ discarded: true }), Effect.mapError(fileFailed));
+          default:
+            return yield* invalidRequest();
+        }
+      }),
+    ),
+  ),
   openbot_coding: McpToolAccess.either(
     (input) => input.action === "describe" || input.action === "get" || input.action === "list",
     McpToolAccess.reads((input) =>
@@ -201,8 +364,22 @@ export const layer = McpToolAccess.toLayer(OpenbotToolkit, {
           return yield* (yield* upstream)
             .stage(yield* decodeUpstreamStage(input.request).pipe(Effect.mapError(invalidRequest)))
             .pipe(Effect.mapError(upstreamFailed));
+        if (input.action === "upstream.install")
+          return yield* (yield* upstream)
+            .install(
+              yield* decodeUpstreamInstall(input.request).pipe(Effect.mapError(invalidRequest)),
+            )
+            .pipe(Effect.mapError(upstreamFailed));
         const service = yield* integration;
         switch (input.action) {
+          case "runtime.activate":
+            return yield* service
+              .activateRuntime(
+                yield* decodeUpstreamInstall(input.request).pipe(Effect.mapError(invalidRequest)),
+              )
+              .pipe(Effect.mapError(failed));
+          case "runtime.rollback":
+            return yield* service.rollbackRuntime.pipe(Effect.mapError(failed));
           case "attention.respond": {
             const request = yield* decodeAttentionResponse(input.request).pipe(
               Effect.mapError(invalidRequest),

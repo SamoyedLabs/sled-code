@@ -2,6 +2,7 @@
 export interface CodingRow {
   readonly host_id: string;
   readonly agent_id: string;
+  /** Empty means the main conversation; public side-task identifiers cannot be empty. */
   readonly task_id: string;
   readonly operation_id: string;
   readonly project_id: string;

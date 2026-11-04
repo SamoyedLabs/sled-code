@@ -7,6 +7,7 @@ import type {
 import {
   providerOptions,
   selectedProviderModel,
+  botProviderSetupMessage,
 } from "@t3tools/client-runtime/openbot/presentation";
 import { AppText as Text } from "../../components/ui/AppText";
 import { ControlPill } from "../../components/ui/ControlPill";
@@ -58,7 +59,7 @@ export function BotProviderChoice({
       {provider && (
         <Text className="text-foreground-muted">
           {provider.state}
-          {provider.message ? ` · ${provider.message}` : ""}
+          {botProviderSetupMessage(provider) ? ` · ${botProviderSetupMessage(provider)}` : ""}
         </Text>
       )}
       <Text>Model</Text>

@@ -27,6 +27,7 @@ import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterReg
 import { makeSubagentChildThread } from "@t3tools/provider-core/server/subagentProjection";
 import * as ThreadForkService from "../orchestration-v2/ThreadForkService.ts";
 import * as ThreadLaunch from "../orchestration-v2/ThreadLaunchService.ts";
+import * as LaunchReceipts from "../orchestration-v2/ThreadLaunchReceipts.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import * as ProviderReplayHarness from "../orchestration-v2/testkit/ProviderReplayHarness.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
@@ -118,7 +119,12 @@ const layerTools = Layer.mergeAll(
   McpHttpServer.layerThreadToolkit,
   McpHttpServer.layerProjectRegistration,
 ).pipe(
-  Layer.provide(DocumentText.layer.pipe(Layer.provideMerge(NodeServices.layer))),
+  Layer.provide(
+    Layer.merge(
+      LaunchReceipts.layer,
+      DocumentText.layer.pipe(Layer.provideMerge(NodeServices.layer)),
+    ),
+  ),
   Layer.provideMerge(McpHttpServer.layerInProcessMcpServer),
   Layer.provide(layerLaunches),
   Layer.provide(NodeCrypto.layer),

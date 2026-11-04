@@ -5,11 +5,13 @@ import {
   OpenbotUpstreamStageInput,
   OpenbotUpstreamStatus,
   OpenbotUpstreamFailureReason,
-  type OpenbotRuntimePlatform,
+  OpenbotRuntimePlatform,
   type OpenbotUpstreamAsset,
   type OpenbotUpstreamRelease,
   type OpenbotStagedRuntime,
+  type OpenbotInstalledRuntime,
 } from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -22,6 +24,7 @@ import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as RuntimeInstallation from "./RuntimeInstallation.ts";
 
 export class UpstreamRuntimeError extends Schema.TaggedError<UpstreamRuntimeError>()(
   "OpenbotUpstreamRuntimeError",
@@ -68,6 +71,7 @@ const decodePublicRelease = Schema.decodeUnknownEffect(
   OpenbotUpstreamStatus.fields.available,
 );
 const isUpstreamRuntimeError = Schema.is(UpstreamRuntimeError);
+const isRuntimePlatform = Schema.is(OpenbotRuntimePlatform);
 const baselineHashes: Readonly<Record<OpenbotRuntimePlatform, string>> = {
   "darwin-arm64": "7537c3f3d7364bef996eb458837d203cd1835dbbf52a9355da815e219dbb31f7",
   "darwin-x64": "7cda3b7144d2fd8fe63fd86afbea9f32f89ddd875754d92c3a50189d931ff2fc",
@@ -94,6 +98,9 @@ export class UpstreamRuntime extends Context.Service<
     readonly stage: (
       input: OpenbotUpstreamStageInput,
     ) => Effect.Effect<OpenbotStagedRuntime, UpstreamRuntimeError>;
+    readonly install: (
+      input: OpenbotUpstreamStageInput,
+    ) => Effect.Effect<OpenbotInstalledRuntime, UpstreamRuntimeError>;
   }
 >()("t3/openbot/UpstreamRuntime") {}
 
@@ -103,6 +110,9 @@ const make = Effect.fn("UpstreamRuntime.make")(function* (config: {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const http = yield* HttpClient.HttpClient;
+  const installation = yield* RuntimeInstallation.RuntimeInstallation;
+  const environment = yield* HostProcess.Environment;
+  const platform = `${yield* HostProcess.Platform}-${yield* HostProcess.Architecture}`;
   const gate = yield* Semaphore.make(1);
   if (
     !path.isAbsolute(config.stateDirectory) ||
@@ -402,15 +412,44 @@ const make = Effect.fn("UpstreamRuntime.make")(function* (config: {
   }, gate.withPermits(1));
   return UpstreamRuntime.of({
     // Atomic manifests let clients read the last completed status during a long download.
-    getStatus: readState(),
+    getStatus: Effect.gen(function* () {
+      const state = yield* readState();
+      const installed = yield* installation.getStatus.pipe(
+        Effect.mapError((cause) => new UpstreamRuntimeError({ reason: cause.reason, cause })),
+      );
+      return {
+        ...state,
+        ...(isRuntimePlatform(platform) ? { hostPlatform: platform } : {}),
+        installation: installed,
+        activationAllowed:
+          !environment.T3CODE_OPENBOT_EXECUTABLE?.trim() &&
+          installed.installed.some(
+            (entry) => entry.platform === platform && entry.compatibility === "pinned-baseline",
+          ),
+      };
+    }),
     checkLatest: checked(undefined).pipe(gate.withPermits(1)),
     checkVersion: Effect.fn("UpstreamRuntime.checkVersion")((version: string) =>
       checked(version).pipe(gate.withPermits(1)),
     ),
     stage,
+    install: Effect.fn("UpstreamRuntime.install")(function* (raw: OpenbotUpstreamStageInput) {
+      const input = yield* decodeInput(raw).pipe(
+        Effect.mapError((cause) => new UpstreamRuntimeError({ reason: "metadata", cause })),
+      );
+      const staged = (yield* readState()).staged.find(
+        (entry) => entry.version === input.version && entry.platform === input.platform,
+      );
+      if (!staged) return yield* new UpstreamRuntimeError({ reason: "not-installed" });
+      return yield* installation
+        .install(staged)
+        .pipe(
+          Effect.mapError((cause) => new UpstreamRuntimeError({ reason: cause.reason, cause })),
+        );
+    }, gate.withPermits(1)),
   });
 });
 
-// This service owns staged archives only. There is deliberately no activation or migration method.
+// Activation stays in Integration so changing executables also clears authenticated Team sessions.
 export const layer = (config: { readonly stateDirectory: string }) =>
   Layer.effect(UpstreamRuntime, make(config));

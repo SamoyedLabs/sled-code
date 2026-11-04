@@ -1,4 +1,5 @@
 import { expect, it } from "@effect/vitest";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import {
   EventId,
   EnvironmentId,
@@ -6,6 +7,7 @@ import {
   ProjectId,
   ProviderInstanceId,
   RunId,
+  OpenbotWriteRequest,
   ThreadId,
   type OpenbotCodingTask,
   type OrchestrationV2AppThread,
@@ -20,6 +22,7 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
+import * as Schema from "effect/Schema";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as Events from "../persistence/OrchestrationEventStore.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
@@ -28,7 +31,8 @@ import * as CodingDelivery from "./CodingDelivery.ts";
 import * as Integration from "./Integration.ts";
 
 const threadId = ThreadId.make("coding-thread");
-const runId = RunId.make("coding-run");
+const runId = RunId.make("run:thread:mcp%3Alaunch%3Aremote-assignment:ordinal:1");
+const decodeWrite = Schema.decodeUnknownEffect(OpenbotWriteRequest);
 const projectId = ProjectId.make("project");
 const now = DateTime.makeUnsafe("2026-11-03T12:00:00Z");
 const modelSelection = { instanceId: ProviderInstanceId.make("codex"), model: "fixture" };
@@ -89,13 +93,14 @@ const seed = Effect.gen(function* () {
     VALUES ('host', 'bot', 'task', 'operation', 'project', 'coding-thread', 'launch', '{}', '2026-11-03T12:00:00Z')`;
 });
 
-it.effect.each(["conversation", "queued", "unconfirmed", "legacy"] as const)(
+it.effect.each(["conversation", "main", "queued", "unconfirmed", "legacy"] as const)(
   "reconciles an uncertain result after reconstruction without replaying beyond the receipt horizon (%s)",
   (evidence) => {
     const acceptedIds = new Set<string>();
     const attempts: string[] = [];
     let acceptedText = "";
-    let returnedTask = task;
+    let returnedTask =
+      evidence === "main" ? { ...task, origin: { ...task.origin, taskId: null } } : task;
     const projection = {
       ...ProjectionStore.emptyProjection({
         type: "thread.created",
@@ -108,6 +113,7 @@ it.effect.each(["conversation", "queued", "unconfirmed", "legacy"] as const)(
     };
     const dependencies = Layer.mergeAll(
       SqlitePersistence.layerMemory,
+      NodeCrypto.layer,
       Layer.mock(CodingBridge.CodingBridge)({
         get: () => Effect.sync(() => returnedTask),
         changes: Stream.empty,
@@ -122,17 +128,20 @@ it.effect.each(["conversation", "queued", "unconfirmed", "legacy"] as const)(
         apiReadToHost: (hostId, input) =>
           Effect.sync(() => {
             expect(hostId).toBe("host");
-            if (input.operation === "task.read")
+            if (input.operation === "task.read" || input.operation === "conversation.read") {
+              expect(input.operation).toBe(evidence === "main" ? "conversation.read" : "task.read");
               return {
                 agentId: "bot",
                 messages: [
                   {
                     id: "accepted-message",
-                    author: evidence === "conversation" ? "user" : "assistant",
+                    author:
+                      evidence === "conversation" || evidence === "main" ? "user" : "assistant",
                     text: acceptedText,
                   },
                 ],
               };
+            }
             if (input.operation === "task.list")
               return {
                 agentId: "bot",
@@ -159,7 +168,15 @@ it.effect.each(["conversation", "queued", "unconfirmed", "legacy"] as const)(
         apiWriteToHost: (hostId, input) =>
           Effect.gen(function* () {
             expect(hostId).toBe("host");
-            if (input.operation !== "task.send") return yield* Effect.die("Unexpected operation");
+            yield* decodeWrite(input).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new Integration.IntegrationError({ message: "Upstream input rejected", cause }),
+              ),
+            );
+            if (input.operation !== "task.send" && input.operation !== "conversation.send")
+              return yield* Effect.die("Unexpected operation");
+            expect(input.operation).toBe(evidence === "main" ? "conversation.send" : "task.send");
             attempts.push(input.clientMessageId);
             acceptedText = input.text;
             acceptedIds.add(input.clientMessageId);
@@ -174,18 +191,33 @@ it.effect.each(["conversation", "queued", "unconfirmed", "legacy"] as const)(
     );
     return Effect.gen(function* () {
       yield* seed;
+      if (evidence === "main") {
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`UPDATE openbot_coding_tasks SET task_id = ''`;
+      }
+      if (evidence === "legacy") {
+        const sql = yield* SqlClient.SqlClient;
+        const firstAttempt = DateTime.formatIso(yield* DateTime.now);
+        yield* sql`INSERT INTO openbot_coding_deliveries
+          (thread_id, run_id, client_message_id, first_attempt_at, payload_text)
+          VALUES (${threadId}, ${runId}, 'sled-coding:legacy-receipt', ${firstAttempt}, 'Original immutable delivery payload.')`;
+      }
       yield* Effect.gen(function* () {
         const delivery = yield* CodingDelivery.CodingDelivery;
         expect((yield* Effect.flip(delivery.reconcile(threadId))).stage).toBe("send");
       }).pipe(Effect.provide(CodingDelivery.layer));
+      expect(attempts).toHaveLength(1);
       if (evidence === "legacy") {
+        expect(attempts[0]).toBe("sled-coding:legacy-receipt");
+        expect(acceptedText).toBe("Original immutable delivery payload.");
         const sql = yield* SqlClient.SqlClient;
         yield* sql`UPDATE openbot_coding_deliveries SET first_attempt_at = NULL, payload_text = NULL`;
       } else yield* TestClock.adjust("25 hours");
-      returnedTask = { ...task, result: "A later edited result." };
+      returnedTask = { ...returnedTask, result: "A later edited result." };
       yield* Effect.gen(function* () {
         const delivery = yield* CodingDelivery.CodingDelivery;
-        const accepted = evidence === "conversation" || evidence === "queued";
+        const accepted =
+          evidence === "conversation" || evidence === "main" || evidence === "queued";
         const notice = yield* delivery.changes.pipe(
           Stream.mapEffect((change) =>
             Effect.gen(function* () {
@@ -222,7 +254,7 @@ it.effect.each(["conversation", "queued", "unconfirmed", "legacy"] as const)(
         readonly accepted_at: string | null;
         readonly reconciliation_required: number;
       }>`SELECT accepted_at, reconciliation_required FROM openbot_coding_deliveries`;
-      if (evidence === "conversation" || evidence === "queued") {
+      if (evidence === "conversation" || evidence === "main" || evidence === "queued") {
         expect(rows[0]?.accepted_at).not.toBeNull();
         expect(rows[0]?.reconciliation_required).toBe(0);
       } else {
@@ -241,6 +273,7 @@ it.effect.each([false, true])(
     let sends = 0;
     const dependencies = Layer.mergeAll(
       SqlitePersistence.layerMemory,
+      NodeCrypto.layer,
       Layer.mock(CodingBridge.CodingBridge)({
         get: () =>
           Effect.sync(() => ({
@@ -333,6 +366,7 @@ it.effect(
             Layer.provideMerge(
               Layer.mergeAll(
                 SqlitePersistence.layerMemory,
+                NodeCrypto.layer,
                 Layer.mock(CodingBridge.CodingBridge)({
                   get: () => Effect.succeed(task),
                   changes: Stream.empty,

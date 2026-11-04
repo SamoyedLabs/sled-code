@@ -1,9 +1,13 @@
 import { BotProviderChoice } from "./BotProviderChoice";
+import { BotRuntimeControls } from "./BotRuntimeControls";
 import { BotProviderSetup } from "./BotProviderSetup";
 import { BotProviderSettings } from "./BotProviderSettings";
 import { BotAttention } from "./BotAttention";
 import { SledToolsConnection } from "./SledToolsConnection";
 import { BotConfiguration } from "./BotConfiguration";
+import { BotFiles } from "./BotFiles";
+import { BotCodingPolicy } from "./BotCodingPolicy";
+import { BotWorkflows } from "./BotWorkflows";
 import { requestConfirmDialog } from "../../confirmDialog";
 import { Link } from "@tanstack/react-router";
 import { randomUUID } from "../../lib/utils";
@@ -208,11 +212,19 @@ function BotEnvironment({ environmentId, label }: { environmentId: EnvironmentId
             {error ?? host.error ?? agents.error}
           </p>
         )}
+        <BotRuntimeControls environmentId={environmentId} />
         {state === "ready" && <SledToolsConnection environmentId={environmentId} />}
         {state === "ready" && <BotAttention environmentId={environmentId} />}
         {state === "ready" && host.data?.hostId && (
           <BotProviderSetup
             key={host.data.hostId}
+            environmentId={environmentId}
+            hostId={host.data.hostId}
+          />
+        )}
+        {state === "ready" && host.data?.hostId && (
+          <BotWorkflows
+            key={`workflows:${host.data.hostId}`}
             environmentId={environmentId}
             hostId={host.data.hostId}
           />
@@ -658,6 +670,18 @@ function BotDetail({
         hostId={expectedHostId}
       />
       <BotConfiguration environmentId={environmentId} agentId={agentId} hostId={expectedHostId} />
+      <BotCodingPolicy
+        key={`policy:${expectedHostId}:${agentId}`}
+        environmentId={environmentId}
+        hostId={expectedHostId}
+        agentId={agentId}
+      />
+      <BotFiles
+        key={`${expectedHostId}:${agentId}`}
+        environmentId={environmentId}
+        hostId={expectedHostId}
+        agentId={agentId}
+      />
       <section className="space-y-2" aria-label="Delegated coding work">
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-medium">Coding work</h4>

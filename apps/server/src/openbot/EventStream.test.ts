@@ -140,6 +140,13 @@ it.live(
               configs: [{ token: "private-mcp-token" }],
             }),
           );
+          socket.send(
+            JSON.stringify({
+              type: "workflows-changed",
+              workflowId: "workflow-1",
+              privateWebhookUrl: "private-webhook-url",
+            }),
+          );
           socket.send(JSON.stringify({ type: "agents-changed" }));
         });
       });
@@ -148,11 +155,15 @@ it.live(
         sessionToken: "private-session",
         isClosed: () => false,
         peers,
-      }).pipe(Stream.take(3), Stream.runCollect);
+      }).pipe(Stream.take(4), Stream.runCollect);
       expect(scope).toMatchObject({
         type: "agent-event-scope",
         includeConversations: false,
-        capabilities: expect.arrayContaining(["agent-runtime-snapshots", "agent-tasks-v1"]),
+        capabilities: expect.arrayContaining([
+          "agent-runtime-snapshots",
+          "agent-tasks-v1",
+          "workflows-v1",
+        ]),
       });
       expect(frames).toEqual([
         {
@@ -208,6 +219,7 @@ it.live(
         },
         { type: "change", resource: "configuration" },
         { type: "change", resource: "configuration" },
+        { type: "change", resource: "all" },
       ]);
       expect(JSON.stringify(frames)).not.toContain("private-");
       expect(peers.size).toBe(0);

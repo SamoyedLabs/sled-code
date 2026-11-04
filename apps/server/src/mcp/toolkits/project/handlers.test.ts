@@ -1,6 +1,7 @@
 import * as ProviderRegistry from "../../../provider/ProviderRegistry.ts";
 import { expect, it } from "@effect/vitest";
 import {
+  CommandId,
   EnvironmentId,
   ProjectId,
   ProviderInstanceId,
@@ -26,6 +27,8 @@ import * as Stream from "effect/Stream";
 import * as DocumentText from "../../../provider/DocumentText.ts";
 import { OrchestratorRuntimeModeAboveCeilingError } from "../../../orchestration-v2/Orchestrator.ts";
 import * as ThreadLaunch from "../../../orchestration-v2/ThreadLaunchService.ts";
+import * as LaunchReceipts from "../../../orchestration-v2/ThreadLaunchReceipts.ts";
+import * as Sqlite from "../../../persistence/Sqlite.ts";
 import * as ThreadManagement from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as ServerConfig from "../../../config.ts";
 import * as ServerSettings from "../../../serverSettings.ts";
@@ -105,10 +108,15 @@ const clientLaunchHarness = (input: {
                 id: launch.threadId,
                 projectId: launch.projectId,
                 modelSelection: launch.modelSelection,
+                runtimeMode: launch.runtimeMode,
+                interactionMode: launch.interactionMode,
+                linkOrigin: launch.linkOrigin,
                 deletedAt: null,
               } as unknown as OrchestrationV2ThreadShell),
         );
       },
+      dispatch: () => Effect.succeed({ sequence: 1, storedEvents: [] }),
+      stopDelegatedTasks: () => Effect.void,
     }),
     Layer.mock(ThreadLaunch.ThreadLaunchService)({
       checkWorktreeBase: input.checkWorktreeBase ?? (() => Effect.void),
@@ -171,8 +179,117 @@ const clientLaunchHarness = (input: {
     ),
     Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
   );
-  return { projectId, modelSelection, projectDefaults, dependencies: layerDependencies };
+  return {
+    projectId,
+    modelSelection,
+    projectDefaults,
+    dependencies: LaunchReceipts.layer.pipe(
+      Layer.provideMerge(layerDependencies),
+      Layer.provideMerge(Sqlite.layerMemory),
+    ),
+  };
 };
+
+it.effect.each([
+  {
+    name: "own linked legacy launch",
+    targetLink: "session-1",
+    targetMode: "approval-required" as const,
+    access: "approval-required" as const,
+    error: null,
+  },
+  {
+    name: "different linked owner",
+    targetLink: "another-session",
+    targetMode: "approval-required" as const,
+    access: "approval-required" as const,
+    error: "capability_denied",
+  },
+  {
+    name: "target above current ceiling",
+    targetLink: "session-1",
+    targetMode: "full-access" as const,
+    access: "approval-required" as const,
+    error: "runtime_mode_escalation_denied",
+  },
+])("receipt lookup and cancellation enforce $name", ({ targetLink, targetMode, access, error }) => {
+  const launched: Array<ThreadLaunch.ThreadLaunchInput> = [];
+  const { projectId, modelSelection, dependencies } = clientLaunchHarness({
+    runtimeModeCeiling: access,
+    launched,
+  });
+  const legacyId = ThreadId.make(
+    "mcp:launch:924ae3322e3dd595c2210687104583b43dc0dad906aea624e24a6305d29abf3f",
+  );
+  launched.push({
+    commandId: CommandId.make(legacyId),
+    threadId: legacyId,
+    projectId,
+    title: "Legacy assignment",
+    modelSelection,
+    runtimeMode: targetMode,
+    interactionMode: "default",
+    workspaceStrategy: { type: "root" },
+    createdBy: "agent",
+    creationSource: "mcp",
+    linkOrigin: { sessionId: targetLink, label: "Laptop", access },
+  });
+  return Effect.gen(function* () {
+    const scope = yield* McpInvocationContext.McpInvocationContext;
+    const linkedScope = {
+      ...scope,
+      client: { sessionId: "session-1", label: "Laptop", access, linked: true },
+    };
+    const toolkit = yield* ProjectToolkit.pipe(
+      Effect.provide(
+        McpToolAccess.HandlersLayer.layer(ProjectHandlers.layer).pipe(Layer.provide(dependencies)),
+      ),
+    );
+    const invoke = Effect.fn("test.launchReceipt")(function* (action: "get" | "cancel") {
+      const results = yield* toolkit
+        .handle("t3_thread_launch_receipt", { action, clientRequestId: "legacy-receipt" })
+        .pipe(
+          Stream.unwrap,
+          Stream.runCollect,
+          Effect.provideService(McpInvocationContext.McpInvocationContext, linkedScope),
+        );
+      return results.at(-1)?.result;
+    });
+    if (error !== null) {
+      expect(yield* invoke("get")).toMatchObject({ code: error });
+      expect(yield* invoke("cancel")).toMatchObject({ code: error });
+      const own = yield* (yield* LaunchReceipts.ThreadLaunchReceipts).get(
+        { requestNamespace: scope.requestNamespace, clientRequestId: "legacy-receipt" },
+        () => Effect.void,
+      );
+      expect(own.cancelRequested).toBe(false);
+    } else {
+      expect(yield* invoke("get")).toMatchObject({
+        state: "accepted",
+        threadId: legacyId,
+        cancelRequested: false,
+      });
+      expect(yield* invoke("cancel")).toMatchObject({
+        state: "cancelled",
+        threadId: legacyId,
+        stopState: "requested",
+      });
+      const readonlyScope = {
+        ...linkedScope,
+        client: { ...linkedScope.client, access: "read-only" as const },
+      };
+      const result = yield* toolkit
+        .handle("t3_thread_launch_receipt", { action: "cancel", clientRequestId: "legacy-receipt" })
+        .pipe(
+          Stream.unwrap,
+          Stream.runCollect,
+          Effect.provideService(McpInvocationContext.McpInvocationContext, readonlyScope),
+        );
+      expect(result.at(-1)?.result).toMatchObject({ code: "capability_denied" });
+    }
+    expect(launched).toHaveLength(1);
+  }).pipe(Effect.provide(dependencies));
+});
 
 it.effect(
   "a client launches with the project's default model and mode, capped at its ceiling",

@@ -24,7 +24,7 @@ const ExternalId = TrimmedNonEmptyString.check(
 export const OpenbotCodingOrigin = Schema.Struct({
   hostId: ExternalId,
   agentId: ExternalId,
-  taskId: ExternalId,
+  taskId: Schema.NullOr(ExternalId),
 });
 export type OpenbotCodingOrigin = typeof OpenbotCodingOrigin.Type;
 export const OpenbotCodingReference = Schema.Struct({
@@ -58,7 +58,7 @@ export type OpenbotCodingCancelInput = typeof OpenbotCodingCancelInput.Type;
 export const OpenbotCodingListInput = Schema.Struct({
   hostId: ExternalId,
   agentId: ExternalId,
-  taskId: Schema.optional(ExternalId),
+  taskId: Schema.optional(Schema.NullOr(ExternalId)),
 });
 export type OpenbotCodingListInput = typeof OpenbotCodingListInput.Type;
 export const OpenbotCodingDeliveryStatus = Schema.Struct({

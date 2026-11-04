@@ -38,6 +38,24 @@ export const OpenbotUpstreamStageInput = Schema.Struct({
   platform: OpenbotRuntimePlatform,
 });
 export type OpenbotUpstreamStageInput = typeof OpenbotUpstreamStageInput.Type;
+export const OpenbotUpstreamInstallInput = OpenbotUpstreamStageInput;
+export type OpenbotUpstreamInstallInput = typeof OpenbotUpstreamInstallInput.Type;
+export const OpenbotInstalledRuntime = Schema.Struct({
+  version: OpenbotRuntimeVersion,
+  platform: OpenbotRuntimePlatform,
+  sha256: Sha256,
+  releaseCommit: Commit,
+  executablePath: Schema.String.check(Schema.isMaxLength(4096)),
+  installedAt: IsoDateTime,
+  compatibility: Compatibility,
+});
+export type OpenbotInstalledRuntime = typeof OpenbotInstalledRuntime.Type;
+export const OpenbotRuntimeInstallationStatus = Schema.Struct({
+  installed: Schema.Array(OpenbotInstalledRuntime).check(Schema.isMaxLength(100)),
+  active: Schema.NullOr(OpenbotInstalledRuntime),
+  previous: Schema.NullOr(OpenbotInstalledRuntime),
+});
+export type OpenbotRuntimeInstallationStatus = typeof OpenbotRuntimeInstallationStatus.Type;
 export const OpenbotStagedRuntime = Schema.Struct({
   ...OpenbotUpstreamAsset.fields,
   version: OpenbotRuntimeVersion,
@@ -55,6 +73,10 @@ export const OpenbotUpstreamFailureReason = Schema.Literals([
   "integrity",
   "storage",
   "unsupported-platform",
+  "archive",
+  "not-installed",
+  "compatibility",
+  "override",
 ]);
 export const OpenbotUpstreamAudit = Schema.Struct({
   at: IsoDateTime,
@@ -70,7 +92,9 @@ export const OpenbotUpstreamStatus = Schema.Struct({
   lastCheckedAt: Schema.NullOr(IsoDateTime),
   staged: Schema.Array(OpenbotStagedRuntime).check(Schema.isMaxLength(100)),
   audit: Schema.Array(OpenbotUpstreamAudit).check(Schema.isMaxLength(100)),
-  activationAllowed: Schema.Literal(false),
+  installation: Schema.optional(OpenbotRuntimeInstallationStatus),
+  hostPlatform: Schema.optional(OpenbotRuntimePlatform),
+  activationAllowed: Schema.Boolean,
   productionMigrationAllowed: Schema.Literal(false),
 });
 export type OpenbotUpstreamStatus = typeof OpenbotUpstreamStatus.Type;

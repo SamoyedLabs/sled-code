@@ -19,6 +19,9 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { openbot } from "../../state/openbot";
 import * as Dialog from "../../components/ui/Dialog";
 import { BotProviderChoice } from "./BotProviderChoice";
+import { BotCustomProviders } from "./BotCustomProviders";
+import { BotModelVisibility } from "./BotModelVisibility";
+import { BotConnections } from "./BotConnections";
 import { Button } from "../../components/ui/Button";
 import { Menu } from "../../components/ui/Menu";
 import { ControlPill } from "../../components/ui/ControlPill";
@@ -622,8 +625,28 @@ export function BotProviderSetup({
               run({ operation: "provider.default.update", provider, model: choice.model || null })
             }
           />
+          <BotModelVisibility
+            key={`${hostId}:${provider}`}
+            environmentId={environmentId}
+            hostId={hostId}
+            provider={provider}
+            onChange={() => {
+              modelsQuery.refresh();
+              statusQuery.refresh();
+            }}
+          />
         </>
       )}
+      <BotConnections environmentId={environmentId} hostId={hostId} />
+      <BotCustomProviders
+        key={hostId}
+        environmentId={environmentId}
+        hostId={hostId}
+        onChange={() => {
+          modelsQuery.refresh();
+          statusQuery.refresh();
+        }}
+      />
     </View>
   );
 }

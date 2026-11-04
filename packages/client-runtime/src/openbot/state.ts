@@ -2,6 +2,7 @@ import {
   type OpenbotCodingListInput,
   type OpenbotReadRequest,
   type OpenbotHostReadInput,
+  type OpenbotCodingPolicyScope,
   type EnvironmentId,
   WS_METHODS,
 } from "@t3tools/contracts";
@@ -15,13 +16,16 @@ import {
 } from "../state/runtime.ts";
 import {
   readHostStatus,
+  readRuntimeStatus,
   listAgents,
   read,
   codingTasks,
   sledToolsStatus,
   attentionSnapshot,
   readFromHost,
+  readCodingPolicy,
 } from "./rpc/index.ts";
+import { createOpenbotFileAtoms } from "./files.ts";
 
 export function createOpenbotAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, E>,
@@ -45,8 +49,92 @@ export function createOpenbotAtoms<R, E>(
     refreshTrigger,
     staleTimeMs: 5_000,
   });
+  const upstream = createEnvironmentQueryAtomFamily(runtime, {
+    label: "openbot:runtime",
+    execute: (_input: Record<string, never>) => readRuntimeStatus(),
+    staleTimeMs: 5_000,
+    refreshTrigger,
+  });
+  const codingPolicy = createEnvironmentQueryAtomFamily(runtime, {
+    label: "openbot:coding-policy",
+    execute: (input: OpenbotCodingPolicyScope) => readCodingPolicy(input),
+    staleTimeMs: 5_000,
+    refreshTrigger,
+  });
   return {
+    ...createOpenbotFileAtoms(runtime, refreshTrigger),
+    codingPolicy,
+    codingPolicyEnable: createEnvironmentRpcCommand(runtime, {
+      label: "Enable bot coding delegation",
+      tag: WS_METHODS.openbotCodingPolicyEnable,
+      onSuccess: ({ environmentId, input }, registry) =>
+        Effect.sync(() =>
+          registry.refresh(
+            codingPolicy({
+              environmentId,
+              input: { hostId: input.hostId, agentId: input.agentId },
+            }),
+          ),
+        ),
+      concurrency: {
+        mode: "serial",
+        key: ({ environmentId, input }) => `${environmentId}:${input.hostId}:${input.agentId}`,
+      },
+    }),
+    codingPolicyDisable: createEnvironmentRpcCommand(runtime, {
+      label: "Disable bot coding delegation",
+      tag: WS_METHODS.openbotCodingPolicyDisable,
+      onSuccess: ({ environmentId, input }, registry) =>
+        Effect.sync(() =>
+          registry.refresh(
+            codingPolicy({
+              environmentId,
+              input: { hostId: input.hostId, agentId: input.agentId },
+            }),
+          ),
+        ),
+      concurrency: {
+        mode: "serial",
+        key: ({ environmentId, input }) => `${environmentId}:${input.hostId}:${input.agentId}`,
+      },
+    }),
     changes,
+    upstream,
+    checkRuntime: createEnvironmentRpcCommand(runtime, {
+      label: "Check bot engine release",
+      tag: WS_METHODS.openbotUpstreamCheck,
+      onSuccess: ({ environmentId }, registry) =>
+        Effect.sync(() => registry.refresh(upstream({ environmentId, input: {} }))),
+      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
+    }),
+    stageRuntime: createEnvironmentRpcCommand(runtime, {
+      label: "Download bot engine release",
+      tag: WS_METHODS.openbotUpstreamStage,
+      onSuccess: ({ environmentId }, registry) =>
+        Effect.sync(() => registry.refresh(upstream({ environmentId, input: {} }))),
+      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
+    }),
+    installRuntime: createEnvironmentRpcCommand(runtime, {
+      label: "Install bot engine release",
+      tag: WS_METHODS.openbotUpstreamInstall,
+      onSuccess: ({ environmentId }, registry) =>
+        Effect.sync(() => registry.refresh(upstream({ environmentId, input: {} }))),
+      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
+    }),
+    activateRuntime: createEnvironmentRpcCommand(runtime, {
+      label: "Activate bot engine release",
+      tag: WS_METHODS.openbotRuntimeActivate,
+      onSuccess: ({ environmentId }, registry) =>
+        Effect.sync(() => registry.refresh(upstream({ environmentId, input: {} }))),
+      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
+    }),
+    rollbackRuntime: createEnvironmentRpcCommand(runtime, {
+      label: "Roll back bot engine release",
+      tag: WS_METHODS.openbotRuntimeRollback,
+      onSuccess: ({ environmentId }, registry) =>
+        Effect.sync(() => registry.refresh(upstream({ environmentId, input: {} }))),
+      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
+    }),
     attention,
     attentionRespond: createEnvironmentRpcCommand(runtime, {
       label: "Respond to bot request",

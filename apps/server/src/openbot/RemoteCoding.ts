@@ -11,6 +11,7 @@ import {
   RunId,
   OpenbotCodingTask,
   OpenbotCodingLaunchInput,
+  ThreadLaunchReceipt,
   OrchestratorMcpThreadReadResult,
   OrchestratorMcpThreadWaitResult,
   OrchestratorMcpThreadSendResult,
@@ -220,7 +221,12 @@ const make = Effect.gen(function* () {
     const stopCaller =
       row.cancel_requested &&
       row.remote_stop_authority_json !== null &&
-      ["t3_thread_interrupt", "t3_thread_read", "t3_thread_wait"].includes(tool)
+      [
+        "t3_thread_interrupt",
+        "t3_thread_read",
+        "t3_thread_wait",
+        "t3_thread_launch_receipt",
+      ].includes(tool)
         ? yield* decodeCaller(row.remote_stop_authority_json).pipe(
             Effect.mapError(() => authorityError()),
           )
@@ -264,7 +270,7 @@ const make = Effect.gen(function* () {
         ? undefined
         : yield* decodeTask(row.remote_snapshot_json).pipe(Effect.mapError(storageError));
     return {
-      origin: { hostId: row.host_id, agentId: row.agent_id, taskId: row.task_id },
+      origin: { hostId: row.host_id, agentId: row.agent_id, taskId: row.task_id || null },
       operationId: row.operation_id,
       projectId: ProjectId.make(row.project_id),
       threadId: ThreadId.make(row.remote_thread_id ?? row.thread_id),
@@ -316,11 +322,66 @@ const make = Effect.gen(function* () {
       linkedAt: DateTime.formatIso(link.value.linkedAt),
     }).pipe(Effect.mapError(storageError));
   });
+  const recoverReceipt = Effect.fn("RemoteCoding.recoverReceipt")(function* (
+    row: CodingRow,
+    action: "get" | "cancel",
+  ) {
+    const receipt = yield* call(
+      row,
+      "t3_thread_launch_receipt",
+      {
+        action,
+        clientRequestId: `openbot:${row.command_id}`,
+      },
+      ThreadLaunchReceipt,
+    );
+    if (action === "cancel" && (!receipt.cancelRequested || receipt.state !== "cancelled"))
+      return yield* new RemoteCodingError({ reason: "execution" });
+    if (receipt.threadId === null) {
+      if (
+        receipt.state !== "cancelled" ||
+        !receipt.cancelRequested ||
+        receipt.stopState !== "not-needed"
+      )
+        return false;
+      yield* sql`UPDATE openbot_coding_tasks SET cancel_requested = 1, remote_stop_pending = 0 WHERE thread_id = ${row.thread_id}`.pipe(
+        Effect.mapError(storageError),
+      );
+      yield* save(
+        yield* load(row.thread_id),
+        {
+          ...(yield* snapshot(row)),
+          state: "cancelled",
+          cancelRequested: true,
+          runId: null,
+          result: null,
+          pendingRequestCount: 0,
+          remoteState: "settled",
+        },
+        true,
+      );
+      return true;
+    }
+    if (receipt.projectId !== row.project_id)
+      return yield* new RemoteCodingError({ reason: "conflict" });
+    yield* sql`UPDATE openbot_coding_tasks SET remote_thread_id = ${receipt.threadId}, remote_launch_attempted = 1,
+      cancel_requested = ${receipt.cancelRequested || row.cancel_requested ? 1 : 0},
+      remote_stop_pending = ${receipt.cancelRequested && receipt.stopState !== "requested" ? 1 : 0}
+      WHERE thread_id = ${row.thread_id}`.pipe(Effect.mapError(storageError));
+    const recovered = yield* load(row.thread_id);
+    yield* save(
+      recovered,
+      { ...(yield* snapshot(recovered)), threadId: receipt.threadId, remoteState: "following" },
+      false,
+    );
+    return true;
+  });
   const launchRemote = Effect.fn("RemoteCoding.launchRemote")(function* (
     row: CodingRow,
     input: OpenbotCodingLaunchInput,
   ) {
     if (row.remote_thread_id !== null || row.cancel_requested) return;
+    if (yield* recoverReceipt(row, "get")) return;
     yield* sql`UPDATE openbot_coding_tasks SET remote_launch_attempted = 1 WHERE thread_id = ${row.thread_id}`.pipe(
       Effect.mapError(storageError),
     );
@@ -460,22 +521,30 @@ const make = Effect.gen(function* () {
     let row = initial;
     if (row.remote_thread_id === null) {
       if (row.cancel_requested) {
-        const task = yield* snapshot(row);
-        yield* save(
+        if (row.remote_launch_attempted) {
+          yield* recoverReceipt(row, "cancel");
+          row = yield* load(row.thread_id);
+          if (row.remote_thread_id === null) return;
+        } else {
+          const task = yield* snapshot(row);
+          yield* save(
+            row,
+            {
+              ...task,
+              remoteState: row.remote_launch_attempted ? "reconciliation-required" : "settled",
+            },
+            !row.remote_launch_attempted,
+          );
+          return;
+        }
+      } else {
+        yield* launchRemote(
           row,
-          {
-            ...task,
-            remoteState: row.remote_launch_attempted ? "reconciliation-required" : "settled",
-          },
-          !row.remote_launch_attempted,
+          yield* decodeLaunch(row.input_json).pipe(Effect.mapError(storageError)),
         );
-        return;
+        row = yield* load(row.thread_id);
+        if (row.remote_thread_id === null) return;
       }
-      yield* launchRemote(
-        row,
-        yield* decodeLaunch(row.input_json).pipe(Effect.mapError(storageError)),
-      );
-      row = yield* load(row.thread_id);
     }
     if (!row.cancel_requested) {
       const pending =
@@ -647,7 +716,11 @@ const make = Effect.gen(function* () {
               yield* save(current, {
                 ...(yield* snapshot(current)),
                 remoteState:
-                  error.reason === "authorization" ? "authorization-required" : "unavailable",
+                  error.reason === "authorization"
+                    ? "authorization-required"
+                    : current.remote_thread_id === null && current.remote_launch_attempted
+                      ? "reconciliation-required"
+                      : "unavailable",
               });
             }),
           ),

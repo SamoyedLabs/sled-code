@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { OpenbotWorkflowReadRequest, OpenbotWorkflowAdminRequest } from "./openbotWorkflows.ts";
 
 const Id = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$/));
 const Text = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100_000));
@@ -114,6 +115,18 @@ export const OpenbotMcpConfig = Schema.Struct({
   url: ShortUrl,
   headers: Schema.Array(Pair).check(Schema.isMaxLength(32)),
 });
+export const OpenbotMcpPatch = Schema.Struct({
+  name: Schema.optional(OpenbotMcpConfig.fields.name),
+  transport: Schema.optional(OpenbotMcpConfig.fields.transport),
+  enabled: Schema.optional(OpenbotMcpConfig.fields.enabled),
+  command: Schema.optional(OpenbotMcpConfig.fields.command),
+  args: Schema.optional(OpenbotMcpConfig.fields.args),
+  env: Schema.optional(OpenbotMcpConfig.fields.env),
+  envPassthrough: Schema.optional(OpenbotMcpConfig.fields.envPassthrough),
+  workingDirectory: Schema.optional(OpenbotMcpConfig.fields.workingDirectory),
+  url: Schema.optional(OpenbotMcpConfig.fields.url),
+  headers: Schema.optional(OpenbotMcpConfig.fields.headers),
+});
 const PromptAnswers = Schema.Record(
   Schema.String.check(Schema.isMaxLength(512)),
   Schema.Array(Schema.String.check(Schema.isMaxLength(100_000))).check(Schema.isMaxLength(32)),
@@ -128,8 +141,22 @@ const PromptAnswers = Schema.Record(
   ),
 );
 const Platform = Schema.Literals(["slack", "discord", "telegram"]);
+const MessagingPlaceId = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128));
+export const OpenbotMessagingOrchestratorRequest = Schema.Union([
+  Schema.Struct({
+    operation: Schema.Literal("connector.messaging.orchestrator"),
+    platform: Schema.Literals(["slack", "discord"]),
+    workspaceId: MessagingPlaceId,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("connector.messaging.orchestrator"),
+    platform: Schema.Literal("telegram"),
+    workspaceId: Schema.Null,
+  }),
+]);
 
 export const OpenbotReadRequest = Schema.Union([
+  OpenbotWorkflowReadRequest,
   Schema.Struct({ operation: Schema.Literal("compatibility.read") }),
   Schema.Struct({ operation: Schema.Literal("channel.list") }),
   Schema.Struct({
@@ -208,6 +235,7 @@ export const OpenbotAttentionResponseInput = Schema.Struct({
 export type OpenbotAttentionResponseInput = typeof OpenbotAttentionResponseInput.Type;
 
 export const OpenbotAdminRequest = Schema.Union([
+  OpenbotWorkflowAdminRequest,
   Schema.Struct({
     operation: Schema.Literal("provider.signInRelay.start"),
     provider: Schema.Literals(["codex", "claude", "antigravity", "muse"]),
@@ -410,6 +438,20 @@ export const OpenbotAdminRequest = Schema.Union([
   }),
   Schema.Struct({ operation: Schema.Literal("mcp.list") }),
   Schema.Struct({
+    operation: Schema.Literal("mcp.updateById"),
+    mcpServerId: Id,
+    patch: OpenbotMcpPatch,
+  }),
+  Schema.Struct({
+    operation: Schema.Literals([
+      "mcp.testById",
+      "mcp.signIn.startById",
+      "mcp.signIn.statusById",
+      "mcp.signIn.cancelById",
+    ]),
+    mcpServerId: Id,
+  }),
+  Schema.Struct({
     operation: Schema.Literals(["mcp.save", "mcp.test", "mcp.signIn.start"]),
     config: OpenbotMcpConfig,
   }),
@@ -434,6 +476,7 @@ export const OpenbotAdminRequest = Schema.Union([
     ]),
   }),
   Schema.Struct({ operation: Schema.Literal("connector.messaging.overview"), platform: Platform }),
+  OpenbotMessagingOrchestratorRequest,
   Schema.Struct({
     operation: Schema.Literal("connector.messaging.connect"),
     platform: Platform,
@@ -442,12 +485,12 @@ export const OpenbotAdminRequest = Schema.Union([
   Schema.Struct({
     operation: Schema.Literals(["connector.messaging.disconnect", "connector.messaging.reconnect"]),
     platform: Platform,
-    workspaceId: Id,
+    workspaceId: MessagingPlaceId,
   }),
   Schema.Struct({
     operation: Schema.Literal("connector.messaging.enabled"),
     platform: Platform,
-    workspaceId: Id,
+    workspaceId: MessagingPlaceId,
     enabled: Schema.Boolean,
   }),
   Schema.Struct({

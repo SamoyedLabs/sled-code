@@ -63,7 +63,15 @@ it.effect.each([
   { name: "openbot", action: "attention.respond" },
   { name: "openbot", action: "upstream.check" },
   { name: "openbot", action: "upstream.stage" },
+  { name: "openbot", action: "upstream.install" },
+  { name: "openbot", action: "runtime.activate" },
+  { name: "openbot", action: "runtime.rollback" },
   { name: "openbot_coding", action: "launch" },
+  { name: "openbot_files", action: "upload" },
+  { name: "openbot_files", action: "send" },
+  { name: "openbot_files", action: "discard" },
+  { name: "openbot_coding_policy", action: "enable" },
+  { name: "openbot_coding_policy", action: "disable" },
 ])("blocks read-only clients from mutation through $name $action", ({ name, action }) =>
   Effect.gen(function* () {
     const server = yield* McpServer.McpServer;

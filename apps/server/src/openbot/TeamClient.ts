@@ -2,6 +2,7 @@ import {
   OpenbotReadRequest,
   OpenbotWriteRequest,
   OpenbotAdminRequest,
+  OpenbotMcpConfig,
   type OpenbotApiResponse,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -14,6 +15,9 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as EventStream from "./EventStream.ts";
+import * as FileProtocol from "./FileProtocol.ts";
+import * as WorkflowProtocol from "./WorkflowProtocol.ts";
+import * as CoreWire from "./CoreWire.ts";
 
 export class TeamClientError extends Schema.TaggedError<TeamClientError>()(
   "OpenbotTeamClientError",
@@ -51,6 +55,12 @@ const SafeMcpRow = Schema.Struct({
   url: Schema.String,
 });
 const decodeMcpRows = Schema.decodeUnknownEffect(Schema.Array(SafeMcpRow));
+const decodeStoredMcpRows = Schema.decodeUnknownEffect(Schema.Array(OpenbotMcpConfig));
+const decodeMcpConfig = Schema.decodeUnknownEffect(OpenbotMcpConfig);
+const ConnectorIdentifier = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128));
+const decodeMessagingOrchestrator = Schema.decodeUnknownEffect(
+  Schema.Struct({ agentId: ConnectorIdentifier, sectionId: Schema.NullOr(ConnectorIdentifier) }),
+);
 const McpResult = Schema.Struct({ toolCount: Schema.Int, error: Schema.NullOr(Schema.String) });
 const decodeMcpResult = Schema.decodeUnknownEffect(McpResult);
 const decodeMcpStatus = Schema.decodeUnknownEffect(
@@ -244,15 +254,37 @@ const decodeWriteRequest = Schema.decodeUnknownEffect(OpenbotWriteRequest);
 const decodeAdminRequest = Schema.decodeUnknownEffect(OpenbotAdminRequest);
 
 type ApiRequest = OpenbotReadRequest | OpenbotWriteRequest | OpenbotAdminRequest;
+type SavedMcpRequest = Extract<
+  ApiRequest,
+  {
+    operation:
+      | "mcp.updateById"
+      | "mcp.testById"
+      | "mcp.signIn.startById"
+      | "mcp.signIn.statusById"
+      | "mcp.signIn.cancelById";
+  }
+>;
+function isSavedMcpRequest(request: ApiRequest): request is SavedMcpRequest {
+  return (
+    request.operation === "mcp.updateById" ||
+    request.operation === "mcp.testById" ||
+    request.operation === "mcp.signIn.startById" ||
+    request.operation === "mcp.signIn.statusById" ||
+    request.operation === "mcp.signIn.cancelById"
+  );
+}
 interface Route {
   readonly method: "GET" | "POST" | "PATCH" | "DELETE";
   readonly path: string;
   readonly body?: unknown;
-  readonly projection?: "mcp-list" | "mcp-test" | "mcp-status";
+  readonly projection?: "mcp-list" | "mcp-test" | "mcp-status" | "messaging-orchestrator";
   readonly providerProjection?: keyof typeof providerDecoders;
+  readonly workflowProjection?: Parameters<typeof WorkflowProtocol.project>[0];
 }
 // Only these source-backed operations can spend the private host-owner session.
-function apiRoute(request: ApiRequest): Route {
+function apiRoute(request: Exclude<ApiRequest, SavedMcpRequest>): Route {
+  if (WorkflowProtocol.isRequest(request)) return WorkflowProtocol.route(request);
   const agentPath =
     "agentId" in request ? `/v1/agents/${encodeURIComponent(request.agentId)}` : "/v1/agents";
   switch (request.operation) {
@@ -608,6 +640,7 @@ function apiRoute(request: ApiRequest): Route {
         method: "POST",
         path: "/v1/admin/mcp-servers/sign-in/start",
         body: { config: request.config },
+        providerProjection: "empty",
       };
     case "mcp.signIn.status":
       return {
@@ -621,6 +654,7 @@ function apiRoute(request: ApiRequest): Route {
         method: "POST",
         path: "/v1/admin/mcp-servers/sign-in/cancel",
         body: { url: request.url },
+        providerProjection: "empty",
       };
     case "mcp.signIn.list":
       return { method: "POST", path: "/v1/admin/mcp-servers/sign-ins", body: {} };
@@ -651,6 +685,13 @@ function apiRoute(request: ApiRequest): Route {
         method: "POST",
         path: "/v1/admin/connectors/messaging/connect",
         body: { platform: request.platform, place: request.place },
+      };
+    case "connector.messaging.orchestrator":
+      return {
+        method: "POST",
+        path: "/v1/admin/connectors/messaging/orchestrator",
+        body: { platform: request.platform, workspaceId: request.workspaceId },
+        projection: "messaging-orchestrator",
       };
     case "connector.messaging.disconnect":
     case "connector.messaging.reconnect":
@@ -748,6 +789,7 @@ function apiRoute(request: ApiRequest): Route {
 }
 
 export interface Session {
+  readonly files: FileProtocol.FileSession<TeamClientError>;
   readonly events: Stream.Stream<EventStream.Frame, TeamClientError>;
   readonly listAgents: Effect.Effect<ReadonlyArray<typeof Agent.Type>, TeamClientError>;
   readonly close: Effect.Effect<void, TeamClientError>;
@@ -788,7 +830,7 @@ const make = Effect.gen(function* () {
             "OpenBot-Protocol-Version": "9",
             "OpenBot-App-Version": "0.60.0",
             "OpenBot-Capabilities":
-              "agent-tasks-v1,agent-create-model,agent-admin-v1,agent-instructions-v1,skills-admin-v1,mcp-servers-v1,mcp-sign-in-v1,browser-navigation,browser-user-control,connectors-v1,channel-chats-v1,providers-v8,provider-accounts-v1,provider-default-v1,provider-host-sign-in-v1,provider-sign-out-v1,custom-provider-harness-v1,custom-agents-v1,model-visibility-v1,claude-api-key-v1,sign-in-relay-v1,provider-account-relay-v1,provider-account-relay-v2",
+              "agent-tasks-v1,agent-create-model,agent-admin-v1,agent-instructions-v1,skills-admin-v1,mcp-servers-v1,mcp-sign-in-v1,browser-navigation,browser-user-control,connectors-v1,channel-chats-v1,providers-v8,provider-accounts-v1,provider-default-v1,provider-host-sign-in-v1,provider-sign-out-v1,custom-provider-harness-v1,custom-agents-v1,model-visibility-v1,claude-api-key-v1,sign-in-relay-v1,provider-account-relay-v1,provider-account-relay-v2,workspace-directory-v1,conversation-file-search-v1,agent-thread-files-v1,message-client-id-v1,workflows-v1",
           }),
         ),
       )
@@ -821,6 +863,12 @@ const make = Effect.gen(function* () {
     );
     return yield* decodeJson(body.text + decoder.decode()).pipe(
       Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+      Effect.flatMap((value) =>
+        Effect.try({
+          try: () => CoreWire.normalize(response.request.url, value),
+          catch: (cause) => new TeamClientError({ reason: "decode", cause }),
+        }),
+      ),
     );
   });
 
@@ -886,7 +934,35 @@ const make = Effect.gen(function* () {
     });
     const execute = Effect.fn("OpenbotTeamClient.execute")(function* (input: ApiRequest) {
       if (closed) return yield* new TeamClientError({ reason: "closed" });
-      const route = apiRoute(input);
+      const route = yield* Effect.gen(function* () {
+        if (!isSavedMcpRequest(input)) return apiRoute(input);
+        // Stored MCP URLs and credentials stay private, including when only an origin is shown to clients.
+        const rows = yield* send(authenticated("/v1/mcp-servers", "GET")).pipe(
+          Effect.flatMap(readJson),
+          Effect.flatMap(decodeStoredMcpRows),
+          Effect.mapError((cause) =>
+            isTeamClientError(cause) ? cause : new TeamClientError({ reason: "decode", cause }),
+          ),
+        );
+        const config = rows.find((row) => row.id === input.mcpServerId);
+        if (!config) return yield* new TeamClientError({ reason: "invalid-configuration" });
+        if (input.operation === "mcp.updateById") {
+          const updated = yield* decodeMcpConfig({ ...config, ...input.patch, id: config.id }).pipe(
+            Effect.mapError(
+              (cause) => new TeamClientError({ reason: "invalid-configuration", cause }),
+            ),
+          );
+          return apiRoute({ operation: "mcp.save", config: updated });
+        }
+        if (input.operation === "mcp.testById") return apiRoute({ operation: "mcp.test", config });
+        if (input.operation === "mcp.signIn.startById")
+          return apiRoute({ operation: "mcp.signIn.start", config });
+        return apiRoute({
+          operation:
+            input.operation === "mcp.signIn.statusById" ? "mcp.signIn.status" : "mcp.signIn.cancel",
+          url: config.url,
+        });
+      });
       let request = authenticated(route.path, route.method);
       if (route.body !== undefined)
         request = yield* HttpClientRequest.bodyJson(route.body)(request).pipe(
@@ -895,6 +971,10 @@ const make = Effect.gen(function* () {
       const response = yield* send(request);
       if (response.status === 204) return null;
       const result = yield* readJson(response);
+      if (route.workflowProjection)
+        return yield* WorkflowProtocol.project(route.workflowProjection, result).pipe(
+          Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+        );
       if (route.providerProjection) {
         if (route.providerProjection === "empty") return {};
         const projected = yield* decodeProviderResult(route.providerProjection, result).pipe(
@@ -931,6 +1011,10 @@ const make = Effect.gen(function* () {
         }
         return projected;
       }
+      if (route.projection === "messaging-orchestrator")
+        return yield* decodeMessagingOrchestrator(result).pipe(
+          Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+        );
       // MCP administration responds with stored credentials; project them out before leaving this service.
       if (route.projection === "mcp-list")
         return yield* decodeMcpRows(result).pipe(
@@ -960,6 +1044,15 @@ const make = Effect.gen(function* () {
         ),
       );
     return {
+      files: FileProtocol.createFileSession({
+        authenticated,
+        send,
+        json: readJson,
+        isClosed: () => closed,
+        isError: isTeamClientError,
+        error: (reason, cause) =>
+          new TeamClientError({ reason, ...(cause === undefined ? {} : { cause }) }),
+      }),
       events: EventStream.connect({
         origin,
         sessionToken: login.sessionToken,

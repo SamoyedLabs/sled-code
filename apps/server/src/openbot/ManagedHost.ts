@@ -13,7 +13,8 @@ import * as Semaphore from "effect/Semaphore";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 
 export interface ManagedHostConfig {
-  readonly executablePath: string;
+  readonly executablePath?: string;
+  readonly allowExecutableSwitch?: boolean;
   readonly args?: ReadonlyArray<string>;
   readonly userDataDirectory: string;
   readonly agentRoot: string;
@@ -64,6 +65,9 @@ export class ManagedHost extends Context.Service<
     readonly getStatus: Effect.Effect<HostStatus>;
     readonly start: Effect.Effect<HostReady, ManagedHostError>;
     readonly stop: Effect.Effect<void>;
+    readonly switchExecutable: (
+      executablePath: string | null,
+    ) => Effect.Effect<HostReady | null, ManagedHostError>;
   }
 >()("t3/openbot/ManagedHost") {}
 
@@ -93,7 +97,7 @@ const validConfiguration = (config: ManagedHostConfig): boolean => {
   const directories = [config.userDataDirectory, config.agentRoot];
   if (config.runtimeRoot !== undefined) directories.push(config.runtimeRoot);
   return (
-    NodePath.isAbsolute(config.executablePath) &&
+    (config.executablePath === undefined || NodePath.isAbsolute(config.executablePath)) &&
     directories.every(
       (directory) =>
         NodePath.isAbsolute(directory) &&
@@ -137,7 +141,8 @@ const make = Effect.fn("ManagedHost.make")(function* (config: ManagedHostConfig 
   const fileSystem = yield* FileSystem.FileSystem;
   const environment = yield* HostProcess.Environment;
   const gate = yield* Semaphore.make(1);
-  let state: HostStatus = { status: config ? "stopped" : "disabled" };
+  let state: HostStatus = { status: config?.executablePath ? "stopped" : "disabled" };
+  let executablePath = config?.executablePath;
   let running: RunningChild | undefined;
   let disposed = false;
 
@@ -167,16 +172,17 @@ const make = Effect.fn("ManagedHost.make")(function* (config: ManagedHostConfig 
       Effect.gen(function* () {
         disposed = true;
         yield* stopOwned();
-        state = { status: config ? "stopped" : "disabled" };
+        state = { status: executablePath ? "stopped" : "disabled" };
       }),
     ),
   );
 
   const start = Effect.fn("ManagedHost.start")(function* () {
-    if (!config) return yield* new ManagedHostError({ reason: "disabled" });
+    const command = executablePath;
+    if (!config || !command) return yield* new ManagedHostError({ reason: "disabled" });
     if (disposed) return yield* new ManagedHostError({ reason: "exited" });
     if (state.status === "ready") return state.ready;
-    if (!validConfiguration(config))
+    if (!validConfiguration({ ...config, executablePath: command }))
       return yield* new ManagedHostError({ reason: "configuration" });
     state = { status: "starting" };
     yield* stopOwned();
@@ -203,7 +209,7 @@ const make = Effect.fn("ManagedHost.make")(function* (config: ManagedHostConfig 
     const child = yield* Effect.try({
       try: () =>
         NodeChildProcess.spawn(
-          config.executablePath,
+          command,
           [...(config.args ?? []), `--user-data-dir=${config.userDataDirectory}`],
           {
             env: childEnvironment,
@@ -283,7 +289,7 @@ const make = Effect.fn("ManagedHost.make")(function* (config: ManagedHostConfig 
         Effect.onInterrupt(() =>
           Effect.gen(function* () {
             yield* stopOwned();
-            state = { status: config ? "stopped" : "disabled" };
+            state = { status: executablePath ? "stopped" : "disabled" };
           }),
         ),
       ),
@@ -291,9 +297,46 @@ const make = Effect.fn("ManagedHost.make")(function* (config: ManagedHostConfig 
     stop: gate.withPermit(
       Effect.gen(function* () {
         yield* stopOwned();
-        state = { status: config ? "stopped" : "disabled" };
+        state = { status: executablePath ? "stopped" : "disabled" };
       }),
     ),
+    switchExecutable: Effect.fn("ManagedHost.switchExecutable")(function* (
+      selected: string | null,
+    ) {
+      if (!config?.allowExecutableSwitch || (selected !== null && !NodePath.isAbsolute(selected)))
+        return yield* new ManagedHostError({ reason: "configuration" });
+      if (disposed) return yield* new ManagedHostError({ reason: "exited" });
+      if (selected === executablePath && state.status === "ready") return state.ready;
+      const previous = executablePath;
+      return yield* Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          yield* stopOwned();
+          executablePath = selected ?? undefined;
+          state = { status: selected ? "stopped" : "disabled" };
+          if (selected === null) return null;
+          return yield* restore(start()).pipe(
+            Effect.onExit((exit) =>
+              Exit.isSuccess(exit)
+                ? Effect.void
+                : Effect.gen(function* () {
+                    yield* stopOwned();
+                    executablePath = previous;
+                    state = { status: previous ? "stopped" : "disabled" };
+                    if (previous)
+                      yield* start().pipe(
+                        Effect.catch((error) =>
+                          Effect.gen(function* () {
+                            yield* stopOwned();
+                            state = { status: "failed", reason: error.reason };
+                          }),
+                        ),
+                      );
+                  }),
+            ),
+          );
+        }),
+      );
+    }, gate.withPermits(1)),
   });
 });
 

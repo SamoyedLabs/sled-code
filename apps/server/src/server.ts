@@ -2,6 +2,9 @@ import * as OpenbotSledTools from "./openbot/SledTools.ts";
 import * as OpenbotUpstream from "./openbot/UpstreamRuntime.ts";
 import * as OpenbotCodingDelivery from "./openbot/CodingDelivery.ts";
 import * as OpenbotRemoteCoding from "./openbot/RemoteCoding.ts";
+import * as OpenbotRuntimeInstallation from "./openbot/RuntimeInstallation.ts";
+import * as OpenbotFiles from "./openbot/Files.ts";
+import * as OpenbotCodingPolicy from "./openbot/CodingPolicy.ts";
 import * as Openbot from "./openbot/Integration.ts";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import type { RelayManagedEndpointRuntimeConfig } from "@t3tools/contracts/relay";
@@ -831,6 +834,8 @@ const layerMakeRoutes = Layer.mergeAll(
   // Links agents ask for: shown in a thread from /mcp, answered over WebSocket.
   Layer.provide(PeerLinkRequests.layer),
   Layer.provide(OpenbotCodingDelivery.layer.pipe(Layer.provide(ProjectionStoreV2.layer))),
+  Layer.provide(OpenbotFiles.layer),
+  Layer.provide(OpenbotCodingPolicy.layer),
   Layer.provide(OpenbotSledTools.layer.pipe(Layer.provide(ServerSecretStore.layer))),
   Layer.provide(
     Layer.unwrap(
@@ -840,6 +845,15 @@ const layerMakeRoutes = Layer.mergeAll(
     ),
   ),
   Layer.provide(Openbot.layer.pipe(Layer.provide(ServerSecretStore.layer))),
+  Layer.provide(
+    Layer.unwrap(
+      ServerConfig.ServerConfig.pipe(
+        Effect.map((config) =>
+          OpenbotRuntimeInstallation.layer({ stateDirectory: config.stateDir }),
+        ),
+      ),
+    ),
+  ),
   // Share the service so HTTP/WS clients single-flight reads and invalidate each other's cached patches.
   Layer.provide(layerPullRequestService),
   // The same activity instance RunExecutionService reports to, by layer memoization.

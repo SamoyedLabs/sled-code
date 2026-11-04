@@ -78,6 +78,36 @@ describe("ManagedHost", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.live(
+    "restores the prior executable after a replacement fails readiness and respects fixed overrides",
+    () =>
+      Effect.gen(function* () {
+        const options = yield* config();
+        yield* Effect.gen(function* () {
+          const host = yield* ManagedHost.ManagedHost;
+          const first = yield* host.start;
+          expect(
+            (yield* Effect.flip(host.switchExecutable(options.userDataDirectory + "/missing")))
+              .reason,
+          ).toBe("spawn");
+          const restored = yield* host.start;
+          expect(restored.serverId).not.toBe(first.serverId);
+          expect((yield* host.getStatus).status).toBe("ready");
+          expect(yield* host.switchExecutable(null)).toBeNull();
+          expect(yield* host.getStatus).toEqual({ status: "disabled" });
+          expect((yield* host.switchExecutable(options.executablePath))?.serverId).toMatch(
+            /^fixture-server-/,
+          );
+        }).pipe(Effect.provide(ManagedHost.layer({ ...options, allowExecutableSwitch: true })));
+        yield* Effect.gen(function* () {
+          const host = yield* ManagedHost.ManagedHost;
+          const first = yield* host.start;
+          expect((yield* Effect.flip(host.switchExecutable(null))).reason).toBe("configuration");
+          expect((yield* host.start).serverId).toBe(first.serverId);
+        }).pipe(Effect.provide(ManagedHost.layer(options)));
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.live("bounds startup and terminates a child that never becomes ready", () =>
     Effect.gen(function* () {
       const options = yield* config("wait");

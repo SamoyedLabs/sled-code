@@ -18,6 +18,140 @@ const Provider = Schema.Struct({
   message: Schema.NullOr(Text),
 });
 const Models = Schema.Array(Model);
+const CustomEndpoint = Schema.Struct({
+  id: Text,
+  name: Text,
+  baseUrl: Text,
+  hasApiKey: Schema.Boolean,
+  models: Schema.Array(Schema.Struct({ id: Text, name: Text })),
+  harness: Schema.Literals(["opencode", "pi"]),
+});
+const CustomEndpoints = Schema.Array(CustomEndpoint);
+const decodeCustomEndpoints = Schema.decodeUnknownResult(
+  Schema.Union([CustomEndpoints, Schema.Struct({ providers: CustomEndpoints })]),
+);
+export function customProviderEndpoints(value: unknown) {
+  const result = decodeCustomEndpoints(value);
+  return Result.isSuccess(result)
+    ? "providers" in result.success
+      ? result.success.providers
+      : result.success
+    : null;
+}
+const CustomAcpAgent = Schema.Struct({
+  id: Text,
+  name: Text,
+  command: Text,
+  args: Schema.Array(Text),
+  envNames: Schema.Array(Text),
+  usagePrompt: Schema.NullOr(Text),
+  resolvedCommand: Schema.NullOr(Text),
+});
+const CustomAgents = Schema.Array(CustomAcpAgent);
+const decodeCustomAgents = Schema.decodeUnknownResult(
+  Schema.Union([CustomAgents, Schema.Struct({ agents: CustomAgents })]),
+);
+export function customAcpAgents(value: unknown) {
+  const result = decodeCustomAgents(value);
+  return Result.isSuccess(result)
+    ? "agents" in result.success
+      ? result.success.agents
+      : result.success
+    : null;
+}
+const ModelVisibility = Schema.Struct({
+  provider: Text,
+  models: Schema.Array(Schema.Struct({ id: Text, name: Text })),
+  shown: Schema.Array(Text),
+  changed: Schema.Boolean,
+});
+const decodeModelVisibility = Schema.decodeUnknownResult(ModelVisibility);
+export function botModelVisibility(value: unknown, provider: string) {
+  const result = decodeModelVisibility(value);
+  return Result.isSuccess(result) && result.success.provider === provider ? result.success : null;
+}
+export type BotCustomSecret = { key: number; name: string; value: string | null };
+export type BotCustomEndpointDraft = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  models: string;
+  headers: BotCustomSecret[];
+};
+export type BotCustomAcpDraft = {
+  id: string;
+  name: string;
+  command: string;
+  args: string;
+  originalArgs?: readonly string[] | undefined;
+  usagePrompt: string;
+  env: BotCustomSecret[];
+};
+export function customEndpointRequest(draft: BotCustomEndpointDraft) {
+  try {
+    const url = new URL(draft.baseUrl.trim());
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return null;
+  } catch {
+    return null;
+  }
+  const models = draft.models
+    .split(/\r?\n/)
+    .filter((line) => line.trim())
+    .map((line) => {
+      const divider = line.indexOf("|");
+      const id = (divider < 0 ? line : line.slice(0, divider)).trim();
+      return { id, name: divider < 0 ? id : line.slice(divider + 1).trim() };
+    });
+  if (models.length === 0 || new Set(models.map((model) => model.id)).size !== models.length)
+    return null;
+  if (draft.headers.some((header) => header.value === null)) return null;
+  return providerAdminRequest({
+    operation: "provider.custom.save",
+    input: {
+      id: draft.id.trim(),
+      name: draft.name.trim(),
+      baseUrl: draft.baseUrl.trim(),
+      apiKey: draft.apiKey.trim() || null,
+      models,
+      headers: draft.headers.map(({ name, value }) => ({ name: name.trim(), value })),
+    },
+  });
+}
+export function customAcpRequest(draft: BotCustomAcpDraft) {
+  if (!draft.command.trim() || /[\r\n\0]/.test(draft.command)) return null;
+  const args =
+    draft.originalArgs && draft.args === draft.originalArgs.join("\n")
+      ? [...draft.originalArgs]
+      : draft.args === ""
+        ? []
+        : draft.args.split(/\r?\n/);
+  return providerAdminRequest({
+    operation: "provider.customAgent.save",
+    input: {
+      id: draft.id.trim(),
+      name: draft.name.trim(),
+      command: draft.command.trim(),
+      args,
+      usagePrompt: draft.usagePrompt.trim() || null,
+      env: draft.env.map(({ name, value }) => ({ name: name.trim(), value })),
+    },
+  });
+}
+const decodeRestart = Schema.decodeUnknownResult(
+  Schema.Struct({ restart: Schema.Literals(["restarted", "skipped-busy", "not-running"]) }),
+);
+export function customRuntimeNotice(value: unknown) {
+  const result = decodeRestart(value);
+  return Result.isSuccess(result) && result.success.restart === "skipped-busy"
+    ? "Saved. Busy bots will use the change after their current work finishes."
+    : "Saved. Refresh providers to see the current models.";
+}
+export function botProviderSetupMessage(provider: BotProvider) {
+  return provider.state === "not-installed"
+    ? "Install this provider in Provider setup to continue."
+    : (provider.message?.replaceAll("in OpenBot", "in Provider setup") ?? null);
+}
 const Status = Schema.Struct({ providers: Schema.Array(Provider) });
 const Account = Schema.Struct({
   id: Text,

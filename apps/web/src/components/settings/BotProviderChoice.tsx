@@ -6,6 +6,7 @@ import type {
 import {
   providerOptions,
   selectedProviderModel,
+  botProviderSetupMessage,
 } from "@t3tools/client-runtime/openbot/presentation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
@@ -53,7 +54,7 @@ export function BotProviderChoice({
       {provider && (
         <p className="text-sm text-muted-foreground">
           {provider.state}
-          {provider.message ? ` · ${provider.message}` : ""}
+          {botProviderSetupMessage(provider) ? ` · ${botProviderSetupMessage(provider)}` : ""}
         </p>
       )}
       <div className="space-y-1">

@@ -1,4 +1,8 @@
 import { BotProviderChoice } from "./BotProviderChoice";
+import { BotRuntimeControls } from "./BotRuntimeControls";
+import { BotFiles } from "./BotFiles";
+import { BotCodingPolicy } from "./BotCodingPolicy";
+import { BotWorkflows } from "./BotWorkflows";
 import { BotProviderSetup } from "./BotProviderSetup";
 import { BotProviderSettings } from "./BotProviderSettings";
 import { BotAttention } from "./BotAttention";
@@ -151,8 +155,16 @@ function BotEnvironment({ environment }: { environment: SettingsTarget }) {
             Settings permission is required to start or stop this engine.
           </Text>
         )}
+        <BotRuntimeControls environmentId={environmentId} />
         {state === "ready" && <SledToolsConnection environmentId={environment.environmentId} />}
         {state === "ready" && <BotAttention environmentId={environmentId} />}
+        {state === "ready" && host.data?.hostId && (
+          <BotWorkflows
+            key={`workflows:${host.data.hostId}`}
+            environmentId={environmentId}
+            hostId={host.data.hostId}
+          />
+        )}
         {state === "ready" && host.data?.hostId && (
           <Button
             label="Provider setup"
@@ -663,6 +675,22 @@ function BotDetail({
         )}
         {hostId && (
           <BotConfiguration environmentId={environmentId} agentId={agentId} hostId={hostId} />
+        )}
+        {hostId && (
+          <BotCodingPolicy
+            key={`policy:${hostId}:${agentId}`}
+            environmentId={environmentId}
+            hostId={hostId}
+            agentId={agentId}
+          />
+        )}
+        {hostId && (
+          <BotFiles
+            key={`${hostId}:${agentId}`}
+            environmentId={environmentId}
+            hostId={hostId}
+            agentId={agentId}
+          />
         )}
         <SettingsSection title="Coding work">
           <View className="gap-3 p-3">

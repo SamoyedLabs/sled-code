@@ -1,5 +1,6 @@
 import * as OpenbotCoding from "../openbot/CodingBridge.ts";
 import * as OpenbotRemoteCoding from "../openbot/RemoteCoding.ts";
+import * as ThreadLaunchReceipts from "./ThreadLaunchReceipts.ts";
 import * as GuestShareService from "../guest/GuestShareService.ts";
 import * as UsageLimitRecoveryWorker from "./UsageLimitRecoveryWorker.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
@@ -374,6 +375,7 @@ const layerOpenbotRemoteCodingProvided = OpenbotRemoteCoding.layer.pipe(
 );
 
 export const layerProduction = Layer.mergeAll(
+  ThreadLaunchReceipts.layer.pipe(Layer.provide(layerThreadManagementProvided)),
   layerOpenbotRemoteCodingProvided,
   OpenbotCoding.layer.pipe(
     Layer.provide(

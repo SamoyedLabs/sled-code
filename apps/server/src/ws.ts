@@ -3,13 +3,19 @@ import * as OpenbotUpstream from "./openbot/UpstreamRuntime.ts";
 import * as OpenbotCoding from "./openbot/CodingBridge.ts";
 import * as OpenbotDelivery from "./openbot/CodingDelivery.ts";
 import * as Openbot from "./openbot/Integration.ts";
-import { OrchestrationDispatchCommandError, OpenbotError } from "@t3tools/contracts";
+import {
+  OrchestrationDispatchCommandError,
+  OpenbotError,
+  OpenbotFilesError,
+} from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
 import * as PeerLinkRequests from "./peer/PeerLinkRequests.ts";
 import * as PeerLinks from "./peer/PeerLinks.ts";
 import * as OpenbotRemoteCoding from "./openbot/RemoteCoding.ts";
+import * as OpenbotFiles from "./openbot/Files.ts";
+import * as OpenbotCodingPolicy from "./openbot/CodingPolicy.ts";
 
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -1377,6 +1383,8 @@ export const layerWsRpc = (
       const openbotUpstream = yield* Effect.serviceOption(OpenbotUpstream.UpstreamRuntime);
       const openbotCoding = yield* Effect.serviceOption(OpenbotCoding.CodingBridge);
       const openbotDelivery = yield* Effect.serviceOption(OpenbotDelivery.CodingDelivery);
+      const openbotFiles = yield* Effect.serviceOption(OpenbotFiles.Files);
+      const openbotCodingPolicy = yield* Effect.serviceOption(OpenbotCodingPolicy.CodingPolicy);
       const secretRequests = yield* SecretRequests.SecretRequests;
       const guestShares = yield* GuestShareService.GuestShareService;
       const pullRequests = yield* PullRequestService.PullRequestService;
@@ -2294,6 +2302,70 @@ export const layerWsRpc = (
                 .stage(input)
                 .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
             : Effect.fail(new OpenbotError({ message: "Openbot release staging is unavailable." })),
+        [WS_METHODS.openbotCodingPolicyGet]: (input) =>
+          Option.isSome(openbotCodingPolicy)
+            ? openbotCodingPolicy.value
+                .get(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Bot coding policy is unavailable." })),
+        [WS_METHODS.openbotCodingPolicyEnable]: (input) =>
+          Option.isSome(openbotCodingPolicy)
+            ? openbotCodingPolicy.value
+                .enable(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Bot coding policy is unavailable." })),
+        [WS_METHODS.openbotCodingPolicyDisable]: (input) =>
+          Option.isSome(openbotCodingPolicy)
+            ? openbotCodingPolicy.value
+                .disable(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Bot coding policy is unavailable." })),
+        [WS_METHODS.openbotFilesListWorkspace]: (input) =>
+          Option.isSome(openbotFiles)
+            ? openbotFiles.value.listWorkspace(input)
+            : Effect.fail(new OpenbotFilesError({ operation: "list", reason: "transfer" })),
+        [WS_METHODS.openbotFilesSearch]: (input) =>
+          Option.isSome(openbotFiles)
+            ? openbotFiles.value.search(input)
+            : Effect.fail(new OpenbotFilesError({ operation: "search", reason: "transfer" })),
+        [WS_METHODS.openbotFilesMaterialize]: (input) =>
+          Option.isSome(openbotFiles)
+            ? openbotFiles.value.materialize(input)
+            : Effect.fail(new OpenbotFilesError({ operation: "download", reason: "transfer" })),
+        [WS_METHODS.openbotFilesUploadDraft]: (input) =>
+          Option.isSome(openbotFiles)
+            ? openbotFiles.value.uploadDraft(input)
+            : Effect.fail(new OpenbotFilesError({ operation: "upload", reason: "transfer" })),
+        [WS_METHODS.openbotFilesListDrafts]: (input) =>
+          Option.isSome(openbotFiles)
+            ? openbotFiles.value.listDrafts(input)
+            : Effect.fail(new OpenbotFilesError({ operation: "list", reason: "transfer" })),
+        [WS_METHODS.openbotFilesSendDraft]: (input) =>
+          Option.isSome(openbotFiles)
+            ? openbotFiles.value.sendDraft(input)
+            : Effect.fail(new OpenbotFilesError({ operation: "send", reason: "transfer" })),
+        [WS_METHODS.openbotFilesDiscardDraft]: (input) =>
+          Option.isSome(openbotFiles)
+            ? openbotFiles.value.discardDraft(input)
+            : Effect.fail(new OpenbotFilesError({ operation: "discard", reason: "transfer" })),
+        [WS_METHODS.openbotUpstreamInstall]: (input) =>
+          Option.isSome(openbotUpstream)
+            ? openbotUpstream.value
+                .install(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Bot engine installation is unavailable." })),
+        [WS_METHODS.openbotRuntimeActivate]: (input) =>
+          Option.isSome(openbot)
+            ? openbot.value
+                .activateRuntime(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Bot engine activation is unavailable." })),
+        [WS_METHODS.openbotRuntimeRollback]: () =>
+          Option.isSome(openbot)
+            ? openbot.value.rollbackRuntime.pipe(
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(new OpenbotError({ message: "Bot engine rollback is unavailable." })),
         [WS_METHODS.openbotReadToHost]: (input) =>
           Option.isSome(openbot)
             ? openbot.value
@@ -3571,6 +3643,8 @@ export const layer = Layer.unwrap(
     const openbot = yield* Effect.serviceOption(Openbot.Integration);
     const openbotCoding = yield* Effect.serviceOption(OpenbotCoding.CodingBridge);
     const openbotDelivery = yield* Effect.serviceOption(OpenbotDelivery.CodingDelivery);
+    const openbotFiles = yield* Effect.serviceOption(OpenbotFiles.Files);
+    const openbotCodingPolicy = yield* Effect.serviceOption(OpenbotCodingPolicy.CodingPolicy);
     const sledTools = yield* Effect.serviceOption(OpenbotSledTools.SledTools);
     const upstream = yield* Effect.serviceOption(OpenbotUpstream.UpstreamRuntime);
     const remoteDesktop = yield* RemoteDesktop.Service;
@@ -3645,6 +3719,18 @@ export const layer = Layer.unwrap(
         }).pipe(
           Effect.provide(
             layerWsRpc(session, clientAnalyticsProps, serverBrowser, reportProfiles).pipe(
+              Layer.provide(
+                Layer.mergeAll(
+                  Option.match(openbotFiles, {
+                    onNone: () => Layer.empty,
+                    onSome: (service) => Layer.succeed(OpenbotFiles.Files, service),
+                  }),
+                  Option.match(openbotCodingPolicy, {
+                    onNone: () => Layer.empty,
+                    onSome: (service) => Layer.succeed(OpenbotCodingPolicy.CodingPolicy, service),
+                  }),
+                ),
+              ),
               Layer.provide(
                 Option.match(openbotDelivery, {
                   onNone: () => Layer.empty,

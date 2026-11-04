@@ -45,10 +45,20 @@ describe("RPC authorization scopes", () => {
       WS_METHODS.openbotReadToHost,
       WS_METHODS.openbotAttention,
       WS_METHODS.openbotSubscribeChanges,
+      WS_METHODS.openbotFilesListWorkspace,
+      WS_METHODS.openbotFilesSearch,
+      WS_METHODS.openbotFilesListDrafts,
+      WS_METHODS.openbotCodingPolicyGet,
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationReadScope);
     }
     expect(requiredScopeForRpcMethod(WS_METHODS.openbotWrite)).toBe(AuthOrchestrationOperateScope);
+    for (const method of [
+      WS_METHODS.openbotUpstreamInstall,
+      WS_METHODS.openbotRuntimeActivate,
+      WS_METHODS.openbotRuntimeRollback,
+    ])
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthEnvironmentMaintainScope);
     for (const method of [
       WS_METHODS.openbotStart,
       WS_METHODS.openbotStop,
@@ -58,6 +68,8 @@ describe("RPC authorization scopes", () => {
       WS_METHODS.openbotUpstreamStatus,
       WS_METHODS.openbotUpstreamCheck,
       WS_METHODS.openbotUpstreamStage,
+      WS_METHODS.openbotCodingPolicyEnable,
+      WS_METHODS.openbotCodingPolicyDisable,
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthSettingsWriteScope);
     }
@@ -82,6 +94,33 @@ describe("RPC authorization scopes", () => {
     ]);
   });
 
+  it("requires both file access and bot authority when transferring attachments", () => {
+    expect(clientRpcRequiredScopes(WS_METHODS.openbotFilesMaterialize, {})).toEqual([
+      AuthFilesystemReadScope,
+      AuthOrchestrationReadScope,
+    ]);
+    expect(clientRpcRequiredScopes(WS_METHODS.openbotFilesUploadDraft, {})).toEqual([
+      AuthOrchestrationOperateScope,
+      AuthFilesystemReadScope,
+    ]);
+    expect(requiredScopeForRpcMethod(WS_METHODS.openbotFilesSendDraft)).toBe(
+      AuthOrchestrationOperateScope,
+    );
+    expect(requiredScopeForRpcMethod(WS_METHODS.openbotFilesDiscardDraft)).toBe(
+      AuthOrchestrationOperateScope,
+    );
+  });
+  it("requires settings and execution authority for bot coding policy changes", () => {
+    for (const method of [
+      WS_METHODS.openbotCodingPolicyEnable,
+      WS_METHODS.openbotCodingPolicyDisable,
+    ])
+      expect(clientRpcRequiredScopes(method, {})).toEqual([
+        AuthSettingsWriteScope,
+        AuthOrchestrationOperateScope,
+      ]);
+  });
+
   it("requires provider management for bot provider administration and operate access for starting bots", () => {
     for (const method of [WS_METHODS.openbotAdmin, WS_METHODS.openbotAdminToHost]) {
       const payload = (request: unknown) =>
@@ -93,6 +132,19 @@ describe("RPC authorization scopes", () => {
         AuthSettingsWriteScope,
         AuthOrchestrationOperateScope,
       ]);
+      for (const operation of [
+        "workflow.startRun",
+        "workflow.runStep",
+        "workflow.stopRun",
+        "workflow.stopStep",
+        "workflow.retryStep",
+        "workflow.decide",
+      ]) {
+        expect(clientRpcRequiredScopes(method, payload({ operation }))).toEqual([
+          AuthSettingsWriteScope,
+          AuthOrchestrationOperateScope,
+        ]);
+      }
       expect(clientRpcRequiredScopes(method, payload({ operation: "memory.create" }))).toEqual([
         AuthSettingsWriteScope,
       ]);

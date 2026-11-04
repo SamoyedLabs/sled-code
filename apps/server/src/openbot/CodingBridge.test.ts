@@ -156,26 +156,30 @@ function harness(uncertainFirstLaunch = false) {
   return { layer, projections, commands, interrupted: () => interrupts };
 }
 
-it.effect(
-  "retries an uncertain launch with the same durable thread and receipt after service reconstruction",
-  () => {
+it.effect.each(["fix-issue", null])(
+  "retries an uncertain launch with the same durable thread and receipt after service reconstruction (%s)",
+  (taskId) => {
+    const launchInput = { ...input, origin: { ...input.origin, taskId } };
     const h = harness(true);
     return Effect.gen(function* () {
       yield* Effect.gen(function* () {
         const bridge = yield* CodingBridge.CodingBridge;
-        expect((yield* Effect.flip(bridge.launch(input))).reason).toBe("execution");
+        expect((yield* Effect.flip(bridge.launch(launchInput))).reason).toBe("execution");
       }).pipe(Effect.provide(CodingBridge.layer));
       yield* Effect.gen(function* () {
         const bridge = yield* CodingBridge.CodingBridge;
-        const resumed = yield* bridge.launch(input);
+        const resumed = yield* bridge.launch(launchInput);
+        expect(resumed.origin).toEqual(launchInput.origin);
         expect(resumed.state).toBe("running");
         expect(isJson(resumed)).toBe(true);
         expect(h.commands.length).toBe(2);
         expect(new Set(h.commands).size).toBe(1);
         expect(h.projections.size).toBe(1);
-        expect(yield* bridge.get(input)).toEqual(resumed);
+        expect(yield* bridge.get(launchInput)).toEqual(resumed);
+        expect(yield* bridge.list({ ...launchInput.origin })).toEqual([resumed]);
         expect(
-          (yield* Effect.flip(bridge.launch({ ...input, prompt: "Different assignment" }))).reason,
+          (yield* Effect.flip(bridge.launch({ ...launchInput, prompt: "Different assignment" })))
+            .reason,
         ).toBe("conflict");
       }).pipe(Effect.provide(CodingBridge.layer));
     }).pipe(

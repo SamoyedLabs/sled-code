@@ -107,7 +107,7 @@ const make = Effect.gen(function* () {
   const find = Effect.fn("CodingBridge.find")(function* (input: OpenbotCodingReference) {
     const rows = yield* sql<Row>`SELECT * FROM openbot_coding_tasks
       WHERE host_id = ${input.origin.hostId} AND agent_id = ${input.origin.agentId}
-      AND task_id = ${input.origin.taskId} AND operation_id = ${input.operationId}`.pipe(
+      AND task_id = ${input.origin.taskId ?? ""} AND operation_id = ${input.operationId}`.pipe(
       Effect.mapError(
         (cause) => new CodingBridgeError({ operation: "read", reason: "storage", cause }),
       ),
@@ -132,7 +132,7 @@ const make = Effect.gen(function* () {
     }
     const threadId = ThreadId.make(row.thread_id);
     const base = {
-      origin: { hostId: row.host_id, agentId: row.agent_id, taskId: row.task_id },
+      origin: { hostId: row.host_id, agentId: row.agent_id, taskId: row.task_id || null },
       operationId: row.operation_id,
       projectId: ProjectId.make(row.project_id),
       threadId,
@@ -211,7 +211,7 @@ const make = Effect.gen(function* () {
     // Persist identity before calling execution: an uncertain launch response must retry the same receipt and thread.
     yield* sql`INSERT INTO openbot_coding_tasks
       (host_id, agent_id, task_id, operation_id, project_id, thread_id, command_id, input_json, created_at, destination_environment_id, remote_authority_json)
-      VALUES (${input.origin.hostId}, ${input.origin.agentId}, ${input.origin.taskId}, ${input.operationId}, ${input.projectId},
+      VALUES (${input.origin.hostId}, ${input.origin.agentId}, ${input.origin.taskId ?? ""}, ${input.operationId}, ${input.projectId},
       ${threadId}, ${commandId}, ${inputJson}, ${DateTime.formatIso(now)}, ${input.environmentId ?? null}, ${authorityJson})
       ON CONFLICT (host_id, agent_id, task_id, operation_id) DO NOTHING`.pipe(
       Effect.mapError(
@@ -262,7 +262,7 @@ const make = Effect.gen(function* () {
     const rows = yield* (
       input.taskId === undefined
         ? sql<Row>`SELECT * FROM openbot_coding_tasks WHERE host_id = ${input.hostId} AND agent_id = ${input.agentId} ORDER BY created_at DESC LIMIT 100`
-        : sql<Row>`SELECT * FROM openbot_coding_tasks WHERE host_id = ${input.hostId} AND agent_id = ${input.agentId} AND task_id = ${input.taskId} ORDER BY created_at DESC LIMIT 100`
+        : sql<Row>`SELECT * FROM openbot_coding_tasks WHERE host_id = ${input.hostId} AND agent_id = ${input.agentId} AND task_id = ${input.taskId ?? ""} ORDER BY created_at DESC LIMIT 100`
     ).pipe(
       Effect.mapError(
         (cause) => new CodingBridgeError({ operation: "list", reason: "storage", cause }),

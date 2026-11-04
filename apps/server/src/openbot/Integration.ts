@@ -7,11 +7,14 @@ import {
   type OpenbotApiResponse,
   type OpenbotAttentionSnapshot,
   type OpenbotChange,
+  type OpenbotUpstreamInstallInput,
+  type OpenbotInstalledRuntime,
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as Base64 from "effect/encoding/Base64";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
@@ -19,11 +22,13 @@ import * as Semaphore from "effect/Semaphore";
 import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
 import * as Schedule from "effect/Schedule";
+import * as Option from "effect/Option";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
 import * as ManagedHost from "./ManagedHost.ts";
 import * as TeamClient from "./TeamClient.ts";
+import * as RuntimeInstallation from "./RuntimeInstallation.ts";
 
 export class IntegrationError extends Schema.TaggedError<IntegrationError>()(
   "OpenbotIntegrationError",
@@ -43,7 +48,15 @@ export class Integration extends Context.Service<
     readonly attentionSnapshot: Effect.Effect<OpenbotAttentionSnapshot>;
     readonly start: Effect.Effect<OpenbotHostStatus, IntegrationError>;
     readonly stop: Effect.Effect<OpenbotHostStatus, IntegrationError>;
+    readonly activateRuntime: (
+      input: OpenbotUpstreamInstallInput,
+    ) => Effect.Effect<OpenbotHostStatus, IntegrationError>;
+    readonly rollbackRuntime: Effect.Effect<OpenbotHostStatus, IntegrationError>;
     readonly listAgents: Effect.Effect<typeof OpenbotAgentList.Type, IntegrationError>;
+    readonly withFilesToHost: <A>(
+      hostId: string,
+      action: (files: TeamClient.Session["files"]) => Effect.Effect<A, TeamClient.TeamClientError>,
+    ) => Effect.Effect<A, IntegrationError>;
     readonly apiRead: (
       input: OpenbotReadRequest,
     ) => Effect.Effect<typeof OpenbotApiResponse.Type, IntegrationError>;
@@ -73,6 +86,11 @@ const isIntegrationError = Schema.is(IntegrationError);
 const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string | undefined) {
   const host = yield* ManagedHost.ManagedHost;
   const client = yield* TeamClient.TeamClient;
+  const installation = Option.getOrUndefined(
+    yield* Effect.serviceOption(RuntimeInstallation.RuntimeInstallation),
+  );
+  const environment = yield* HostProcess.Environment;
+  const platform = `${yield* HostProcess.Platform}-${yield* HostProcess.Architecture}`;
   const status = host.getStatus.pipe(
     Effect.map((value) => ({
       state: value.status,
@@ -330,6 +348,105 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
     );
   const apiAdmin = (input: OpenbotAdminRequest) =>
     withSession((session) => session.apiAdmin(input), "Unable to configure Openbot.");
+  const switchRuntime = Effect.fn("OpenbotIntegration.switchRuntime")(
+    function* (runtime: OpenbotInstalledRuntime) {
+      if (!installation || !ownerSecret || environment.T3CODE_OPENBOT_EXECUTABLE?.trim())
+        return yield* new IntegrationError({
+          message: "Runtime activation is unavailable while an executable override is configured.",
+          cause: new Error("runtime-override"),
+        });
+      if (runtime.compatibility !== "pinned-baseline" || runtime.platform !== platform)
+        return yield* new IntegrationError({
+          message: "This runtime requires compatibility validation on this host before activation.",
+          cause: new Error("runtime-compatibility"),
+        });
+      const previous = (yield* installation.getStatus).active;
+      let committed = false;
+      const restorePrevious = Effect.gen(function* () {
+        yield* clearConnection();
+        yield* host.switchExecutable(previous?.executablePath ?? null).pipe(Effect.ignore);
+        yield* PubSub.publish(changes, yield* readyHostId);
+      });
+      return yield* Effect.uninterruptibleMask((restore) =>
+        restore(
+          Effect.gen(function* () {
+            yield* clearConnection();
+            yield* PubSub.publish(changes, null);
+            const started = yield* host.switchExecutable(runtime.executablePath);
+            if (!started) return yield* new ManagedHost.ManagedHostError({ reason: "readiness" });
+            const session = yield* client.connect({ apiUrl: started.apiUrl, ownerSecret });
+            connection = {
+              key: `${started.serverId}:${started.fingerprint}:${started.apiUrl}`,
+              session,
+            };
+            yield* session.listAgents;
+            initializedSessions.add(session);
+          }),
+        ).pipe(
+          Effect.andThen(installation.select(runtime)),
+          Effect.tap(() =>
+            Effect.sync(() => {
+              committed = true;
+            }),
+          ),
+          Effect.andThen(Effect.flatMap(readyHostId, (hostId) => PubSub.publish(changes, hostId))),
+          Effect.andThen(status),
+          Effect.onExit((exit) =>
+            Exit.isSuccess(exit) || committed ? Effect.void : restorePrevious,
+          ),
+        ),
+      );
+    },
+    Effect.mapError((cause) =>
+      isIntegrationError(cause)
+        ? cause
+        : new IntegrationError({
+            message:
+              "Unable to activate the installed bot runtime; the prior selection was retained.",
+            cause,
+          }),
+    ),
+  );
+  const activateRuntime = Effect.fn("OpenbotIntegration.activateRuntime")(
+    function* (input: OpenbotUpstreamInstallInput) {
+      if (!installation)
+        return yield* new IntegrationError({
+          message: "Bot runtime installation is unavailable.",
+          cause: new Error("runtime-unavailable"),
+        });
+      return yield* switchRuntime(yield* installation.resolve(input));
+    },
+    Effect.mapError((cause) =>
+      isIntegrationError(cause)
+        ? cause
+        : new IntegrationError({ message: "Unable to resolve the installed bot runtime.", cause }),
+    ),
+    gate.withPermits(1),
+  );
+  const rollbackRuntime = gate
+    .withPermit(
+      Effect.gen(function* () {
+        if (!installation)
+          return yield* new IntegrationError({
+            message: "Bot runtime installation is unavailable.",
+            cause: new Error("runtime-unavailable"),
+          });
+        const previous = (yield* installation.getStatus).previous;
+        if (!previous)
+          return yield* new IntegrationError({
+            message: "No previous bot runtime is available.",
+            cause: new Error("runtime-no-previous"),
+          });
+        return yield* switchRuntime(yield* installation.resolve(previous));
+      }),
+    )
+    .pipe(
+      Effect.mapError((cause) =>
+        isIntegrationError(cause)
+          ? cause
+          : new IntegrationError({ message: "Unable to restore the previous bot runtime.", cause }),
+      ),
+    );
   return Integration.of({
     status,
     readyHostId,
@@ -338,9 +455,19 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
     attentionSnapshot,
     start,
     stop,
+    activateRuntime,
+    rollbackRuntime,
     listAgents,
     apiRead,
     apiReadToHost,
+    withFilesToHost: Effect.fn("OpenbotIntegration.withFilesToHost")(
+      <A>(
+        hostId: string,
+        action: (
+          files: TeamClient.Session["files"],
+        ) => Effect.Effect<A, TeamClient.TeamClientError>,
+      ) => withSession((session) => action(session.files), "Unable to transfer bot files.", hostId),
+    ),
     apiWrite,
     apiWriteToHost,
     apiAdminToHost,
@@ -351,29 +478,33 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
 export const layerWithHost = (ownerSecret: string | undefined) =>
   Layer.effect(Integration, make(ownerSecret));
 
-// An explicit executable opts this environment in. State and credentials belong to this Sled home.
+// An override wins; otherwise this home uses only the runtime whose activation was committed.
 export const layer = Layer.unwrap(
   Effect.gen(function* () {
     const environment = yield* HostProcess.Environment;
-    const executablePath = environment.T3CODE_OPENBOT_EXECUTABLE?.trim();
-    if (!executablePath) {
-      return layerWithHost(undefined).pipe(
-        Layer.provide(ManagedHost.layer(undefined)),
-        Layer.provide(TeamClient.layer),
-      );
-    }
+    const override = environment.T3CODE_OPENBOT_EXECUTABLE?.trim();
+    const installation = yield* RuntimeInstallation.RuntimeInstallation;
+    const selected = yield* installation.getStatus.pipe(
+      Effect.flatMap((state) =>
+        state.active ? installation.resolve(state.active) : Effect.succeed(null),
+      ),
+      Effect.orElseSucceed(() => null),
+    );
+    const executablePath = override ?? selected?.executablePath;
     const config = yield* ServerConfig.ServerConfig;
     const path = yield* Path.Path;
     const secrets = yield* ServerSecretStore.ServerSecretStore;
     const ownerSecret = Base64.encode(yield* secrets.getOrCreateRandom("openbot-owner", 32));
     const hostConfig: ManagedHost.ManagedHostConfig = {
-      executablePath,
+      ...(executablePath === undefined ? {} : { executablePath }),
+      allowExecutableSwitch: !override,
       userDataDirectory: path.join(config.stateDir, "openbot", "profile"),
       agentRoot: path.join(config.stateDir, "openbot", "agents"),
       serverName: "Sled bots",
       ownerSecret,
     };
     return layerWithHost(ownerSecret).pipe(
+      Layer.provide(Layer.succeed(RuntimeInstallation.RuntimeInstallation, installation)),
       Layer.provide(ManagedHost.layer(hostConfig)),
       Layer.provide(TeamClient.layer),
     );

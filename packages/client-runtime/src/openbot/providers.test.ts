@@ -11,7 +11,123 @@ import {
   providerRelayCallbackQuery,
   providerSetupResult,
   EMPTY_PROVIDER_SETUP,
+  customProviderEndpoints,
+  customAcpAgents,
+  botModelVisibility,
+  customEndpointRequest,
+  customAcpRequest,
 } from "./providers.ts";
+
+it("projects custom endpoint summaries without saved credentials", () => {
+  const endpoint = {
+    id: "local-llm",
+    name: "Local model",
+    baseUrl: "http://localhost:1234/v1",
+    hasApiKey: true,
+    models: [{ id: "variant/model[context=272k]", name: "My model" }],
+    harness: "opencode",
+  };
+  expect(
+    customProviderEndpoints([
+      {
+        ...endpoint,
+        apiKey: "private-key",
+        headers: [{ name: "Authorization", value: "private-header" }],
+      },
+    ]),
+  ).toEqual([endpoint]);
+  expect(customProviderEndpoints([{ ...endpoint, models: null }])).toBeNull();
+});
+
+it("projects editable ACP commands without environment values", () => {
+  const agent = {
+    id: "school-acp",
+    name: "School",
+    command: "node",
+    args: ["/path with spaces/agent.mjs", "--acp"],
+    envNames: ["API_KEY"],
+    usagePrompt: null,
+    resolvedCommand: "/usr/bin/node",
+  };
+  expect(
+    customAcpAgents([
+      { ...agent, env: { API_KEY: "private-value" }, accessToken: "private-token" },
+    ]),
+  ).toEqual([agent]);
+  expect(customAcpAgents([{ ...agent, envNames: null }])).toBeNull();
+});
+
+it("keeps full model visibility identities bound to the selected provider", () => {
+  const settings = {
+    provider: "opencode",
+    models: [{ id: "openai/model[context=272k,reasoning=high]", name: "Full model" }],
+    shown: ["openai/model[context=272k,reasoning=high]"],
+    changed: true,
+  };
+  expect(botModelVisibility({ ...settings, apiKey: "private-value" }, "opencode")).toEqual(
+    settings,
+  );
+  expect(botModelVisibility(settings, "codex")).toBeNull();
+});
+
+it("builds custom runtime requests with literal arguments and explicit secret retention", () => {
+  expect(
+    customEndpointRequest({
+      id: "local-llm",
+      name: "Local",
+      baseUrl: "http://localhost:1234/v1",
+      apiKey: "",
+      models: "vendor/model[context=272k] | My model",
+      headers: [{ key: 0, name: "X-API-Key", value: "new-key" }],
+    }),
+  ).toEqual({
+    operation: "provider.custom.save",
+    input: {
+      id: "local-llm",
+      name: "Local",
+      baseUrl: "http://localhost:1234/v1",
+      apiKey: null,
+      models: [{ id: "vendor/model[context=272k]", name: "My model" }],
+      headers: [{ name: "X-API-Key", value: "new-key" }],
+    },
+  });
+  expect(
+    customAcpRequest({
+      id: "school-acp",
+      name: "School",
+      command: "node",
+      args: "/path with spaces/agent.mjs\n--acp",
+      usagePrompt: "",
+      env: [
+        { key: 0, name: "API_KEY", value: null },
+        { key: 1, name: "EMPTY_FLAG", value: "" },
+      ],
+    }),
+  ).toEqual({
+    operation: "provider.customAgent.save",
+    input: {
+      id: "school-acp",
+      name: "School",
+      command: "node",
+      args: ["/path with spaces/agent.mjs", "--acp"],
+      usagePrompt: null,
+      env: [
+        { name: "API_KEY", value: null },
+        { name: "EMPTY_FLAG", value: "" },
+      ],
+    },
+  });
+  expect(
+    customEndpointRequest({
+      id: "local-llm",
+      name: "Local",
+      baseUrl: "https://user:password@example.test/v1",
+      apiKey: "",
+      models: "model | Model",
+      headers: [],
+    }),
+  ).toBeNull();
+});
 
 it("preserves host model identities and requires a matching explicit provider selection", () => {
   const models = providerModels([

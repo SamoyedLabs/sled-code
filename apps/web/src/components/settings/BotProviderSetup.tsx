@@ -18,6 +18,9 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { openbot } from "../../state/openbot";
 import { requestConfirmDialog } from "../../confirmDialog";
 import { BotProviderChoice } from "./BotProviderChoice";
+import { BotCustomProviders } from "./BotCustomProviders";
+import { BotModelVisibility } from "./BotModelVisibility";
+import { BotConnections } from "./BotConnections";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
@@ -664,8 +667,28 @@ function ProviderSetupPanel({
           >
             Set selected model as engine default
           </Button>
+          <BotModelVisibility
+            key={`${hostId}:${provider}`}
+            environmentId={environmentId}
+            hostId={hostId}
+            provider={provider}
+            onChange={() => {
+              modelsQuery.refresh();
+              statusQuery.refresh();
+            }}
+          />
         </>
       )}
+      <BotConnections environmentId={environmentId} hostId={hostId} />
+      <BotCustomProviders
+        key={hostId}
+        environmentId={environmentId}
+        hostId={hostId}
+        onChange={() => {
+          modelsQuery.refresh();
+          statusQuery.refresh();
+        }}
+      />
     </div>
   );
 }

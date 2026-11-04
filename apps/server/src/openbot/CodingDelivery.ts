@@ -1,6 +1,8 @@
 import { ThreadId, type OpenbotCodingOrigin, type OpenbotChange } from "@t3tools/contracts";
 import { delegatedTaskProgress } from "@t3tools/provider-core/server/subagentProjection";
 import * as Context from "effect/Context";
+import * as Digest from "effect/crypto/Digest";
+import * as Hex from "effect/encoding/Hex";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -58,6 +60,9 @@ const Ack = Schema.Struct({
   deliveries: Schema.Array(Schema.Struct({ recipientAgentId: Schema.String })),
 });
 const decodeAck = Schema.decodeUnknownEffect(Ack);
+const encodeDeliveryKey = Schema.encodeEffect(
+  Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
+);
 const decodeTaskSnapshot = Schema.decodeUnknownEffect(
   Schema.Struct({
     agentId: Schema.String,
@@ -107,6 +112,7 @@ const terminal = new Set(["completed", "failed", "cancelled", "interrupted", "ro
 
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  const digest = yield* Digest.Digest;
   const bridge = yield* CodingBridge.CodingBridge;
   const integration = yield* Integration.Integration;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
@@ -118,15 +124,17 @@ const make = Effect.gen(function* () {
   const recover = Effect.fn("CodingDelivery.recover")(
     function* (row: TaskRow, text: string) {
       const snapshot = yield* integration
-        .apiReadToHost(row.host_id, {
-          operation: "task.read",
-          agentId: row.agent_id,
-          taskId: row.task_id,
-        })
+        .apiReadToHost(
+          row.host_id,
+          row.task_id === ""
+            ? { operation: "conversation.read", agentId: row.agent_id }
+            : { operation: "task.read", agentId: row.agent_id, taskId: row.task_id },
+        )
         .pipe(Effect.flatMap(decodeTaskSnapshot));
       if (snapshot.agentId !== row.agent_id) return false;
       if (snapshot.messages.some((message) => message.author === "user" && message.text === text))
         return true;
+      if (row.task_id === "") return false;
       const tasks = yield* integration
         .apiReadToHost(row.host_id, { operation: "task.list", agentId: row.agent_id })
         .pipe(Effect.flatMap(decodeTaskList));
@@ -159,7 +167,7 @@ const make = Effect.gen(function* () {
     const origin: OpenbotCodingOrigin = {
       hostId: row.host_id,
       agentId: row.agent_id,
-      taskId: row.task_id,
+      taskId: row.task_id || null,
     };
     const task = yield* bridge
       .get({ origin, operationId: row.operation_id })
@@ -174,7 +182,18 @@ const make = Effect.gen(function* () {
       if (delegatedTaskProgress(projection).state !== "result_available") return;
     }
     const runId = task.runId ?? "cancelled-before-launch";
-    const clientMessageId = `sled-coding:${row.thread_id}:${runId}`;
+    const clientMessageId = `sled-coding:${Hex.encode(
+      yield* digest
+        .digest(
+          Digest.sha256,
+          new TextEncoder().encode(
+            yield* encodeDeliveryKey([row.thread_id, runId]).pipe(
+              Effect.mapError((cause) => new CodingDeliveryError({ stage: "storage", cause })),
+            ),
+          ),
+        )
+        .pipe(Effect.mapError((cause) => new CodingDeliveryError({ stage: "storage", cause }))),
+    )}`;
     const result =
       task.result ??
       (task.cancelRequested
@@ -192,7 +211,8 @@ const make = Effect.gen(function* () {
       readonly accepted_at: string | null;
       readonly first_attempt_at: string | null;
       readonly payload_text: string | null;
-    }>`SELECT accepted_at, first_attempt_at, payload_text FROM openbot_coding_deliveries
+      readonly client_message_id: string;
+    }>`SELECT accepted_at, first_attempt_at, payload_text, client_message_id FROM openbot_coding_deliveries
       WHERE thread_id = ${row.thread_id} AND run_id = ${runId}`.pipe(
       Effect.mapError((cause) => new CodingDeliveryError({ stage: "storage", cause })),
     );
@@ -229,13 +249,23 @@ const make = Effect.gen(function* () {
     }
     if (!recovered) {
       const response = yield* integration
-        .apiWriteToHost(row.host_id, {
-          operation: "task.send",
-          agentId: row.agent_id,
-          taskId: row.task_id,
-          text: payload,
-          clientMessageId,
-        })
+        .apiWriteToHost(
+          row.host_id,
+          row.task_id === ""
+            ? {
+                operation: "conversation.send",
+                agentId: row.agent_id,
+                text: payload,
+                clientMessageId: receipt.client_message_id,
+              }
+            : {
+                operation: "task.send",
+                agentId: row.agent_id,
+                taskId: row.task_id,
+                text: payload,
+                clientMessageId: receipt.client_message_id,
+              },
+        )
         .pipe(Effect.mapError((cause) => new CodingDeliveryError({ stage: "send", cause })));
       const acknowledgement = yield* decodeAck(response).pipe(
         Effect.mapError((cause) => new CodingDeliveryError({ stage: "acknowledgement", cause })),

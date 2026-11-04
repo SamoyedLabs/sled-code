@@ -10,6 +10,8 @@ import {
   AuthDesktopOperateScope,
   AuthSettingsWriteScope,
   AuthProvidersManageScope,
+  AuthEnvironmentMaintainScope,
+  AuthFilesystemReadScope,
   AuthSourceControlWriteScope,
   AuthTerminalOperateScope,
   type AuthEnvironmentScope,
@@ -22,6 +24,15 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.openbotAttentionRespond]: AuthSettingsWriteScope,
   [WS_METHODS.openbotUpstreamCheck]: AuthSettingsWriteScope,
   [WS_METHODS.openbotUpstreamStage]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotUpstreamInstall]: AuthEnvironmentMaintainScope,
+  [WS_METHODS.openbotRuntimeActivate]: AuthEnvironmentMaintainScope,
+  [WS_METHODS.openbotRuntimeRollback]: AuthEnvironmentMaintainScope,
+  [WS_METHODS.openbotFilesMaterialize]: AuthFilesystemReadScope,
+  [WS_METHODS.openbotFilesUploadDraft]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotFilesSendDraft]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotFilesDiscardDraft]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotCodingPolicyEnable]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotCodingPolicyDisable]: AuthSettingsWriteScope,
   [WS_METHODS.openbotWrite]: AuthOrchestrationOperateScope,
   [WS_METHODS.openbotAdmin]: AuthSettingsWriteScope,
   [WS_METHODS.openbotAdminToHost]: AuthSettingsWriteScope,
@@ -103,6 +114,15 @@ export function clientRpcRequiredScopes(
   method: string,
   input: unknown,
 ): readonly AuthEnvironmentScope[] {
+  if (
+    method === WS_METHODS.openbotCodingPolicyEnable ||
+    method === WS_METHODS.openbotCodingPolicyDisable
+  )
+    return [AuthSettingsWriteScope, AuthOrchestrationOperateScope];
+  if (method === WS_METHODS.openbotFilesMaterialize)
+    return [AuthFilesystemReadScope, AuthOrchestrationReadScope];
+  if (method === WS_METHODS.openbotFilesUploadDraft)
+    return [AuthOrchestrationOperateScope, AuthFilesystemReadScope];
   if (method === WS_METHODS.openbotAdmin || method === WS_METHODS.openbotAdminToHost) {
     const request =
       method === WS_METHODS.openbotAdminToHost &&
@@ -120,7 +140,15 @@ export function clientRpcRequiredScopes(
     ) {
       if (request.operation.startsWith("provider."))
         return [AuthSettingsWriteScope, AuthProvidersManageScope];
-      if (request.operation === "agent.create")
+      if (
+        request.operation === "agent.create" ||
+        request.operation === "workflow.startRun" ||
+        request.operation === "workflow.runStep" ||
+        request.operation === "workflow.stopRun" ||
+        request.operation === "workflow.stopStep" ||
+        request.operation === "workflow.retryStep" ||
+        request.operation === "workflow.decide"
+      )
         return [AuthSettingsWriteScope, AuthOrchestrationOperateScope];
     }
     return [AuthSettingsWriteScope];

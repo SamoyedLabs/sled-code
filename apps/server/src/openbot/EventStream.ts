@@ -93,6 +93,7 @@ const resources: Readonly<Record<string, OpenbotChange["resource"]>> = {
   "skills-changed": "configuration",
   "mcp-servers-changed": "configuration",
   "channels-changed": "all",
+  "workflows-changed": "all",
 };
 const attentionEvents = new Set([
   "prompt",
@@ -114,6 +115,7 @@ const capabilities = [
   "browser-user-control",
   "browser-page-state",
   "prompt-multi-select-v1",
+  "workflows-v1",
 ];
 
 // The released wire uses botId even though the current host's in-process events use agentId.

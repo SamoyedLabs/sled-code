@@ -19,6 +19,7 @@ import {
   OrchestratorMcpFailure,
   SourceControlCloneRepositoryInput,
   SourceControlCloneRepositoryResult,
+  ThreadLaunchReceipt,
 } from "@t3tools/contracts";
 import * as FileSystem from "effect/FileSystem";
 import * as DocumentText from "../../../provider/DocumentText.ts";
@@ -26,6 +27,7 @@ import * as ServerConfig from "../../../config.ts";
 import * as ProviderRegistry from "../../../provider/ProviderRegistry.ts";
 import * as ServerSettings from "../../../serverSettings.ts";
 import * as ThreadLaunchService from "../../../orchestration-v2/ThreadLaunchService.ts";
+import * as ThreadLaunchReceipts from "../../../orchestration-v2/ThreadLaunchReceipts.ts";
 import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Schema from "effect/Schema";
@@ -124,7 +126,7 @@ const ProjectCloneTool = Tool.make("t3_project_clone", {
 const ThreadLaunchTool = Tool.make("t3_thread_launch", {
   ...shared,
   description:
-    "Create one new top-level thread, bound to its workspace before the agent starts. Task in `message`. Omit `projectId`, model and modes to inherit yours (outside a thread, pass `projectId` or `scratch`); modes cannot exceed yours. After an error or lost reply, retry with the same `clientRequestId`. Follow it with `t3_thread_read` or `t3_thread_wait`. Mention it with its `link`.",
+    "Create one new top-level thread, bound to its workspace before the agent starts. Task in `message`. Omit `projectId`, model and modes to inherit yours (outside a thread, pass `projectId` or `scratch`); modes cannot exceed yours. After an error or lost reply, retry with the same `clientRequestId`, or use `t3_thread_launch_receipt` to look up or cancel it. Follow with `t3_thread_read` or `t3_thread_wait`. Mention its `link`.",
   parameters: Schema.Struct({
     environmentId: OrchestratorMcpEnvironmentTarget,
     projectId: Schema.optional(ProjectId),
@@ -173,13 +175,30 @@ const ThreadLaunchTool = Tool.make("t3_thread_launch", {
     ProviderRegistry.ProviderRegistry,
     DocumentText.DocumentText,
     Digest.Digest,
+    ThreadLaunchReceipts.ThreadLaunchReceipts,
   ],
 })
   .annotate(Tool.Destructive, true)
   .annotate(Tool.OpenWorld, true);
 
+const ThreadLaunchReceiptTool = Tool.make("t3_thread_launch_receipt", {
+  ...shared,
+  description:
+    "Look up or cancel your t3_thread_launch by its clientRequestId without launching again. Cancel persists even before launch and requests a stop if the thread exists; stopState:'requested' is not completion. Follow a known thread to verify settlement.",
+  parameters: Schema.Struct({
+    environmentId: OrchestratorMcpEnvironmentTarget,
+    action: Schema.Literals(["get", "cancel"]),
+    clientRequestId: OrchestratorMcpClientRequestId,
+  }),
+  success: ThreadLaunchReceipt,
+  dependencies: [...shared.dependencies, ThreadLaunchReceipts.ThreadLaunchReceipts],
+})
+  .annotate(Tool.Idempotent, true)
+  .annotate(Tool.Destructive, true);
+
 export const ProjectToolkit = Toolkit.make(
   ThreadLaunchTool,
+  ThreadLaunchReceiptTool,
   ProjectListTool,
   ProjectReadTool,
   ProjectCreateTool,
