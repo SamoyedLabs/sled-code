@@ -1761,6 +1761,8 @@ const runCommand = Effect.fn("runCommand")(function* (
   },
 ) {
   const commandSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const started = performance.now();
+  yield* Effect.log(`[desktop-phase] ${options.label}: started`);
   const child = yield* commandSpawner.spawn(command);
   const [stdout, stderr, exitCode] = yield* Effect.all(
     [
@@ -1771,6 +1773,9 @@ const runCommand = Effect.fn("runCommand")(function* (
     { concurrency: "unbounded" },
   );
 
+  yield* Effect.log(
+    `[desktop-phase] ${options.label}: finished in ${((performance.now() - started) / 1000).toFixed(1)}s (exit=${exitCode})`,
+  );
   if (exitCode !== 0) {
     return yield* new BuildCommandFailedError({
       command: options.label,
@@ -2850,6 +2855,14 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   if (platform === "mac") {
     const path = yield* Path.Path;
     const repoRoot = yield* RepoRoot;
+    const privateIdentity =
+      privateLaunch &&
+      (yield* Config.String("SLED_MAC_DISTRIBUTION").pipe(
+        Config.withDefault("private-development"),
+      )) === "private-development"
+        ? yield* Config.String("T3_REMOTE_SIGNING_IDENTITY").pipe(Config.withDefault(""))
+        : "";
+    if (privateIdentity && privateIdentity !== "-") buildConfig.forceCodeSigning = true;
     buildConfig.mac = {
       target: target === "dmg" ? [target, "zip"] : [target],
       ...(privateLaunch &&
@@ -2894,7 +2907,14 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
           role: "Viewer",
         },
       ],
-      ...(signed ? { sign: path.join(repoRoot, "scripts/sign-macos.ts") } : {}),
+      ...(privateIdentity && privateIdentity !== "-"
+        ? {
+            identity: privateIdentity.replace(/^Apple Development:\s*/, ""),
+            sign: path.join(repoRoot, "scripts/sign-private-desktop.cjs"),
+          }
+        : signed
+          ? { sign: path.join(repoRoot, "scripts/sign-macos.ts") }
+          : {}),
       ...(macPasskeySigning
         ? {
             entitlements: macPasskeySigning.entitlementsPath,

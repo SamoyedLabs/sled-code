@@ -10,6 +10,7 @@ import re
 import secrets
 import subprocess
 import sys
+import time
 
 REPO = 'SamoyedLabs/sled-code'
 
@@ -118,7 +119,7 @@ def sha256(path):
             result.update(block)
         return result.hexdigest()
 
-def publish():
+def publish_once():
     version = os.environ['SLED_RELEASE_VERSION']
     sha = os.environ['SLED_RELEASE_SHA']
     if not re.fullmatch(r'0\.[0-9]+\.[0-9]+', version) or not re.fullmatch(r'[0-9a-f]{40}', sha):
@@ -137,16 +138,46 @@ def publish():
             assets[name] = checksum
         assets[manifest_path.name] = sha256(manifest_path)
     tag = 'v' + version
-    # Existing tags/releases are never overwritten; failed publishes remain visible drafts.
-    run('gh', 'release', 'create', tag, '--repo', REPO, '--target', sha, '--draft',
-        '--title', 'Sled Code ' + version, '--notes', 'Sled source: ' + sha)
-    release_id = json.loads(run('gh', 'release', 'view', tag, '--repo', REPO, '--json', 'databaseId'))['databaseId']
-    run('gh', 'release', 'upload', tag, '--repo', REPO, *[str(folder / name) for name in assets])
+    marker = 'Sled source: ' + sha
+    existing = next((r for r in api('releases?per_page=100') if r['tag_name'] == tag), None)
+    if existing:
+        if existing.get('body') != marker or existing.get('target_commitish') != sha:
+            raise ValueError('Existing release has different source provenance')
+        release_id = existing['id']
+    else:
+        run('gh', 'release', 'create', tag, '--repo', REPO, '--target', sha, '--draft',
+            '--title', 'Sled Code ' + version, '--notes', marker)
+        release_id = json.loads(run('gh', 'release', 'view', tag, '--repo', REPO, '--json', 'databaseId'))['databaseId']
+    release = api(f'releases/{release_id}')
+    remote = {a['name']: a for a in release['assets']}
+    if any(name not in assets or asset.get('digest') != 'sha256:' + assets[name]
+           for name, asset in remote.items()):
+        raise ValueError('Remote asset digest mismatch; release retained without changes')
+    missing = sorted(set(assets) - set(remote))
+    if not release['draft']:
+        if missing:
+            raise ValueError('Published release is missing certified assets')
+        print('Certified release already published; no build or upload repeated.')
+        return
+    if missing:
+        print(f'[publish] Uploading {len(missing)} remaining certified assets', flush=True)
+        run('gh', 'release', 'upload', tag, '--repo', REPO, *[str(folder / name) for name in missing])
     remote = {a['name']: a for a in api(f'releases/{release_id}')['assets']}
     if set(remote) != set(assets) or any(remote[n].get('digest') != 'sha256:' + digest for n, digest in assets.items()):
         raise ValueError('Remote asset digest mismatch; release retained as draft')
     run('gh', 'api', '--method', 'PATCH', f'repos/{REPO}/releases/{release_id}',
         '-F', 'draft=false', '-F', 'prerelease=false', '-f', 'make_latest=true')
+
+
+def publish():
+    for attempt in range(3):
+        try:
+            return publish_once()
+        except subprocess.CalledProcessError:
+            if attempt == 2:
+                raise
+            print('[publish] GitHub operation failed; reconciling retained assets before retry', flush=True)
+            time.sleep(2 ** (attempt + 1))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)

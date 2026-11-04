@@ -1,0 +1,61 @@
+name: Sled Native Cache Benchmark
+on:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: sled-native-cache-benchmark-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  benchmark:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      SLED_APPLE_TEAM_ID: ${{ vars.SLED_APPLE_TEAM_ID }}
+      T3CODE_RELAY_URL: ${{ vars.T3CODE_RELAY_URL }}
+      T3CODE_CLERK_PUBLISHABLE_KEY: ${{ vars.T3CODE_CLERK_PUBLISHABLE_KEY }}
+      T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ vars.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID }}
+      T3CODE_CLERK_JWT_TEMPLATE: ${{ vars.T3CODE_CLERK_JWT_TEMPLATE }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci-deps
+        with:
+          install-args: --filter @t3tools/mobile... --filter @t3tools/scripts...
+          restore-full-store: "false"
+      - name: Select isolated benchmark directories
+        run: |
+          echo "SLED_IOS_COMPILER_CACHE_DIR=$RUNNER_TEMP/sled-native-cache-benchmark/compiler" >> "$GITHUB_ENV"
+          echo "SLED_IOS_SWIFT_PACKAGE_DIR=$RUNNER_TEMP/sled-native-cache-benchmark/source-packages" >> "$GITHUB_ENV"
+          echo "SLED_IOS_SWIFT_PACKAGE_CACHE_DIR=$RUNNER_TEMP/sled-native-cache-benchmark/package-cache" >> "$GITHUB_ENV"
+      - name: Cold native archive
+        run: python3 scripts/sled/benchmark-ios-cache.py cold
+      - name: Save measured compiler results
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ${{ env.SLED_IOS_COMPILER_CACHE_DIR }}
+          key: sled-native-benchmark-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Remove local compiler results before testing restoration
+        run: rm -rf "$SLED_IOS_COMPILER_CACHE_DIR"
+      - name: Restore measured compiler results
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ${{ env.SLED_IOS_COMPILER_CACHE_DIR }}
+          key: sled-native-benchmark-${{ github.run_id }}-${{ github.run_attempt }}
+          fail-on-cache-miss: true
+      - name: Warm native archive with fresh DerivedData
+        run: python3 scripts/sled/benchmark-ios-cache.py warm
+      - name: Retain benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-cache-benchmark
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/sled-native-cache-benchmark/cold/*.json*
+            ${{ runner.temp }}/sled-native-cache-benchmark/warm/*.json*
+            ${{ runner.temp }}/sled-native-cache-benchmark/current/*-diagnostics.json
+            ${{ runner.temp }}/sled-native-cache-benchmark/current/phase-timings.jsonl

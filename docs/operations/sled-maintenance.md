@@ -145,6 +145,10 @@ For Windows x64, use the existing `dist:desktop:artifact --platform win --target
 
 ### Unattended GitHub-hosted desktop releases
 
+Desktop publication reconciles a retained draft and uploads only missing, digest-matching certified assets. Transient GitHub failures get bounded retries; rerunning the failed publication job reuses the original artifacts and version. Conflicting source provenance or remote bytes stop publication. Private Mac builds sign the app inside Electron packaging before the final ZIP is created.
+
+To measure native compiler reuse without publishing, dispatch `sled-mobile-release.yml` with `benchmark=true`. It builds two unsigned Release archives on one Mac runner, round-trips the compiler cache through GitHub, and removes DerivedData between builds. The job summary reports archive time and compiler hits/misses; `native-cache-benchmark` retains the evidence. This measures compiler reuse with warm OS/dependency state, not a fresh-runner signed release or TestFlight availability. Native release evidence also includes `phase-timings.jsonl` for Pods, package resolution, archive, export, and upload.
+
 `sled-desktop-release.yml` runs on GitHub-hosted Ubuntu, macOS arm64 and Windows x64 VMs. No personal computer, self-hosted runner, local cron or persistent server is required. Its five-minute cloud schedule covers bot merges even without a push event. It selects main only after successful `Check` for that exact SHA and avoids duplicate source releases/drafts. Both platforms must verify before the draft is published. Devices receive releases when next online. Mobile OTA/native cloud automation is separate and is not implemented by this desktop workflow.
 
 To verify a branch's desktop build tooling without signing or publishing, dispatch

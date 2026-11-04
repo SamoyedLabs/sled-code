@@ -111,89 +111,89 @@ class HostedReleaseTest(unittest.TestCase):
                 finally:
                     os.chdir(old)
 
-    def test_publish_uses_draft_id_and_requires_every_certified_digest(self):
-        cases = [(None, 0), ('missing', 0), ('extra', 0)] + [
-            (corruption, index) for corruption in ['digest', 'no-digest'] for index in range(4)]
-        for corruption, index in cases:
-            with self.subTest(corruption=corruption, index=index), tempfile.TemporaryDirectory() as temp:
+    def test_publish_resumes_after_each_ambiguous_network_failure(self):
+        for interrupted in ('create', 'upload', 'finalize', None):
+            with self.subTest(interrupted=interrupted), tempfile.TemporaryDirectory() as temp:
                 folder = Path(temp) / 'release-desktop'
                 folder.mkdir()
-                assets = {}
-                for platform, name in [('mac', 'test.zip'), ('win', 'test.exe')]:
-                    artifact = folder / name
+                digests = {}
+                for platform in ('mac', 'win'):
+                    artifact = folder / (platform + '.zip')
                     artifact.write_bytes(platform.encode())
                     manifest = folder / f'verified-{platform}.json'
-                    manifest.write_text(json.dumps({'platform': platform, 'version': '0.2.42',
-                                                    'hashes': {name: hosted.sha256(artifact)}}))
-                    for path in [artifact, manifest]:
-                        assets[path.name] = hosted.sha256(path)
-                remote = [{'name': name, 'digest': 'sha256:' + digest} for name, digest in assets.items()]
-                if corruption == 'missing':
-                    remote.pop()
-                elif corruption == 'extra':
-                    remote.append({'name': 'uncertified.exe', 'digest': 'sha256:extra'})
-                elif corruption == 'digest':
-                    remote[index]['digest'] = 'sha256:changed'
-                elif corruption == 'no-digest':
-                    remote[index].pop('digest')
-                commands = []
-                def command(*args):
-                    commands.append(args)
-                    if args[:3] == ('gh', 'release', 'view'):
-                        self.assertIn('databaseId', args)
-                        return '{"databaseId": 123}'
-                    return ''
+                    manifest.write_text(json.dumps(dict(platform=platform, version='0.2.42',
+                        hashes={artifact.name: hosted.sha256(artifact)})))
+                    for file in (artifact, manifest):
+                        digests[file.name] = 'sha256:' + hosted.sha256(file)
+                state = {'release': None, 'failed': False, 'uploads': []}
+                def fail(stage):
+                    if stage == interrupted and not state['failed']:
+                        state['failed'] = True
+                        raise hosted.subprocess.CalledProcessError(1, 'gh')
                 def api(endpoint):
-                    # GitHub cannot resolve an untagged draft via releases/tags/v*.
+                    if endpoint == 'releases?per_page=100':
+                        return [state['release']] if state['release'] else []
                     self.assertEqual(endpoint, 'releases/123')
-                    return {'assets': remote}
+                    return state['release']
+                def command(*args):
+                    if args[:3] == ('gh', 'release', 'create'):
+                        self.assertIsNone(state['release'])
+                        state['release'] = dict(id=123, tag_name='v0.2.42', draft=True,
+                            target_commitish='a' * 40, body='Sled source: ' + 'a' * 40, assets=[])
+                        fail('create')
+                    elif args[:3] == ('gh', 'release', 'view'):
+                        return '{"databaseId":123}'
+                    elif args[:3] == ('gh', 'release', 'upload'):
+                        for name in args[6:]:
+                            name = Path(name).name
+                            self.assertNotIn(name, state['uploads'])
+                            state['uploads'].append(name)
+                            state['release']['assets'].append(dict(name=name, digest=digests[name]))
+                            fail('upload')
+                    elif args[:2] == ('gh', 'api'):
+                        self.assertEqual(len(state['uploads']), 4)
+                        state['release']['draft'] = False
+                        fail('finalize')
+                    else:
+                        self.fail(str(args))
+                    return ''
                 old = os.getcwd()
                 try:
                     os.chdir(temp)
-                    with patch.dict(os.environ, {'SLED_RELEASE_VERSION': '0.2.42', 'SLED_RELEASE_SHA': 'a' * 40}), patch.object(
-                        hosted, 'run', side_effect=command), patch.object(hosted, 'api', side_effect=api):
-                        if corruption:
-                            with self.assertRaisesRegex(ValueError, 'Remote asset digest mismatch'):
-                                hosted.publish()
-                        else:
-                            hosted.publish()
-                    create = commands[0]
-                    self.assertEqual(create[:4], ('gh', 'release', 'create', 'v0.2.42'))
-                    self.assertEqual(create[create.index('--target') + 1], 'a' * 40)
-                    self.assertEqual(create[create.index('--notes') + 1], 'Sled source: ' + 'a' * 40)
-                    self.assertIn('--draft', create)
-                    uploads = [c for c in commands if c[:3] == ('gh', 'release', 'upload')]
-                    self.assertEqual(len(uploads), 1)
-                    self.assertEqual(set(uploads[0][6:]), {str(Path('release-desktop') / name) for name in assets})
-                    finalizes = [c for c in commands if c[:2] == ('gh', 'api')]
-                    self.assertEqual(len(finalizes), 0 if corruption else 1)
-                    if finalizes:
-                        self.assertIn('repos/' + hosted.REPO + '/releases/123', finalizes[0])
-                        for field in ['draft=false', 'prerelease=false', 'make_latest=true']:
-                            self.assertIn(field, finalizes[0])
+                    with patch.dict(os.environ, SLED_RELEASE_VERSION='0.2.42', SLED_RELEASE_SHA='a' * 40), \
+                            patch.object(hosted, 'api', side_effect=api), patch.object(hosted, 'run', side_effect=command), \
+                            patch('time.sleep'):
+                        hosted.publish()
+                        hosted.publish()
+                    self.assertFalse(state['release']['draft'])
+                    self.assertEqual(set(state['uploads']), set(digests))
                 finally:
                     os.chdir(old)
 
-    def test_publish_never_reuses_existing_release_or_draft(self):
-        with tempfile.TemporaryDirectory() as temp:
-            folder = Path(temp) / 'release-desktop'
-            folder.mkdir()
-            for platform in ['mac', 'win']:
-                (folder / f'verified-{platform}.json').write_text(json.dumps({
-                    'platform': platform, 'version': '0.2.42', 'hashes': {},
-                }))
-            old = os.getcwd()
-            try:
-                os.chdir(temp)
-                with patch.dict(os.environ, {'SLED_RELEASE_VERSION': '0.2.42', 'SLED_RELEASE_SHA': 'a' * 40}), patch.object(
-                    hosted, 'run', side_effect=hosted.subprocess.CalledProcessError(1, 'gh')) as run, patch.object(hosted, 'api') as api:
-                    with self.assertRaises(hosted.subprocess.CalledProcessError):
-                        hosted.publish()
-                    self.assertEqual(run.call_count, 1)
-                    self.assertEqual(run.call_args.args[:3], ('gh', 'release', 'create'))
-                    api.assert_not_called()
-            finally:
-                os.chdir(old)
+    def test_resume_refuses_foreign_or_modified_remote_artifacts(self):
+        for corruption in ('source', 'target', 'digest', 'extra', 'published-missing'):
+            with self.subTest(corruption=corruption), tempfile.TemporaryDirectory() as temp:
+                folder = Path(temp) / 'release-desktop'
+                folder.mkdir()
+                for platform in ('mac', 'win'):
+                    (folder / f'verified-{platform}.json').write_text(json.dumps(dict(
+                        platform=platform, version='0.2.42', hashes={})))
+                release = dict(id=123, tag_name='v0.2.42', draft=corruption != 'published-missing',
+                    body='Sled source: ' + 'a' * 40, target_commitish='a' * 40, assets=[])
+                if corruption == 'source': release['body'] = 'unrelated release'
+                if corruption == 'target': release['target_commitish'] = 'b' * 40
+                if corruption == 'digest': release['assets'] = [dict(name='verified-mac.json', digest='sha256:wrong')]
+                if corruption == 'extra': release['assets'] = [dict(name='extra.exe', digest='sha256:wrong')]
+                old = os.getcwd()
+                try:
+                    os.chdir(temp)
+                    with patch.dict(os.environ, SLED_RELEASE_VERSION='0.2.42', SLED_RELEASE_SHA='a' * 40), \
+                            patch.object(hosted, 'api', side_effect=lambda endpoint: [release] if '?' in endpoint else release), \
+                            patch.object(hosted, 'run') as run:
+                        with self.assertRaises(ValueError): hosted.publish()
+                    run.assert_not_called()
+                finally:
+                    os.chdir(old)
 
 if __name__ == '__main__':
     unittest.main()

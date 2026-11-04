@@ -80,7 +80,7 @@ class MobileReleaseTest(unittest.TestCase):
                     m.check_environment(manifest)
 
     def test_manual_signing_is_opt_in_and_does_not_apply_profiles_to_pods(self):
-        for manual, exit_code, prepared in ((False, 0, False), (True, 0, False), (True, 65, True)):
+        for manual, exit_code, prepared, unsigned in ((False, 0, False, False), (True, 0, False, False), (True, 65, True, False), (False, 0, True, True)):
             with self.subTest(manual=manual, exit_code=exit_code, prepared=prepared), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
                 script = root / 'scripts/testflight-ios.py'
@@ -107,6 +107,8 @@ class MobileReleaseTest(unittest.TestCase):
                 public.write_text(json.dumps({k: 'fixture' for k in m.PUBLIC}))
                 argv = [str(script), 'archive', '--team', m.TEAM, '--build-number', '3',
                         '--output-dir', str(output), '--credentials-dir', str(credentials), '--public-config', str(public)]
+                if unsigned:
+                    argv.append('--unsigned')
                 if manual:
                     argv.append('--manual-signing')
                 if prepared:
@@ -131,7 +133,8 @@ class MobileReleaseTest(unittest.TestCase):
                 build_call = next(call for call in commands.call_args_list if call.args[0][:2] == ['xcodebuild', 'archive'])
                 self.assertEqual(build_call.kwargs['env']['APP_VARIANT'], 'preview')
                 build = build_call.args[0]
-                self.assertEqual('CODE_SIGN_STYLE=Automatic' in build, not manual)
+                self.assertEqual('CODE_SIGN_STYLE=Automatic' in build, not manual and not unsigned)
+                self.assertEqual('CODE_SIGNING_ALLOWED=NO' in build, unsigned)
                 self.assertFalse(any(part.startswith('PROVISIONING_PROFILE_SPECIFIER=') for part in build))
                 self.assertEqual(any(command[0] == 'ruby' for command in actual), manual)
                 self.assertEqual(any(command[:2] == ['security', 'unlock-keychain'] for command in actual), manual)

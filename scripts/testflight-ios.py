@@ -19,7 +19,7 @@ def run_logged(command, *, cwd, env, log, check=False):
     stopped = threading.Event()
 
     def report_progress():
-        while not stopped.wait(60):
+        while not stopped.wait(30):
             status = log.stat()
             print(f'[native] {stage} running: elapsed={int(time.monotonic() - started)}s '
                   f'log_bytes={status.st_size} quiet_for={max(0, int(time.time() - status.st_mtime))}s',
@@ -41,6 +41,11 @@ def run_logged(command, *, cwd, env, log, check=False):
         finally:
             stopped.set()
             reporter.join()
+            record = dict(phase=stage, elapsed_seconds=round(time.monotonic() - started, 3),
+                          exit_code=exit_code, source_sha=os.environ.get('GITHUB_SHA'),
+                          run_id=os.environ.get('GITHUB_RUN_ID'), run_attempt=os.environ.get('GITHUB_RUN_ATTEMPT'))
+            with (log.parent / 'phase-timings.jsonl').open('a') as timings:
+                timings.write(json.dumps(record) + '\n')
             print(f'[native] {stage} finished: exit={exit_code} '
                   f'elapsed={int(time.monotonic() - started)}s', flush=True)
 
@@ -51,6 +56,7 @@ parser.add_argument('action', choices=['archive', 'export', 'upload'])
 parser.add_argument('--team', required=True)
 parser.add_argument('--build-number', default='1')
 parser.add_argument('--bundle-id', default='com.samoyedlabs.sled')
+parser.add_argument('--unsigned', action='store_true', help='Benchmark archive compilation without signing; cannot export or upload.')
 parser.add_argument('--manual-signing', action='store_true', help='Use the supplied distribution profile for the archive as well as export.')
 parser.add_argument('--prepare', action='store_true', help='Apply source integration and regenerate iOS configuration.')
 parser.add_argument('--skip-prebuild', action='store_true',
@@ -64,6 +70,8 @@ parser.add_argument('--derived-data-path', type=Path, default=root / '.tools/ios
 parser.add_argument('--tools-bin', type=Path, default=root / '.tools/bin')
 parser.add_argument('--output-dir', type=Path, help='Use a distinct directory to retain previous native releases.')
 args = parser.parse_args()
+if args.unsigned and (args.action != 'archive' or args.manual_signing):
+    parser.error('--unsigned is restricted to benchmark archives without manual signing')
 if args.skip_prebuild and (args.action != 'archive' or not args.prepare):
     parser.error('--skip-prebuild requires archive --prepare')
 if args.enable_ota:
@@ -178,6 +186,9 @@ if args.action == 'archive':
                         str(projects[0]), signing['certificateSha1'], signing['profileUuid']],
                        cwd=mobile, env=env, check=True)
         command = [part for part in command if part not in ('CODE_SIGN_STYLE=Automatic', '-allowProvisioningUpdates')]
+    if args.unsigned:
+        command = [part for part in command if part not in ('CODE_SIGN_STYLE=Automatic', '-allowProvisioningUpdates')]
+        command += ['CODE_SIGNING_ALLOWED=NO', 'CODE_SIGNING_REQUIRED=NO', 'CODE_SIGN_IDENTITY=']
 else:
     if not archive.exists():
         raise SystemExit('Create the native archive first')
@@ -198,7 +209,8 @@ else:
                '-exportPath', str(output / 'export'), '-exportOptionsPlist', str(options),
                '-allowProvisioningUpdates']
 log = output / (args.action + '.log')
-command += api_auth_flags
+if not args.unsigned:
+    command += api_auth_flags
 previous_keychains = None
 try:
     if signing and (args.action != 'archive' or args.manual_signing):
@@ -230,13 +242,13 @@ print(args.action, 'exit:', result.returncode, 'log:', log)
 if result.returncode == 0:
     with (archive / 'Info.plist').open('rb') as stream:
         metadata = plistlib.load(stream)['ApplicationProperties']
-    if metadata.get('CFBundleIdentifier') != args.bundle_id or metadata.get('Team') != args.team:
+    if metadata.get('CFBundleIdentifier') != args.bundle_id or (not args.unsigned and metadata.get('Team') != args.team):
         raise SystemExit('Built archive identity does not match the requested TestFlight target')
     if args.action == 'archive' and metadata['CFBundleVersion'] != args.build_number:
         raise SystemExit('Archive did not embed the requested build number; do not upload')
     status_path = output / 'status.json'
     status = json.loads(status_path.read_text()) if status_path.exists() and args.action != 'archive' else {}
-    status.update(updatedAt=datetime.now(timezone.utc).isoformat(), team=args.team,
+    status.update(benchmarkOnly=args.unsigned, updatedAt=datetime.now(timezone.utc).isoformat(), team=args.team,
                   bundleIdentifier=args.bundle_id, version=metadata['CFBundleShortVersionString'],
                   build=metadata['CFBundleVersion'], internalTestFlightOnly=True)
     status[{'archive': 'archiveSucceeded', 'export': 'appStoreExportSucceeded', 'upload': 'uploaded'}[args.action]] = True

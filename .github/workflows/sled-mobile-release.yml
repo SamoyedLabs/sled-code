@@ -1,6 +1,11 @@
 name: Sled Mobile Release
 on:
   workflow_dispatch:
+    inputs:
+      benchmark:
+        description: Measure unsigned cold/warm native builds without publishing
+        type: boolean
+        default: false
   workflow_run:
     workflows: [CI]
     types: [completed]
@@ -10,12 +15,12 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: sled-mobile-release
+  group: ${{ inputs.benchmark && format('sled-mobile-benchmark-{0}', github.ref) || 'sled-mobile-release' }}
   cancel-in-progress: false
 jobs:
   resolve:
     if: >-
-      github.repository == 'SamoyedLabs/sled-code' &&
+      !inputs.benchmark && github.repository == 'SamoyedLabs/sled-code' &&
       github.ref == 'refs/heads/main' &&
       vars.SLED_MOBILE_RELEASE_ENABLED == 'true' &&
       (github.event_name != 'workflow_run' ||
@@ -179,6 +184,7 @@ jobs:
           path: |
             release-mobile/native/*-diagnostics.json
             release-mobile/native/compilation-cache-statistics.json
+            release-mobile/native/phase-timings.jsonl
             release-mobile/plan.json
             release-mobile/baseline.json
             release-mobile/archive-validation.json
@@ -192,3 +198,6 @@ jobs:
           path: ${{ runner.temp }}/ci-timings.jsonl
           retention-days: 7
           if-no-files-found: ignore
+  benchmark:
+    if: github.event_name == 'workflow_dispatch' && inputs.benchmark
+    uses: ./.github/workflows/sled-native-cache-benchmark.yml

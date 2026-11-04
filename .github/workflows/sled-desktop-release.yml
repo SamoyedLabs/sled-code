@@ -171,9 +171,6 @@ jobs:
             signing=()
           fi
           python3 scripts/sled/ci_progress.py run --phase "Build signed final installer and updater metadata" -- vp run dist:desktop:artifact --platform '${{ matrix.platform }}' --target '${{ matrix.target }}' --arch '${{ matrix.arch }}' --build-version '${{ needs.resolve.outputs.version }}' "${signing[@]}" --skip-build --output-dir release-desktop
-          if [[ '${{ matrix.platform }}' == 'mac' && "$SLED_MAC_DISTRIBUTION" == 'private-development' ]]; then
-            node scripts/sign-private-desktop.cjs 'release-desktop/T3-Code-${{ needs.resolve.outputs.version }}-arm64.zip'
-          fi
       - name: Finalize private metadata and verify signatures and update assets
         env:
           SLED_RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
