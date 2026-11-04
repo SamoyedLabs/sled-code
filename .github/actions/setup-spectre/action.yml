@@ -1,0 +1,49 @@
+name: Cache Windows Spectre libraries
+description: Reuse libraries for the exact compiler, with a verified installer fallback.
+runs:
+  using: composite
+  steps:
+    - name: Resolve the Windows compiler cache
+      id: msvc
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+        $install = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        if (!$install) { throw 'Visual C++ tools are missing on the hosted image' }
+        $toolset = Get-ChildItem (Join-Path $install 'VC\Tools\MSVC') -Directory | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
+        $compiler = Get-FileHash (Join-Path $toolset.FullName 'bin\Hostx64\x64\cl.exe') -Algorithm SHA256
+        "path=$(Join-Path $toolset.FullName 'lib\spectre\x64')" >> $env:GITHUB_OUTPUT
+        "key=msvc-spectre-x64-v1-$($toolset.Name)-$($compiler.Hash)" >> $env:GITHUB_OUTPUT
+        "MSVC_INSTALL=$install" >> $env:GITHUB_ENV
+    - name: Restore matching Windows Spectre libraries
+      id: spectre
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: ${{ steps.msvc.outputs.path }}
+        key: ${{ steps.msvc.outputs.key }}
+    - name: Ensure required Windows Spectre libraries
+      id: installed_msvc
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $install = $env:MSVC_INSTALL
+        $toolset = Get-ChildItem (Join-Path $install 'VC\Tools\MSVC') -Directory | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
+        if (!(Test-Path (Join-Path $toolset.FullName 'lib\spectre\x64\libcmt.lib'))) {
+          $setup = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\setup.exe'
+          $process = Start-Process -FilePath $setup -ArgumentList @('modify', '--installPath', "`"$install`"", '--add', 'Microsoft.VisualStudio.Component.VC.Runtimes.x86.x64.Spectre', '--quiet', '--norestart') -Wait -PassThru
+          if ($process.ExitCode -notin @(0, 3010)) { throw "Visual Studio component installation failed: $($process.ExitCode)" }
+        }
+        # The installer may update MSVC; never save new libraries under the old compiler key.
+        $toolset = Get-ChildItem (Join-Path $install 'VC\Tools\MSVC') -Directory | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
+        $libraryPath = Join-Path $toolset.FullName 'lib\spectre\x64'
+        if (!(Test-Path (Join-Path $libraryPath 'libcmt.lib'))) { throw 'Required x64 Spectre libraries are still missing' }
+        $compiler = Get-FileHash (Join-Path $toolset.FullName 'bin\Hostx64\x64\cl.exe') -Algorithm SHA256
+        "path=$libraryPath" >> $env:GITHUB_OUTPUT
+        "key=msvc-spectre-x64-v1-$($toolset.Name)-$($compiler.Hash)" >> $env:GITHUB_OUTPUT
+    - name: Cache installed Windows Spectre libraries
+      if: steps.spectre.outputs.cache-matched-key != steps.installed_msvc.outputs.key
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: ${{ steps.installed_msvc.outputs.path }}
+        key: ${{ steps.installed_msvc.outputs.key }}

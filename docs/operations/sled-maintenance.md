@@ -147,6 +147,28 @@ For Windows x64, use the existing `dist:desktop:artifact --platform win --target
 
 `sled-desktop-release.yml` runs on GitHub-hosted Ubuntu, macOS arm64 and Windows x64 VMs. No personal computer, self-hosted runner, local cron or persistent server is required. Its five-minute cloud schedule covers bot merges even without a push event. It selects main only after successful `Check` for that exact SHA and avoids duplicate source releases/drafts. Both platforms must verify before the draft is published. Devices receive releases when next online. Mobile OTA/native cloud automation is separate and is not implemented by this desktop workflow.
 
+To verify a branch's desktop build tooling without signing or publishing, dispatch
+`sled-desktop-release.yml` on that branch with `verify_only=true`. This runs the desktop
+build on standard Linux, Windows and Mac runners and compiles the native Mac host.
+It does not validate installer signatures, TestFlight upload or Apple processing.
+
+CI and release logs emit `[progress]` phase start, elapsed-time heartbeats and completion
+records. Job summaries and `phase-timings-*` artifacts retain durations and the historical
+samples used for estimates. To inspect a running or completed workflow, including runner
+allocation and the active step, run:
+
+```sh
+python3 scripts/sled/ci_progress.py status --repo SamoyedLabs/sled-code --run RUN_ID --output timings.json
+```
+
+Ranges use up to five successful main runs from the last 30 days and require three
+observations. They are historical ranges, not deadlines or calibrated confidence intervals.
+Overruns and missing history explicitly have no ETA. Whole-run estimates require the same
+enabled jobs; mobile whole-run estimates remain unavailable because native and OTA paths
+differ. Native and OTA phase histories are separate. Queueing, cache misses and changed
+workloads can exceed the observed range. The JSON export preserves run attempts and step
+timings for comparing forecasts with actual completion.
+
 The release gate is `SLED_DESKTOP_RELEASE_ENABLED=true`. The default **private same-owner Mac** path is `SLED_MAC_DISTRIBUTION=private-development`. Securely provision `SLED_MAC_CSC_LINK` (base64 encrypted PKCS#12 containing only the existing authorized Apple Development certificate and private key) and `SLED_MAC_CSC_KEY_PASSWORD` (its export password). No Developer ID certificate, notarization key or purchase is required for this private route. Root owns credential provisioning; implementation did not transfer keys. Export only the selected identity, never all identities in the login keychain.
 
 The nonsecret `SLED_APPLE_TEAM_ID=WYW7983W9W`, `SLED_MAC_DISTRIBUTION=private-development`, exact prior app `SLED_MAC_SIGNING_REQUIREMENT`, and four public Connect variables have been configured in repository Actions variables. The workflow imports the supplied identity into an ephemeral runner keychain. Because the pinned builder does not select Apple Development for non-MAS signing, private mode uses the already verified packaging-then-`sign-private-desktop.cjs` path, explicitly omits notarization and regenerates the final ZIP blockmap and hashes after signing. Verification requires the prior app's exact designated requirement plus the expected team, deep/strict signature validation, helper verification and final archive hashes. This preserves the established same-owner signature trust instead of weakening it to a team-only check. Gatekeeper/public notarization is not claimed. Existing private native Squirrel download acceptance was verified on this Mac; root has provisioned the existing identity, and hosted validation now awaits committed source and a real hosted run.

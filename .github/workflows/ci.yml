@@ -19,6 +19,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || inputs.candidate_sha || github.ref }}
@@ -38,6 +39,8 @@ jobs:
           persist-credentials: false
       - name: Test upstream merge and promotion safeguards
         run: python3 scripts/sled/upstream_test.py
+      - name: Test progress and ETA reporting
+        run: python3 scripts/sled/ci_progress_test.py
       - name: Test CI routing
         run: node --test .github/scripts/ci-changes.test.cjs .github/scripts/ci-gate.test.cjs
       - name: Verify pinned native dependency notices
@@ -51,11 +54,13 @@ jobs:
   # .github/scripts/ci-changes.cjs maps changed files to workspace packages and
   # their dependents, on both PRs and main. Detection fails open: if the diff
   # cannot be resolved or a path has no known owner, everything runs.
+
   changes:
     name: Changes
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
+      timings: ${{ steps.timing.outputs.timings }}
       docs: ${{ steps.detect.outputs.docs }}
       docs_files: ${{ steps.detect.outputs.docs_files }}
       lint: ${{ steps.detect.outputs.lint }}
@@ -87,6 +92,7 @@ jobs:
             /pnpm-workspace.yaml
             /.github/scripts/ci-changes.cjs
             /.github/actions/ci-changes/
+            /scripts/sled/ci_progress.py
             /config/sled-upstream.json
             /*/package.json
             /*/*/package.json
@@ -114,6 +120,12 @@ jobs:
         uses: ./.github/actions/ci-changes
         with:
           base-sha: ${{ inputs.base_sha }}
+
+      - name: Load recent GitHub step timings
+        id: timing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/sled/ci_progress.py history --workflow ci.yml
 
   docs:
     name: Docs
@@ -155,8 +167,12 @@ jobs:
   lint:
     permissions:
       contents: read
+      actions: read
     name: Lint
     needs: changes
+    env:
+      CI_TIMING_JOB: Lint
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.lint != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -197,7 +213,7 @@ jobs:
 
       # Files/dependencies are repo-wide; export checks cover clean workspaces only.
       - name: Check unused code
-        run: vp run knip:check
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Check unused code" -- vp run knip:check
 
       - name: Check generated GitHub GraphQL operations
         run: vp run --filter @t3tools/source-control-github generate --check
@@ -206,13 +222,26 @@ jobs:
         run: vp run --filter t3 generate --check
 
       - name: Check
-        run: vp check
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Check" -- vp check
+
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
 
   build:
     permissions:
       contents: read
+      actions: read
     name: Build and Typecheck
     needs: changes
+    env:
+      CI_TIMING_JOB: Build and Typecheck
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && (needs.changes.outputs.build != 'false' || needs.changes.outputs.typecheck != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -278,7 +307,7 @@ jobs:
       - name: Build desktop pipeline
         id: build
         if: ${{ !cancelled() && steps.electron.outcome == 'success' && steps.apt.outcome == 'success' && needs.changes.outputs.build != 'false' }}
-        run: vp run build:desktop
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Build desktop pipeline" -- vp run build:desktop
 
       - name: Verify preload bundle output
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -292,6 +321,15 @@ jobs:
           cat "$RUNNER_TEMP/typecheck.log"
           exit "$(cat "$RUNNER_TEMP/typecheck-status")"
 
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
+
   # Server, web, mobile and scripts have independent jobs below.
   # `--parallel` drops the package dependency ordering that `vp run`
   # applies by default: these `test` tasks declare no `dependsOn` and resolve
@@ -301,8 +339,12 @@ jobs:
   test:
     permissions:
       contents: read
+      actions: read
     name: Test
     needs: changes
+    env:
+      CI_TIMING_JOB: Test
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.test != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -360,13 +402,26 @@ jobs:
             filters=()
             for package in $TEST_PACKAGES; do filters+=(--filter "$package"); done
           fi
-          vp run --parallel --concurrency-limit 4 "${filters[@]}" test
+          python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Test" -- vp run --parallel --concurrency-limit 4 "${filters[@]}" test
+
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
 
   test_scripts:
     permissions:
       contents: read
+      actions: read
     name: Test Scripts
     needs: changes
+    env:
+      CI_TIMING_JOB: Test Scripts
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.test_scripts != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -393,13 +448,26 @@ jobs:
         run: node --test .github/scripts/check-nightly-release.test.cjs .github/scripts/vercel-deployment-output.test.cjs
 
       - name: Test
-        run: vp run --filter @t3tools/scripts test
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Test" -- vp run --filter @t3tools/scripts test
+
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
 
   test_lint_rules:
     permissions:
       contents: read
+      actions: read
     name: Test Lint Rules ${{ matrix.shard }}/2
     needs: changes
+    env:
+      CI_TIMING_JOB: Test Lint Rules ${{ matrix.shard }}/2
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.test_lint_rules != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -426,7 +494,7 @@ jobs:
       - name: Test
         id: tests
         working-directory: oxlint-plugin-t3code
-        run: vp test run --config ../vite.config.ts --dir . --shard=${{ matrix.shard }}/2 --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Test" -- vp test run --config ../vite.config.ts --dir . --shard=${{ matrix.shard }}/2 --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
 
       - name: Upload test timings
         if: always() && steps.tests.outcome != 'skipped'
@@ -437,9 +505,21 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
+
   test_web:
     name: Test Web ${{ matrix.project }} ${{ matrix.shard }}/2
     needs: changes
+    env:
+      CI_TIMING_JOB: Test Web ${{ matrix.project }} ${{ matrix.shard }}/2
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.test_web != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -493,7 +573,7 @@ jobs:
       - name: Test
         id: tests
         working-directory: apps/web
-        run: vp test run --project ${{ matrix.project }} --shard=${{ matrix.shard }}/2 --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Test" -- vp test run --project ${{ matrix.project }} --shard=${{ matrix.shard }}/2 --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
 
       - name: Upload test timings
         if: always() && steps.tests.outcome != 'skipped'
@@ -504,9 +584,21 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
+
   test_web_boot:
     name: Web Production Boot
     needs: changes
+    env:
+      CI_TIMING_JOB: Web Production Boot
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.test_web != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -551,12 +643,24 @@ jobs:
 
       - name: Boot the built web client
         run: |
-          vp run --filter @t3tools/web build
+          python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Boot the built web client" -- vp run --filter @t3tools/web build
           node apps/web/scripts/verify-built-boot.ts
+
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
 
   test_mobile:
     name: Test Mobile ${{ matrix.project }} ${{ matrix.shard }}/${{ matrix.total }}
     needs: changes
+    env:
+      CI_TIMING_JOB: Test Mobile ${{ matrix.project }} ${{ matrix.shard }}/${{ matrix.total }}
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.test_mobile != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -586,7 +690,7 @@ jobs:
       - name: Test
         id: tests
         working-directory: apps/mobile
-        run: vp test run --project ${{ matrix.project }} --shard=${{ matrix.shard }}/${{ matrix.total }} --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Test" -- vp test run --project ${{ matrix.project }} --shard=${{ matrix.shard }}/${{ matrix.total }} --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
 
       - name: Upload test timings
         if: always() && steps.tests.outcome != 'skipped'
@@ -597,9 +701,21 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
+
   test_mobile_compiler:
     name: Mobile Compiler ${{ matrix.shard }}/2
     needs: changes
+    env:
+      CI_TIMING_JOB: Mobile Compiler ${{ matrix.shard }}/2
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.test_mobile != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -628,7 +744,7 @@ jobs:
         working-directory: apps/mobile
         env:
           T3_MOBILE_COMPILER_SHARD: ${{ matrix.shard }}/2
-        run: vp test run --project compiler --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Test compiler coverage" -- vp test run --project compiler --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
 
       - name: Upload test timings
         if: always() && steps.tests.outcome != 'skipped'
@@ -638,6 +754,15 @@ jobs:
           path: ${{ runner.temp }}/test-results.json
           retention-days: 7
           if-no-files-found: error
+
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
 
   # apps/server sets `fileParallelism: false`, so its test files run strictly
   # one at a time. Sharding spreads them over separate runners instead of
@@ -649,8 +774,12 @@ jobs:
   test_server:
     permissions:
       contents: read
+      actions: read
     name: Test Server ${{ matrix.shard }}
     needs: changes
+    env:
+      CI_TIMING_JOB: Test Server ${{ matrix.shard }}
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.test_server != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -716,7 +845,7 @@ jobs:
           T3CODE_TRANSFER_BUDGET_RESULT_PATH: ${{ runner.temp }}/thread-transfer-result.json
         # Remote task caching is disabled; one invocation avoids a cold task runner per file.
         run: >-
-          vp test run --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Test" -- vp test run --shard=${{ matrix.shard }}/${{ strategy.job-total }}
           --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
 
       - name: Upload test timings
@@ -760,6 +889,15 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
+
   # Split out of Check and Test: both paid ~7-9s to install a Rust toolchain
   # for checks that take under 3s, on the critical path of every PR.
   rust:
@@ -801,6 +939,9 @@ jobs:
   mobile_native_static_analysis:
     name: Mobile Native Static Analysis
     needs: changes
+    env:
+      CI_TIMING_JOB: Mobile Native Static Analysis
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.mobile_native != 'false' }}
     runs-on: macos-15
     timeout-minutes: 30
@@ -826,7 +967,7 @@ jobs:
         run: brew bundle install --file apps/mobile/Brewfile
 
       - name: Lint mobile native sources
-        run: vp run lint:mobile
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Lint mobile native sources" -- vp run lint:mobile
 
       - name: Parse remote desktop Swift sources against the iOS Simulator SDK
         run: |
@@ -837,6 +978,15 @@ jobs:
           xcrun swiftc -frontend -parse -target arm64-apple-ios18.0-simulator \
             -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" "${sources[@]}"
 
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
+
   remote_native:
     name: Remote Desktop Host Build
     needs: changes
@@ -844,6 +994,8 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     env:
+      CI_TIMING_JOB: Remote Desktop Host Build
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
       # SecIdentityCreate is public in the macOS 26 SDK; the runner defaults to Xcode 16.4.
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
@@ -864,13 +1016,26 @@ jobs:
           xcrun --sdk macosx --show-sdk-version
           swift --version
       - name: Compile macOS capture, encoding, transport and input host
-        run: swift build --package-path native/remote-desktop --product T3RemoteHost -c debug
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Compile macOS capture, encoding, transport and input host" -- swift build --package-path native/remote-desktop --product T3RemoteHost -c debug
+
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
 
   release_smoke:
     permissions:
       contents: read
+      actions: read
     name: Release Smoke
     needs: changes
+    env:
+      CI_TIMING_JOB: Release Smoke
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.release_smoke != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -891,7 +1056,16 @@ jobs:
         uses: ./.github/actions/setup-ci-deps
 
       - name: Exercise release-only workflow steps
-        run: node scripts/release-smoke.ts
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Exercise release-only workflow steps" -- node scripts/release-smoke.ts
+
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
 
   # Branch protection requires this job by its name, `Check`. It fails when any
   # other job fails, is cancelled, or is skipped without a reason, so splitting

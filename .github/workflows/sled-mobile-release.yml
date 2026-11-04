@@ -8,6 +8,7 @@ on:
     - cron: "7,27,47 * * * *"
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: sled-mobile-release
   cancel-in-progress: false
@@ -26,7 +27,9 @@ jobs:
     permissions:
       contents: read
       checks: read
+      actions: read
     outputs:
+      timings: ${{ steps.timing.outputs.timings }}
       sha: ${{ steps.resolve.outputs.sha }}
     steps:
       - uses: actions/checkout@v6
@@ -38,12 +41,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/sled/hosted-mobile-release.py resolve
+      - name: Load recent GitHub step timings
+        id: timing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/sled/ci_progress.py history --workflow sled-mobile-release.yml
   release:
     needs: resolve
     if: needs.resolve.outputs.sha != ''
     runs-on: macos-15
     timeout-minutes: 90
     env:
+      CI_TIMING_BASELINE: ${{ needs.resolve.outputs.timings }}
+      CI_TIMING_JOB: release
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
       APP_VARIANT: preview
       SLED_APPLE_TEAM_ID: ${{ vars.SLED_APPLE_TEAM_ID }}
@@ -54,6 +64,7 @@ jobs:
     permissions:
       contents: write
       checks: read
+      actions: read
     steps:
       - uses: actions/checkout@v6
         with:
@@ -111,6 +122,7 @@ jobs:
         if: steps.plan.outputs.mode == 'ota'
         run: npx --yes eas-cli@27.4.1 --version
       - name: Restore native compiler and dependency caches
+        id: native-cache
         if: steps.plan.outputs.mode == 'native'
         uses: ./.github/actions/setup-ios-native-cache
         with:
@@ -118,8 +130,8 @@ jobs:
       - name: Install the app-target signing editor
         if: steps.plan.outputs.mode == 'native'
         run: gem install xcodeproj --version 1.27.0 --no-document
-      - name: Release checked main to the private Sled phone channel
-        if: steps.plan.outputs.mode != 'skip'
+      - name: Release native phone build (${{ steps.native-cache.outputs.compiler-cache-restored == 'true' && 'restored cache' || 'cold cache' }})
+        if: steps.plan.outputs.mode == 'native'
         env:
           GH_TOKEN: ${{ github.token }}
           SLED_APPLE_TEAM_ID: ${{ vars.SLED_APPLE_TEAM_ID }}
@@ -134,7 +146,24 @@ jobs:
           SLED_APPLE_API_KEY_ID: ${{ secrets.SLED_APPLE_API_KEY_ID }}
           SLED_APPLE_API_ISSUER: ${{ secrets.SLED_APPLE_API_ISSUER }}
           SLED_EXPO_TOKEN: ${{ secrets.SLED_EXPO_TOKEN }}
-        run: python3 scripts/sled/hosted-mobile-release.py release
+        run: python3 scripts/sled/ci_progress.py run --phase "Release native phone build (${{ steps.native-cache.outputs.compiler-cache-restored == 'true' && 'restored cache' || 'cold cache' }})" -- python3 scripts/sled/hosted-mobile-release.py release
+      - name: Release compatible OTA update
+        if: steps.plan.outputs.mode == 'ota'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLED_APPLE_TEAM_ID: ${{ vars.SLED_APPLE_TEAM_ID }}
+          T3CODE_RELAY_URL: ${{ vars.T3CODE_RELAY_URL }}
+          T3CODE_CLERK_PUBLISHABLE_KEY: ${{ vars.T3CODE_CLERK_PUBLISHABLE_KEY }}
+          T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ vars.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID }}
+          T3CODE_CLERK_JWT_TEMPLATE: ${{ vars.T3CODE_CLERK_JWT_TEMPLATE }}
+          SLED_IOS_CSC_LINK: ${{ secrets.SLED_IOS_CSC_LINK }}
+          SLED_IOS_CSC_KEY_PASSWORD: ${{ secrets.SLED_IOS_CSC_KEY_PASSWORD }}
+          SLED_IOS_PROVISIONING_PROFILE: ${{ secrets.SLED_IOS_PROVISIONING_PROFILE }}
+          SLED_APPLE_API_KEY: ${{ secrets.SLED_APPLE_API_KEY }}
+          SLED_APPLE_API_KEY_ID: ${{ secrets.SLED_APPLE_API_KEY_ID }}
+          SLED_APPLE_API_ISSUER: ${{ secrets.SLED_APPLE_API_ISSUER }}
+          SLED_EXPO_TOKEN: ${{ secrets.SLED_EXPO_TOKEN }}
+        run: python3 scripts/sled/ci_progress.py run --phase "Release compatible OTA update" -- python3 scripts/sled/hosted-mobile-release.py release
       - name: Preserve native compiler and dependency caches
         if: always() && steps.plan.outputs.mode == 'native'
         uses: ./.github/actions/setup-ios-native-cache
@@ -155,3 +184,11 @@ jobs:
             release-mobile/archive-validation.json
             release-mobile/ipa-validation.json
             release-mobile/ota-receipt.json
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
