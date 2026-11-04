@@ -10,15 +10,10 @@ if (!identity || identity === "-")
   throw new Error("Set T3_REMOTE_SIGNING_IDENTITY to your Apple development identity.");
 const archive = path.resolve(process.argv[2]);
 if (!archive.endsWith(".zip")) throw new Error("Expected the private desktop ZIP.");
-const store = path.join(root, "node_modules/.pnpm");
-const builders = fs.readdirSync(store).filter((name) => name.startsWith("app-builder-lib@"));
-if (builders.length !== 1)
-  throw new Error(
-    "Expected the pinned electron-builder dependencies; install the upstream workspace.",
-  );
-const builderRequire = require("node:module").createRequire(
-  path.join(store, builders[0], "node_modules/app-builder-lib/package.json"),
-);
+const { createRequire } = require("node:module");
+const desktopRequire = createRequire(path.join(root, "apps/desktop/package.json"));
+const electronRequire = createRequire(desktopRequire.resolve("electron-builder/package.json"));
+const builderRequire = createRequire(electronRequire.resolve("app-builder-lib/package.json"));
 const { signAsync } = builderRequire("@electron/osx-sign");
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "t3-private-sign-"));
 const output = `${archive}.signed.zip`;

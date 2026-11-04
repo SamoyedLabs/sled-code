@@ -10,9 +10,20 @@ import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 import { createBuildConfig } from "./build-desktop-artifact.ts";
 
+const readWindowsSigning = Schema.decodeUnknownSync(
+  Schema.Struct({
+    verifyUpdateCodeSignature: Schema.Boolean,
+    signtoolOptions: Schema.Struct({ publisherName: Schema.Array(Schema.String) }),
+  }),
+);
+
 const readMac = Schema.decodeUnknownSync(
   Schema.Struct({
-    mac: Schema.Struct({ extendInfo: Schema.Record(Schema.String, Schema.Unknown) }),
+    mac: Schema.Struct({
+      extendInfo: Schema.Record(Schema.String, Schema.Unknown),
+      type: Schema.optional(Schema.String),
+      notarize: Schema.optional(Schema.Boolean),
+    }),
   }),
 );
 
@@ -27,6 +38,8 @@ it.effect("private desktop launch preserves its isolated profile when opened in 
       undefined,
       undefined,
     );
+    assert.strictEqual(readMac(config).mac.type, "development");
+    assert.strictEqual(readMac(config).mac.notarize, false);
     assert.deepStrictEqual(readMac(config).mac.extendInfo.LSEnvironment, {
       T3CODE_HOME: "/private/t3-remote-desktop",
       T3CODE_DISABLE_AUTO_UPDATE: "true",
@@ -161,4 +174,61 @@ it.effect(
         ),
       );
     }),
+);
+
+it("portable updater opt-in preserves public settings and excludes account paths", () => {
+  assert.deepStrictEqual(
+    privateDesktopLaunchEnvironment(
+      "/private/build-home",
+      {},
+      { automaticUpdates: true, portable: true },
+    ),
+    {
+      SLED_PORTABLE_PROFILE: "true",
+      T3CODE_DISABLE_AUTO_UPDATE: "false",
+    },
+  );
+  assert.strictEqual(
+    privateDesktopLaunchEnvironment("/private/build-home", {}).T3CODE_DISABLE_AUTO_UPDATE,
+    "true",
+  );
+});
+
+it.effect("Windows updater opt-in pins its publisher and portable profile", () =>
+  Effect.gen(function* () {
+    const config = yield* createBuildConfig(
+      "win",
+      "nsis",
+      "0.1.7",
+      false,
+      false,
+      undefined,
+      undefined,
+    );
+    assert.deepStrictEqual(config.extraMetadata, {
+      sledPrivateEnvironment: {
+        SLED_PORTABLE_PROFILE: "true",
+        T3CODE_DISABLE_AUTO_UPDATE: "false",
+      },
+    });
+    assert.strictEqual(config.forceCodeSigning, true);
+    const win = readWindowsSigning(config.win);
+    assert.strictEqual(win.verifyUpdateCodeSignature, true);
+    assert.deepStrictEqual(win.signtoolOptions.publisherName, ["Sled Owner"]);
+  }).pipe(
+    Effect.provide([
+      NodeServices.layer,
+      ConfigProvider.layer(
+        ConfigProvider.fromEnv({
+          env: {
+            T3CODE_DESKTOP_PRIVATE_BUILD: "true",
+            SLED_DESKTOP_PORTABLE: "true",
+            SLED_DESKTOP_AUTO_UPDATE: "true",
+            SLED_WINDOWS_PUBLISHER_NAME: "Sled Owner",
+            T3CODE_DESKTOP_UPDATE_REPOSITORY: "SamoyedLabs/sled-code",
+          },
+        }),
+      ),
+    ]),
+  ),
 );

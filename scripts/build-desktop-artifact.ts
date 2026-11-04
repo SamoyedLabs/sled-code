@@ -2805,10 +2805,10 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     ],
   };
   const privateLaunch =
-    platform === "mac" &&
+    (platform === "mac" || platform === "win") &&
     (yield* Config.Boolean("T3CODE_DESKTOP_PRIVATE_BUILD").pipe(Config.withDefault(false)))
       ? privateDesktopLaunchEnvironment(
-          yield* Config.String("T3CODE_DESKTOP_PRIVATE_HOME"),
+          yield* Config.String("T3CODE_DESKTOP_PRIVATE_HOME").pipe(Config.withDefault("")),
           yield* Config.all({
             T3CODE_RELAY_URL: Config.String("T3CODE_RELAY_URL").pipe(Config.withDefault("")),
             T3CODE_CLERK_PUBLISHABLE_KEY: Config.String("T3CODE_CLERK_PUBLISHABLE_KEY").pipe(
@@ -2821,8 +2821,19 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
               Config.withDefault(""),
             ),
           }),
+          {
+            automaticUpdates: yield* Config.Boolean("SLED_DESKTOP_AUTO_UPDATE").pipe(
+              Config.withDefault(false),
+            ),
+            portable: yield* Config.Boolean("SLED_DESKTOP_PORTABLE").pipe(
+              Config.withDefault(false),
+            ),
+          },
         )
       : undefined;
+  if (privateLaunch) {
+    buildConfig.extraMetadata = { sledPrivateEnvironment: privateLaunch };
+  }
   const updateChannel = resolveDesktopUpdateChannel(version);
   // Missing publish config infers a GitHub feed from tokens; staging has no repository, so manifest generation would crash.
   buildConfig.publish = null;
@@ -2845,6 +2856,12 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     const repoRoot = yield* RepoRoot;
     buildConfig.mac = {
       target: target === "dmg" ? [target, "zip"] : [target],
+      ...(privateLaunch &&
+      (yield* Config.String("SLED_MAC_DISTRIBUTION").pipe(
+        Config.withDefault("private-development"),
+      )) === "private-development"
+        ? { type: "development", notarize: false }
+        : {}),
       icon: "icon.icns",
       category: "public.app-category.developer-tools",
       extendInfo: {
@@ -2972,7 +2989,16 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       // Resource editing sets product icons even when code signing is disabled.
       signAndEditExecutable: true,
     };
-    if (signed && (yield* HostProcess.Platform) === "win32") {
+    if (privateLaunch?.T3CODE_DISABLE_AUTO_UPDATE === "false") {
+      const publisher = yield* Config.String("SLED_WINDOWS_PUBLISHER_NAME");
+      if (!publisher.trim())
+        return yield* Effect.die(
+          new Error("Sled Windows updates require an explicit signing publisher"),
+        );
+      buildConfig.forceCodeSigning = true;
+      winConfig.signtoolOptions = { publisherName: [publisher] };
+      winConfig.verifyUpdateCodeSignature = true;
+    } else if (signed && (yield* HostProcess.Platform) === "win32") {
       winConfig.azureSignOptions = yield* AzureTrustedSigningOptionsConfig;
     } else if (signed) {
       const path = yield* Path.Path;
