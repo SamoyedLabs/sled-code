@@ -9,6 +9,41 @@ import plistlib
 import re
 import shlex
 import subprocess
+import threading
+import time
+
+
+def run_logged(command, *, cwd, env, log, check=False):
+    stage = log.stem
+    started = time.monotonic()
+    stopped = threading.Event()
+
+    def report_progress():
+        while not stopped.wait(60):
+            status = log.stat()
+            print(f'[native] {stage} running: elapsed={int(time.monotonic() - started)}s '
+                  f'log_bytes={status.st_size} quiet_for={max(0, int(time.time() - status.st_mtime))}s',
+                  flush=True)
+
+    print(f'[native] {stage} started', flush=True)
+    with log.open('w') as stream:
+        reporter = threading.Thread(target=report_progress, daemon=True)
+        reporter.start()
+        exit_code = 'interrupted'
+        try:
+            result = subprocess.run(command, cwd=cwd, env=env, stdout=stream,
+                                    stderr=subprocess.STDOUT, check=check)
+            exit_code = result.returncode
+            return result
+        except subprocess.CalledProcessError as error:
+            exit_code = error.returncode
+            raise
+        finally:
+            stopped.set()
+            reporter.join()
+            print(f'[native] {stage} finished: exit={exit_code} '
+                  f'elapsed={int(time.monotonic() - started)}s', flush=True)
+
 
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
@@ -79,9 +114,8 @@ if args.action == 'archive':
     if args.prepare:
         import sys
         subprocess.run([sys.executable, 'scripts/sled/prepare-native.py'], cwd=root, env=env, check=True)
-        with (output / 'prebuild.log').open('w') as stream:
-            subprocess.run(['pnpm', 'exec', 'expo', 'prebuild', '--platform', 'ios', '--no-install'],
-                           cwd=mobile, env=env, stdout=stream, stderr=subprocess.STDOUT, check=True)
+        run_logged(['pnpm', 'exec', 'expo', 'prebuild', '--platform', 'ios', '--no-install'],
+                   cwd=mobile, env=env, log=output / 'prebuild.log', check=True)
     projects = list((mobile / 'ios').glob('*.xcodeproj'))
     if len(projects) != 1:
         raise SystemExit('Expected one generated iOS application project')
@@ -94,14 +128,12 @@ if args.action == 'archive':
         plistlib.dump(app_info, stream)
     workspace = mobile / 'ios' / (project_name + '.xcworkspace')
     if args.prepare or not workspace.exists():
-        with (output / 'pods.log').open('w') as stream:
-            subprocess.run(['pod', 'install', '--no-repo-update'], cwd=mobile / 'ios', env=env,
-                           stdout=stream, stderr=subprocess.STDOUT, check=True)
+        run_logged(['pod', 'install', '--no-repo-update'], cwd=mobile / 'ios', env=env,
+                   log=output / 'pods.log', check=True)
     if args.prepare:
-        with (output / 'packages.log').open('w') as stream:
-            subprocess.run(['xcodebuild', '-resolvePackageDependencies', '-workspace', str(workspace),
-                            '-scheme', project_name, '-derivedDataPath', str(args.derived_data_path.resolve())],
-                           cwd=mobile, env=env, stdout=stream, stderr=subprocess.STDOUT, check=True)
+        run_logged(['xcodebuild', '-resolvePackageDependencies', '-workspace', str(workspace),
+                    '-scheme', project_name, '-derivedDataPath', str(args.derived_data_path.resolve())],
+                   cwd=mobile, env=env, log=output / 'packages.log', check=True)
     command = ['xcodebuild', 'archive', '-workspace', str(workspace),
                '-scheme', project_name, '-configuration', 'Release', '-sdk', 'iphoneos',
                '-destination', 'generic/platform=iOS', '-jobs', '4',
@@ -154,8 +186,7 @@ try:
             private_result = subprocess.run(keychain_command, capture_output=True)
             if private_result.returncode:
                 raise SystemExit('Could not prepare the private distribution keychain')
-    with log.open('w') as stream:
-        result = subprocess.run(command, cwd=mobile, env=env, stdout=stream, stderr=subprocess.STDOUT)
+    result = run_logged(command, cwd=mobile, env=env, log=log)
 finally:
     if previous_keychains is not None:
         subprocess.run(['security', 'list-keychains', '-d', 'user', '-s', *previous_keychains], capture_output=True)
