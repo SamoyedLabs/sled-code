@@ -9,6 +9,9 @@ import {
   type RemoteDesktopStartInput,
   type RemoteDesktopStatus,
 } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
+
+const isRemoteDesktopError = Schema.is(RemoteDesktopError);
 
 interface NativeSession {
   createNativeOffer(fingerprint: string): Promise<RemoteDesktopStartInput>;
@@ -82,7 +85,9 @@ export interface DesktopNativeState {
   readonly path?: "direct" | "relayed";
   readonly available?: boolean;
 }
+// @effect-diagnostics-next-line extendsNativeError:off - Internal sentinels stay inside this Promise-based native controller.
 class ConnectionLost extends Error {}
+// @effect-diagnostics-next-line extendsNativeError:off - Internal sentinels stay inside this Promise-based native controller.
 class SetupRequired extends Error {}
 function tagged(error: unknown, tag: string): boolean {
   return typeof error === "object" && error !== null && "_tag" in error && error._tag === tag;
@@ -94,7 +99,7 @@ function transientSignaling(error: unknown): boolean {
 }
 function retryable(error: unknown): boolean {
   if (error instanceof ConnectionLost) return true;
-  if (error instanceof RemoteDesktopError)
+  if (isRemoteDesktopError(error))
     return [
       "transport",
       "unavailable",

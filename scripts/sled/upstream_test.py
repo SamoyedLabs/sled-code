@@ -14,6 +14,15 @@ CONFIG = json.loads((Path(__file__).resolve().parents[2] / "config/sled-upstream
 
 
 class PolicyTests(unittest.TestCase):
+    def test_blocked_sync_fails_after_recording_the_attention_issue(self):
+        issue = {"number": 34, "title": upstream.BLOCKER_TITLE}
+        with patch.object(upstream, "api", side_effect=[[issue], {}]) as api, \
+             patch.object(upstream, "summary"):
+            with self.assertRaisesRegex(RuntimeError, "Automatic updates are held"):
+                upstream.blocker("SamoyedLabs/sled-code", "Upstream merge conflicts: App.tsx")
+            self.assertEqual(api.call_args.args[1], "PATCH")
+            self.assertIn("App.tsx", api.call_args.args[2]["body"])
+
     def test_candidate_and_cleanup_pushes_use_environment_credentials_without_embedding_them(self):
         checkout = Path("/isolated/checkout")
         for arguments in [
@@ -159,6 +168,84 @@ class PromotionTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "identity changed"):
                 upstream.finalize("SamoyedLabs/sled-code", CONFIG)
             api.assert_not_called()
+
+    def test_held_candidate_is_not_reported_as_a_successful_sync(self):
+        self.pr["labels"] = [{"name": "sled:hold"}]
+        with patch.object(upstream, "open_candidate", return_value=self.pr), \
+             patch.object(upstream, "api") as api:
+            with self.assertRaisesRegex(RuntimeError, "remains staged"):
+                upstream.finalize("SamoyedLabs/sled-code", CONFIG)
+            api.assert_not_called()
+
+    def test_prepare_reports_a_hold_even_when_the_candidate_is_already_current(self):
+        self.pr["labels"] = [{"name": "sled:hold"}]
+
+        def fake_git(*args, **kwargs):
+            output = ""
+            if args[0] == "rev-parse":
+                output = self.incoming if args[1].startswith("FETCH_HEAD") else self.base
+            elif args[0] == "ls-remote":
+                output = self.head + "\trefs/heads/upstream/nightly"
+            return subprocess.CompletedProcess(args, 1 if args[0] == "merge-base" else 0,
+                                               stdout=output, stderr="")
+
+        with patch.object(upstream, "labels"), \
+             patch.object(upstream, "pages", return_value=[{"tag_name": self.data["tag"]}]), \
+             patch.object(upstream, "open_candidate", return_value=self.pr), \
+             patch.object(upstream, "git", side_effect=fake_git), \
+             patch.object(upstream, "merge_candidate") as merge:
+            with self.assertRaisesRegex(RuntimeError, "newer dependent updates remain held"):
+                upstream.prepare("SamoyedLabs/sled-code", CONFIG)
+            merge.assert_not_called()
+
+    def test_included_managed_candidate_is_retired_with_an_exact_branch_lease(self):
+        def fake_git(*args, **kwargs):
+            output = ""
+            if args[0] == "show":
+                output = self.base + " " + self.incoming
+            elif args[0] == "ls-remote":
+                output = self.head + "\trefs/heads/upstream/nightly"
+            return subprocess.CompletedProcess(args, 0, stdout=output, stderr="")
+
+        issue = {"number": 34, "title": upstream.BLOCKER_TITLE}
+        with patch.object(upstream, "open_candidate", return_value=self.pr), \
+             patch.object(upstream, "git", side_effect=fake_git), \
+             patch.object(upstream, "api", side_effect=[{}, [issue], {}]) as api, \
+             patch.object(upstream, "authenticated_push") as push, \
+             patch.object(upstream, "summary"):
+            upstream.clear_integrated_update("SamoyedLabs/sled-code", CONFIG, "d" * 40)
+            push.assert_called_once_with("--force-with-lease=refs/heads/upstream/nightly:" + self.head,
+                                         "origin", ":refs/heads/upstream/nightly")
+            self.assertEqual(api.call_args_list[0].args[2], {"state": "closed"})
+            self.assertEqual(api.call_args_list[-1].args[2],
+                             {"state": "closed", "state_reason": "completed"})
+
+    def test_modified_candidate_is_never_retired(self):
+        self.pr["head"]["sha"] = "d" * 40
+        with patch.object(upstream, "open_candidate", return_value=self.pr), \
+             patch.object(upstream, "blocker", side_effect=RuntimeError("extra edits")), \
+             patch.object(upstream, "api") as api, \
+             patch.object(upstream, "authenticated_push") as push:
+            with self.assertRaisesRegex(RuntimeError, "extra edits"):
+                upstream.clear_integrated_update("SamoyedLabs/sled-code", CONFIG, "e" * 40)
+            api.assert_not_called()
+            push.assert_not_called()
+
+    def test_candidate_history_missing_from_main_is_never_retired(self):
+        def fake_git(*args, **kwargs):
+            return subprocess.CompletedProcess(args, 1 if args[0] == "merge-base" else 0,
+                                               stdout=self.base + " " + self.incoming if args[0] == "show" else "",
+                                               stderr="")
+
+        with patch.object(upstream, "open_candidate", return_value=self.pr), \
+             patch.object(upstream, "git", side_effect=fake_git), \
+             patch.object(upstream, "blocker", side_effect=RuntimeError("missing history")), \
+             patch.object(upstream, "api") as api, \
+             patch.object(upstream, "authenticated_push") as push:
+            with self.assertRaisesRegex(RuntimeError, "missing history"):
+                upstream.clear_integrated_update("SamoyedLabs/sled-code", CONFIG, "d" * 40)
+            api.assert_not_called()
+            push.assert_not_called()
 
     def test_successful_check_on_other_commit_cannot_merge(self):
         def fake_api(endpoint, *args):

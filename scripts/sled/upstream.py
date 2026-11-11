@@ -136,6 +136,7 @@ def blocker(repo, message):
     else:
         api(f"repos/{repo}/issues", "POST", {"title": BLOCKER_TITLE, "body": body, "labels": ["sled:upstream", "sled:hold"]})
     summary(body)
+    raise RuntimeError(body)
 
 
 def labels(repo):
@@ -156,6 +157,33 @@ def open_candidate(repo, config):
     return prs[0] if prs else None
 
 
+def clear_integrated_update(repo, config, base):
+    candidate = open_candidate(repo, config)
+    if candidate:
+        data = metadata(candidate["body"])
+        if candidate["head"]["sha"] != data["head"]:
+            blocker(repo, "The previous candidate has extra edits; preserving it for review.")
+        git("fetch", "origin", data["head"])
+        parents = git("show", "-s", "--format=%P", data["head"]).stdout.strip().split()
+        if parents != [data["base"], data["upstream"]]:
+            blocker(repo, "The previous candidate is not the managed upstream merge; preserving it.")
+        for parent in parents:
+            if git("merge-base", "--is-ancestor", parent, base, check=False).returncode:
+                blocker(repo, "The previous candidate contains history missing from main; preserving it.")
+        remote = git("ls-remote", "origin", f"refs/heads/{config['candidateBranch']}").stdout.strip()
+        if not remote or remote.split()[0] != data["head"]:
+            blocker(repo, "The candidate branch changed; preserving it for review.")
+        api(f"repos/{repo}/pulls/{candidate['number']}", "PATCH", {"state": "closed"})
+        authenticated_push(f"--force-with-lease=refs/heads/{config['candidateBranch']}:{data['head']}",
+                           "origin", f":refs/heads/{config['candidateBranch']}")
+        summary(f"Closed superseded candidate #{candidate['number']}; both parents are included in main.")
+    issues = api(f"repos/{repo}/issues?state=open&labels=sled%3Aupstream&per_page=100")
+    for issue in issues:
+        if "pull_request" not in issue and issue["title"] == BLOCKER_TITLE:
+            api(f"repos/{repo}/issues/{issue['number']}", "PATCH",
+                {"state": "closed", "state_reason": "completed"})
+
+
 def prepare(repo, config):
     labels(repo)
     base_branch, branch = config["baseBranch"], config["candidateBranch"]
@@ -167,6 +195,7 @@ def prepare(repo, config):
     git("fetch", "--no-tags", upstream_url, f"refs/tags/{tag}")
     upstream = require_sha(git("rev-parse", "FETCH_HEAD^{commit}").stdout.strip())
     if git("merge-base", "--is-ancestor", upstream, base, check=False).returncode == 0:
+        clear_integrated_update(repo, config, base)
         summary(f"Already contains {tag} ({upstream}). No update needed.")
         return
     existing = open_candidate(repo, config)
@@ -181,12 +210,11 @@ def prepare(repo, config):
         if old_head != old["head"]:
             blocker(repo, "Candidate has edits beyond the managed merge. Preserving those changes for review.")
             return
-        if old["base"] == base and old["upstream"] == upstream:
-            summary(f"Existing candidate #{existing['number']} already tracks {tag}; no duplicate work.")
-            return
         held = {label["name"] for label in existing.get("labels", [])} & set(config["holdLabels"])
         if held:
-            summary(f"Candidate #{existing['number']} is staged ({', '.join(sorted(held))}); newer dependent updates remain held.")
+            raise RuntimeError(f"Candidate #{existing['number']} is staged ({', '.join(sorted(held))}); newer dependent updates remain held.")
+        if old["base"] == base and old["upstream"] == upstream:
+            summary(f"Existing candidate #{existing['number']} already tracks {tag}; no duplicate work.")
             return
     with tempfile.TemporaryDirectory(prefix="sled-upstream-") as temporary:
         checkout = Path(temporary) / "checkout"
@@ -222,6 +250,8 @@ def prepare(repo, config):
     api(f"repos/{repo}/actions/workflows/{config['ciWorkflow']}/dispatches", "POST",
         {"ref": branch, "inputs": {"candidate_sha": head, "base_sha": base}})
     summary(f"Prepared {pr['html_url']} at {head}; CI dispatched. " + ("Staged for review." if reasons else "Awaiting Check."))
+    if reasons:
+        raise RuntimeError(f"Candidate #{pr['number']} needs review: " + "; ".join(reasons))
 
 
 def finalize(repo, config):
@@ -231,8 +261,7 @@ def finalize(repo, config):
         return
     held = {label["name"] for label in pr.get("labels", [])} & set(config["holdLabels"])
     if held or not config["autoMerge"]:
-        summary(f"Candidate #{pr['number']} remains staged: {', '.join(sorted(held)) or 'automatic merge disabled'}.")
-        return
+        raise RuntimeError(f"Candidate #{pr['number']} remains staged: {', '.join(sorted(held)) or 'automatic merge disabled'}.")
     data = metadata(pr["body"])
     if pr["head"]["sha"] != data["head"] or pr["head"]["repo"]["full_name"].lower() != repo.lower():
         raise RuntimeError("Candidate identity changed; refusing promotion")
@@ -250,8 +279,7 @@ def finalize(repo, config):
     reasons = classify(changes_between(data["base"], data["head"]), config)
     if reasons:
         api(f"repos/{repo}/issues/{pr['number']}/labels", "POST", {"labels": ["sled:hold"]})
-        summary("Candidate staged: " + "; ".join(reasons))
-        return
+        raise RuntimeError("Candidate staged: " + "; ".join(reasons))
     runs = api(f"repos/{repo}/actions/workflows/{config['ciWorkflow']}/runs?head_sha={data['head']}&per_page=100")["workflow_runs"]
     runs = [run for run in runs if run["head_sha"] == data["head"] and run["event"] in ("workflow_dispatch", "pull_request", "push")]
     if not runs:
@@ -299,4 +327,7 @@ if __name__ == "__main__":
         main()
     except (RuntimeError, ValueError, KeyError) as error:
         summary("Upstream automation stopped: " + str(error))
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            annotation = str(error).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+            print("::error title=Upstream sync blocked::" + annotation)
         sys.exit(1)
