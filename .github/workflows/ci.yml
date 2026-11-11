@@ -40,6 +40,13 @@ jobs:
           persist-credentials: false
       - name: Test upstream merge and promotion safeguards
         run: python3 scripts/sled/upstream_test.py
+      - name: Verify upstream branch read with the workflow token
+        if: github.repository == 'SamoyedLabs/sled-code'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/branches/main" |
+            jq --exit-status '.protected and (.protection.required_status_checks.contexts | index("Check") != null)'
       - name: Test progress and ETA reporting
         run: python3 scripts/sled/ci_progress_test.py
       - name: Test CI routing
