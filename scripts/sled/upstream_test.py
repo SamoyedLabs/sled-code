@@ -162,6 +162,62 @@ class PromotionTests(unittest.TestCase):
             self.assertEqual(api.call_count, 1)
             git.assert_not_called()
 
+    def test_promotion_with_workflow_token_obeys_protection_freshness_and_merge_result(self):
+        repo = "SamoyedLabs/sled-code"
+        branch = {"protected": True, "commit": {"sha": self.base},
+                  "protection": {"required_status_checks": {"contexts": ["Check"]}}}
+        cases = [
+            ("eligible", branch, {"merged": True}, True, None),
+            ("unprotected", dict(branch, protected=False), None, False, "main must be protected"),
+            ("missing check", dict(branch, protection={}), None, False, "main must be protected"),
+            ("advanced base", dict(branch, commit={"sha": "d" * 40}), None, False, None),
+            ("merge refused", branch, {"merged": False, "message": "Branch is behind"},
+             True, "GitHub refused the checked merge"),
+        ]
+        for name, current_branch, merge_result, attempts_merge, error in cases:
+            with self.subTest(name=name):
+                def fake_api(endpoint, method="GET", payload=None):
+                    if endpoint.endswith("/protection"):
+                        raise RuntimeError("Resource not accessible by integration (HTTP 403)")
+                    if "/git/ref/" in endpoint:
+                        return {"object": {"sha": self.base}}
+                    if "/actions/workflows/" in endpoint:
+                        return {"workflow_runs": [{"id": 7, "head_sha": self.head, "event": "workflow_dispatch",
+                                                   "run_number": 1, "status": "completed", "conclusion": "success"}]}
+                    if "/actions/runs/7/jobs" in endpoint:
+                        return {"jobs": [{"name": "Check", "conclusion": "success"}]}
+                    if endpoint == f"repos/{repo}/branches/main":
+                        return current_branch
+                    if endpoint == f"repos/{repo}/pulls/1/merge" and method == "PUT":
+                        return merge_result
+                    raise AssertionError("Unexpected API call: " + endpoint)
+
+                def fake_git(*args, **kwargs):
+                    output = self.base + " " + self.incoming if args[0] == "show" else ""
+                    if args[0] == "rev-parse":
+                        output = self.incoming
+                    return subprocess.CompletedProcess(args, 0, stdout=output, stderr="")
+
+                with patch.object(upstream, "open_candidate", return_value=dict(self.pr, html_url="https://example.invalid/pr/1")), \
+                     patch.object(upstream, "api", side_effect=fake_api) as api, \
+                     patch.object(upstream, "git", side_effect=fake_git), \
+                     patch.object(upstream, "changes_between", return_value=[]), \
+                     patch.object(upstream, "authenticated_push") as push, patch.object(upstream, "summary"):
+                    if error:
+                        with self.assertRaisesRegex(RuntimeError, error):
+                            upstream.finalize(repo, CONFIG)
+                    else:
+                        upstream.finalize(repo, CONFIG)
+                    merges = [call for call in api.call_args_list if call.args[0].endswith("/merge")]
+                    self.assertEqual(len(merges), int(attempts_merge))
+                    if merges:
+                        self.assertEqual(merges[0].args[2], {"sha": self.head, "merge_method": "merge"})
+                    if name == "eligible":
+                        push.assert_called_once_with("--force-with-lease=refs/heads/upstream/nightly:" + self.head,
+                                                     "origin", ":refs/heads/upstream/nightly")
+                    else:
+                        push.assert_not_called()
+
     def test_modified_managed_head_requires_review(self):
         self.pr["head"]["sha"] = "d" * 40
         with patch.object(upstream, "open_candidate", return_value=self.pr), patch.object(upstream, "api") as api:

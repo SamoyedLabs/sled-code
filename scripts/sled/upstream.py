@@ -43,7 +43,7 @@ def api(endpoint, method="GET", payload=None):
     result = subprocess.run(args, input=json.dumps(payload) if payload is not None else None,
                             text=True, capture_output=True)
     if result.returncode:
-        raise RuntimeError(result.stderr.strip() or "GitHub API failed")
+        raise RuntimeError(f"GitHub API {method} {endpoint}: " + (result.stderr.strip() or "request failed"))
     return json.loads(result.stdout) if result.stdout.strip() else None
 
 
@@ -295,10 +295,14 @@ def finalize(repo, config):
     if run["conclusion"] != "success" or len(gate) != 1 or gate[0]["conclusion"] != "success":
         summary(f"Candidate waiting: CI {run['status']}/{run['conclusion']}; Check must succeed.")
         return
-    protection = api(f"repos/{repo}/branches/{config['baseBranch']}/protection")
-    checks = protection.get("required_status_checks") or {}
-    if not checks.get("strict") or config["requiredJob"] not in checks.get("contexts", []):
-        summary("Automatic merge held: main requires strict up-to-date branch protection with Check.")
+    # Branch summaries need Contents:read; /protection needs Administration:read,
+    # which GITHUB_TOKEN cannot receive. GitHub enforces strict protection at merge.
+    branch = api(f"repos/{repo}/branches/{config['baseBranch']}")
+    checks = (branch.get("protection") or {}).get("required_status_checks") or {}
+    if not branch.get("protected") or config["requiredJob"] not in checks.get("contexts", []):
+        raise RuntimeError("Automatic merge held: main must be protected with required Check.")
+    if branch["commit"]["sha"] != data["base"]:
+        summary("Main advanced during validation; a new integration candidate and CI run are required.")
         return
     result = api(f"repos/{repo}/pulls/{pr['number']}/merge", "PUT",
                  {"sha": data["head"], "merge_method": "merge"})
