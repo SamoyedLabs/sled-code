@@ -2,9 +2,9 @@
   "verifiedAt": "2026-11-11",
   "t3code": {
     "repository": "https://github.com/pingdotgg/t3code.git",
-    "channel": "main",
-    "tag": "v0.1.10-nightly.20261111.4529",
-    "commit": "330b9f484032e7a7f9df01c5d73accd97ec356b8",
+    "channel": "nightly",
+    "tag": "v0.1.10-nightly.20261111.4544",
+    "commit": "1264c206aee0dce805d6279809118bc091f29d2f",
     "checkout": ".",
     "desktopPath": "apps/desktop",
     "mobilePath": "apps/mobile",
