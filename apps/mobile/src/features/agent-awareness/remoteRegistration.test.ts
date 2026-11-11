@@ -769,7 +769,10 @@ describe("makeRelayDeviceRegistrationRequest", () => {
         registrations.push(await request.json());
         return Response.json({ ok: true });
       });
-      Constants.expoConfig!.extra = { relay: { url: "https://relay.example.test" } };
+      Constants.expoConfig!.extra = {
+        sledConnectNotifications: true,
+        relay: { url: "https://relay.example.test" },
+      };
       setAgentAwarenessRelayTokenProvider(() => Promise.resolve("clerk"), "user-a");
       return Effect.gen(function* () {
         yield* runBackgroundOperations();
@@ -903,7 +906,10 @@ describe("makeRelayDeviceRegistrationRequest", () => {
         ManagedRelay.ManagedRelayRequestFailedError
       >,
     ) {
-      Constants.expoConfig!.extra = { relay: { url: "https://relay.example.test/" } };
+      Constants.expoConfig!.extra = {
+        sledConnectNotifications: true,
+        relay: { url: "https://relay.example.test/" },
+      };
       const unexpected = () => Effect.die("Unexpected relay request");
       return Layer.succeed(
         ManagedRelay.ManagedRelayClient,
