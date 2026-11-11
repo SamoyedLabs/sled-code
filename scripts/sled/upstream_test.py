@@ -231,6 +231,35 @@ class PromotionTests(unittest.TestCase):
             api.assert_not_called()
             push.assert_not_called()
 
+    def test_failed_branch_deletion_leaves_the_candidate_pr_open(self):
+        def fake_git(*args, **kwargs):
+            output = self.base + " " + self.incoming if args[0] == "show" else ""
+            if args[0] == "ls-remote":
+                output = self.head + "\trefs/heads/upstream/nightly"
+            return subprocess.CompletedProcess(args, 0, stdout=output, stderr="")
+
+        with patch.object(upstream, "open_candidate", return_value=self.pr), \
+             patch.object(upstream, "git", side_effect=fake_git), \
+             patch.object(upstream, "authenticated_push", side_effect=RuntimeError("lease rejected")), \
+             patch.object(upstream, "api") as api:
+            with self.assertRaisesRegex(RuntimeError, "lease rejected"):
+                upstream.clear_integrated_update("SamoyedLabs/sled-code", CONFIG, "d" * 40)
+            api.assert_not_called()
+
+    def test_cleanup_can_resume_after_the_branch_was_deleted(self):
+        def fake_git(*args, **kwargs):
+            output = self.base + " " + self.incoming if args[0] == "show" else ""
+            return subprocess.CompletedProcess(args, 0, stdout=output, stderr="")
+
+        with patch.object(upstream, "open_candidate", return_value=self.pr), \
+             patch.object(upstream, "git", side_effect=fake_git), \
+             patch.object(upstream, "api", side_effect=[{}, []]) as api, \
+             patch.object(upstream, "authenticated_push") as push, \
+             patch.object(upstream, "summary"):
+            upstream.clear_integrated_update("SamoyedLabs/sled-code", CONFIG, "d" * 40)
+            push.assert_not_called()
+            self.assertEqual(api.call_args_list[0].args[2], {"state": "closed"})
+
     def test_candidate_history_missing_from_main_is_never_retired(self):
         def fake_git(*args, **kwargs):
             return subprocess.CompletedProcess(args, 1 if args[0] == "merge-base" else 0,

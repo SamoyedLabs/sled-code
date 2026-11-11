@@ -171,11 +171,12 @@ def clear_integrated_update(repo, config, base):
             if git("merge-base", "--is-ancestor", parent, base, check=False).returncode:
                 blocker(repo, "The previous candidate contains history missing from main; preserving it.")
         remote = git("ls-remote", "origin", f"refs/heads/{config['candidateBranch']}").stdout.strip()
-        if not remote or remote.split()[0] != data["head"]:
+        if remote and remote.split()[0] != data["head"]:
             blocker(repo, "The candidate branch changed; preserving it for review.")
+        if remote:
+            authenticated_push(f"--force-with-lease=refs/heads/{config['candidateBranch']}:{data['head']}",
+                               "origin", f":refs/heads/{config['candidateBranch']}")
         api(f"repos/{repo}/pulls/{candidate['number']}", "PATCH", {"state": "closed"})
-        authenticated_push(f"--force-with-lease=refs/heads/{config['candidateBranch']}:{data['head']}",
-                           "origin", f":refs/heads/{config['candidateBranch']}")
         summary(f"Closed superseded candidate #{candidate['number']}; both parents are included in main.")
     issues = api(f"repos/{repo}/issues?state=open&labels=sled%3Aupstream&per_page=100")
     for issue in issues:
