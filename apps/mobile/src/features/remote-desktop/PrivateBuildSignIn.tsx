@@ -1,4 +1,5 @@
 import { useHostedAuth } from "@clerk/expo/hosted-auth";
+import * as Linking from "expo-linking";
 import { useRef, useState } from "react";
 import { View } from "react-native";
 import { AppText } from "../../components/ui/AppText";
@@ -16,8 +17,7 @@ export function PrivateBuildSignIn() {
     setBusy(true);
     setError(null);
     try {
-      // The private bundle ID is not registered with the production Clerk instance.
-      await startHostedAuth({ redirectUrl: "com.t3tools.t3code://callback", mode: "sign-in" });
+      await startHostedAuth({ redirectUrl: Linking.createURL("callback"), mode: "sign-in" });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Sign-in could not complete. Try again.");
     }

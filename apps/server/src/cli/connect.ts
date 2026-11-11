@@ -51,7 +51,7 @@ import * as RelayTracing from "../cloud/relayTracing.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as ExternalLauncher from "../process/externalLauncher.ts";
-import { readPersistedServerRuntimeState } from "../serverRuntimeState.ts";
+import { isProcessAlive, readPersistedServerRuntimeState } from "../serverRuntimeState.ts";
 import { projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
 import { resolveCliCommand } from "./invocation.ts";
 import * as CliService from "./service.ts";
@@ -62,6 +62,17 @@ const jsonFlag = Flag.Boolean("json").pipe(
 );
 
 const isCloudCliTokenManagerError = Schema.is(CliTokenManager.CloudCliTokenManagerError);
+
+class PersonalRelayValidationError extends Schema.TaggedError<PersonalRelayValidationError>()(
+  "PersonalRelayValidationError",
+  { message: Schema.String, cause: Schema.Defect() },
+) {}
+
+const personalRelayFailure = (cause: unknown) =>
+  new PersonalRelayValidationError({
+    message: cause instanceof Error ? cause.message : "Could not validate the personal Sled relay.",
+    cause,
+  });
 
 export const headlessFlag = Flag.Boolean("headless").pipe(
   Flag.withDescription(
@@ -299,6 +310,7 @@ const withCloudCliSessionToken = <A, E, R>(
 
 type LiveCloudActionResult =
   | { readonly status: "not-running" }
+  | { readonly status: "server-gone" }
   | { readonly status: "succeeded" }
   | { readonly status: "failed"; readonly cause: Cause.Cause<unknown> };
 
@@ -307,6 +319,10 @@ const runLiveCloudUnlink = Effect.fn("cloud.cli.run_live_unlink")(function* () {
   const runtimeState = yield* readPersistedServerRuntimeState(config.serverRuntimeStatePath);
   if (Option.isNone(runtimeState)) {
     return { status: "not-running" } satisfies LiveCloudActionResult;
+  }
+  // A killed server leaves its record behind, and another process may own its port by now.
+  if (!isProcessAlive(runtimeState.value.pid)) {
+    return { status: "server-gone" } satisfies LiveCloudActionResult;
   }
 
   const environmentAuth = yield* EnvironmentAuth.EnvironmentAuth;
@@ -459,6 +475,12 @@ const reportCloudDisconnectResults = Effect.fn("cloud.cli.report_disconnect_resu
       );
     } else {
       yield* Console.log("Sled Connect is disabled locally.");
+      // A killed server cannot stop the connector it started, and nothing adopts it on restart.
+      if (input.liveResult.status === "server-gone") {
+        yield* Console.warn(
+          "The server that ran Sled Connect is gone, but its cloudflared process may still be running.\nStop that process if it is.",
+        );
+      }
     }
 
     if (Exit.isFailure(input.relayResult)) {
@@ -806,7 +828,10 @@ const connectRelayCommand = Command.make("relay", {
         const secrets = yield* ServerSecretStore.ServerSecretStore;
         const saved = yield* secrets.get(RELAY_URL_SECRET);
         const linked = yield* secrets.get(CLOUD_LINKED_USER_ID);
-        const url = yield* Effect.try(() => personalRelayUrl(flags.url));
+        const url = yield* Effect.try({
+          try: () => personalRelayUrl(flags.url),
+          catch: personalRelayFailure,
+        });
         if (Option.isSome(linked) && Option.isSome(saved) && bytesToString(saved.value) !== url) {
           yield* Console.error(
             "Unlink the existing connection with `t3 connect unlink` before changing relays.",
@@ -816,7 +841,10 @@ const connectRelayCommand = Command.make("relay", {
           });
         }
         const publishableKey = yield* clerkPublishableKeyConfig;
-        yield* Effect.tryPromise(() => validatePersonalRelay(url, publishableKey));
+        yield* Effect.tryPromise({
+          try: () => validatePersonalRelay(url, publishableKey),
+          catch: personalRelayFailure,
+        });
         yield* secrets.set(RELAY_URL_SECRET, stringToBytes(url));
         yield* Console.log(
           `Sled Connect relay saved: ${url}\nRun \`t3 connect\` to sign in and connect this machine.`,

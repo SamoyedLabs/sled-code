@@ -6,7 +6,7 @@
     "deploy": "wrangler deploy",
     "setup": "node scripts/setup.ts",
     "test": "vp test run --config ../../vite.config.ts --dir .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "effect-tsgo tsrs --noEmit"
   },
   "dependencies": {
     "@t3tools/contracts": "workspace:*",
@@ -16,7 +16,6 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260601.1",
     "@types/node": "catalog:",
-    "typescript": "catalog:",
     "vite-plus": "catalog:"
   }
 }
