@@ -4,7 +4,7 @@ import { installThreadOutboxDelivery } from "./state/threadOutboxDelivery";
 import * as Linking from "expo-linking";
 import * as SplashScreen from "expo-splash-screen";
 import { requireNativeModule } from "expo";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Platform, StatusBar } from "react-native";
 import { StartupSplash } from "./components/StartupSplash";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -22,7 +22,7 @@ import {
 import { pipe } from "effect/Function";
 import { DEFAULT_HOSTED_APP_URL } from "@t3tools/shared/connectAuth";
 
-import { RegistryContext } from "@effect/atom-react";
+import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { ProjectChipIconRasterizer } from "./native/ProjectChipIconImages";
 import { ThreadArrangementHost } from "./features/threads/ThreadArrangementSheet";
 import * as Dialog from "./components/ui/Dialog";
@@ -51,7 +51,7 @@ import { RootStack, rootPathnameFromState, workspaceLocationFromState } from "./
 import { appAtomRegistry } from "./state/atom-registry";
 import { subscribeComposerDraftModelReconciliation } from "./state/use-composer-drafts";
 import { environmentThreadShells, threadEnvironment } from "./state/threads";
-import { environmentShell } from "./state/shell";
+import { environmentShell, shellCachesReadAtom } from "./state/shell";
 import { OverlayPortalHost } from "./components/ui/OverlayPortal";
 import { shouldHandleAppLink, restoreDraftLinkState } from "./lib/appLinking";
 import { hasCloudPublicConfig } from "./features/cloud/publicConfig";
@@ -220,6 +220,14 @@ export default function App() {
 function AppContent() {
   const { themeAppearance } = useAppearancePreferences();
   const navigationTheme = useMobileNavigationTheme();
+  const shellCachesRead = useAtomValue(shellCachesReadAtom);
+  const [shellWaitEnded, setShellWaitEnded] = useState(false);
+
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- bounds the native splash wait for cached thread and project shells, matching upstream startup
+  useEffect(() => {
+    const timer = setTimeout(() => setShellWaitEnded(true), 1_500);
+    return () => clearTimeout(timer);
+  }, []);
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- matches the Android navigation bar to the app theme, as StatusBar does for the status bar
   useEffect(() => {
@@ -255,7 +263,7 @@ function AppContent() {
           </SafeAreaProvider>
         </KeyboardProvider>
       </GestureHandlerRootView>
-      <StartupSplash />
+      <StartupSplash ready={shellCachesRead || shellWaitEnded} />
     </>
   );
 }

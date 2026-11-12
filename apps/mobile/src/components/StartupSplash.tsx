@@ -57,7 +57,7 @@ function sample(time: number, stops: number[], values: number[]) {
   return interpolate(time, stops, values, Extrapolation.CLAMP);
 }
 
-export function StartupSplash() {
+export function StartupSplash({ ready = true }: { readonly ready?: boolean }) {
   const { isReady, themeAppearance } = useAppearancePreferences();
   const reduced = useReduceMotionEnabled();
   const active = useAppActive();
@@ -72,7 +72,14 @@ export function StartupSplash() {
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- hand off the OS launch screen only after the appearance and local raster layers can paint; the UI-thread clock plays once over the loading app
   useEffect(() => {
-    if (!active || !isReady || !laidOut || loaded.size !== Object.keys(layers).length || finished)
+    if (
+      !ready ||
+      !active ||
+      !isReady ||
+      !laidOut ||
+      loaded.size !== Object.keys(layers).length ||
+      finished
+    )
       return;
     SplashScreen.hide();
     const remaining = DURATION - time.get();
@@ -90,7 +97,7 @@ export function StartupSplash() {
       ),
     );
     return () => cancelAnimation(time);
-  }, [active, finish, finished, isReady, laidOut, loaded, reduced, time]);
+  }, [active, finish, finished, isReady, laidOut, loaded, ready, reduced, time]);
 
   const overlayStyle = useAnimatedStyle(() => ({
     opacity: sample(time.get(), reduced ? [0, DURATION] : [880, DURATION], [1, 0]),
