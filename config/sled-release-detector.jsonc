@@ -1,0 +1,10 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "sled-release-detector",
+  "main": "../.github/scripts/sled-release-detector.mjs",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  "triggers": { "crons": ["* * * * *"] },
+  "kv_namespaces": [{ "binding": "RELEASES", "id": "435096ed9e874f17b4ac7a4727dbd244" }],
+}

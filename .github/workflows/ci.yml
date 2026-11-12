@@ -51,6 +51,8 @@ jobs:
         run: python3 scripts/sled/ci_progress_test.py
       - name: Test CI routing
         run: node --test .github/scripts/ci-changes.test.cjs .github/scripts/ci-gate.test.cjs
+      - name: Test independent release detection
+        run: node --test .github/scripts/sled-release-detector.test.mjs
       - name: Verify pinned native dependency notices
         run: |
           python3 scripts/prepare-webrtc-notices.py
