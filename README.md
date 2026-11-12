@@ -93,7 +93,7 @@ See the [maintainer guide](docs/operations/sled-maintenance.md) for signing, ser
 
 ## Keeping up with T3 Code
 
-Sled Code is an independent repository that preserves T3's Git history. A scheduled workflow checks published T3 nightlies **every six hours** and prepares upstream updates against Sled's source.
+Sled Code is an independent repository that preserves T3's Git history. An independent cloud checker checks published T3 nightlies **every minute** and starts upstream updates against Sled's source. GitHub's scheduled workflow remains a backup.
 
 ```text
 T3 nightly → Sled integration → automated checks → eligible merge

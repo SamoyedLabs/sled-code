@@ -22,6 +22,7 @@ import * as DesktopWindow from "../window/DesktopWindow.ts";
 import * as PreviewPasskeys from "../preview/Passkeys.ts";
 import * as DesktopBackendManager from "../backend/DesktopBackendManager.ts";
 import * as DesktopBackendPool from "../backend/DesktopBackendPool.ts";
+import * as DesktopHomeOwner from "../backend/DesktopHomeOwner.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import * as DesktopLegacyLocalStorage from "./DesktopLegacyLocalStorage.ts";
 import * as DesktopLifecycle from "./DesktopLifecycle.ts";
@@ -227,6 +228,23 @@ const bootstrap = Effect.gen(function* () {
   const backgroundHost = yield* Effect.promise(() =>
     existingRemoteDesktopAgent(environment.baseDir),
   );
+  // A backend started while another server holds this home's lock can only exit with code 78.
+  if (
+    !backgroundHost &&
+    !(settings.wslOnly && settings.wslBackendEnabled) &&
+    !(yield* DesktopHomeOwner.awaitHomeOwnershipRelease())
+  ) {
+    const owner = yield* DesktopHomeOwner.readLiveHomeOwner();
+    yield* logBootstrapWarning("bootstrap found another server owning the T3 home", {
+      owner: Option.getOrNull(owner),
+    });
+    yield* (yield* ElectronDialog.ElectronDialog).showErrorBox(
+      "This Sled home is unavailable",
+      DesktopHomeOwner.homeOwnedMessage(owner),
+    );
+    return yield* (yield* ElectronApp.ElectronApp).quit;
+  }
+
   const backendPortSelection = backgroundHost
     ? { port: backgroundHost.port, selectedByScan: false }
     : yield* resolveDesktopBackendPort(environment.configuredBackendPort);

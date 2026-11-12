@@ -475,7 +475,7 @@ jobs:
         run: python3 -B .github/scripts/stage-preview-bundle.test.py
 
       - name: Test release checks
-        run: node --test .github/scripts/check-nightly-release.test.cjs .github/scripts/vercel-deployment-output.test.cjs .github/scripts/mobile-preview-comment.test.cjs
+        run: node --test .github/scripts/check-nightly-release.test.cjs .github/scripts/vercel-deployment-output.test.cjs .github/scripts/mobile-preview-comment.test.cjs .github/scripts/test-delta.test.cjs
 
       - name: Finish installing browser secret helper build libraries
         timeout-minutes: 5
@@ -901,6 +901,7 @@ jobs:
         env:
           T3CODE_TRANSFER_BUDGET_REPORT_PATH: ${{ runner.temp }}/t3code-transfer-budget.md
           T3CODE_TRANSFER_BUDGET_RESULT_PATH: ${{ runner.temp }}/thread-transfer-result.json
+          T3CODE_TRANSFER_BUDGET_SCENARIOS_PATH: ${{ runner.temp }}/thread-transfer-scenarios.json
         # Remote task caching is disabled; one invocation avoids a cold task runner per file.
         run: >-
           python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Test" -- vp test run --shard=${{ matrix.shard }}/${{ strategy.job-total }}
@@ -943,7 +944,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: thread-transfer-results
-          path: ${{ runner.temp }}/thread-transfer-result.json
+          path: |
+            ${{ runner.temp }}/thread-transfer-result.json
+            ${{ runner.temp }}/thread-transfer-scenarios.json
           if-no-files-found: ignore
           retention-days: 30
 

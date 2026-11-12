@@ -97,12 +97,11 @@ export class MacVoiceSession {
     try {
       const result = await this.bridge.record({ id, locale });
       if (this.id !== id) return;
-      const commit = resolveTranscriptCommit(
-        captured,
-        this.observeDraft(),
-        result.text,
-        result.locale,
-      );
+      const current = this.observeDraft();
+      // Native recording keeps its captured insertion target, including across an edit-and-undo.
+      if (current?.revision !== captured.revision)
+        throw new Error("The draft changed. Your recording was not inserted.");
+      const commit = resolveTranscriptCommit(captured, current, result.text, result.locale);
       if (commit.kind === "stale")
         throw new Error("The draft changed. Your recording was not inserted.");
       if (commit.kind === "empty") throw new Error("No speech was detected. Try again.");

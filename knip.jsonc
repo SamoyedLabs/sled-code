@@ -14,6 +14,7 @@
         ".github/scripts/thread-transfer-report.cjs",
         // Retained release tooling is referenced by the archived upstream workflows.
         ".github/scripts/mirror-play-apk.cjs",
+        ".github/scripts/pr-limits.cjs",
       ],
       "vite": { "entry": [".github/**/*.test.cjs"] },
       "vitest": { "entry": [".github/**/*.test.cjs"] },
