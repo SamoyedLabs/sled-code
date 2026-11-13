@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 """Archive the tested native iPhone app; export/upload only when explicitly selected."""
 import argparse
+from contextlib import nullcontext
 from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
 import plistlib
 import re
-import shlex
 import subprocess
 import threading
 import time
 
 from sled.native_build_diagnostics import publish_progress
+from sled.native_signing import signing_session
+from sled.native_build_cache import NativePreparation, configure_cache
 
 
 def build_activity(log):
@@ -109,7 +111,10 @@ parser.add_argument('--enable-ota', action='store_true',
 parser.add_argument('--ota-channel', help='Explicit Sled EAS channel for a new OTA-capable native archive.')
 parser.add_argument('--credentials-dir', type=Path, default=root / '.tools/apple-credentials')
 parser.add_argument('--public-config', type=Path, default=root / '.tools/desktop-review/connect-public-config.json')
-parser.add_argument('--derived-data-path', type=Path, default=root / '.tools/ios-device-build')
+parser.add_argument('--derived-data-path', type=Path,
+                    help='Override persistent, toolchain-scoped DerivedData.')
+parser.add_argument('--disable-compiler-cache', action='store_true', help='Measure a build without the compiler cache.')
+parser.add_argument('--force-prepare', action='store_true', help='Regenerate native configuration even if its receipt matches.')
 parser.add_argument('--tools-bin', type=Path, default=root / '.tools/bin')
 parser.add_argument('--output-dir', type=Path, help='Use a distinct directory to retain previous native releases.')
 args = parser.parse_args()
@@ -165,27 +170,22 @@ if public_config.exists():
     if set(public) != allowed or not all(isinstance(v, str) for v in public.values()):
         raise SystemExit('Expected only the four public connection settings')
     env.update(public)
-package_cache_flags = []
-for variable, option in (('SLED_IOS_SWIFT_PACKAGE_DIR', '-clonedSourcePackagesDirPath'),
-                         ('SLED_IOS_SWIFT_PACKAGE_CACHE_DIR', '-packageCachePath')):
-    if env.get(variable):
-        directory = Path(env[variable]).resolve()
-        directory.mkdir(parents=True, exist_ok=True)
-        package_cache_flags.extend([option, str(directory)])
 compiler_cache_flags = []
-if env.get('SLED_IOS_COMPILER_CACHE_DIR'):
-    compiler_cache = Path(env['SLED_IOS_COMPILER_CACHE_DIR']).resolve()
-    compiler_cache.mkdir(parents=True, exist_ok=True)
-    compiler_cache_flags = [
-        'COMPILATION_CACHE_ENABLE_CACHING=YES',
-        'COMPILATION_CACHE_ENABLE_DIAGNOSTIC_REMARKS=YES',
-        'COMPILATION_CACHE_CAS_PATH=' + str(compiler_cache),
-        'COMPILATION_CACHE_KEEP_CAS_DIRECTORY=YES',
-        'COMPILATION_CACHE_ENABLE_PLUGIN=NO',
-        'COMPILATION_CACHE_LIMIT_SIZE=2G',
-    ]
 if args.action == 'archive':
-    if args.prepare and not args.skip_prebuild:
+    cache = configure_cache(env, root, args.derived_data_path, args.disable_compiler_cache)
+    args.derived_data_path = cache['derivedData']
+    package_cache_flags, compiler_cache_flags = cache['packages'], cache['compiler']
+
+    def native_runtime():
+        resolved = subprocess.check_output(['pnpm', 'exec', 'expo-updates', 'runtimeversion:resolve',
+                                           '--platform', 'ios'], cwd=mobile, env=env, text=True)
+        return json.loads(resolved)['runtimeVersion']
+
+    preparation = NativePreparation(root, env, cache['toolchain'], native_runtime)
+    reused_preparation = args.prepare and not args.force_prepare and preparation.matches()
+    if reused_preparation:
+        print('[native] Reusing verified native preparation and Pods', flush=True)
+    if args.prepare and not args.skip_prebuild and not reused_preparation:
         import sys
         subprocess.run([sys.executable, 'scripts/sled/prepare-native.py'], cwd=root, env=env, check=True)
         run_logged(['pnpm', 'exec', 'expo', 'prebuild', '--platform', 'ios', '--no-install'],
@@ -197,14 +197,15 @@ if args.action == 'archive':
     info_path = mobile / 'ios' / project_name / 'Info.plist'
     with info_path.open('rb') as stream:
         app_info = plistlib.load(stream)
-    app_info['CFBundleVersion'] = '$(CURRENT_PROJECT_VERSION)'
-    with info_path.open('wb') as stream:
-        plistlib.dump(app_info, stream)
+    if app_info.get('CFBundleVersion') != '$(CURRENT_PROJECT_VERSION)':
+        app_info['CFBundleVersion'] = '$(CURRENT_PROJECT_VERSION)'
+        with info_path.open('wb') as stream:
+            plistlib.dump(app_info, stream)
     workspace = mobile / 'ios' / (project_name + '.xcworkspace')
-    if args.prepare or not workspace.exists():
+    if (args.prepare and not reused_preparation) or not workspace.exists():
         run_logged(['pod', 'install', '--no-repo-update'], cwd=mobile / 'ios', env=env,
                    log=output / 'pods.log', check=True)
-    if args.prepare:
+    if args.prepare and not reused_preparation:
         run_logged(['xcodebuild', '-resolvePackageDependencies', '-workspace', str(workspace),
                     '-scheme', project_name, '-derivedDataPath', str(args.derived_data_path.resolve()),
                     *package_cache_flags],
@@ -221,17 +222,21 @@ if args.action == 'archive':
     if args.manual_signing:
         # Profile overrides belong on the app target; applying them to Pods breaks resource bundles.
         subprocess.run(['ruby', '-rxcodeproj', '-e',
-                        'p = Xcodeproj::Project.open(ARGV[0]); '
+                        'p = Xcodeproj::Project.open(ARGV[0]); changed = false; '
                         'p.targets.select { |t| t.product_type == "com.apple.product-type.application" }.each { |t| '
-                        't.build_configurations.each { |c| c.build_settings.merge!('
+                        't.build_configurations.each { |c| { '
                         '"CODE_SIGN_STYLE" => "Manual", "CODE_SIGN_IDENTITY" => ARGV[1], '
-                        '"PROVISIONING_PROFILE_SPECIFIER" => ARGV[2]) } }; p.save',
+                        '"PROVISIONING_PROFILE_SPECIFIER" => ARGV[2] }.each { |k,v| '
+                        'if c.build_settings[k] != v; c.build_settings[k] = v; changed = true; end } } }; '
+                        'p.save if changed',
                         str(projects[0]), signing['certificateSha1'], signing['profileUuid']],
                        cwd=mobile, env=env, check=True)
         command = [part for part in command if part not in ('CODE_SIGN_STYLE=Automatic', '-allowProvisioningUpdates')]
     if args.unsigned:
         command = [part for part in command if part not in ('CODE_SIGN_STYLE=Automatic', '-allowProvisioningUpdates')]
         command += ['CODE_SIGNING_ALLOWED=NO', 'CODE_SIGNING_REQUIRED=NO', 'CODE_SIGN_IDENTITY=']
+    if args.prepare:
+        preparation.record()
 else:
     if not archive.exists():
         raise SystemExit('Create the native archive first')
@@ -254,20 +259,10 @@ else:
 log = output / (args.action + '.log')
 if not args.unsigned:
     command += api_auth_flags
-previous_keychains = None
-try:
-    if signing and (args.action != 'archive' or args.manual_signing):
-        previous_keychains = shlex.split(subprocess.check_output(['security', 'list-keychains', '-d', 'user'], text=True))
-        password = Path(signing['passwordFile']).read_text()
-        for keychain_command in [
-            ['security', 'unlock-keychain', '-p', password, signing['keychainPath']],
-            ['security', 'list-keychains', '-d', 'user', '-s', signing['keychainPath'], *previous_keychains],
-        ]:
-            private_result = subprocess.run(keychain_command, capture_output=True)
-            if private_result.returncode:
-                raise SystemExit('Could not prepare the private distribution keychain')
+lease = signing_session(signing, output) if signing and not args.unsigned and (args.action != 'archive' or args.manual_signing) else nullcontext()
+with lease:
     result = run_logged(command, cwd=mobile, env=env, log=log)
-    if args.action == 'archive' and compiler_cache_flags:
+    if args.action == 'archive' and not args.disable_compiler_cache:
         counts = {'hits': 0, 'misses': 0}
         with log.open(errors='replace') as stream:
             for line in stream:
@@ -277,10 +272,6 @@ try:
                     counts['misses'] += 1
         (output / 'compilation-cache-statistics.json').write_text(json.dumps(counts, indent=2) + '\n')
         print('[native] compilation cache: ' + json.dumps(counts), flush=True)
-finally:
-    if previous_keychains is not None:
-        subprocess.run(['security', 'list-keychains', '-d', 'user', '-s', *previous_keychains], capture_output=True)
-        subprocess.run(['security', 'lock-keychain', signing['keychainPath']], capture_output=True)
 print(args.action, 'exit:', result.returncode, 'log:', log)
 if result.returncode == 0:
     with (archive / 'Info.plist').open('rb') as stream:

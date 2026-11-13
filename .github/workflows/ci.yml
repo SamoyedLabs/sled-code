@@ -49,6 +49,11 @@ jobs:
             jq --exit-status '.protected and (.protection.required_status_checks.contexts | index("Check") != null)'
       - name: Test progress and ETA reporting
         run: python3 scripts/sled/ci_progress_test.py
+      - name: Test iOS release, signing restoration, and cache invalidation
+        run: |
+          python3 scripts/sled/hosted-mobile-release-test.py
+          python3 scripts/sled/native_signing_test.py
+          python3 scripts/sled/native_build_cache_test.py
       - name: Test CI routing
         run: node --test .github/scripts/ci-changes.test.cjs .github/scripts/ci-gate.test.cjs
       - name: Test independent release detection

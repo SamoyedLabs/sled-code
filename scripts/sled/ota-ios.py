@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import re
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -20,7 +21,10 @@ def main():
     parser.add_argument('--export', action='store_true')
     parser.add_argument('--publish', action='store_true')
     parser.add_argument('--message')
+    parser.add_argument('--plan', action='store_true', help='Report ota/native as JSON without exporting or publishing.')
     args = parser.parse_args()
+    if args.plan and (args.export or args.publish):
+        parser.error('--plan cannot export or publish')
     if args.publish and not args.message:
         parser.error('--publish requires --message')
     apps = list((args.archive / 'Products/Applications').glob('*.app'))
@@ -57,24 +61,33 @@ def main():
         return subprocess.run(command, cwd=mobile, env=env, check=True, text=True,
                               stdout=subprocess.PIPE if capture else None)
 
-    def check():
+    def calculate_runtime():
         resolved = json.loads(run(['pnpm', 'exec', 'expo-updates', 'runtimeversion:resolve',
                                    '--platform', 'ios'], True).stdout)
         runtime = resolved['runtimeVersion']
-        if runtime != updates['EXUpdatesRuntimeVersion']:
-            raise SystemExit(f'Native build needed: source fingerprint {runtime} differs from archive '
-                             f'{updates["EXUpdatesRuntimeVersion"]}. Do not override runtime.')
-        print('Matching iOS runtime:', runtime, flush=True)
+        if not isinstance(runtime, str) or not re.fullmatch('[0-9a-f]{40}', runtime):
+            raise SystemExit('Expected a calculated native runtime fingerprint')
         return runtime
 
-    runtime = check()
+    runtime = calculate_runtime()
+    mode = 'ota' if runtime == updates['EXUpdatesRuntimeVersion'] else 'native'
+    if args.plan:
+        print(json.dumps(dict(mode=mode, runtimeVersion=runtime,
+                              archiveRuntimeVersion=updates['EXUpdatesRuntimeVersion'],
+                              nativeBuild=info['CFBundleVersion'], projectId=PROJECT, channel=CHANNEL)))
+        return
+    if mode == 'native':
+        raise SystemExit(f'Native build needed: source fingerprint {runtime} differs from archive '
+                         f'{updates["EXUpdatesRuntimeVersion"]}. Do not override runtime.')
+    print('Matching iOS runtime:', runtime, flush=True)
     if not (args.export or args.publish):
         return
     output = args.output.resolve()
     if output.exists():
         parser.error('Choose a new --output directory; retain earlier update artifacts')
     run(['pnpm', 'exec', 'expo', 'export', '--platform', 'ios', '--output-dir', str(output)])
-    check()
+    if calculate_runtime() != runtime:
+        raise SystemExit('Native runtime changed during export; refusing publication')
     (output / 'sled-compatibility.json').write_text(json.dumps({
         'runtimeVersion': runtime, 'projectId': PROJECT, 'channel': CHANNEL,
         'bundleIdentifier': info['CFBundleIdentifier'], 'nativeBuild': info['CFBundleVersion'],

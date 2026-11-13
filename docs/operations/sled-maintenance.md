@@ -86,6 +86,10 @@ The Sled Expo project is `@samoyed-labs/sled-code` (`707658f3-e37c-410c-b0fd-74a
 
 Use `scripts/testflight-ios.py archive --team <existing-team> --build-number <unused-build> --prepare`, then its separate `export` and `upload` actions. Existing credentials remain under the ignored `.tools/apple-credentials` directory on their original machine. Keep bundle ID/team and existing sign-in configuration; do not uninstall the phone app as a migration step. The script's default remains OTA off and keeps the current private identity override. TestFlight upload/access and an increasing App Store build number are still required; export is not upload.
 
+Local archives retain toolchain-scoped compiler and package caches under `~/Library/Caches/Sled/ios-native`; DerivedData is separate per checkout. `--prepare` reuses installed Pods only when native inputs, installed lockfiles and the calculated runtime still match. Use `--force-prepare` to regenerate, or `--disable-compiler-cache` for an uncached comparison. Manual signing checks the private key before compilation and temporarily extends only the dedicated distribution keychain's timeout, then restores its settings and locks it on success or failure.
+
+Before choosing a native build, run `scripts/sled/ota-ios.py --archive <existing-archive> --public-config <public-config> --plan`. Its JSON selects `ota` only when the calculated runtime matches that archive; `native` requires a new binary. Planning does not publish. Patched dependencies remain source-built unless an exactly compatible precompiled artifact is available.
+
 The currently installed OTA-disabled binary cannot receive the change that enables OTA. Obtain a Sled-owned Expo project and owner first. Export `SLED_EXPO_PROJECT_ID` and `SLED_EXPO_OWNER` in the local build environment, then prepare a new native archive:
 
 ```sh
