@@ -4,7 +4,7 @@ import { installThreadOutboxDelivery } from "./state/threadOutboxDelivery";
 import * as Linking from "expo-linking";
 import * as SplashScreen from "expo-splash-screen";
 import { requireNativeModule } from "expo";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Platform, StatusBar } from "react-native";
 import { StartupSplash } from "./components/StartupSplash";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -78,6 +78,12 @@ import { installUiRuntimeMemoryWarningGc } from "./lib/useUiRuntimeMemoryWarning
 import { SubscriptionUsageCoordinator } from "./widgets/SubscriptionUsageCoordinator";
 import { installSubscriptionUsageRefresh } from "./widgets/useSubscriptionUsage";
 import { GlobalVoiceInputControl } from "./features/voice-input/GlobalVoiceInputControl";
+import {
+  launchSplashHomeRowsPending,
+  settleLaunchSplashHomeRows,
+  splashCanHide,
+  useLaunchSplashHomeRowsPending,
+} from "./features/home/home-launch-splash";
 import { restoreSettingsLinkState } from "./features/settings/settings-navigation";
 import {
   hydrateWorkspaceSelections,
@@ -167,6 +173,8 @@ function handleNavigationStateChange(state: NavigationState | undefined): void {
   resolvePendingNewTaskPromptLink(state);
   resolvePendingThreadPromptLink(state);
   if (!state) return;
+  // A launch that opens another route has no Home rows for the splash to wait for.
+  if (state.routes[state.index]?.name !== "Home") settleLaunchSplashHomeRows();
   setAgentNotificationPathname(workspaceLocationFromState(state).pathname);
   recordAppShortcutNavigationState(state);
   pruneNewTaskFlowStates(state);
@@ -205,6 +213,40 @@ disposeOnFoundationReplace(typeof module === "undefined" ? undefined : module.ho
   for (const dispose of appServiceDisposers) dispose();
 });
 
+// Cached shells are local reads that end in a fraction of this time; the limit keeps a failed
+// read, or a list that does not lay out, from holding the splash screen.
+const SPLASH_WAIT_MS = 1_500;
+
+function useStartupSplashReady() {
+  const { isReady } = useAppearancePreferences();
+  const shellCachesRead = useAtomValue(shellCachesReadAtom);
+  const homeRowsPending = useLaunchSplashHomeRowsPending();
+  const [waitEnded, setWaitEnded] = useState(false);
+  const hidden = useRef(false);
+
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- starts the limit on how long the native splash screen waits for cached shells and their rows
+  useEffect(() => {
+    const timer = setTimeout(() => setWaitEnded(true), SPLASH_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const ready = splashCanHide({
+    preferencesReady: isReady,
+    shellCachesRead,
+    homeRowsPending: homeRowsPending || launchSplashHomeRowsPending(),
+    waitEnded,
+  });
+
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- releases the cached-row launch hold once Sled's animated splash can take over
+  useEffect(() => {
+    if (!ready || hidden.current) return;
+    hidden.current = true;
+    settleLaunchSplashHomeRows();
+  }, [ready]);
+
+  return ready;
+}
+
 export default function App() {
   return (
     <RegistryContext.Provider value={appAtomRegistry}>
@@ -220,14 +262,7 @@ export default function App() {
 function AppContent() {
   const { themeAppearance } = useAppearancePreferences();
   const navigationTheme = useMobileNavigationTheme();
-  const shellCachesRead = useAtomValue(shellCachesReadAtom);
-  const [shellWaitEnded, setShellWaitEnded] = useState(false);
-
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- bounds the native splash wait for cached thread and project shells, matching upstream startup
-  useEffect(() => {
-    const timer = setTimeout(() => setShellWaitEnded(true), 1_500);
-    return () => clearTimeout(timer);
-  }, []);
+  const splashReady = useStartupSplashReady();
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- matches the Android navigation bar to the app theme, as StatusBar does for the status bar
   useEffect(() => {
@@ -263,7 +298,7 @@ function AppContent() {
           </SafeAreaProvider>
         </KeyboardProvider>
       </GestureHandlerRootView>
-      <StartupSplash ready={shellCachesRead || shellWaitEnded} />
+      <StartupSplash ready={splashReady} />
     </>
   );
 }
