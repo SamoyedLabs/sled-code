@@ -1,16 +1,16 @@
 {
-  "verifiedAt": "2026-11-12",
+  "verifiedAt": "2026-11-13",
   "t3code": {
     "repository": "https://github.com/pingdotgg/t3code.git",
     "channel": "nightly",
-    "tag": "v0.1.10-nightly.20261112.4606",
-    "commit": "d8f3feff0c1749ca020941427b153005755baca6",
+    "tag": "v0.1.10-nightly.20261113.4643",
+    "commit": "9a35ab0afeae64ac7c3bf92d674ead365cf55e10",
     "checkout": ".",
     "desktopPath": "apps/desktop",
     "mobilePath": "apps/mobile",
     "mobilePreviewProfile": "preview:dev",
     "mobileIOSBetaProfile": "testflight",
-    "latestReleaseVerifiedAtUTC": "2026-11-12"
+    "latestReleaseVerifiedAtUTC": "2026-11-13"
   },
   "sill": {
     "repository": "https://github.com/Saffsanity/sill.git",

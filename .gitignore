@@ -61,3 +61,4 @@ apps/mobile/modules/t3-remote-desktop/Frameworks/
 apps/desktop/prod-resources/remote-desktop/*.app/
 
 native/voice-input/build/
+/packages/ssh/.ssh-launcher-test-*/
