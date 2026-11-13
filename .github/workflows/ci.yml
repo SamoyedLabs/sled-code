@@ -56,6 +56,8 @@ jobs:
           python3 scripts/sled/native_build_cache_test.py
       - name: Test CI routing
         run: node --test .github/scripts/ci-changes.test.cjs .github/scripts/ci-gate.test.cjs
+      - name: Test runner allocation retries
+        run: python3 .github/scripts/ci-runner-retry-test.py
       - name: Test independent release detection
         run: node --test .github/scripts/sled-release-detector.test.mjs
       - name: Verify pinned native dependency notices
