@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Focused hosted release safety/decision tests; no network, signing or publishing."""
 import importlib.util
+import contextlib
+import io
 import json
 import os
 import plistlib
@@ -26,6 +28,37 @@ def baseline():
 
 
 class MobileReleaseTest(unittest.TestCase):
+    def test_local_ota_plan_selects_by_runtime_without_export_or_publication(self):
+        for runtime, plan in [('a' * 40, True), ('b' * 40, True), ('b' * 40, False)]:
+            with self.subTest(runtime=runtime, plan=plan), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                archive = root / 'App.xcarchive'
+                app = archive / 'Products/Applications/Sled.app'
+                app.mkdir(parents=True)
+                (app / 'Info.plist').write_bytes(plistlib.dumps(dict(
+                    CFBundleIdentifier=m.BUNDLE, CFBundleVersion='6')))
+                (app / 'Expo.plist').write_bytes(plistlib.dumps(dict(
+                    EXUpdatesEnabled=True, EXUpdatesURL='https://u.expo.dev/' + m.PROJECT,
+                    EXUpdatesRequestHeaders={'expo-channel-name': m.CHANNEL},
+                    EXUpdatesRuntimeVersion='a' * 40)))
+                public = root / 'public.json'
+                public.write_text(json.dumps({key: 'fixture' for key in m.PUBLIC}))
+                argv = ['ota-ios.py', '--archive', str(archive), '--public-config', str(public),
+                        '--plan' if plan else '--export']
+                def resolve(command, **kwargs):
+                    self.assertEqual(command[:4], ['pnpm', 'exec', 'expo-updates', 'runtimeversion:resolve'])
+                    return subprocess.CompletedProcess(command, 0, stdout=json.dumps({'runtimeVersion': runtime}))
+                stream = io.StringIO()
+                with patch.object(sys, 'argv', argv), patch.object(subprocess, 'run', side_effect=resolve), \
+                        contextlib.redirect_stdout(stream):
+                    if plan:
+                        runpy.run_path(str(m.ROOT / 'scripts/sled/ota-ios.py'), run_name='__main__')
+                        value = json.loads(stream.getvalue())
+                        self.assertEqual(value['mode'], 'ota' if runtime == 'a' * 40 else 'native')
+                    else:
+                        with self.assertRaisesRegex(SystemExit, 'Native build needed'):
+                            runpy.run_path(str(m.ROOT / 'scripts/sled/ota-ios.py'), run_name='__main__')
+
     def test_resolve_skips_released_commits_and_blocks_unresolved_uploads_without_native_setup(self):
         sha = 'd' * 40
         for items, expected in [([], sha), ([{'tag_name': 'sled-mobile-' + sha, 'draft': False}], ''),
@@ -92,6 +125,10 @@ class MobileReleaseTest(unittest.TestCase):
                 (script.parent / 'sled').mkdir()
                 shutil.copyfile(m.ROOT / 'scripts/sled/native_build_diagnostics.py',
                                 script.parent / 'sled/native_build_diagnostics.py')
+                shutil.copyfile(m.ROOT / 'scripts/sled/native_signing.py',
+                                script.parent / 'sled/native_signing.py')
+                shutil.copyfile(m.ROOT / 'scripts/sled/native_build_cache.py',
+                                script.parent / 'sled/native_build_cache.py')
                 ios = root / 'apps/mobile/ios'
                 (ios / 'App.xcodeproj').mkdir(parents=True)
                 (ios / 'App.xcworkspace').mkdir()
@@ -119,7 +156,14 @@ class MobileReleaseTest(unittest.TestCase):
                     argv.append('--manual-signing')
                 if prepared:
                     argv.extend(['--prepare', '--skip-prebuild'])
+                keychain_timeout = 300
                 def fake_run(command, **kwargs):
+                    nonlocal keychain_timeout
+                    if command[:2] == ['security', 'show-keychain-info']:
+                        return subprocess.CompletedProcess(command, 0, stdout='',
+                            stderr='Keychain "fixture" lock-on-sleep timeout=300s\n')
+                    if command[:2] == ['security', 'set-keychain-settings']:
+                        keychain_timeout = int(command[command.index('-t') + 1])
                     if publication_failed and command[:3] == ['gh', 'release', 'upload']:
                         raise subprocess.TimeoutExpired(command, 10)
                     if command[:2] == ['xcodebuild', 'archive']:
@@ -127,17 +171,24 @@ class MobileReleaseTest(unittest.TestCase):
                                                "Cache miss\nAuthorization: Bearer signing-secret\n"
                                                "profile-fixture " + 'C' * 40 + "\n")
                         kwargs['stdout'].flush()
+                        # A six-minute compile reaches signing after the default keychain
+                        # timeout. Model that OS transition without a wall-clock wait.
+                        if manual and not unsigned and keychain_timeout <= 360:
+                            return subprocess.CompletedProcess(command, 65)
                     return subprocess.CompletedProcess(command, exit_code if command[:2] == ['xcodebuild', 'archive'] else 0)
 
-                with patch.dict(os.environ, SLED_MOBILE_PROGRESS_TAG='sled-mobile-' + 'd' * 40), \
+                with patch.dict(os.environ, SLED_MOBILE_PROGRESS_TAG='sled-mobile-' + 'd' * 40,
+                                SLED_IOS_CACHE_ROOT=str(root / 'cache')), \
                         patch.object(sys, 'path', [str(script.parent), *sys.path]), \
                         patch.object(sys, 'argv', argv), patch.object(subprocess, 'run', side_effect=fake_run) as commands, \
-                        patch.object(subprocess, 'check_output', return_value=''), patch('builtins.print') as printed, \
+                        patch.object(subprocess, 'check_output', side_effect=lambda command, **kw:
+                            'Xcode fixture' if command[0] in ('xcodebuild', 'xcrun') else ''), patch('builtins.print') as printed, \
                         patch('threading.Thread') as reporter, patch('threading.Event.wait', side_effect=[False, True] * 3):
                     reporter.return_value.start.side_effect = lambda: reporter.call_args.kwargs['target']()
                     with self.assertRaises(SystemExit) as result:
                         runpy.run_path(str(script), run_name='__main__')
                     self.assertEqual(result.exception.code, exit_code)
+                self.assertEqual(keychain_timeout, 300)
                 console = '\n'.join(' '.join(map(str, call.args)) for call in printed.call_args_list)
                 self.assertIn('[native] archive started', console)
                 self.assertIn('[native] archive running:', console)
@@ -172,6 +223,7 @@ class MobileReleaseTest(unittest.TestCase):
                 build_call = next(call for call in commands.call_args_list if call.args[0][:2] == ['xcodebuild', 'archive'])
                 self.assertEqual(build_call.kwargs['env']['APP_VARIANT'], 'preview')
                 build = build_call.args[0]
+                self.assertIn('COMPILATION_CACHE_ENABLE_CACHING=YES', build)
                 self.assertEqual('CODE_SIGN_STYLE=Automatic' in build, not manual and not unsigned)
                 self.assertEqual('CODE_SIGNING_ALLOWED=NO' in build, unsigned)
                 self.assertFalse(any(part.startswith('PROVISIONING_PROFILE_SPECIFIER=') for part in build))
