@@ -272,7 +272,7 @@ describe("hosted thread links", () => {
   });
 
   it("leaves a hosted link that is part of another link as written", () => {
-    const hosted = "https://app.t3.codes/threads/there/t1";
+    const hosted = `${DEFAULT_HOSTED_APP_URL}/threads/there/t1`;
     const relabeled = "[There](t3-thread://v2/there/t1)";
     const title = titlesIn({ there: { t1: "There" } });
     for (const [markdown, expected] of [

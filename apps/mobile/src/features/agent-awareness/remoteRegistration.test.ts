@@ -759,7 +759,10 @@ describe("makeRelayDeviceRegistrationRequest", () => {
       }
       return Response.json({ ok: true });
     });
-    Constants.expoConfig!.extra = { relay: { url: "https://relay.example.test" } };
+    Constants.expoConfig!.extra = {
+      sledConnectNotifications: true,
+      relay: { url: "https://relay.example.test" },
+    };
     return registrations;
   };
 
