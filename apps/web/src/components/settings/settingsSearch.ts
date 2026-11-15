@@ -1040,6 +1040,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["device hub simulator emulator ios android install start version"],
   },
   {
+    id: "simulator-memory",
+    title: "Reduce iOS simulator memory",
+    to: "/settings/devices",
+    searchTerms: ["simslim ram simulator services background health memory"],
+  },
+  {
     id: "device-platform-support",
     title: "Local simulators",
     to: "/settings/devices",

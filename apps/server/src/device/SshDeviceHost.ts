@@ -25,6 +25,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as ServerConfig from "../config.ts";
 import { releaseAgentDeviceSession } from "./AgentDeviceTarget.ts";
 import * as DeviceHost from "./DeviceHost.ts";
+import { makeSimulatorMemory } from "./SimulatorMemory.ts";
 import { makeDeviceHubOperations } from "./DeviceHubOperations.ts";
 import { quoteRemoteArg, remoteDeviceEnvironment, remoteDeviceScript } from "./sshDeviceScript.ts";
 
@@ -377,6 +378,7 @@ export const make = Effect.fn("SshDeviceHost.make")(function* (
       devices: makeDeviceHubOperations({
         hostId: config.id,
         origin: hubOrigin,
+        prepareSimulator: makeSimulatorMemory({ run, nodePath: remote.nodePath, baseDir: null }),
         http,
         run,
         // Keep probing negative reports so tooling installed after connecting is still found.

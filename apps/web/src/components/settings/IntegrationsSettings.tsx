@@ -826,11 +826,38 @@ function DeviceIntegrationSettings() {
           agentAccessEnabled={settings.enableAgentDeviceAccess}
         />
       </SettingsSection>
+      <SettingsSection id="simulator-memory" title="Simulator memory">
+        <SimulatorMemorySetting />
+      </SettingsSection>
       <DeviceSourcesSettings
         supportsEas={state.supportsEasHosts === true}
         supportsSimlock={state.supportsSimlockHosts === true}
       />
     </>
+  );
+}
+
+function SimulatorMemorySetting() {
+  const settings = useScopedSettings();
+  const updateSettings = useUpdateScopedSettings();
+  const { scope } = useSettingsScope();
+  const projectScope = scope.kind === "project" || scope.kind === "checkout";
+  return (
+    <SettingsRow
+      {...searchableSetting("simulator-memory")}
+      serverScoped
+      settingKeys={["reduceSimulatorMemory"]}
+      description="Reduce background services on Apple Silicon iOS simulators. Photos, purchases, push, web links and iCloud stay enabled. Changes apply when a device opens."
+      control={
+        <ScopedSwitch
+          settingKeys={["reduceSimulatorMemory"]}
+          checked={settings.reduceSimulatorMemory}
+          disabled={projectScope}
+          aria-label="Reduce iOS simulator memory"
+          onCheckedChange={(checked) => updateSettings({ reduceSimulatorMemory: Boolean(checked) })}
+        />
+      }
+    />
   );
 }
 

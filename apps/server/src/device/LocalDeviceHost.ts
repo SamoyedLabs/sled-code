@@ -38,6 +38,7 @@ import * as ServerConfig from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import { releaseAgentDeviceSession } from "./AgentDeviceTarget.ts";
 import * as DeviceHost from "./DeviceHost.ts";
+import { makeSimulatorMemory } from "./SimulatorMemory.ts";
 import { makeDeviceHubOperations } from "./DeviceHubOperations.ts";
 import {
   agentDeviceStateDir,
@@ -841,6 +842,11 @@ export const make = Effect.fn("LocalDeviceHost.make")(function* () {
     devices: makeDeviceHubOperations({
       hostId,
       origin: running.hub.origin,
+      prepareSimulator: makeSimulatorMemory({
+        run,
+        nodePath: running.hub.nodePath,
+        baseDir: config.baseDir,
+      }),
       http: httpClient,
       run,
       platformAvailable: (platform) =>

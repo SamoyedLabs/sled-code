@@ -10,7 +10,12 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http";
 
-import type { DeviceHostReady, DeviceOperations, HostDevice } from "./DeviceHost.ts";
+import type {
+  DeviceHostReady,
+  DeviceOpenContext,
+  DeviceOperations,
+  HostDevice,
+} from "./DeviceHost.ts";
 
 const BOOT_TIMEOUT = Duration.minutes(3);
 const SCREENSHOT_TIMEOUT = Duration.seconds(20);
@@ -74,6 +79,10 @@ export const makeDeviceHubOperations = (options: {
   readonly origin: string;
   readonly http: HttpClient.HttpClient;
   readonly run: DeviceHostReady["run"];
+  readonly prepareSimulator?: (
+    deviceId: string,
+    context?: DeviceOpenContext,
+  ) => Effect.Effect<void, DeviceOperationError>;
   /** Android gates listing AVDs, which the hub does not report until they boot. */
   readonly platformAvailable: (platform: DevicePlatform) => Effect.Effect<boolean>;
 }): DeviceOperations => {
@@ -196,42 +205,49 @@ export const makeDeviceHubOperations = (options: {
     };
   }).pipe(Effect.withSpan("DeviceHubOperations.list"));
 
-  const boot: DeviceOperations["boot"] = Effect.fn("DeviceHubOperations.boot")(function* (device) {
-    const result = yield* postJson(
-      "/api/devices/boot",
-      { platform: device.platform, id: device.id, name: device.name },
-      "boot",
-    ).pipe(Effect.flatMap((request) => hubJson(request, HubActionResult, "boot", BOOT_TIMEOUT)));
-    if (!result.ok) {
-      // Keep the hub's launch command and nested failure available to agents for recovery.
-      const diagnostics = [
-        result.error,
-        ...(result.errors ?? []).flatMap((error) => [error.message, error.error]),
-      ]
-        .filter((text) => text?.trim())
-        .join("\n\n");
-      return yield* new DeviceBootError({
-        hostId,
-        deviceId: device.id,
-        reason: /insufficient.*(?:disk|space)|not enough.*(?:disk|space)|no space left/i.test(
-          diagnostics,
-        )
-          ? "disk_space"
-          : /timed? out|timeout/i.test(diagnostics)
-            ? "timeout"
-            : "launch_failed",
-        ...(diagnostics ? { diagnostics: boundDiagnostics(diagnostics) } : {}),
-        cause: result,
-      });
-    }
-    if (device.platform === "ios") yield* attachIosStream(device.id, "boot");
-    return result.serial ?? result.id ?? device.id;
-  });
+  const boot: DeviceOperations["boot"] = Effect.fn("DeviceHubOperations.boot")(
+    function* (device, context) {
+      const result = yield* postJson(
+        "/api/devices/boot",
+        { platform: device.platform, id: device.id, name: device.name },
+        "boot",
+      ).pipe(Effect.flatMap((request) => hubJson(request, HubActionResult, "boot", BOOT_TIMEOUT)));
+      if (!result.ok) {
+        // Keep the hub's launch command and nested failure available to agents for recovery.
+        const diagnostics = [
+          result.error,
+          ...(result.errors ?? []).flatMap((error) => [error.message, error.error]),
+        ]
+          .filter((text) => text?.trim())
+          .join("\n\n");
+        return yield* new DeviceBootError({
+          hostId,
+          deviceId: device.id,
+          reason: /insufficient.*(?:disk|space)|not enough.*(?:disk|space)|no space left/i.test(
+            diagnostics,
+          )
+            ? "disk_space"
+            : /timed? out|timeout/i.test(diagnostics)
+              ? "timeout"
+              : "launch_failed",
+          ...(diagnostics ? { diagnostics: boundDiagnostics(diagnostics) } : {}),
+          cause: result,
+        });
+      }
+      if (device.platform === "ios" && !device.physical)
+        yield* options.prepareSimulator?.(device.id, context) ?? Effect.void;
+      if (device.platform === "ios") yield* attachIosStream(device.id, "boot");
+      return result.serial ?? result.id ?? device.id;
+    },
+  );
 
-  const attach: DeviceOperations["attach"] = (device) =>
-    device.platform === "ios"
-      ? attachIosStream(device.id, "open").pipe(Effect.asVoid)
-      : Effect.void;
+  const attach: DeviceOperations["attach"] = Effect.fn("DeviceHubOperations.attach")(
+    function* (device, context) {
+      if (device.platform === "ios" && !device.physical)
+        yield* options.prepareSimulator?.(device.id, context) ?? Effect.void;
+      if (device.platform === "ios") yield* attachIosStream(device.id, "open");
+    },
+  );
 
   const shutdown: DeviceOperations["shutdown"] = Effect.fn("DeviceHubOperations.shutdown")(
     function* (device) {

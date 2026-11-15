@@ -46,6 +46,9 @@ import { agentDeviceSession, releaseAgentDeviceSession } from "./AgentDeviceTarg
 import { ensureDeviceHub } from "./DeviceToolchain.ts";
 
 const decodeJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
+const decodeBootTarget = Schema.decodeUnknownSync(
+  Schema.Struct({ platform: Schema.String, id: Schema.String }),
+);
 const decodeBootError = Schema.decodeUnknownSync(Schema.fromJsonString(DeviceBootError));
 const encodeBootError = Schema.encodeSync(Schema.fromJsonString(DeviceBootError));
 
@@ -84,6 +87,98 @@ it.effect.each([400, 500])(
     }),
 );
 
+it.effect.each([false, true])(
+  "slims only opted-in iOS simulators before streaming (%s)",
+  (simslim) =>
+    Effect.gen(function* () {
+      const calls: string[] = [];
+      const contexts: unknown[] = [];
+      const operations = makeDeviceHubOperations({
+        hostId: LOCAL_DEVICE_HOST_ID,
+        origin: "http://device.test",
+        ...(simslim
+          ? {
+              prepareSimulator: (_id, context) =>
+                Effect.sync(() => {
+                  calls.push("simslim");
+                  contexts.push(context);
+                }),
+            }
+          : {}),
+        http: HttpClient.make((request) =>
+          Effect.sync(() => {
+            calls.push(new URL(request.url).pathname);
+            return HttpClientResponse.fromWeb(request, Response.json({ ok: true }));
+          }),
+        ),
+        run: (command, args) =>
+          Effect.sync(() => {
+            calls.push([command, ...args].join(" "));
+            return { code: 0, stdout: "", stderr: "" };
+          }),
+        platformAvailable: () => Effect.succeed(true),
+      });
+      const phone = {
+        id: "phone",
+        name: "Phone",
+        version: "iOS 27.0",
+        platform: "ios",
+        booted: false,
+        physical: false,
+      } as const;
+      yield* operations.boot(phone, { reduceSimulatorMemory: true, fullServices: true });
+      if (simslim) expect(contexts).toEqual([{ reduceSimulatorMemory: true, fullServices: true }]);
+      expect(calls[0]).toBe("/api/devices/boot");
+      expect(calls.at(-1)).toBe("/vendor/serve-sim/grid/api/start");
+      expect(calls.filter((call) => call.startsWith("simslim"))).toHaveLength(simslim ? 1 : 0);
+      calls.length = 0;
+      yield* operations.attach({ ...phone, booted: true });
+      expect(calls.some((call) => call.startsWith("simslim"))).toBe(simslim);
+      calls.length = 0;
+      yield* operations.boot({ ...phone, platform: "android" });
+      expect(calls).toEqual(["/api/devices/boot"]);
+      calls.length = 0;
+      yield* operations.attach({ ...phone, physical: true });
+      expect(calls.some((call) => call.startsWith("simslim"))).toBe(false);
+    }),
+);
+
+it.effect("reports SimSlim failure without claiming the stream is ready", () =>
+  Effect.gen(function* () {
+    const operations = makeDeviceHubOperations({
+      hostId: LOCAL_DEVICE_HOST_ID,
+      origin: "http://device.test",
+      prepareSimulator: () =>
+        Effect.fail(
+          new DeviceOperationError({
+            operation: "slim simulator",
+            reason: "command_failed",
+            exitCode: 127,
+            cause: "missing",
+          }),
+        ),
+      http: HttpClient.make(() => Effect.die("must not attach stream")),
+      run: () => Effect.succeed({ code: 127, stdout: "", stderr: "missing" }),
+      platformAvailable: () => Effect.succeed(true),
+    });
+    const error = yield* operations
+      .attach({
+        id: "phone",
+        name: "Phone",
+        version: "iOS 27.0",
+        platform: "ios",
+        booted: true,
+        physical: false,
+      })
+      .pipe(Effect.flip);
+    expect(error).toMatchObject({
+      operation: "slim simulator",
+      reason: "command_failed",
+      exitCode: 127,
+    });
+  }),
+);
+
 const fixture = Effect.fn("fixture")(function* (
   onBoot: Effect.Effect<void> = Effect.void,
   bootError?: string | { error?: string; errors?: Array<{ message: string; error?: string }> },
@@ -99,6 +194,7 @@ const fixture = Effect.fn("fixture")(function* (
     readonly routesStreams?: boolean;
     readonly onClose?: Effect.Effect<"ok" | "missing" | "reject" | "http_error" | "malformed">;
     readonly onPlatformAvailability?: Effect.Effect<void>;
+    readonly prepareSimulator?: Parameters<typeof makeDeviceHubOperations>[0]["prepareSimulator"];
   } = {},
 ) {
   const settings = yield* Ref.make(DEFAULT_SERVER_SETTINGS);
@@ -165,12 +261,14 @@ const fixture = Effect.fn("fixture")(function* (
       if (request.url.endsWith("/boot")) {
         yield* onBoot;
         booted = true;
+        if (request.body._tag !== "Uint8Array") throw new Error("Missing boot body");
+        const target = decodeBootTarget(decodeJson(new TextDecoder().decode(request.body.body)));
         return HttpClientResponse.fromWeb(
           request,
           Response.json(
             bootError
               ? { ok: false, ...(typeof bootError === "string" ? { error: bootError } : bootError) }
-              : { ok: true, serial: "emulator-5554" },
+              : { ok: true, serial: target.platform === "ios" ? target.id : "emulator-5554" },
           ),
         );
       }
@@ -219,6 +317,7 @@ const fixture = Effect.fn("fixture")(function* (
         origin: "http://device.test",
         http,
         run,
+        ...(options.prepareSimulator ? { prepareSimulator: options.prepareSimulator } : {}),
         platformAvailable: (platform) =>
           Ref.get(platform === "ios" ? iosAvailable : androidAvailable),
       }),
@@ -1040,6 +1139,57 @@ it.effect("includes nested hub boot diagnostics and bounds them to 2,000 charact
     expect(roundTrip.message).toBe(error.message);
     expect((yield* service.state).bootingDevices).toEqual([]);
   }),
+);
+
+it.effect.each([false, true])(
+  "powers off a simulator requiring a restart during open (booted: %s)",
+  (booted) =>
+    Effect.gen(function* () {
+      let attempts = 0;
+      const { service, devices, requests } = yield* fixture(
+        Effect.void,
+        undefined,
+        false,
+        undefined,
+        false,
+        undefined,
+        {
+          prepareSimulator: () =>
+            ++attempts === 1
+              ? Effect.fail(
+                  new DeviceOperationError({
+                    operation: "prepare simulator services",
+                    reason: "simulator_reboot_required",
+                    cause: "fixture",
+                  }),
+                )
+              : Effect.void,
+        },
+      );
+      const deviceId = DeviceId.make("11111111-1111-1111-1111-111111111111");
+      devices.push({
+        id: deviceId,
+        name: "iPhone",
+        platform: "ios",
+        version: "iOS 26.5",
+        booted,
+        physical: false,
+      });
+      yield* service.configure({ enabled: true });
+      const input = {
+        threadId: ThreadId.make("simulator-restart"),
+        deviceId,
+        platform: "ios" as const,
+        fullServices: true,
+      };
+      const error = yield* service.open(input).pipe(Effect.flip);
+      expect(error).toMatchObject({ reason: "simulator_reboot_required" });
+      expect(requests.some((url) => url.endsWith("/shutdown"))).toBe(true);
+      expect(yield* service.sessionsForThread(input.threadId)).toEqual([]);
+      const session = yield* service.open(input);
+      expect(session.deviceId).toBe(deviceId);
+      expect(attempts).toBe(2);
+    }),
 );
 
 it.effect("keeps shutdown successful when subsequent discovery fails", () =>

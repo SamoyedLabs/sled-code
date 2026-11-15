@@ -1,4 +1,5 @@
 {
   "agent-device": "0.21.36",
-  "expo-device-hub": "0.22.1"
+  "expo-device-hub": "0.22.1",
+  "simslim": "0.14.0"
 }

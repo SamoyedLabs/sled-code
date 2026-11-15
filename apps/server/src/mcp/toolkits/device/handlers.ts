@@ -80,6 +80,14 @@ export function agentDeviceQuickStart(
           "The command is removed when the device closes or T3 Code restarts. If it is missing, call device_open again.",
         ]
       : []),
+    ...(device.platform === "ios" &&
+    !device.physical &&
+    host?.kind !== "eas" &&
+    host?.kind !== "simlock"
+      ? [
+          "Sled Code reduces simulator background services on supported Macs, keeping Photos, purchases, push, web links and iCloud enabled. Before testing Health, contacts/calendar, Siri, widgets or other disabled system features, call device_open for this same device with fullServices: true. To return to reduced services, use fullServices: false. Ordinary reopens preserve the choice. If restoring services reports a restart is required, Sled powers the simulator off: call device_open again with the same options, then test the actual app behavior; service flags alone do not prove it works.",
+        ]
+      : []),
     platformNotes,
   ].join("\n");
 }
@@ -267,6 +275,7 @@ const handlers = {
           hostId: target.hostId,
           deviceId: target.id,
           platform: target.platform,
+          ...(input.fullServices === undefined ? {} : { fullServices: input.fullServices }),
         },
         { workspaceRoot: yield* threadWorkspaceRoot(scope.thread.threadId) },
       );
