@@ -319,7 +319,7 @@ describe("buildProjectGroups", () => {
       preferredEnvironmentId: environmentId,
     });
     expect(groups).toHaveLength(1);
-    expect(groups[0]?.label).toBe("T3 Code");
+    expect(groups[0]?.label).toBe("Sled Code");
 
     // A subfolder group in repository_path mode keeps its own title.
     const localIdentity = { ...repositoryIdentity, rootPath: "/work/t3code" };

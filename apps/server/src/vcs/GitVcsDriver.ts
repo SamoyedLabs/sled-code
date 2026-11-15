@@ -990,18 +990,15 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
       .map((entry) => path.join(cwd, entry));
   });
 
-  // Git defaults and macOS writeout-only can leave empty refs after crashes; flush before publication.
-  // Set fsync first: Git 2.36 ignores unknown batch without resetting the method.
-  // Batch fully flushes refs and equals fsync on macOS HFS+/APFS and Windows NTFS/ReFS.
-  // Keep per-object fsync elsewhere; VcsProcess retries unsupported macOS full flushes with plain fsync.
+  // Flush objects and refs before publication; Git 2.36 needs fsync set before batch.
+  // macOS batch writes can fail to publish isolated packs, so only Windows uses batch.
+  // VcsProcess retries unsupported macOS full flushes with plain fsync.
   const durableWrite = [
     "-c",
     "core.fsync=objects,reference",
     "-c",
     "core.fsyncMethod=fsync",
-    ...(hostPlatform === "darwin" || hostPlatform === "win32"
-      ? ["-c", "core.fsyncMethod=batch"]
-      : []),
+    ...(hostPlatform === "win32" ? ["-c", "core.fsyncMethod=batch"] : []),
   ] as const;
 
   // Checkpoints must handle existing paths beyond Windows MAX_PATH, even when
