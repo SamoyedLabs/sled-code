@@ -55,6 +55,30 @@ to the other screen switches the live display and touch input to that screen.
 On supported Android foldables, use **Fold device** and **Unfold device** beside
 the screen to change its posture in either view.
 
+## Reduce iOS simulator memory
+
+Sled Code automatically installs [SimSlim](https://github.com/MobAI-App/simslim)
+when opening an iOS simulator on a local or SSH Apple Silicon Mac. The default
+profile reduces background services while keeping Photos, purchases, push,
+web links, and iCloud enabled. Android, physical devices, Intel Macs, EAS,
+and Simlock devices are unaffected.
+
+Turn off **Reduce iOS simulator memory** in Settings → Devices to restore
+standard services the next time you open a managed simulator. Some services
+need a restart: Sled Code powers the simulator off and asks you to reopen it
+when that is required. Changing services does not erase apps or data.
+
+Agents can call `device_open` with `fullServices: true` before testing Health,
+contacts or calendar sync, Siri, widgets, or other disabled system features.
+That choice survives reopening and restarting the simulator. Calling
+`device_open` with `fullServices: false` returns it to the reduced profile
+when memory reduction is enabled. Ordinary reopens preserve the choice.
+
+Services enabled manually through SimSlim stay enabled for the current boot;
+the reduced profile reapplies after a restart. A successful service check is
+not proof that the app's feature works: test the actual flow after restoring
+services.
+
 ## Tools
 
 The toolbar's **Tools** button opens a drawer for the open device. It shows the

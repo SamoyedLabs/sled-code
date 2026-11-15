@@ -348,6 +348,7 @@ export const DeviceOpenInput = Schema.Struct({
   platform: DevicePlatform,
   /** Boot the simulator or emulator when it is not running. Defaults to true. */
   boot: Schema.optional(Schema.Boolean),
+  fullServices: Schema.optional(Schema.Boolean),
 });
 export type DeviceOpenInput = typeof DeviceOpenInput.Type;
 
@@ -584,6 +585,8 @@ export class DeviceOperationError extends Schema.TaggedError<DeviceOperationErro
     operation: Schema.String,
     reason: Schema.Literals([
       "command_failed",
+      "simulator_install_failed",
+      "simulator_reboot_required",
       "request_failed",
       "invalid_payload",
       "settings_failed",
@@ -595,6 +598,10 @@ export class DeviceOperationError extends Schema.TaggedError<DeviceOperationErro
 ) {
   override get message(): string {
     const explanation = {
+      simulator_install_failed:
+        "SimSlim could not be installed. Retry, or turn off Reduce iOS simulator memory in Settings > Devices.",
+      simulator_reboot_required:
+        "Some simulator services require a restart. Reopen the simulator to finish restoring services before testing.",
       command_failed: `The device command failed${this.exitCode === undefined ? "" : ` (exit code ${this.exitCode})`}.`,
       request_failed: "Could not communicate with device support. Try refreshing devices.",
       invalid_payload: "The device request could not be encoded.",
@@ -639,6 +646,12 @@ export const DeviceToolListResult = Schema.Struct({
 export type DeviceToolListResult = typeof DeviceToolListResult.Type;
 
 export const DeviceToolOpenInput = Schema.Struct({
+  fullServices: Schema.optional(
+    Schema.Boolean.annotate({
+      description:
+        "Restore full system services before feature-dependent iOS tests. Omit to preserve the device's choice; false returns to reduced services.",
+    }),
+  ),
   deviceId: Schema.optional(
     DeviceId.annotate({
       description: "Device id from `device_list`. Default: the booted or last used device.",

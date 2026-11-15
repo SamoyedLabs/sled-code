@@ -296,6 +296,7 @@ export const makeWithHosts = Effect.fn("DeviceService.makeWithHosts")(function* 
   const readDeviceSettings = settings.getSettings.pipe(
     Effect.map((value) => ({
       enabled: value.enableDeviceSupport,
+      reduceSimulatorMemory: value.reduceSimulatorMemory,
       agentAccessEnabled: value.enableAgentDeviceAccess,
       onboardingCompleted: value.deviceOnboardingCompleted,
     })),
@@ -806,6 +807,16 @@ export const makeWithHosts = Effect.fn("DeviceService.makeWithHosts")(function* 
           });
         }
       }
+      const simulatorContext = {
+        ...context,
+        reduceSimulatorMemory: (yield* readDeviceSettings).reduceSimulatorMemory,
+        ...(input.fullServices === undefined ? {} : { fullServices: input.fullServices }),
+      };
+      const restartTarget = { hostId: host.id, deviceId: device.id, platform: device.platform };
+      const prepareFailed = (error: DeviceOperationError) =>
+        error.reason === "simulator_reboot_required"
+          ? shutdown(restartTarget).pipe(Effect.andThen(Effect.fail(error)))
+          : Effect.fail(error);
       if (!device.booted && input.boot !== false) {
         const booting = { ...device, threadId: input.threadId };
         yield* publish((current) => ({
@@ -817,7 +828,7 @@ export const makeWithHosts = Effect.fn("DeviceService.makeWithHosts")(function* 
             booting,
           ],
         }));
-        const bootedId = yield* ready.devices.boot(device, context).pipe(
+        const bootedId = yield* ready.devices.boot(device, simulatorContext).pipe(
           Effect.ensuring(
             publish((current) => ({
               ...current,
@@ -826,6 +837,7 @@ export const makeWithHosts = Effect.fn("DeviceService.makeWithHosts")(function* 
               ),
             })),
           ),
+          Effect.catchTags({ DeviceOperationError: prepareFailed }),
         );
         state = yield* refresh(ready);
         // Retained entries predate the boot, so only a complete listing confirms the booted device.
@@ -836,7 +848,9 @@ export const makeWithHosts = Effect.fn("DeviceService.makeWithHosts")(function* 
           return yield* new DeviceNotFoundError({ hostId: host.id, deviceId: bootedId });
         }
       } else if (device.booted) {
-        yield* ready.devices.attach(device);
+        yield* ready.devices
+          .attach(device, simulatorContext)
+          .pipe(Effect.catchTags({ DeviceOperationError: prepareFailed }));
       }
       if (hosts.get(host.id) !== host)
         return yield* new DeviceHostUnavailableError({
