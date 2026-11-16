@@ -113,6 +113,12 @@ To export without publishing, add `--export --output .tools/ota-ios-<unique-name
 
 Verify an archive and its separately exported IPA with `python3 scripts/sled/verify-ios-artifact.py <artifact>`. Both checks verify the signed app identity, OTA endpoint/channel, fingerprint runtime, embedded JS and WebRTC. IPA verification additionally requires an App Store profile with debugging disabled. Run both before the explicit upload action. Artifact verification does not prove installation, sign-in, stored-connection continuity or native permissions on the phone.
 
+### Reconciling interrupted hosted mobile releases
+
+A draft named `sled-mobile-<sha>` reserves an Apple or Expo operation. If retained workflow evidence proves that archive or export failed before upload began, attach that evidence and a reconciliation record, then retain the draft under `sled-failed-mobile-<sha>`. Do not delete its assets, publish the failed attempt, or clear a reservation whose upload outcome is unknown.
+
+After a separately uploaded native build, verify its signed archive, exported IPA and Apple build state before using `scripts/sled/hosted-mobile-release.py seed` to create a new `baseline.json`. Publish that verified baseline under its matching `sled-ios-native-<build>` tag. An outdated baseline can reuse an existing build number or select the wrong OTA compatibility path.
+
 ### Portable desktop update channel
 
 The portable private build resolves the current account's home to `~/.sled` before Electron storage or the server starts. It embeds only the four permitted public connection settings. It preserves Sled's private application identity and uses `SamoyedLabs/sled-code` for normal in-app update checks, download and explicit restart/install. It does not force a restart during an agent session. Manual builds remain updater-disabled.

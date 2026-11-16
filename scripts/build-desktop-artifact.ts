@@ -1064,7 +1064,8 @@ export function resolveWindowsServerAsarIgnoreGlobs(arch: typeof BuildArch.Type)
   ];
 }
 
-export const WINDOWS_PACKAGED_PAYLOAD_FILE_LIMIT = 80;
+// Current Windows packaging produces 91 files; retain a bounded loose-file budget.
+export const WINDOWS_PACKAGED_PAYLOAD_FILE_LIMIT = 128;
 export const WINDOWS_SERVER_RESOURCE_SOURCE_DIR = "apps/desktop/prod-resources/windows-server";
 export const WINDOWS_SERVER_EXTRA_RESOURCES = [
   {

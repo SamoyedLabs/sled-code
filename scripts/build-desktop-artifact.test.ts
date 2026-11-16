@@ -971,6 +971,21 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
           appVersion: WINDOWS_PAYLOAD_FIXTURE_VERSION,
         });
 
+        // The current signed Windows release has 91 files after native dependencies are staged.
+        for (let index = result.fileCount; index < 91; index++) {
+          yield* fs.writeFileString(
+            path.join(fixture.packagedAppDir, `runtime-${index}.bin`),
+            "fixture",
+          );
+        }
+        const currentPayload = yield* validateWindowsPackagedPayload({
+          stageDistDir: fixture.stageDistDir,
+          appExecutableName: fixture.appExecutableName,
+          targetArch: "x64",
+          appVersion: WINDOWS_PAYLOAD_FIXTURE_VERSION,
+        });
+        assert.equal(currentPayload.fileCount, 91);
+
         const secondAsarPath = path.join(path.dirname(fixture.generatedAsarPath), "second.asar");
         yield* packWindowsServerAsar({
           sourceDir: fixture.sourceDir,
@@ -1371,18 +1386,25 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
   it.effect("rejects a Windows payload that regresses above the file-count budget", () =>
     Effect.scoped(
       Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
         const fixture = yield* makeWindowsPayloadFixture({ copyUnpackedNatives: true });
+        for (let index = 0; index <= WINDOWS_PACKAGED_PAYLOAD_FILE_LIMIT; index++) {
+          yield* fs.writeFileString(
+            path.join(fixture.packagedAppDir, `extra-${index}.bin`),
+            "fixture",
+          );
+        }
         const error = yield* validateWindowsPackagedPayload({
           stageDistDir: fixture.stageDistDir,
           appExecutableName: fixture.appExecutableName,
           targetArch: "x64",
           appVersion: WINDOWS_PAYLOAD_FIXTURE_VERSION,
-          fileLimit: 2,
         }).pipe(Effect.flip);
 
         assert.instanceOf(error, WindowsPackagedPayloadValidationError);
         assert.equal(error.reason, "file-limit-exceeded");
-        assert.isAbove(error.fileCount ?? 0, 2);
+        assert.isAbove(error.fileCount ?? 0, WINDOWS_PACKAGED_PAYLOAD_FILE_LIMIT);
       }),
     ),
   );
