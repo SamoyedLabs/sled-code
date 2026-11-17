@@ -1,3 +1,7 @@
+import type { CSSProperties } from "react";
+import { deviceWorkspaceKey, useDeviceWorkspaceStore } from "./device/deviceWorkspaceStore";
+import { useResizableWidth, RESIZABLE_WIDTH_PROPERTY } from "~/hooks/useResizableWidth";
+import { RightPanelResizeHandle } from "./preview/RightPanelResizeHandle";
 import { ChildThreadApprovals } from "./chat/ChildThreadApprovals";
 import { workspaceAreaProps } from "../lib/workspaceFocus";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
@@ -1125,10 +1129,55 @@ export default function ChatView(props: ChatViewProps) {
   const rightPanelControlsAtRoot = rightPanelPresent && !shouldUsePlanSidebarSheet;
   const renderedRightPanelSurface = rightPanelPresence.value?.activeSurface ?? null;
   const renderedRightPanelSurfaces = rightPanelPresence.value?.surfaces ?? [];
-  const previewMiniPlayerVisible = shouldRenderPreviewMiniPlayer(
-    activePreviewMiniPlayer?.source ?? null,
-    renderedRightPanelSurface,
+  const deviceWorkspace = useDeviceWorkspaceStore((state) =>
+    activeThreadKey ? state.byThreadKey[activeThreadKey] : undefined,
   );
+  const deviceWorkspaceActive =
+    !embedded &&
+    rightPanelOpen &&
+    renderedRightPanelSurface?.kind === "device" &&
+    deviceWorkspace !== undefined;
+  const selectedDeviceSurface = deviceWorkspaceActive
+    ? renderedRightPanelSurfaces.find(
+        (surface) =>
+          surface.kind === "device" &&
+          surface.target &&
+          deviceWorkspaceKey(surface.target.hostId, surface.target.deviceId) ===
+            deviceWorkspace.selected,
+      )
+    : undefined;
+  const [deviceWorkspaceSize, setDeviceWorkspaceSize] = useState({ width: 1280, height: 800 });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- measures the workspace so chat can reclaim unused device space while respecting window and sidebar resizes
+  useLayoutEffect(() => {
+    if (!deviceWorkspaceActive || !workspaceLayoutElement) return;
+    const measure = () => {
+      const { clientWidth: width, clientHeight: height } = workspaceLayoutElement;
+      setDeviceWorkspaceSize((current) =>
+        current.width === width && current.height === height ? current : { width, height },
+      );
+    };
+    measure();
+    return observeResize(workspaceLayoutElement, measure);
+  }, [deviceWorkspaceActive, workspaceLayoutElement]);
+  const deviceFocusMode = deviceWorkspace?.mode === "focus";
+  const chatDockMaxWidth = Math.max(
+    360,
+    Math.min(deviceFocusMode ? Infinity : 560, deviceWorkspaceSize.width - 400),
+  );
+  const focusDeviceWidth = Math.max(480, (deviceWorkspaceSize.height - 160) * 0.5 + 176);
+  const chatDock = useResizableWidth({
+    storageKey: `t3code:device-chat-width:${activeThreadKey}${deviceFocusMode ? ":focus" : ""}`,
+    defaultWidth: deviceFocusMode ? deviceWorkspaceSize.width - focusDeviceWidth : 360,
+    minWidth: 360,
+    maxWidth: chatDockMaxWidth,
+    edge: "right",
+  });
+  const previewMiniPlayerVisible =
+    !deviceWorkspaceActive &&
+    shouldRenderPreviewMiniPlayer(
+      activePreviewMiniPlayer?.source ?? null,
+      renderedRightPanelSurface,
+    );
   const canMaximizeRightPanel = rightPanelOpen;
   // An embedded side chat has no panel; a stale maximized flag would hide its own column.
   const rightPanelMaximized =
@@ -3335,7 +3384,10 @@ export default function ChatView(props: ChatViewProps) {
   const content = (
     <div
       ref={setWorkspaceLayoutElement}
-      className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
+      className={cn(
+        "relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background",
+        deviceWorkspaceActive && shouldUsePlanSidebarSheet && "flex-col",
+      )}
     >
       {embedded ? null : (
         <DeviceSetupDialogHost
@@ -3348,13 +3400,44 @@ export default function ChatView(props: ChatViewProps) {
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-col overflow-x-hidden",
-          rightPanelMaximized ? "w-0 flex-none" : "flex-1",
+          rightPanelMaximized
+            ? "w-0 flex-none"
+            : deviceWorkspaceActive
+              ? shouldUsePlanSidebarSheet
+                ? "order-2 h-80 w-full shrink-0 border-t"
+                : "relative shrink-0 border-r"
+              : "flex-1",
         )}
+        style={
+          deviceWorkspaceActive && !rightPanelMaximized && !shouldUsePlanSidebarSheet
+            ? ({
+                [RESIZABLE_WIDTH_PROPERTY]: `${chatDock.width}px`,
+                width: `var(${RESIZABLE_WIDTH_PROPERTY})`,
+              } as CSSProperties)
+            : undefined
+        }
+        data-device-chat-dock={deviceWorkspaceActive || undefined}
         data-chat-column-maximized-away={rightPanelMaximized ? "true" : "false"}
         data-chat-column
         inert={rightPanelMaximized}
         onMouseUp={preventMiddleClickPasteOutsideEditable}
       >
+        {deviceWorkspaceActive && !rightPanelMaximized && !shouldUsePlanSidebarSheet ? (
+          <RightPanelResizeHandle
+            handlers={chatDock.handlers}
+            className="right-0 left-auto"
+            label="Resize chat"
+            tabIndex={0}
+            aria-valuenow={chatDock.width}
+            aria-valuemin={360}
+            aria-valuemax={chatDockMaxWidth}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+              event.preventDefault();
+              chatDock.setWidth(chatDock.width + (event.key === "ArrowRight" ? 20 : -20));
+            }}
+          />
+        ) : null}
         {embedded ? null : (
           <header
             ref={threadPanelPopoverAnchorRef}
@@ -3999,7 +4082,7 @@ export default function ChatView(props: ChatViewProps) {
 
       {rightPanelPresent && activeThreadRef && !embedded ? (
         <ChatRightPanel
-          sheet={shouldUsePlanSidebarSheet}
+          sheet={shouldUsePlanSidebarSheet && !deviceWorkspaceActive}
           workspaceLayoutElement={workspaceLayoutElement}
           widthStorageKey={`t3code:preview-panel-width:${activeThreadKey}`}
           sheetAnimationDurationMs={panelAnimationsActive ? panelAnimationDurationMs : 0}
@@ -4007,7 +4090,10 @@ export default function ChatView(props: ChatViewProps) {
           open={rightPanelOpen}
           keybindings={keybindings}
           getShortcutContext={getShortcutContextStable}
-          maximized={rightPanelMaximized}
+          maximized={rightPanelMaximized || deviceWorkspaceActive}
+          reserveTitleBarControlInset={
+            !deviceWorkspaceActive || rightPanelMaximized || shouldUsePlanSidebarSheet
+          }
           layoutControls={
             rightPanelOpen ? (
               <div className="mr-px flex items-center gap-1">
@@ -4021,13 +4107,22 @@ export default function ChatView(props: ChatViewProps) {
           }
           surfaces={renderedRightPanelSurfaces}
           environmentId={activeThreadRef.environmentId}
-          activeSurfaceId={renderedRightPanelSurface?.id ?? null}
+          activeSurfaceId={selectedDeviceSurface?.id ?? renderedRightPanelSurface?.id ?? null}
           pendingSurfaceIds={pendingFileSurfaceIds}
           previewSessions={activePreviewState.sessions}
           desktopByTabId={activePreviewState.desktopByTabId}
           previewRuntimeTabId={resolvePreviewRuntimeTabId}
           terminalLabelsById={activeTerminalLabelsById}
-          onActivate={activateRightPanelSurfaceStable}
+          onActivate={(surface) => {
+            if (deviceWorkspaceActive && surface.kind === "device" && surface.target) {
+              const selected = deviceWorkspaceKey(surface.target.hostId, surface.target.deviceId);
+              useDeviceWorkspaceStore.getState().update(activeThreadRef, {
+                selected,
+                hidden: deviceWorkspace.hidden.filter((key) => key !== selected),
+                picker: false,
+              });
+            } else activateRightPanelSurfaceStable(surface);
+          }}
           onCloseSurface={closeRightPanelSurfaceStable}
           onRenameDevice={(surfaceId, title) => {
             if (activeThreadRef)

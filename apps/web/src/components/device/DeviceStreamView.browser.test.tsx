@@ -16,7 +16,7 @@ vi.mock(import("./DevicePhoneViewport"), () => ({
 import { DeviceStreamView } from "./DeviceStreamView";
 
 const access = { httpBase: "http://test", wsBase: "ws://test", query: {}, credentials: true };
-function setup() {
+function setup(deviceName = "Test phone") {
   const registry = AtomRegistry.make();
   const touches: unknown[] = [];
   const image = vi.spyOn(HTMLImageElement.prototype, "src", "set").mockImplementation(() => {});
@@ -52,7 +52,7 @@ function setup() {
   return {
     view: () => (
       <RegistryContext.Provider value={registry}>
-        <div style={{ width: 400, height: 800 }}>{view()}</div>
+        <div style={{ width: 400, height: 800 }}>{view(deviceName)}</div>
       </RegistryContext.Provider>
     ),
     [Symbol.dispose]() {
@@ -77,19 +77,23 @@ function setup() {
   };
 }
 
-function view() {
+function view(deviceName: string) {
   return (
     <DeviceStreamView
       hostId="local"
       environmentId={EnvironmentId.make("test")}
       deviceId="test"
       platform="ios"
+      deviceName={deviceName}
       visible
-      allowPhoneView={false}
+      allowPhoneView
       renderControls={(controls) => (
-        <output>
-          {controls.handle?.inputConnected ? "Input connected" : "Input disconnected"}
-        </output>
+        <>
+          <output>
+            {controls.handle?.inputConnected ? "Input connected" : "Input disconnected"}
+          </output>
+          <output aria-label="3D availability">{controls.phoneUnavailableReason}</output>
+        </>
       )}
     />
   );
@@ -97,6 +101,14 @@ function view() {
 
 // router: false because the device view renders no links and never navigates.
 const options = { router: false } as const;
+
+it("rejects an unidentified iPhone model in the shared preview", async () => {
+  using input = setup("Sled Multiview B");
+  await using screen = await render(input.view(), options);
+  await expect
+    .element(screen.getByLabelText("3D availability"))
+    .toHaveTextContent("No matching 3D model for this device");
+});
 
 function flatPointer(container: HTMLElement) {
   const surface = container.querySelector("canvas")!.parentElement!.parentElement!;

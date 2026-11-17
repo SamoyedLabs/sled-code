@@ -22,6 +22,9 @@ export function DeviceWorkspace(props: {
   hostKind: DeviceHostSummary["kind"] | undefined;
   hostDiagnostics: string | undefined;
   visible: boolean;
+  interactive?: boolean;
+  controlsHost?: HTMLElement | null;
+  defaultPresentation?: "phone" | "flat";
   onFloat: () => void;
   onClose: () => void;
   onPowerOff: () => void;
@@ -38,7 +41,7 @@ export function DeviceWorkspace(props: {
   const controls = useDeviceControls({
     ...props,
     access,
-    visible: props.visible && runsHostCommands,
+    visible: props.visible && runsHostCommands && props.interactive !== false,
   });
   const saveScreenshot = () => {
     if (!access || capturing.current || !props.visible) return;
@@ -92,27 +95,35 @@ export function DeviceWorkspace(props: {
             visible={props.visible}
             serveSimOnly={props.hostKind === "simlock"}
             axOverlay={axOverlay}
-            allowPhoneView
-            renderControls={(view) => (
-              <DeviceControlsRail
-                platform={props.device.platform}
-                hostKind={props.hostKind}
-                handle={view.handle}
-                view={view}
-                controls={controls}
-                screenshotPending={screenshotPending}
-                onScreenshot={() => void saveScreenshot()}
-                toolsOpen={toolsOpen}
-                onTools={() => setToolsOpen(!toolsOpen)}
-                onFloat={props.onFloat}
-                onClose={props.onClose}
-                onPowerOff={props.onPowerOff}
-              />
-            )}
+            allowPhoneView={props.interactive !== false}
+            workspaceTile={props.controlsHost !== undefined}
+            defaultPresentation={props.defaultPresentation}
+            showPresentationControls={props.interactive !== false}
+            renderControls={
+              props.interactive === false
+                ? undefined
+                : (view) => (
+                    <DeviceControlsRail
+                      platform={props.device.platform}
+                      hostKind={props.hostKind}
+                      handle={view.handle}
+                      view={view}
+                      controls={controls}
+                      screenshotPending={screenshotPending}
+                      onScreenshot={() => void saveScreenshot()}
+                      toolsOpen={toolsOpen}
+                      onTools={() => setToolsOpen(!toolsOpen)}
+                      onFloat={props.onFloat}
+                      onClose={props.onClose}
+                      onPowerOff={props.onPowerOff}
+                      controlsHost={props.controlsHost}
+                    />
+                  )
+            }
           />
         </div>
       </div>
-      {toolsOpen ? (
+      {toolsOpen && props.interactive !== false ? (
         <DeviceToolsPanel
           device={props.device}
           controls={controls}
