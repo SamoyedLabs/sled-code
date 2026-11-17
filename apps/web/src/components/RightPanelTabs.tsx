@@ -110,6 +110,7 @@ import { surfaceShortcutKey } from "~/lib/surfaceShortcutKey";
 export interface RightPanelTabsProps {
   mode: PreviewPanelMode;
   maximized?: boolean;
+  reserveTitleBarControlInset?: boolean;
   open?: boolean;
   keybindings: ResolvedKeybindingsConfig;
   getShortcutContext: () => ShortcutMatchContext;
@@ -1347,7 +1348,10 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           props.mode === "inline" && !props.layoutControls ? "pr-28" : "pr-3",
           ownsDesktopTitleBar && "drag-region",
           ownsDesktopTitleBar && "wco:pr-(--workspace-native-controls-inset)",
-          props.mode === "inline" && props.maximized && COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
+          props.mode === "inline" &&
+            props.maximized &&
+            props.reserveTitleBarControlInset !== false &&
+            COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
         )}
         data-right-panel-tabbar
       >

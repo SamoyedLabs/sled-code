@@ -1,3 +1,6 @@
+import { scopedThreadKey } from "@t3tools/client-runtime/environment";
+import { DeviceGrid } from "./DeviceGrid";
+import { useDeviceWorkspaceStore } from "./deviceWorkspaceStore";
 import { DeviceHostUpdates } from "./DeviceHostUpdates";
 import type {
   DevicePlatform,
@@ -5,9 +8,9 @@ import type {
   DeviceSummary,
   ScopedThreadRef,
 } from "@t3tools/contracts";
-import { ArrowUpRight, CircleAlert, Play, Smartphone, X } from "lucide-react";
+import { ArrowUpRight, CircleAlert, Grid2X2, Play, Smartphone, X } from "lucide-react";
 import { useAtomMount } from "@effect/atom-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import { usePreviewMiniPlayerStore } from "~/previewMiniPlayerStore";
 import {
@@ -79,7 +82,27 @@ export function DevicePanel(props: {
       : NO_DEVICE_PROBE_ATOM,
   );
 
+  const workspace = useDeviceWorkspaceStore(
+    (value) => value.byThreadKey[scopedThreadKey(props.threadRef)],
+  );
   const sessions = state.sessions.filter((session) => session.threadId === threadId);
+  const onlySession = sessions.length === 1 ? sessions[0] : undefined;
+  const remainingDevice = onlySession
+    ? state.devices.find(
+        (device) => device.hostId === onlySession.hostId && device.id === onlySession.deviceId,
+      )
+    : undefined;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- returns to the normal preview when the server reports that only one open device remains
+  useEffect(() => {
+    if (!loaded || !props.visible || !workspace || workspace.picker || !remainingDevice) return;
+    useRightPanelStore.getState().openDevice(props.threadRef, {
+      hostId: remainingDevice.hostId,
+      deviceId: remainingDevice.id,
+      platform: remainingDevice.platform,
+      name: remainingDevice.name,
+    });
+    useDeviceWorkspaceStore.getState().leave(props.threadRef);
+  }, [loaded, props.visible, props.threadRef, workspace, remainingDevice]);
   const activeSession = props.surface.target
     ? sessions.find(
         (session) =>
@@ -87,11 +110,13 @@ export function DevicePanel(props: {
           session.hostId === props.surface.target.hostId,
       )
     : undefined;
-  const activeDevice = activeSession
-    ? state.devices.find(
-        (device) => device.hostId === activeSession.hostId && device.id === activeSession.deviceId,
-      )
-    : undefined;
+  const activeDevice =
+    !workspace?.picker && activeSession
+      ? state.devices.find(
+          (device) =>
+            device.hostId === activeSession.hostId && device.id === activeSession.deviceId,
+        )
+      : undefined;
   const activeHost = activeDevice
     ? state.hosts.find((host) => host.id === activeDevice.hostId)
     : undefined;
@@ -130,6 +155,18 @@ export function DevicePanel(props: {
         platform: device.platform,
         name: device.name,
       });
+      const workspaceState =
+        useDeviceWorkspaceStore.getState().byThreadKey[scopedThreadKey(props.threadRef)];
+      const openedDeviceKey = deviceKey({
+        hostId: result.value.hostId,
+        id: result.value.deviceId,
+      });
+      if (workspaceState)
+        useDeviceWorkspaceStore.getState().update(props.threadRef, {
+          picker: false,
+          selected: openedDeviceKey,
+          hidden: workspaceState.hidden.filter((key) => key !== openedDeviceKey),
+        });
       settleOperation(null);
     }
   };
@@ -215,8 +252,45 @@ export function DevicePanel(props: {
     );
   }
 
+  if (workspace && !workspace.picker)
+    return (
+      <PreviewPanelShell mode={props.mode}>
+        <DeviceGrid state={state} threadRef={props.threadRef} visible={props.visible} />
+      </PreviewPanelShell>
+    );
+
   return (
     <PreviewPanelShell mode={props.mode}>
+      {workspace || sessions.length > 1 ? (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
+          <span role="status" className="text-xs text-muted-foreground">
+            {sessions.length} {sessions.length === 1 ? "device" : "devices"} open
+          </span>
+          <Button
+            variant="outline"
+            size="compact"
+            onClick={() => {
+              const initialSession = activeSession ?? sessions[0];
+              useRightPanelStore.getState().setMaximized(props.threadRef, false);
+              useDeviceWorkspaceStore.getState().update(props.threadRef, {
+                picker: false,
+                ...(workspace
+                  ? {}
+                  : {
+                      selected: initialSession
+                        ? deviceKey({ hostId: initialSession.hostId, id: initialSession.deviceId })
+                        : null,
+                    }),
+              });
+            }}
+          >
+            <span className="flex items-center gap-1.5">
+              <Grid2X2 className="size-3.5" />
+              {workspace ? "Back to multi-view" : "View together"}
+            </span>
+          </Button>
+        </div>
+      ) : null}
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div
           className={cn(

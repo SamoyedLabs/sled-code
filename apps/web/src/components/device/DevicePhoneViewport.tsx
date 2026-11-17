@@ -64,7 +64,10 @@ export function DevicePhoneViewport(props: {
                 canvas,
                 source,
                 onUnavailable,
-                onModelError: (cause) => console.warn("Device 3D asset could not load", cause),
+                onModelError: (cause) => {
+                  console.warn("Device 3D asset could not load", cause);
+                  onUnavailable();
+                },
                 profile: profileRef.current,
                 model: modelRef.current,
                 accessory: accessoryRef.current,

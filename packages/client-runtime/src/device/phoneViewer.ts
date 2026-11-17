@@ -209,6 +209,7 @@ export function createPhoneViewer(options: {
       }
       framing.advance(now, reducedMotion());
       applyCamera();
+      phone.root.visible = modelSource === null || imported !== null;
       renderer.render(scene, camera);
       if (motion.needsFrame() || framing.needsFrame() || orientationTurn || foldTurn)
         scheduler.invalidate();

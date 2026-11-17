@@ -55,6 +55,26 @@ to the other screen switches the live display and touch input to that screen.
 On supported Android foldables, use **Fold device** and **Unfold device** beside
 the screen to change its posture in either view.
 
+## View multiple devices
+
+When two or more devices are open in the same thread, the Device panel offers
+**View together**. Choose it to keep the thread's open simulators and emulators
+visible beside chat. Use **Grid** to compare them or
+**Focus** to enlarge the selected device. Select a preview before controlling
+it; keyboard input goes to that device only. The workspace shows up to four
+live previews at a time, with paging for larger groups.
+When only one open device remains, the panel returns to its normal preview.
+
+Multi-view starts with flat screens. Use the toolbar below the previews to
+control the selected device or turn on its 3D view when available.
+
+Focus gives chat more room on wide windows. Drag the divider to adjust it.
+Grid and Focus remember their chat widths separately. On narrow windows, chat
+sits below the previews.
+
+Hiding a preview keeps its device running. Use **Show hidden** to bring it
+back, or the device's power control to shut it down.
+
 ## Reduce iOS simulator memory
 
 Sled Code automatically installs [SimSlim](https://github.com/MobAI-App/simslim)

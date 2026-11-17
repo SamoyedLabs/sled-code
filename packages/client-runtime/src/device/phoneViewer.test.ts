@@ -132,7 +132,7 @@ function fixture(profile?: DeviceShapeProfile) {
 }
 
 it("rejects incompatible accessories and releases an accessory that finishes after detaching", async () => {
-  const { viewer } = fixture();
+  const { viewer, draw, state } = fixture();
   const keyboard = {
     id: "ipad-pro-13-m5-magic-keyboard",
     modelId: "ipad-pro-13-m5",
@@ -141,6 +141,9 @@ it("rejects incompatible accessories and releases an accessory that finishes aft
   viewer.setAccessory(keyboard);
   expect(models.pending).toHaveLength(0);
   viewer.setModel({ id: "ipad-pro-13-m5", url: "/ipad.glb" });
+  viewer.frameUpdated();
+  draw();
+  expect(state.frames.at(-1)!.phone?.visible).toBe(false);
   viewer.setAccessory(keyboard);
   viewer.setAccessory(null);
   expect(models.pending[1]!.signal.aborted).toBe(true);
@@ -150,5 +153,9 @@ it("rejects incompatible accessories and releases an accessory that finishes aft
   await Promise.resolve();
   expect(asset.parent).toBeNull();
   expect(dispose).toHaveBeenCalledOnce();
+  viewer.setModel(null);
+  viewer.frameUpdated();
+  draw();
+  expect(state.frames.at(-1)!.phone?.visible).toBe(true);
   viewer.dispose();
 });
