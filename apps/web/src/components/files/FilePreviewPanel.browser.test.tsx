@@ -475,10 +475,14 @@ describe("source file scroll", () => {
       await mouse("mouseMoved", startRect.left + 80, outsideEdgeY);
       await vi.waitFor(() => {
         const firstMounted = Number(rows()[0]?.getAttribute("data-line"));
+        const included = rowAt(expectedIncludedLine)?.getBoundingClientRect();
+        expect(included).toBeDefined();
         if (direction === "down") {
           expect(firstMounted).toBeGreaterThanOrEqual(targetFirstMounted);
+          expect(included!.bottom).toBeLessThanOrEqual(nearEdgeY);
         } else {
           expect(firstMounted).toBeLessThanOrEqual(targetFirstMounted);
+          expect(included!.top).toBeGreaterThanOrEqual(nearEdgeY);
         }
       });
       await mouse("mouseReleased", startRect.left + 80, outsideEdgeY);
