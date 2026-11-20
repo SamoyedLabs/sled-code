@@ -6,13 +6,17 @@ it("acknowledges already drawn identical pixels without waiting for another nati
   expect(draw.offer({ uri: "image-a", sequence: 1 })).toBe(false);
   expect(draw.loaded(99)).toBeUndefined();
   expect(draw.loaded(1)).toBe(1);
+  expect(draw.sequence).toBe(1);
   expect(draw.offer({ uri: "image-a", sequence: 2 })).toBe(true);
   expect(draw.loaded(1)).toBeUndefined();
   expect(draw.offer({ uri: "image-b", sequence: 3 })).toBe(false);
+  expect(draw.sequence).toBeUndefined();
   expect(draw.loaded(2)).toBeUndefined();
   expect(draw.loaded(3)).toBe(3);
+  expect(draw.sequence).toBe(3);
   expect(draw.loaded(3)).toBeUndefined();
   draw.reset();
+  expect(draw.sequence).toBeUndefined();
   expect(draw.offer({ uri: "image-b", sequence: 4 })).toBe(false);
 });
 

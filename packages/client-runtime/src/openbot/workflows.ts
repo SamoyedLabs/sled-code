@@ -85,6 +85,9 @@ const ports: Readonly<Record<NodeKind, { in: readonly string[]; out: readonly st
 function knownKind(kind: string): kind is NodeKind {
   return Object.hasOwn(ports, kind);
 }
+export function workflowPorts(kind: string) {
+  return knownKind(kind) ? ports[kind] : { in: [], out: [] };
+}
 export function workflowEditable(graph: OpenbotWorkflowGraph) {
   return (
     graph.nodes.every((node) => knownKind(node.kind)) &&

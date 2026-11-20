@@ -72,7 +72,7 @@ export function browseInputEndPaddingClass(input: {
 export type SearchOverlayMode = "command" | "files" | "content";
 
 export type CommandPaletteOpenIntent =
-  | { readonly kind: "add-project" | "new-thread-in" | "change-theme" }
+  | { readonly kind: "add-project" | "new-thread-in" | "new-bot-chat" | "change-theme" }
   | {
       readonly kind: "search";
       readonly query: string;
@@ -100,6 +100,7 @@ export type CommandPaletteUiAction =
     }
   | { readonly _tag: "OpenAddProject" }
   | { readonly _tag: "OpenNewThreadIn" }
+  | { readonly _tag: "OpenNewBotChat" }
   | { readonly _tag: "OpenChangeTheme" }
   | {
       readonly _tag: "OpenChildSearch";
@@ -156,6 +157,8 @@ export function reduceCommandPaletteUiState(
       return openWithIntent({ kind: "add-project" });
     case "OpenNewThreadIn":
       return openWithIntent({ kind: "new-thread-in" });
+    case "OpenNewBotChat":
+      return openWithIntent({ kind: "new-bot-chat" });
     case "OpenChangeTheme":
       return openWithIntent({ kind: "change-theme" });
   }
@@ -781,7 +784,7 @@ export function buildRootGroups(input: {
 export function getCommandPaletteInputPlaceholder(mode: CommandPaletteMode): string {
   switch (mode) {
     case "root":
-      return "Search commands, projects, and threads...";
+      return "Search bots, threads, projects, and commands...";
     case "root-browse":
       return "Enter project path (e.g. ~/projects/my-app)";
     case "submenu":

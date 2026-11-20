@@ -20,7 +20,10 @@ export class ChannelLedgerError extends Schema.TaggedError<ChannelLedgerError>()
 export interface ChannelRow {
   readonly binding_key: string;
   readonly binding_json: string;
-  readonly origin_ref: string;
+  readonly origin_ref: string | null;
+  readonly grant_id: string | null;
+  readonly host_id: string;
+  readonly fingerprint: string;
   readonly launch_hash: string;
   readonly launch_json: string;
   readonly authority_json: string;
@@ -40,6 +43,8 @@ export interface ChannelRow {
   readonly result_hash: string | null;
   readonly receipt_json: string | null;
   readonly created_at: number;
+  readonly remote_linked_at: string | null;
+  readonly remote_thread_id: string | null;
 }
 export class ChannelCodingLedger extends Context.Service<
   ChannelCodingLedger,
@@ -47,7 +52,9 @@ export class ChannelCodingLedger extends Context.Service<
     readonly reserve: (input: {
       readonly hostId: string;
       readonly fingerprint: string;
-      readonly originRef: string;
+      readonly originRef: string | null;
+      readonly grantId?: string;
+      readonly standingAuthority?: Authority;
       readonly binding: OpenbotChannelCodingBinding;
       readonly launch: Schema.Json;
       readonly projectId: string;
@@ -96,13 +103,16 @@ const make = Effect.gen(function* () {
   const reserve: ChannelCodingLedger["Service"]["reserve"] = Effect.fn(
     "ChannelCodingLedger.reserve",
   )(function* (input) {
-    const owner = yield* origins.owner(
-      input.originRef,
-      input.hostId,
-      input.fingerprint,
-      input.binding.channelId,
-      input.binding.requestMessageId,
-    );
+    const owner =
+      input.grantId && input.standingAuthority
+        ? input.standingAuthority
+        : yield* origins.owner(
+            input.originRef ?? "",
+            input.hostId,
+            input.fingerprint,
+            input.binding.channelId,
+            input.binding.requestMessageId,
+          );
     const authority = yield* encodeAuthority(owner).pipe(Effect.mapError(storage));
     const binding = encodeJson({ ...input.binding });
     const key = Origins.channelPayloadHash({
@@ -121,11 +131,12 @@ const make = Effect.gen(function* () {
     return yield* sql
       .withTransaction(
         Effect.gen(function* () {
-          yield* sql`INSERT INTO openbot_channel_coding_tasks (binding_key,binding_json,origin_ref,launch_hash,launch_json,authority_json,thread_id,command_id,environment_id,project_id,state,created_at)
-        VALUES (${key},${binding},${input.originRef},${hash},${encodeJson(input.launch)},${authority},${threadId},${commandId},${input.environmentId ?? null},${input.projectId},'reserved',${now}) ON CONFLICT(binding_key) DO NOTHING`;
+          yield* sql`INSERT INTO openbot_channel_coding_tasks (binding_key,binding_json,origin_ref,grant_id,host_id,fingerprint,launch_hash,launch_json,authority_json,thread_id,command_id,environment_id,project_id,state,created_at)
+        VALUES (${key},${binding},${input.originRef},${input.grantId ?? null},${input.hostId},${input.fingerprint},${hash},${encodeJson(input.launch)},${authority},${threadId},${commandId},${input.environmentId ?? null},${input.projectId},'reserved',${now}) ON CONFLICT(binding_key) DO NOTHING`;
           const row = yield* read(key);
           if (
             row.origin_ref !== input.originRef ||
+            row.grant_id !== (input.grantId ?? null) ||
             row.launch_hash !== hash ||
             row.authority_json !== authority
           )

@@ -5,7 +5,12 @@ import * as NodePath from "node:path";
 export function privateDesktopLaunchEnvironment(
   home: string,
   publicSettings: Readonly<Record<string, string>>,
-  options: { automaticUpdates?: boolean; portable?: boolean } = {},
+  options: {
+    automaticUpdates?: boolean;
+    portable?: boolean;
+    displayName?: string | undefined;
+    stageLabel?: string | undefined;
+  } = {},
 ) {
   const profile = options.portable ? NodePath.join(NodeOS.homedir(), ".sled") : home.trim();
   const liveHome = NodePath.join(NodeOS.homedir(), ".t3");
@@ -24,6 +29,9 @@ export function privateDesktopLaunchEnvironment(
     ...(options.portable ? { SLED_PORTABLE_PROFILE: "true" } : { T3CODE_HOME: profile }),
     T3CODE_DISABLE_AUTO_UPDATE: options.automaticUpdates ? "false" : "true",
   };
+  if (options.displayName?.trim()) environment.T3CODE_DESKTOP_APP_NAME = options.displayName.trim();
+  if (options.stageLabel?.trim())
+    environment.T3CODE_DESKTOP_STAGE_LABEL = options.stageLabel.trim();
   for (const key of [
     "T3CODE_RELAY_URL",
     "T3CODE_CLERK_PUBLISHABLE_KEY",

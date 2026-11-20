@@ -1004,3 +1004,41 @@ describe("DesktopBackendConfiguration", () => {
     }
   });
 });
+
+it.effect(
+  "exposes an optional bundled engine to the packaged backend without enabling hosting",
+  () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "sled-bundled-host-" });
+      const resourcesPath = path.join(baseDir, "resources");
+      const executable = path.join(
+        resourcesPath,
+        "openbot",
+        "OpenBot.app",
+        "Contents",
+        "MacOS",
+        "OpenBot",
+      );
+      yield* fileSystem.makeDirectory(path.dirname(executable), { recursive: true });
+      yield* fileSystem.writeFileString(executable, "owned engine fixture");
+      yield* Effect.gen(function* () {
+        const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+        const config = yield* configuration.resolvePrimary;
+        assert.equal(config.env.T3CODE_BUNDLED_OPENBOT_EXECUTABLE, executable);
+        assert.isUndefined(config.env.T3CODE_OPENBOT_EXECUTABLE);
+        assert.isUndefined(config.env.OPENBOT_CODEX_PATH);
+      }).pipe(
+        Effect.provide(
+          layerBackendConfiguration().pipe(
+            Layer.provideMerge(layerServerExposure),
+            Layer.provideMerge(DesktopAppSettings.layerTest()),
+            Layer.provideMerge(DesktopWslServerTree.layerTest()),
+            Layer.provideMerge(DesktopWslEnvironment.layerTest()),
+            Layer.provideMerge(layerEnvironment(baseDir, { isPackaged: true, resourcesPath })),
+          ),
+        ),
+      );
+    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+);

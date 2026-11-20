@@ -1,0 +1,268 @@
+.openbot-react .wfn-stage.wfn-canvas {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+.openbot-react .wfn-stage .wfn-viewport {
+  touch-action: none;
+}
+.openbot-react .wfn-stage .wfn-world {
+  transform-origin: 0 0;
+}
+.openbot-react .wfn-stage .wfn-react-connections {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  color: var(--openbot-text-muted);
+  pointer-events: none;
+}
+.openbot-react .wfn-react-connections path[role="button"] {
+  pointer-events: stroke;
+  cursor: pointer;
+}
+.openbot-react .wfn-stage .wfn-hud-tool,
+.openbot-react .wfn-stage .wfn-hud-switcher {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 32px;
+  height: 32px;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+.openbot-react .wfn-stage button:hover {
+  background: var(--wfn-hover);
+}
+.openbot-react .wfn-stage button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.openbot-react .wfn-stage :is(button, input, textarea, select):focus-visible {
+  outline: 1px solid var(--openbot-text-muted);
+  outline-offset: 2px;
+}
+.openbot-react .wfn-stage .wfn-react-node-actions {
+  position: absolute;
+  right: 0;
+  top: -30px;
+  display: flex;
+  gap: 4px;
+}
+.openbot-react .wfn-stage .wfn-react-node-actions button {
+  padding: 4px;
+  background: var(--wfn-card);
+  border-radius: 4px;
+}
+.openbot-react .wfn-stage .wfn-react-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--openbot-text-muted);
+}
+.openbot-react
+  .wfn-stage
+  :is(.wfn-react-field input, .wfn-react-field select, .wfn-field-foot select) {
+  min-width: 0;
+  background: var(--wfn-field);
+  color: var(--openbot-text-primary);
+  padding: 8px;
+  border-radius: 6px;
+}
+.openbot-react .wfn-stage .wfn-react-step-run {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px;
+  font-size: 11px;
+  color: var(--openbot-text-muted);
+}
+.openbot-react .wfn-stage .wfn-field-result {
+  padding: 10px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  max-height: 300px;
+  overflow: auto;
+}
+.openbot-react .wfn-stage .wfn-field-result button {
+  padding: 6px;
+  border-radius: 4px;
+}
+.openbot-react .wfn-react-notice {
+  position: absolute;
+  top: 68px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  z-index: 4;
+  background: var(--wfn-card);
+  font-size: 12px;
+}
+.openbot-react .wfn-react-notice button,
+.openbot-react .wfn-react-empty button {
+  padding: 6px 10px;
+  border: 1px solid var(--wfn-ring-strong);
+  border-radius: 6px;
+}
+.openbot-react .wfn-react-empty {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  color: var(--openbot-text-muted);
+}
+.openbot-react .wfn-react-empty h2 {
+  font-size: 22px;
+  color: var(--openbot-text-primary);
+}
+.openbot-react .wfn-react-empty p {
+  font-size: 13px;
+}
+.openbot-react .wfn-react-run-status {
+  padding-inline: 8px;
+  font-size: 11px;
+}
+.openbot-react .wfn-react-history {
+  position: absolute;
+  right: 16px;
+  top: 72px;
+  bottom: 70px;
+  width: 300px;
+  z-index: 5;
+  overflow: auto;
+  border-radius: 12px;
+  background: var(--wfn-glass);
+  box-shadow: 0 0 0 1px var(--wfn-ring-strong);
+  backdrop-filter: var(--wfn-glass-blur);
+  padding: 12px;
+  font-size: 12px;
+}
+.openbot-react .wfn-react-history header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.openbot-react .wfn-react-history li {
+  border-bottom: 1px solid var(--wfn-ring);
+  padding-block: 8px;
+}
+.openbot-react .wfn-react-history li > button {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  gap: 8px;
+  text-align: left;
+  padding: 6px;
+  border-radius: 6px;
+}
+.openbot-react .wfn-react-history time {
+  width: 100%;
+  color: var(--openbot-text-muted);
+  font-size: 11px;
+}
+.openbot-react .wfn-react-history button[aria-pressed="true"] {
+  background: var(--wfn-hover);
+}
+.openbot-react .wfn-react-connect {
+  position: absolute;
+  left: 50%;
+  bottom: 70px;
+  transform: translateX(-50%);
+  padding: 8px;
+  background: var(--wfn-glass);
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+.openbot-react .wfn-react-style-tools {
+  max-width: 90vw;
+  border-radius: 10px;
+}
+.openbot-react .wfn-react-style-tools .wfn-row {
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  border: 0;
+}
+.openbot-react .wfn-react-style-tools .wfn-row-name {
+  font-size: 9px;
+}
+.openbot-react .wfn-node:not([data-selected]) .wfn-react-style-tools {
+  display: none;
+}
+.openbot-react
+  .wfn-node:is([data-kind="note"], [data-kind="shape"], [data-kind="text"])
+  .wfn-field-task {
+  display: contents;
+}
+.openbot-react .wfn-node:is([data-kind="shape"], [data-kind="text"]) > .wfn-label {
+  display: none;
+}
+.openbot-react .wfn-node[data-kind="shape"] textarea {
+  position: relative;
+  z-index: 1;
+}
+.openbot-react .wfn-node .wfn-grip {
+  padding: 0;
+  background: transparent;
+}
+.openbot-react .wfn-node .wfn-grip:hover {
+  background: transparent;
+}
+.openbot-react .wfn-node .wfn-grip:is([data-corner="w"], [data-corner="e"]) {
+  cursor: ew-resize;
+}
+.openbot-react .wfn-node .wfn-grip:is([data-corner="n"], [data-corner="s"]) {
+  cursor: ns-resize;
+}
+.openbot-react .wfn-node .wfn-grip:is([data-corner="nw"], [data-corner="se"]) {
+  cursor: nwse-resize;
+}
+.openbot-react .wfn-node .wfn-grip:is([data-corner="ne"], [data-corner="sw"]) {
+  cursor: nesw-resize;
+}
+.openbot-react .wfn-node .wfn-row :is(input, select) {
+  min-width: 0;
+  max-width: 65%;
+  background: transparent;
+  color: inherit;
+}
+.openbot-react .wfn-node .wfn-row button[aria-pressed="true"] {
+  background: var(--wfn-hover);
+}
+.openbot-react .wfn-node .wfn-row-value {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.openbot-react .wfn-node .wfn-settings-block > legend {
+  font-size: 11px;
+  color: var(--openbot-text-muted);
+}
+.openbot-react .wfn-node .wfn-row-choice {
+  overflow: hidden;
+}
+.openbot-react .wfn-node .wfn-row-choice > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.openbot-react .wfn-picker-search {
+  margin: 4px;
+  padding: 6px;
+}

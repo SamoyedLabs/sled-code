@@ -1,5 +1,5 @@
 import { EnvironmentId, ProjectId, ProviderInstanceId } from "@t3tools/contracts";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
   deriveLogicalProjectKeyFromSettings,
@@ -12,6 +12,10 @@ import {
   getSidebarProjectSettingsKey,
 } from "./sidebarProjectGrouping";
 import type { Project } from "./types";
+import {
+  buildProjectActionItems,
+  type CommandPaletteProject,
+} from "./components/CommandPalette.logic";
 
 const primaryEnvironmentId = EnvironmentId.make("env-primary");
 const remoteEnvironmentId = EnvironmentId.make("env-remote");
@@ -211,7 +215,7 @@ describe("environment grouping", () => {
     expect(pickerEntry?.targetProject.id).toBe(canonical.id);
   });
 
-  it("keeps the current environment when available and falls back otherwise", () => {
+  it("keeps group labels and concrete picker targets aligned with the selected environment", async () => {
     const currentPrimary = makeProject({ repositoryIdentity });
     const currentRemote = makeProject({
       id: ProjectId.make("current-remote"),
@@ -220,6 +224,8 @@ describe("environment grouping", () => {
     });
     const destinationRepositoryIdentity = {
       canonicalKey: "github.com/example/destination",
+      displayName: "Example/destination",
+      name: "destination",
       locator: {
         source: "git-remote" as const,
         remoteName: "origin",
@@ -228,14 +234,14 @@ describe("environment grouping", () => {
     };
     const destinationPrimary = makeProject({
       id: ProjectId.make("destination-primary"),
-      title: "destination",
+      title: "Local destination",
       workspaceRoot: "/tmp/destination",
       repositoryIdentity: destinationRepositoryIdentity,
     });
     const destinationRemote = makeProject({
       id: ProjectId.make("destination-remote"),
       environmentId: remoteEnvironmentId,
-      title: "destination",
+      title: "Remote destination",
       workspaceRoot: "/remote/destination",
       repositoryIdentity: destinationRepositoryIdentity,
     });
@@ -277,6 +283,43 @@ describe("environment grouping", () => {
       environmentId: primaryEnvironmentId,
       id: fallbackPrimary.id,
     });
+    expect(destination?.group.displayName).toBe("Example/destination");
+    expect(destination?.targetProject.title).toBe("Remote destination");
+    const target = destination!.targetProject;
+    const pickerProject = { ...target, displayName: destination!.group.displayName };
+    const runProject = vi.fn(async (_project: CommandPaletteProject) => {});
+    const [item] = buildProjectActionItems({
+      projects: [pickerProject],
+      valuePrefix: "new-thread-in",
+      icon: () => null,
+      runProject,
+    });
+    expect(item?.title).toBe("Example/destination");
+    expect(item?.value).toBe(`new-thread-in:${remoteEnvironmentId}:${destinationRemote.id}`);
+    await item!.run();
+    expect(runProject).toHaveBeenCalledExactlyOnceWith(pickerProject);
+    expect(runProject.mock.calls[0]?.[0]).toMatchObject({
+      id: destinationRemote.id,
+      environmentId: remoteEnvironmentId,
+      title: "Remote destination",
+    });
+    const single = buildSidebarProjectSnapshots({
+      projects: [destinationPrimary],
+      settings: defaultGroupingSettings,
+      primaryEnvironmentId,
+      resolveEnvironmentLabel: () => null,
+    });
+    const commonTitle = buildSidebarProjectSnapshots({
+      projects: [destinationPrimary, destinationRemote].map((project) => ({
+        ...project,
+        title: "My custom app",
+      })),
+      settings: defaultGroupingSettings,
+      primaryEnvironmentId,
+      resolveEnvironmentLabel: () => null,
+    });
+    expect(single[0]?.displayName).toBe("Local destination");
+    expect(commonTitle[0]?.displayName).toBe("My custom app");
   });
 
   it("puts the preferred project after pinned projects", () => {

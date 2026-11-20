@@ -27,10 +27,8 @@ export function useBotBrowser(environmentId: EnvironmentId, hostId: string) {
     const settled = await settlePromise(async () => {
       const result = await admin({ environmentId, input: { hostId, request } });
       if (result._tag === "Failure") {
-        setDisplay(null);
-        setProfiles(null);
         setError("The browser request failed. Refresh before retrying.");
-        return;
+        return null;
       } else if (request.operation === "browser.display") setDisplay(browserDisplay(result.value));
       else if (request.operation === "browser.profiles.list")
         setProfiles(browserProfiles(result.value));
@@ -44,21 +42,24 @@ export function useBotBrowser(environmentId: EnvironmentId, hostId: string) {
         });
         if (next._tag === "Success") setProfiles(browserProfiles(next.value));
       }
-      if (request.operation !== "browser.display") {
+      if (
+        request.operation !== "browser.display" &&
+        request.operation !== "browser.profiles.list"
+      ) {
         const next = await admin({
           environmentId,
           input: { hostId, request: { operation: "browser.display" } },
         });
         if (next._tag === "Success") setDisplay(browserDisplay(next.value));
       }
+      return result.value;
     });
     if (settled._tag === "Failure") {
-      setDisplay(null);
-      setProfiles(null);
       setError("The browser request failed. Refresh before retrying.");
     }
     lock.current = false;
     setBusy(false);
+    return settled._tag === "Success" ? settled.value : null;
   };
   return {
     display: canControl ? display : null,

@@ -134,6 +134,14 @@ const AssetClaimsSchema = Schema.Union([
   }),
   Schema.Struct({
     version: Schema.Literal(1),
+    kind: Schema.Literal("bot-library-image"),
+    hostId: Schema.String,
+    fileId: Schema.String,
+    conversationId: Schema.optionalKey(Schema.String),
+    expiresAt: Schema.Number,
+  }),
+  Schema.Struct({
+    version: Schema.Literal(1),
     kind: Schema.Literal("attachment"),
     attachmentId: Schema.String,
     download: Schema.optionalKey(Schema.Boolean),
@@ -199,6 +207,7 @@ export type ResolvedAsset =
       readonly bytes: Uint8Array;
       readonly mimeType: string;
     }
+  | Extract<AssetClaims, { kind: "bot-library-image" }>
   | {
       readonly kind: "source-control-media";
       readonly url: string;
@@ -821,6 +830,13 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
       imageDimensions = readImageDimensions(image.bytes);
       break;
     }
+    case "bot-library-image": {
+      const { _tag: _kind, ...source } = input.resource;
+      expiresAt = (yield* Clock.currentTimeMillis) + 60_000;
+      claims = { version: 1, kind: "bot-library-image", ...source, expiresAt };
+      fileName = "image";
+      break;
+    }
     case "native-app-icon": {
       claims = {
         version: 1,
@@ -899,6 +915,8 @@ export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (
 
   const claims = decodeClaims(encodedPayload);
   if (!claims || claims.expiresAt <= (yield* Clock.currentTimeMillis)) return null;
+
+  if (claims.kind === "bot-library-image") return relativePath === "image" ? claims : null;
 
   if (claims.kind === "attachment") {
     const config = yield* ServerConfig.ServerConfig;

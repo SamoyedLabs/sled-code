@@ -2,17 +2,20 @@ import { useEffect, useRef, useState } from "react";
 import * as Schema from "effect/Schema";
 import {
   OpenbotVaultState,
+  OpenbotVaultCodes,
   OpenbotVaultSecret,
   OpenbotVaultOnePasswordStatus,
   OpenbotVaultBitwardenStatus,
   OpenbotVaultImportResult,
   type OpenbotVaultRequest,
 } from "@t3tools/contracts";
+import type { BotVaultCode } from "./BotVaultTwoStep";
 import type { VaultExecute } from "@t3tools/client-runtime/openbot/presentation";
 const decodeVaultBitwardenStatus = Schema.decodeUnknownSync(OpenbotVaultBitwardenStatus);
 const decodeVaultImportResult = Schema.decodeUnknownSync(OpenbotVaultImportResult);
 const decodeVaultOnePasswordStatus = Schema.decodeUnknownSync(OpenbotVaultOnePasswordStatus);
 const decodeVaultSecret = Schema.decodeUnknownSync(OpenbotVaultSecret);
+const decodeVaultCodes = Schema.decodeUnknownSync(OpenbotVaultCodes);
 const decodeVaultState = Schema.decodeUnknownSync(OpenbotVaultState);
 export function useBotVault(execute: VaultExecute) {
   const [state, setState] = useState<OpenbotVaultState | null>(null);
@@ -37,6 +40,7 @@ export function useBotVault(execute: VaultExecute) {
   const run = async (
     request: OpenbotVaultRequest,
     consume?: (secret: string) => Promise<void> | void,
+    receiveCodes?: (codes: typeof OpenbotVaultCodes.Type) => void,
   ) => {
     if (lock.current || !alive.current) return false;
     lock.current = true;
@@ -54,6 +58,8 @@ export function useBotVault(execute: VaultExecute) {
         if (request.operation === "vault.reveal") {
           const secret = decodeVaultSecret(result.value);
           if (consume) await consume(secret.value);
+        } else if (request.operation === "vault.codes") {
+          receiveCodes?.(decodeVaultCodes(result.value));
         } else if (request.operation.startsWith("vault.onepassword."))
           setOnepassword(decodeVaultOnePasswordStatus(result.value));
         else if (request.operation.startsWith("vault.bitwarden."))
@@ -85,6 +91,19 @@ export function useBotVault(execute: VaultExecute) {
     error,
     notice,
     run,
+    getCode: async (version: "v3" | "v4", itemId: string) => {
+      let code: BotVaultCode | null = null;
+      await run({ operation: "vault.codes", version }, undefined, ({ codes }) => {
+        const selected = codes.find((entry) => entry.id === itemId);
+        if (selected)
+          code = {
+            code: selected.code,
+            period: selected.period,
+            expiresAt: Date.now() + selected.remainingMs,
+          };
+      });
+      return code;
+    },
     isActive: () => alive.current,
     clearState: () => setState(null),
   };

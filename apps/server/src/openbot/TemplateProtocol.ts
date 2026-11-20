@@ -5,6 +5,7 @@ import {
   TemplateReview,
   TemplatePublication,
   TemplateInstalled,
+  TemplateAdoption,
   type TemplateRequest,
 } from "@t3tools/contracts/openbot-templates";
 const decodeEmpty = Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.Unknown));
@@ -17,6 +18,10 @@ const paths = {
   "templates.updateMarketplace": "/v1/admin/agents/update-marketplace",
   "templates.detail": "/v1/admin/agents/template-detail",
   "templates.listing": "/v1/admin/agents/marketplace-detail",
+  "templates.publication": "/v1/admin/agents/template-publication",
+  "templates.adopt": "/v1/admin/agents/adoption/install",
+  "templates.adoptionStatus": "/v1/admin/agents/adoption/status",
+  "templates.adoptions": "/v1/admin/agents/adoption/list",
 } as const;
 export function isRequest(request: { readonly operation: string }): request is TemplateRequest {
   return Object.hasOwn(paths, request.operation);
@@ -24,7 +29,13 @@ export function isRequest(request: { readonly operation: string }): request is T
 export function route(request: TemplateRequest) {
   const operation = request.operation;
   const body =
-    operation === "templates.install"
+    operation === "templates.adopt"
+      ? { operationId: request.operationId, kind: request.kind, sourceId: request.sourceId, timezone: request.timezone, expectedRevision: request.expectedRevision, ...(request.agentId === undefined ? {} : { agentId: request.agentId }) }
+      : operation === "templates.adoptionStatus"
+        ? { operationId: request.operationId }
+        : operation === "templates.adoptions"
+          ? {}
+          : operation === "templates.install"
       ? {
           templateId: request.templateId,
           timezone: request.timezone,
@@ -50,7 +61,15 @@ export const project = Effect.fn("OpenbotTemplateProtocol.project")((
 ) => {
   if (operation === "templates.unpublish") return decodeEmpty(value).pipe(Effect.as({}));
   const schema: Schema.Codec<unknown> =
-    operation === "templates.preview"
+    operation === "templates.adopt"
+      ? TemplateAdoption
+      : operation === "templates.adoptionStatus"
+        ? Schema.NullOr(TemplateAdoption)
+        : operation === "templates.adoptions"
+          ? Schema.Array(TemplateAdoption).check(Schema.isMaxLength(100))
+          : operation === "templates.publication"
+            ? Schema.Struct({ publication: Schema.NullOr(TemplatePublication) })
+            : operation === "templates.preview"
       ? TemplatePreview
       : operation === "templates.detail" || operation === "templates.listing"
         ? TemplateReview

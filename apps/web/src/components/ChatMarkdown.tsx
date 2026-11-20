@@ -244,6 +244,15 @@ interface ChatMarkdownProps {
   /** Keep one list per configuration (a module constant): it keys the shared parse cache. */
   extraRemarkPlugins?: NonNullable<ReactMarkdownOptions["remarkPlugins"]>;
   renderContextReference?: ((reference: ChatMarkdownContextReference) => ReactNode) | undefined;
+  renderLink?: ((href: string, children: ReactNode) => ReactNode) | undefined;
+  renderCodeBlock?:
+    | ((block: {
+        code: string;
+        language: string;
+        filename: string | undefined;
+        streaming: boolean;
+      }) => ReactNode)
+    | undefined;
   /** Loads media a source control host keeps behind a credential through the server, which holds
       `cwd`'s; without it a private repository's uploads load unauthenticated and 404. */
   sourceControlMedia?: boolean | undefined;
@@ -502,6 +511,8 @@ function useChatMarkdownState({
   workspaceMutationId,
   onImageExpand,
   renderContextReference,
+  renderLink,
+  renderCodeBlock,
   headingLevelOffset = 0,
   sourceControlMedia = false,
 }: ChatMarkdownProps) {
@@ -902,6 +913,8 @@ function useChatMarkdownState({
     fileLinkChip,
     sourceControlMedia,
     renderContextReference,
+    renderLink,
+    renderCodeBlock,
     headingLevelOffset,
     imageBaseDir,
     workspaceMutationId,
@@ -1079,6 +1092,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
       updateThreadPullRequestLink,
       fileLinkChip,
       renderContextReference,
+      renderLink,
     } = use(ChatMarkdownRendererContext);
     const text = use(ChatMarkdownTextContext);
     const citation = href ? parseAssistantCitationHref(href) : null;
@@ -1103,6 +1117,8 @@ const CHAT_MARKDOWN_COMPONENTS = {
         <span>{label}</span>
       );
     }
+    const customLink = href ? renderLink?.(href, children) : null;
+    if (customLink != null) return customLink;
     const normalizedHref = href ? normalizeMarkdownLinkHrefKey(href) : "";
     const fileLinkMeta = normalizedHref
       ? (markdownFileLinkMetaByHref.get(normalizedHref) ??
@@ -1570,6 +1586,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
       expandMedia,
       isStreaming,
       onRunShellCommand,
+      renderCodeBlock,
       inline,
       mathEnabled,
     } = use(ChatMarkdownRendererContext);
@@ -1629,6 +1646,13 @@ const CHAT_MARKDOWN_COMPONENTS = {
         </MarkdownMermaidCodeBlock>
       );
     }
+    if (renderCodeBlock)
+      return renderCodeBlock({
+        code: codeBlock.code,
+        language,
+        filename: fenceTitle ?? undefined,
+        streaming: isStreaming && !isClosedCodeFence(node, text, codeBlock.code),
+      });
     return (
       <MarkdownCodeBlock
         code={codeBlock.code}

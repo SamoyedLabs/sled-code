@@ -1,7 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off - Server-only opaque grants and injected clock; no Effect execution in this transport module.
 import * as NodeCrypto from "node:crypto";
 import type { BrowserSession } from "./BrowserProtocol.ts";
-import type { OpenbotBrowserViewerGrant } from "@t3tools/contracts";
+import type { OpenbotBrowserViewerGrant, OpenbotBrowserViewFeatures } from "@t3tools/contracts";
 
 type Entry = {
   principal: string;
@@ -13,6 +13,7 @@ type Entry = {
   path: string;
   connected: boolean;
   ackFrames: boolean;
+  features?: OpenbotBrowserViewFeatures;
   stop?: () => void;
   beforeClose?: () => void;
   timer?: ReturnType<typeof setTimeout>;
@@ -28,6 +29,7 @@ export class BrowserViews {
     create: (
       hostId: string,
       tabId: string,
+      features?: OpenbotBrowserViewFeatures,
     ) => Promise<{
       session: BrowserSession;
       upstream: Awaited<ReturnType<BrowserSession["create"]>>;
@@ -41,6 +43,7 @@ export class BrowserViews {
     hostId: string,
     tabId: string,
     ackFrames = false,
+    features?: OpenbotBrowserViewFeatures,
   ): Promise<OpenbotBrowserViewerGrant> {
     await this.options.authorize(principal, hostId);
     if (
@@ -52,7 +55,7 @@ export class BrowserViews {
       throw new Error("Browser view unavailable");
     this.#opening++;
     try {
-      const { session, upstream } = await this.options.create(hostId, tabId);
+      const { session, upstream } = await this.options.create(hostId, tabId, features);
       // Authority may have changed while the host was creating the session.
       try {
         await this.options.authorize(principal, hostId);
@@ -74,13 +77,21 @@ export class BrowserViews {
         path: upstream.streamPath,
         connected: false,
         ackFrames,
+        ...(upstream.features ? { features: upstream.features } : {}),
       });
       const timer = setTimeout(() => {
         void this.#remove(id).catch(() => {});
       }, 60_000);
       timer.unref();
       this.#entries.get(id)!.timer = timer;
-      return { id, token, hostId, tabId, expiresAt };
+      return {
+        id,
+        token,
+        hostId,
+        tabId,
+        expiresAt,
+        ...(upstream.features ? { features: upstream.features } : {}),
+      };
     } finally {
       this.#opening--;
     }
@@ -138,6 +149,9 @@ export class BrowserViews {
   }
   async acknowledgesFrames(principal: string, hostId: string, id: string) {
     return (await this.#owned(principal, hostId, id)).ackFrames;
+  }
+  async features(principal: string, hostId: string, id: string) {
+    return (await this.#owned(principal, hostId, id)).features;
   }
   async check(principal: string, hostId: string, id: string) {
     await this.#owned(principal, hostId, id);

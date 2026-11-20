@@ -75,6 +75,21 @@ it.live(
               type: "runtime-snapshot",
               snapshot: {
                 ...emptySnapshot,
+                contextStates: [
+                  {
+                    botId: "bot1",
+                    threadId: "thread1",
+                    usage: {
+                      usedTokens: 6000,
+                      windowTokens: 10000,
+                      autoCompactAt: 0.9,
+                      nativeManaged: false,
+                      categories: [{ category: "messages", tokens: 5000 }],
+                      providerPrivateState: "private-context-state",
+                    },
+                    compaction: null,
+                  },
+                ],
                 mcpServers: [{ env: { TOKEN: "private-config" } }],
                 pendingApprovals: supportsAcp
                   ? [
@@ -147,6 +162,31 @@ it.live(
               privateWebhookUrl: "private-webhook-url",
             }),
           );
+          socket.send(
+            JSON.stringify({ type: "channel-memories-changed", channelId: "owned-channel" }),
+          );
+          socket.send(
+            JSON.stringify({ type: "channel-routines-changed", channelId: "owned-channel" }),
+          );
+          if (decodeScope(scope).capabilities.includes("browser-control"))
+            socket.send(
+              JSON.stringify({
+                type: "browser-changed",
+                tabs: [{ loading: true, privateUrl: "private-browser-url" }],
+              }),
+            );
+          socket.send(
+            JSON.stringify({
+              type: "team-presence",
+              snapshot: { privateMemberData: "private-presence" },
+            }),
+          );
+          socket.send(
+            JSON.stringify({
+              type: "team-direct-message",
+              message: { text: "private-direct-message" },
+            }),
+          );
           socket.send(JSON.stringify({ type: "agents-changed" }));
         });
       });
@@ -155,12 +195,16 @@ it.live(
         sessionToken: "private-session",
         isClosed: () => false,
         peers,
-      }).pipe(Stream.take(4), Stream.runCollect);
+      }).pipe(
+        Stream.takeUntil((frame) => frame.type === "change" && frame.resource === "agents"),
+        Stream.runCollect,
+      );
       expect(scope).toMatchObject({
         type: "agent-event-scope",
         includeConversations: false,
         capabilities: expect.arrayContaining([
           "agent-runtime-snapshots",
+          "context-usage-v1",
           "agent-tasks-v1",
           "workflows-v1",
         ]),
@@ -169,6 +213,20 @@ it.live(
         {
           type: "snapshot",
           complete: true,
+          contexts: [
+            {
+              botId: "bot1",
+              threadId: "thread1",
+              usage: {
+                usedTokens: 6000,
+                windowTokens: 10000,
+                autoCompactAt: 0.9,
+                nativeManaged: false,
+                categories: [{ category: "messages", tokens: 5000 }],
+              },
+              compaction: null,
+            },
+          ],
           requests: [
             {
               kind: "approval",
@@ -220,6 +278,12 @@ it.live(
         { type: "change", resource: "configuration" },
         { type: "change", resource: "configuration" },
         { type: "change", resource: "all" },
+        { type: "change", resource: "memory" },
+        { type: "change", resource: "routines" },
+        { type: "change", resource: "browser" },
+        { type: "change", resource: "all" },
+        { type: "change", resource: "all" },
+        { type: "change", resource: "agents" },
       ]);
       expect(JSON.stringify(frames)).not.toContain("private-");
       expect(peers.size).toBe(0);

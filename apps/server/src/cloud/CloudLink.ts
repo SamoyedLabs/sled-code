@@ -1,6 +1,7 @@
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect's Crypto has no createPublicKey.
 import * as NodeCrypto from "node:crypto";
 import {
+  AuthDesktopOperateScope,
   AuthStandardClientScopes,
   EnvironmentAuthenticatedPrincipal,
   type EnvironmentCloudLinkStateResult,
@@ -1589,7 +1590,7 @@ const make = Effect.gen(function* () {
 
       const keyPair = yield* getOrCreateEnvironmentKeyPairFromSecretStore(secrets);
       const issued = yield* environmentAuth.createPairingLink({
-        scopes: AuthStandardClientScopes,
+        scopes: [...AuthStandardClientScopes, AuthDesktopOperateScope],
         subject: "cloud-connect",
         ttl: Duration.minutes(2),
         label: "Sled Connect connect",

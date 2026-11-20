@@ -1,3 +1,4 @@
+import { BotChannelGrants } from "./BotChannelGrants";
 import { useState } from "react";
 import type { EnvironmentId, OpenbotChannelTask } from "@t3tools/contracts";
 import {
@@ -13,10 +14,18 @@ import { Textarea } from "../ui/textarea";
 import { Checkbox } from "../ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
-type Props = { environmentId: EnvironmentId; hostId: string };
+type Props = {
+  environmentId: EnvironmentId;
+  hostId: string;
+  initiallyExpanded?: boolean;
+  initialChannelId?: string;
+  initialTaskId?: string;
+};
 type Controller = ReturnType<typeof useBotChannels>;
 export function BotChannels(props: Props) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(
+    props.initiallyExpanded ?? props.initialChannelId !== undefined,
+  );
   return (
     <section aria-label="Bot channels" className="space-y-3">
       <Button
@@ -311,8 +320,8 @@ function TaskRow({ controller, task }: { controller: Controller; task: OpenbotCh
     </li>
   );
 }
-function ChannelsPanel({ environmentId, hostId }: Props) {
-  const controller = useBotChannels(environmentId, hostId, randomUUID);
+function ChannelsPanel({ environmentId, hostId, initialChannelId, initialTaskId }: Props) {
+  const controller = useBotChannels(environmentId, hostId, randomUUID, initialChannelId);
   const [archived, setArchived] = useState(false);
   const [messageLimit, setMessageLimit] = useState(50);
   const [taskLimit, setTaskLimit] = useState(25);
@@ -383,6 +392,15 @@ function ChannelsPanel({ environmentId, hostId }: Props) {
       <ChannelSettings controller={controller} />
       {channel && (
         <div className="space-y-4">
+          {(controller.recipient ?? channel.leadAgentId) && (
+            <BotChannelGrants
+              key={`${environmentId}:${hostId}:${channel.id}:${controller.recipient ?? channel.leadAgentId}`}
+              environmentId={environmentId}
+              hostId={hostId}
+              channelId={channel.id}
+              agentId={(controller.recipient ?? channel.leadAgentId)!}
+            />
+          )}
           <h3 className="text-base font-medium">
             {channel.name}
             {channel.archived ? " · archived" : ""}
@@ -545,9 +563,15 @@ function ChannelsPanel({ environmentId, hostId }: Props) {
           </Button>
           <h3 className="text-base font-medium">Tasks</h3>
           <ul className="space-y-4">
-            {controller.tasks.slice(0, taskLimit).map((task) => (
-              <TaskRow key={task.id} controller={controller} task={task} />
-            ))}
+            {controller.tasks
+              .toSorted(
+                (left, right) =>
+                  Number(right.id === initialTaskId) - Number(left.id === initialTaskId),
+              )
+              .slice(0, taskLimit)
+              .map((task) => (
+                <TaskRow key={task.id} controller={controller} task={task} />
+              ))}
           </ul>
           {controller.tasks.length > taskLimit && (
             <Button variant="outline" size="sm" onClick={() => setTaskLimit(taskLimit + 25)}>

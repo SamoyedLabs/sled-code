@@ -1,3 +1,5 @@
+import * as ChannelCoding from "../../../openbot/ChannelCoding.ts";
+import * as ChannelGrants from "../../../openbot/ChannelCodingGrants.ts";
 import { OpenbotMaintenanceCommand } from "@t3tools/contracts";
 import * as Maintenance from "../../../openbot/Maintenance.ts";
 import * as Invocation from "../../McpInvocationContext.ts";
@@ -474,22 +476,42 @@ export const layer = McpToolAccess.toLayer(OpenbotToolkit, {
               .apiWrite(yield* decodeWrite(input.request).pipe(Effect.mapError(invalidRequest)))
               .pipe(Effect.mapError(failed));
           case "admin":
-            return yield* service
-              .apiAdmin(yield* decodeAdmin(input.request).pipe(Effect.mapError(invalidRequest)))
-              .pipe(
-                Effect.provideService(RemoteCoding.Caller, channelAuthority),
-                Effect.mapError(failed),
-              );
           case "admin.host": {
-            const request = yield* decodeHostAdmin(input.request).pipe(
-              Effect.mapError(invalidRequest),
+            const wrapped =
+              input.action === "admin.host"
+                ? yield* decodeHostAdmin(input.request).pipe(Effect.mapError(invalidRequest))
+                : null;
+            const request =
+              wrapped?.request ??
+              (yield* decodeAdmin(input.request).pipe(Effect.mapError(invalidRequest)));
+            const hostId = wrapped?.hostId ?? (yield* service.readyHostId);
+            if (!hostId) return yield* invalidRequest();
+            const result = Effect.gen(function* () {
+              if (request.operation === "channel.send") {
+                const coding = yield* Effect.serviceOption(ChannelCoding.ChannelCoding);
+                if (Option.isNone(coding)) return yield* invalidRequest();
+                return yield* coding.value.send(hostId, request);
+              }
+              if (request.operation === "channel.grants") {
+                const grants = yield* Effect.serviceOption(ChannelGrants.ChannelCodingGrants);
+                if (Option.isNone(grants) || request.command.hostId !== hostId)
+                  return yield* invalidRequest();
+                return yield* grants.value
+                  .command(request.command)
+                  .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)));
+              }
+              return yield* service.apiAdminToHost(hostId, request);
+            });
+            return yield* result.pipe(
+              Effect.provideService(RemoteCoding.Caller, channelAuthority),
+              Effect.mapError(
+                (error) =>
+                  new OrchestratorMcpFailure({
+                    code: "orchestration_error",
+                    message: error.message,
+                  }),
+              ),
             );
-            return yield* service
-              .apiAdminToHost(request.hostId, request.request)
-              .pipe(
-                Effect.provideService(RemoteCoding.Caller, channelAuthority),
-                Effect.mapError(failed),
-              );
           }
           default:
             return yield* invalidRequest();

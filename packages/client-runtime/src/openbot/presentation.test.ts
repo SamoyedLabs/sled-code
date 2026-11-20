@@ -1,6 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import {
   conversationView,
+  browserDisplay,
   taskViews,
   memoryViews,
   routineViews,
@@ -99,4 +100,35 @@ it("keeps permission locks and original instruction text available to the editor
     text: original,
   });
   expect(instructionView({ fileName: "private.txt", exists: true, text: original })).toBeNull();
+});
+
+it("reads released browser owner spelling without hiding tabs or control state", () => {
+  const tab = {
+    id: "owned-tab",
+    title: "Owned supervision fixture",
+    url: "http://127.0.0.1:64041/",
+    loading: false,
+    ownerThreadId: null,
+    ownerBotId: "owned-agent",
+    userControl: true,
+  };
+  expect(browserDisplay({ tabs: [tab], activeTabId: tab.id })).toEqual({
+    tabs: [
+      {
+        id: tab.id,
+        title: tab.title,
+        url: tab.url,
+        loading: false,
+        ownerThreadId: null,
+        ownerAgentId: "owned-agent",
+        userControl: true,
+      },
+    ],
+    activeTabId: tab.id,
+  });
+  expect(
+    browserDisplay({ tabs: [{ ...tab, ownerAgentId: null }], activeTabId: tab.id })?.tabs[0]
+      ?.ownerAgentId,
+  ).toBeNull();
+  expect(browserDisplay({ tabs: [{ ...tab, ownerBotId: 42 }], activeTabId: tab.id })).toBeNull();
 });

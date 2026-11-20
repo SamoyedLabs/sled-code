@@ -1,3 +1,4 @@
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { useContext } from "react";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId } from "@t3tools/contracts";
@@ -8,9 +9,15 @@ import { BotData } from "./BotData";
 export function DataEnvironment({
   environmentId,
   hostId,
+  workspace = false,
+  view,
+  modal,
 }: {
   environmentId: EnvironmentId;
   hostId: string;
+  workspace?: boolean;
+  view?: "tables" | "sites";
+  modal?: { open: boolean; onOpenChange: (open: boolean) => void };
 }) {
   const agents = useEnvironmentQuery(openbot.agents({ environmentId, input: {} }));
   const registry = useContext(RegistryContext);
@@ -30,6 +37,10 @@ export function DataEnvironment({
   const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
   return (
     <BotData
+      key={`${environmentId}:${hostId}`}
+      workspace={workspace}
+      view={view}
+      modal={modal}
       agents={agents.data ?? []}
       actions={{
         canReadTables,
@@ -41,7 +52,7 @@ export function DataEnvironment({
             request.operation === "tables.delete" || request.operation === "sites.delete"
               ? await admin({ environmentId, input: { hostId, request } })
               : await read({ environmentId, input: { hostId, request } });
-          if (result._tag === "Failure") throw new Error("Host data request failed");
+          if (result._tag === "Failure") throw squashAtomCommandFailure(result);
           return result.value;
         },
       }}

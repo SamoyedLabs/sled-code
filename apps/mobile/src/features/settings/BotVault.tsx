@@ -1,7 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId } from "@t3tools/contracts";
-import type { OpenbotVaultItem, OpenbotVaultRequest } from "@t3tools/contracts";
+import type {
+  OpenbotVaultItem,
+  OpenbotVaultRequest,
+  OpenbotVaultVersion,
+} from "@t3tools/contracts";
 import {
   vaultFields,
   vaultPrivateFields,
@@ -9,18 +13,63 @@ import {
   vaultDraft,
   vaultSaveRequest,
   vaultLabel,
+  workflowAgents,
   type VaultKind,
 } from "@t3tools/client-runtime/openbot/presentation";
 import { useBotVault, type VaultController } from "./useBotVault";
 import { openbot } from "../../state/openbot";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { useEnvironmentQuery } from "../../state/query";
+import { settingsCapabilities } from "@t3tools/client-runtime/openbot/settings";
+import { isForegroundHandoffActive } from "../../lib/foreground-handoff";
+import { BotVaultCodePanel, BotVaultTwoStepSetup, type BotVaultCode } from "./BotVaultTwoStep";
+import { SettingsSection } from "./components/SettingsSection";
+import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
 import { AppState, View } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
 import * as Clipboard from "expo-clipboard";
 import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
+import { ListRow } from "../../components/ui/ListRow";
+import { ScreenScrollView } from "../../components/ui/ScreenScrollView";
+import { Sheet } from "../../components/ui/Sheet";
 import { Picker } from "./BotConnectionControls";
+export function BotVaultEntry(scope: { environmentId: EnvironmentId; hostId: string }) {
+  const [open, setOpen] = useState(false);
+  const compatibility = useEnvironmentQuery(
+    openbot.readFromHost({
+      environmentId: scope.environmentId,
+      input: { hostId: scope.hostId, request: { operation: "compatibility.read" } },
+    }),
+  );
+  const canManage = useAtomValue(
+    openbot.adminToHost.permissionAtom(scope.environmentId, {
+      hostId: scope.hostId,
+      request: { operation: "vault.list", version: "v1" },
+    }),
+  );
+  if (!canManage || !settingsCapabilities(compatibility.data).includes("vault-v1")) return null;
+  return (
+    <>
+      <SettingsSection title="Vault">
+        <ListRow icon="lock" label="Vault and password managers" onPress={() => setOpen(true)} />
+      </SettingsSection>
+      {open && (
+        <Sheet title="Vault" onClose={() => setOpen(false)}>
+          <ScreenScrollView
+            contentInsetAdjustmentBehavior="automatic"
+            keyboardShouldPersistTaps="handled"
+            contentContainerClassName="px-5 pb-6 pt-4"
+          >
+            <BotVault {...scope} />
+          </ScreenScrollView>
+        </Sheet>
+      )}
+    </>
+  );
+}
+
 export function BotVault({
   environmentId,
   hostId,
@@ -34,16 +83,32 @@ export function BotVault({
 }
 function VaultHost({ environmentId, hostId }: { environmentId: EnvironmentId; hostId: string }) {
   const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
+  const compatibility = useEnvironmentQuery(
+    openbot.readFromHost({
+      environmentId,
+      input: { hostId, request: { operation: "compatibility.read" } },
+    }),
+  );
+  const caps = settingsCapabilities(compatibility.data);
+  const version = caps.includes("vault-v4")
+    ? "v4"
+    : caps.includes("vault-v3")
+      ? "v3"
+      : caps.includes("vault-v2")
+        ? "v2"
+        : "v1";
   const controller = useBotVault(async (request) => {
     const result = await admin({ environmentId, input: { hostId, request } });
     return result._tag === "Failure"
       ? { ok: false, error: "Vault request failed." }
       : { ok: true, value: result.value };
   });
+  if (compatibility.isPending) return <Text>Opening vault…</Text>;
   return (
     <VaultPanel
-      key={`${environmentId}:${hostId}`}
+      key={`${environmentId}:${hostId}:${version}`}
       controller={controller}
+      version={version}
       environmentId={environmentId}
       hostId={hostId}
     />
@@ -70,8 +135,20 @@ function Action({
   );
   return <Button label={label} disabled={disabled || !allowed} onPress={onAction} />;
 }
-function VaultPanel({ controller: c, ...authority }: Authority & { controller: VaultController }) {
-  const [version, setVersion] = useState<"v1" | "v2">("v2");
+function VaultPanel({
+  controller: c,
+  version,
+  ...authority
+}: Authority & { controller: VaultController; version: OpenbotVaultVersion }) {
+  const hasTwoStep = version === "v3" || version === "v4";
+  const agentQuery = useEnvironmentQuery(
+    version === "v4"
+      ? openbot.readFromHost({
+          environmentId: authority.environmentId,
+          input: { hostId: authority.hostId, request: { operation: "agent.list" } },
+        })
+      : null,
+  );
   const [selection, setSelection] = useState<OpenbotVaultItem | null>(null);
   const [kind, setKind] = useState<VaultKind>("login");
   const [fields, setFields] = useState<Record<string, string>>({});
@@ -79,15 +156,34 @@ function VaultPanel({ controller: c, ...authority }: Authority & { controller: V
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const secrets = useRef<Record<string, string>>({});
+  const [setup, setSetup] = useState(false);
+  const [keyChange, setKeyChange] = useState<"keep" | "update" | "remove">("keep");
+  const [agentScope, setAgentScope] = useState<readonly string[] | null | undefined>(undefined);
+  const [accessOpen, setAccessOpen] = useState(false);
+  const [codeOpen, setCodeOpen] = useState(false);
+  const [code, setCode] = useState<BotVaultCode | null>(null);
+  const codeGeneration = useRef(0);
   const clear = () => {
     secrets.current = {};
+    setKeyChange("keep");
+    setSetup(false);
+    setCodeOpen(false);
+    setCode(null);
+    codeGeneration.current += 1;
     setEpoch((v) => v + 1);
   };
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Clear private native input buffers before the app leaves the foreground.
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
-      if (state !== "active") {
+      if (state !== "active" && !isForegroundHandoffActive()) {
         secrets.current = {};
+        setKeyChange("keep");
+        setSetup(false);
+        setCodeOpen(false);
+        setCode(null);
+        codeGeneration.current += 1;
+        setAgentScope(undefined);
+        setAccessOpen(false);
         setEpoch((v) => v + 1);
         setSelection(null);
       }
@@ -99,6 +195,8 @@ function VaultPanel({ controller: c, ...authority }: Authority & { controller: V
     setSelection(item);
     setFields(vaultDraft(item));
     setKind(item?.kind ?? "login");
+    setAgentScope(undefined);
+    setAccessOpen(false);
     setConfirmDelete(false);
   };
   const run = (request: OpenbotVaultRequest) => {
@@ -106,7 +204,21 @@ function VaultPanel({ controller: c, ...authority }: Authority & { controller: V
     return c.run(request);
   };
   const save = () => {
-    const request = vaultSaveRequest(kind, selection?.id ?? null, fields, secrets.current, version);
+    const request = vaultSaveRequest(
+      kind,
+      selection?.id ?? null,
+      fields,
+      secrets.current,
+      version,
+      {
+        ...(keyChange === "update"
+          ? { twoStepKey: secrets.current.twoStepKey }
+          : keyChange === "remove"
+            ? { twoStepKey: "" }
+            : {}),
+        ...(agentScope === undefined ? {} : { agents: agentScope }),
+      },
+    );
     clear();
     if (request === null) {
       setLocalError("Check the item fields and try again.");
@@ -118,27 +230,45 @@ function VaultPanel({ controller: c, ...authority }: Authority & { controller: V
     });
   };
   const [localError, setLocalError] = useState<string | null>(null);
+  const canLoad = useAtomValue(
+    openbot.adminToHost.permissionAtom(authority.environmentId, {
+      hostId: authority.hostId,
+      request: { operation: "vault.list", version },
+    }),
+  );
+  const startup = useEffectEvent(() => {
+    if (!c.state) void c.run({ operation: "vault.list", version });
+  });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Synchronize the private host inventory with this mounted Vault version and its permission.
+  useEffect(() => {
+    if (!canLoad) return;
+    let mounted = true;
+    queueMicrotask(() => {
+      if (mounted) startup();
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [canLoad]);
+  const effectiveScope = agentScope === undefined ? (selection?.agents ?? null) : agentScope;
+  const refreshCode = async () => {
+    if ((version !== "v3" && version !== "v4") || !selection) return;
+    const generation = ++codeGeneration.current;
+    const next = await c.getCode(version, selection.id);
+    if (generation === codeGeneration.current) setCode(next);
+  };
+  const reloadCode = useEffectEvent(() => {
+    void refreshCode();
+  });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Fetch the next private verification code only while its exact login is visible.
+  useEffect(() => {
+    if (!codeOpen) return;
+    const delay = code ? Math.max(250, code.expiresAt - Date.now() + 100) : 30_000;
+    const timer = setTimeout(reloadCode, delay);
+    return () => clearTimeout(timer);
+  }, [codeOpen, code]);
   return (
-    <View>
-      <Text>Vault and password managers</Text>
-      <Text>
-        Settings authority is required. Connecting a password manager also requires operate
-        authority. Blank replacement secrets keep saved values.
-      </Text>
-      <Picker
-        label="Vault API"
-        value={version}
-        options={[
-          { id: "v2", name: "v2 (includes API keys)" },
-          { id: "v1", name: "v1" },
-        ]}
-        disabled={c.busy}
-        onChange={(value) => {
-          choose(null);
-          c.clearState();
-          setVersion(value === "v1" ? "v1" : "v2");
-        }}
-      />
+    <View className="gap-3">
       {
         <Action
           {...authority}
@@ -151,7 +281,7 @@ function VaultPanel({ controller: c, ...authority }: Authority & { controller: V
           }}
         />
       }
-      {c.state && <Text>{c.state.status}</Text>}
+      {c.state && c.state.status !== "ready" && <Text>Vault {c.state.status}</Text>}
       {(c.error || localError) && <Text>{c.error || localError}</Text>}
       {c.notice && <Text>{c.notice}</Text>}
       {c.state?.items.map((item) => (
@@ -163,7 +293,7 @@ function VaultPanel({ controller: c, ...authority }: Authority & { controller: V
       <Picker
         label="Item kind"
         value={kind}
-        options={(version === "v2"
+        options={(version !== "v1"
           ? ["login", "card", "contact", "apiKey"]
           : ["login", "card", "contact"]
         ).map((id) => ({ id, name: id }))}
@@ -173,6 +303,8 @@ function VaultPanel({ controller: c, ...authority }: Authority & { controller: V
             clear();
             setKind(value);
             setFields({});
+            setAgentScope(undefined);
+            setAccessOpen(false);
           }
         }}
       />
@@ -197,12 +329,109 @@ function VaultPanel({ controller: c, ...authority }: Authority & { controller: V
           />
         ))}
       </View>
+      {hasTwoStep && kind === "login" && (
+        <SettingsSection title="Two-step verification">
+          <View className="gap-2 px-4 py-3">
+            <Text className="text-foreground-muted">
+              {keyChange === "update"
+                ? "New key ready to save"
+                : keyChange === "remove"
+                  ? "Key will be removed when saved"
+                  : selection?.kind === "login" && selection.hasTwoStep
+                    ? "Verification key saved"
+                    : "No verification key"}
+            </Text>
+            <Button
+              label="Set up verification key"
+              disabled={c.busy || c.state?.status !== "ready"}
+              onPress={() => setSetup(true)}
+            />
+            {selection?.kind === "login" && selection.hasTwoStep && (
+              <>
+                <Button
+                  label="Show verification code"
+                  disabled={c.busy || codeOpen}
+                  onPress={() => {
+                    setCodeOpen(true);
+                    void refreshCode();
+                  }}
+                />
+                <Button
+                  label={
+                    keyChange === "remove" ? "Keep verification key" : "Remove verification key"
+                  }
+                  disabled={c.busy}
+                  onPress={() => {
+                    delete secrets.current.twoStepKey;
+                    setKeyChange(keyChange === "remove" ? "keep" : "remove");
+                  }}
+                />
+              </>
+            )}
+          </View>
+        </SettingsSection>
+      )}
+      {codeOpen && (
+        <BotVaultCodePanel live={code} busy={c.busy} onRefresh={() => void refreshCode()} />
+      )}
+      {setup && (
+        <BotVaultTwoStepSetup
+          onClose={() => setSetup(false)}
+          onApply={(key) => {
+            secrets.current.twoStepKey = key;
+            setKeyChange("update");
+            setSetup(false);
+          }}
+        />
+      )}
+      {version === "v4" && (
+        <SettingsSection title="Agent access">
+          <View className="gap-2 px-4 py-3">
+            <Text className="text-foreground-muted">
+              {effectiveScope === null ? "Every agent" : `${effectiveScope.length} selected`}
+            </Text>
+            <Button
+              label={accessOpen ? "Close agent access" : "Edit agent access"}
+              disabled={c.busy}
+              onPress={() => setAccessOpen(!accessOpen)}
+            />
+          </View>
+          {accessOpen && (
+            <>
+              <SettingsSwitchRow
+                icon="person.2"
+                label="Every agent"
+                value={effectiveScope === null}
+                disabled={c.busy}
+                onValueChange={(include) => setAgentScope(include ? null : [])}
+              />
+              {effectiveScope !== null &&
+                workflowAgents(agentQuery.data).map((agent) => (
+                  <SettingsSwitchRow
+                    key={agent.id}
+                    icon="person.crop.circle"
+                    label={agent.name}
+                    value={effectiveScope.includes(agent.id)}
+                    disabled={c.busy}
+                    onValueChange={(include) =>
+                      setAgentScope(
+                        include
+                          ? [...new Set([...effectiveScope, agent.id])]
+                          : effectiveScope.filter((id) => id !== agent.id),
+                      )
+                    }
+                  />
+                ))}
+            </>
+          )}
+        </SettingsSection>
+      )}
       {
         <Action
           {...authority}
           request={{
             operation: "vault.save",
-            version: "v2",
+            version,
             input: {
               kind: "login",
               id: selection?.id ?? null,
@@ -226,7 +455,12 @@ function VaultPanel({ controller: c, ...authority }: Authority & { controller: V
               controller={c}
               request={
                 field === "key"
-                  ? { operation: "vault.reveal", version: "v2", id: selection.id, field }
+                  ? {
+                      operation: "vault.reveal",
+                      version: version === "v1" ? "v2" : version,
+                      id: selection.id,
+                      field,
+                    }
                   : { operation: "vault.reveal", version, id: selection.id, field }
               }
             />

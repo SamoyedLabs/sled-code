@@ -414,11 +414,21 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           };
         }}
         initialFocus={searchInputRef}
-        align={props.popupAlign ?? "start"}
-        // Docked, the popup opens above the composer and slides over it when that space is short,
-        // so a short window gets its full height (Floating UI sizes to the viewport) instead of a sliver.
+        align={props.popupAlign ?? (props.isComposerOwned ? "end" : "start")}
+        // Keep the editor and send controls clear. Flip below a top-of-page composer;
+        // in short windows the available-height constraint shrinks the picker instead of covering it.
         {...(docked
-          ? { side: "top" as const, collisionAvoidance: { side: "shift", align: "shift" } as const }
+          ? {
+              side: "top" as const,
+              collisionAvoidance: { side: "flip", align: "shift" } as const,
+              ...(props.isComposerOwned
+                ? {
+                    anchor: () =>
+                      triggerRef.current?.closest('[data-slot="composer-shell"]') ??
+                      triggerRef.current,
+                  }
+                : {}),
+            }
           : {})}
         className="before:hidden"
         padding="none"

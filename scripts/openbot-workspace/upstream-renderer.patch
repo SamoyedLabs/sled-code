@@ -1,0 +1,1396 @@
+diff --git a/packages/i18n/src/messages/en/composer.ts b/packages/i18n/src/messages/en/composer.ts
+index 9a53de9..25891de 100644
+--- a/packages/i18n/src/messages/en/composer.ts
++++ b/packages/i18n/src/messages/en/composer.ts
+@@ -75,6 +75,7 @@ export const messages = defineMessages("composer", {
+   "composer.add.image": "Attach image",
+   "composer.add.skill": "Use a skill",
+   "composer.add.context": "Add context",
++  "composer.add.editQueuedFiles": "Edit queued files",
+   "composer.upload.cancel": "Cancel upload",
+   "composer.upload.uploading": "Uploading {name}",
+   "composer.upload.progress": "{sent} of {total}",
+diff --git a/packages/ui/src/features/conversation/ComposerAddMenu.tsx b/packages/ui/src/features/conversation/ComposerAddMenu.tsx
+index 426d586..4499081 100644
+--- a/packages/ui/src/features/conversation/ComposerAddMenu.tsx
++++ b/packages/ui/src/features/conversation/ComposerAddMenu.tsx
+@@ -9,6 +9,7 @@ export interface ComposerAddMenuProps {
+   attachDisabled?: boolean | undefined;
+   /** Opens the file picker. Without it, the menu has no image or context item. */
+   onAttach?: (() => void) | undefined;
++  onEditQueuedFiles?: (() => void) | undefined;
+   /** Opens the skill picker of the editor, after the menu gave the focus back. Without it, no skill item. */
+   onPickSkill?: (() => void) | undefined;
+   /** Without it, no side question item. */
+@@ -86,6 +87,14 @@ export function ComposerAddMenu(props: ComposerAddMenuProps) {
+               <span>{t("composer.add.context")}</span>
+             </DropdownMenu.Item>
+           </Show>
++          <Show when={props.onEditQueuedFiles}>
++            {(open) => (
++              <DropdownMenu.Item onSelectAfterClose={() => requestAnimationFrame(() => open()())}>
++                <File aria-hidden="true" />
++                <span>{t("composer.add.editQueuedFiles")}</span>
++              </DropdownMenu.Item>
++            )}
++          </Show>
+           <Show when={props.onSideQuestion}>
+             {(open) => (
+               <>
+diff --git a/packages/ui/src/features/conversation/threads/AgentThreadView.tsx b/packages/ui/src/features/conversation/threads/AgentThreadView.tsx
+index 9370829..8215d8c 100644
+--- a/packages/ui/src/features/conversation/threads/AgentThreadView.tsx
++++ b/packages/ui/src/features/conversation/threads/AgentThreadView.tsx
+@@ -137,6 +137,7 @@ export interface AgentThreadViewProps {
+   onOpenDraftAttachment?: ((attachment: DraftAttachment) => void) | undefined;
+   /** Opens the file picker. Without it, the "+" menu has no image or context item. */
+   onAttachFiles?: (() => void) | undefined;
++  onEditQueuedFiles?: (() => void) | undefined;
+   /** Opens the agent's side question with the draft. Without it, the "+" menu has no side question. */
+   onSideQuestion?: (() => void) | undefined;
+   /** Without it, the message box has no microphone. */
+@@ -147,6 +148,8 @@ export interface AgentThreadViewProps {
+   onSend: (text: string) => Promise<boolean>;
+   onStop: () => void;
+   onOpenLink: (url: string) => void;
++  onOpenSharedFile?: (path: string) => void;
++  onOpenWorkspaceFile?: (path: string) => void;
+   onPreview: (attachment: AttachmentSummary) => void;
+   onAttachmentAction: (attachment: AttachmentSummary, action: "open" | "reveal" | "download") => void;
+   /** The window draws the macOS window controls over the top start corner. The image viewer leaves room. */
+@@ -448,6 +451,8 @@ export function AgentThreadView(props: AgentThreadViewProps) {
+                   skills={props.skills}
+                   onSelectAgent={() => undefined}
+                   onOpenLink={props.onOpenLink}
++                  onOpenSharedFile={props.onOpenSharedFile}
++                  onOpenWorkspaceFile={props.onOpenWorkspaceFile}
+                   onPreview={props.onPreview}
+                   onAttachmentAction={props.onAttachmentAction}
+                   mediaSource={props.mediaSource}
+@@ -583,6 +588,7 @@ export function AgentThreadView(props: AgentThreadViewProps) {
+               onOpenChange={setAddMenuOpen}
+               disabled={sending() || voicePhase() === "transcribing"}
+               onAttach={props.onAttachFiles}
++              onEditQueuedFiles={props.onEditQueuedFiles}
+               onPickSkill={() => setSkillPickerRequest((current) => current + 1)}
+               onSideQuestion={props.onSideQuestion}
+             />
+diff --git a/src/renderer/src/features/conversation/AgentSettingsPanel.tsx b/src/renderer/src/features/conversation/AgentSettingsPanel.tsx
+index 7a52a68..fb393b0 100644
+--- a/src/renderer/src/features/conversation/AgentSettingsPanel.tsx
++++ b/src/renderer/src/features/conversation/AgentSettingsPanel.tsx
+@@ -200,6 +200,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
+       props.routines,
+     ),
+   );
++  const routinesAvailable = () => !props.remoteClient || props.routines !== undefined;
+   const routinesPort = createMemo(() => {
+     const eventApi = props.eventRoutines ?? props.adminCalls?.eventRoutines;
+     return eventApi
+@@ -277,9 +278,10 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
+       agentId: currentAgentId(),
+       // Read here, not in the callback: a prop can be a compiled memo, and the callback has no owner.
+       remoteClient: untrack(() => props.remoteClient === true),
++      routinesAvailable: routinesAvailable(),
+       tablesVisible: untrack(() => props.tablesVisible !== false),
+     }),
+-    ({ agentId, remoteClient, tablesVisible }) => {
++    ({ agentId, remoteClient, tablesVisible, routinesAvailable }) => {
+       setDraft((state) => {
+         state.tables.open = false;
+         state.memories.open = false;
+@@ -300,24 +302,24 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
+           });
+       }
+       void untrack(() => loadSkillsCount(agentId));
+-      if (!remoteClient) {
+-        loadMemoriesCount(agentId);
+-        untrack(() => loadRoutinesCount(routinesPort()));
+-      }
++      if (!remoteClient) loadMemoriesCount(agentId);
++      if (routinesAvailable) untrack(() => loadRoutinesCount(routinesPort()));
+     },
+   );
+ 
+   // The counts follow a memory or routine change, also one that the agent makes in a turn.
+   createEffect(
+-    () => (props.remoteClient ? null : ([currentAgentId(), memoriesPort(), routinesPort()] as const)),
+-    (sources) => {
+-      if (!sources) return;
+-      const [agentId, memories, routines] = sources;
+-      const stopMemories = memories.subscribe(() => loadMemoriesCount(agentId));
+-      const stopRoutines = routines.subscribe(() => loadRoutinesCount(routines));
++    () => ({
++      agentId: currentAgentId(),
++      memories: props.remoteClient ? null : memoriesPort(),
++      routines: routinesAvailable() ? routinesPort() : null,
++    }),
++    ({ agentId, memories, routines }) => {
++      const stopMemories = memories?.subscribe(() => loadMemoriesCount(agentId));
++      const stopRoutines = routines?.subscribe(() => loadRoutinesCount(routines));
+       return () => {
+-        stopMemories();
+-        stopRoutines();
++        stopMemories?.();
++        stopRoutines?.();
+       };
+     },
+   );
+@@ -516,9 +518,9 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
+               </Show>
+             </SettingsLinkGroup>
+           </Show>
+-          <Show when={!props.remoteClient || props.onPublish}>
++          <Show when={routinesAvailable() || props.onPublish}>
+             <SettingsLinkGroup inset title={t("agentSettings.groups.does")}>
+-              <Show when={!props.remoteClient}>
++              <Show when={routinesAvailable()}>
+                 <SettingsLinkRow
+                   icon={<CalendarClock aria-hidden="true" />}
+                   label={t("agentSettings.links.routines")}
+diff --git a/src/renderer/src/features/conversation/ConversationComposer.tsx b/src/renderer/src/features/conversation/ConversationComposer.tsx
+index 5862160..1b4d652 100644
+--- a/src/renderer/src/features/conversation/ConversationComposer.tsx
++++ b/src/renderer/src/features/conversation/ConversationComposer.tsx
+@@ -46,6 +46,7 @@ import { deviceSendShortcut, sendShortcutAriaKey, sendShortcutHintKey } from "..
+ import { speechReading } from "../speech/speech-playback";
+ import { stopSpokenReply } from "../speech/speech-replies";
+ import { copyComposerSelection, readComposerCopy } from "./composer-clipboard";
++import { conversationFileTarget } from "./conversation-runtime";
+ import { useConversationViewScope } from "./conversation-scope";
+ import { currentConversationTarget } from "./stores/composer-store";
+ 
+@@ -700,7 +701,10 @@ export function ConversationComposer() {
+               data-openbot-attachment-picker={props.runtime ? undefined : "true"}
+               onChange={(event) => {
+                 if (props.runtime?.importFiles)
+-                  void props.runtime.importFiles(Array.from(event.currentTarget.files ?? []));
++                  void props.runtime.importFiles(
++                    Array.from(event.currentTarget.files ?? []),
++                    conversationFileTarget(props),
++                  );
+               }}
+             />
+             <ComposerAddMenu
+@@ -711,6 +715,17 @@ export function ConversationComposer() {
+               }
+               attachDisabled={attachmentBusy()}
+               onAttach={openAttachmentPicker}
++              onEditQueuedFiles={
++                props.runtime?.openQueueAttachments && conversationFileTarget(props)
++                  ? () => {
++                      const target = conversationFileTarget(props);
++                      if (target)
++                        void props.runtime
++                          ?.openQueueAttachments?.(target)
++                          .catch((error) => reportErrorBanner(error, "queue"));
++                    }
++                  : undefined
++              }
+               onPickSkill={pickSkill()}
+               onSideQuestion={askSideQuestion()}
+               onVoice={openVoiceConversation()}
+diff --git a/src/renderer/src/features/conversation/ConversationPanels.tsx b/src/renderer/src/features/conversation/ConversationPanels.tsx
+index f6af2de..4dcb8d5 100644
+--- a/src/renderer/src/features/conversation/ConversationPanels.tsx
++++ b/src/renderer/src/features/conversation/ConversationPanels.tsx
+@@ -24,7 +24,7 @@ import { useConversationController } from "./conversation-controller-context";
+ import { type AgentNotificationLevelCalls, conversationRuntime } from "./conversation-runtime";
+ import { useConversationViewScope } from "./conversation-scope";
+ import { agentSkillsMode } from "./installed-skills-source";
+-import { desktopChatEventRoutinesApi } from "./routine-webhooks-api";
++import { chatEventRoutinesApi } from "./routine-webhooks-api";
+ 
+ const BROWSER_PANEL_DEFAULT_RATIO = 0.5;
+ const BROWSER_PANEL_MIN = 220;
+@@ -656,7 +656,7 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
+               onRoutineSelectionRequestHandled={handleRoutineSettingsRequest}
+               onOpenRoutineRun={props.onOpenSearchMessage ? openRoutineRunMessage : undefined}
+               files={agentFiles(props.server, agent().id)}
+-              eventRoutines={desktopChatEventRoutinesApi(props.server, props.runtime)}
++              eventRoutines={chatEventRoutinesApi(props.server, props.runtime)}
+               routines={props.runtime?.routines}
+             />
+           </Loading>
+diff --git a/src/renderer/src/features/conversation/ConversationQuestionPrompt.tsx b/src/renderer/src/features/conversation/ConversationQuestionPrompt.tsx
+index f9791be..ed3f1f9 100644
+--- a/src/renderer/src/features/conversation/ConversationQuestionPrompt.tsx
++++ b/src/renderer/src/features/conversation/ConversationQuestionPrompt.tsx
+@@ -1,3 +1,7 @@
++import { Button } from "@openbot/ui";
++import { type ConversationUiBlock, isSecretFormField, uiBlockHasPrivilegedAction } from "@openbot/contracts/ui-blocks";
++import { conversationFileTarget } from "./conversation-runtime";
++import { reportErrorBanner } from "../../error-reports";
+ import type { QuestionPromptComposerAnswer } from "@openbot/ui/components/QuestionPromptBubble";
+ import { createMemo, Loading, lazy, Show } from "solid-js";
+ import { deviceSendShortcut } from "../../send-shortcut-preference";
+@@ -9,6 +13,10 @@ import type { ConversationProps, PromptAnswerOptions } from "./conversation-type
+  * `elementRef` gets the card, for the chat that keeps it in view. `onAnswer` replaces the view's answer.
+  * `registerComposerAnswer` lets the message box of the same chat answer the question.
+  */
++function protectedBlock(block: ConversationUiBlock): boolean {
++  return Boolean(block.vault) || (block.spec.type === "form" && block.spec.fields.some(isSecretFormField)) || uiBlockHasPrivilegedAction(block.spec);
++}
++
+ export function ConversationQuestionPrompt(props: {
+   elementRef?: (element: HTMLElement | undefined) => void;
+   onAnswer?: (answers: Record<string, string[]>, options?: PromptAnswerOptions) => Promise<boolean>;
+@@ -56,6 +64,9 @@ export function ConversationQuestionPrompt(props: {
+               }
+             >
+               {(block) => (
++                <Show when={view.runtime?.openSecureResponse && conversationFileTarget(view) &&
++                  protectedBlock(block())}
++                  fallback={
+                 <UiBlockPrompt
+                   block={block()}
+                   agents={view.agents}
+@@ -66,6 +77,13 @@ export function ConversationQuestionPrompt(props: {
+                   onAnswer={answer}
+                   onAnswered={presentResolution}
+                 />
++                  }>
++                  <Button type="button" onClick={() => {
++                    const target = conversationFileTarget(view);
++                    if (target) void view.runtime?.openSecureResponse?.({ ...target, turnId: entry.prompt.turnId,
++                      requestId: entry.prompt.requestId, blockId: block().blockId }).catch((error) => reportErrorBanner(error, "turn"));
++                  }}>Open secure response</Button>
++                </Show>
+               )}
+             </Show>
+           </Loading>
+diff --git a/src/renderer/src/features/conversation/ConversationSideThread.tsx b/src/renderer/src/features/conversation/ConversationSideThread.tsx
+index b3c3c40..017ad3f 100644
+--- a/src/renderer/src/features/conversation/ConversationSideThread.tsx
++++ b/src/renderer/src/features/conversation/ConversationSideThread.tsx
+@@ -1,3 +1,4 @@
++import { reportErrorBanner } from "../../error-reports";
+ import { canPreviewAttachment } from "@openbot/contracts/ipc";
+ import type { AppTextKey } from "@openbot/i18n";
+ import { classifyFailure } from "@openbot/telemetry";
+@@ -26,6 +27,8 @@ export function ConversationSideThread(props: { threadId: string }) {
+   const {
+     props: view,
+     openExternalMessageUrl,
++    openSharedFile,
++    openWorkspaceFile,
+     previewAttachment,
+     attachmentAction,
+     attachmentDownloads,
+@@ -159,9 +162,14 @@ export function ConversationSideThread(props: { threadId: string }) {
+             }
+             mediaSource={view.runtime?.attachmentMedia}
+             downloads={attachmentDownloads}
++            onEditQueuedFiles={view.runtime?.openQueueAttachments ? () => {
++              void view.runtime?.openQueueAttachments?.({ agentId: current().agent.id, taskId: current().thread.task.id }).catch((error) => reportErrorBanner(error, "queue"));
++            } : undefined}
+             onSend={(text) => sendSide(current().thread, text)}
+             onStop={() => current().thread.onStop()}
+             onOpenLink={(url) => void openExternalMessageUrl(url)}
++            onOpenSharedFile={openSharedFile}
++            onOpenWorkspaceFile={(path) => openWorkspaceFile(path)}
+             onPreview={(attachment) => void previewAttachment(attachment)}
+             onAttachmentAction={attachmentAction}
+             approval={current().thread.approval}
+diff --git a/src/renderer/src/features/conversation/ConversationThread.tsx b/src/renderer/src/features/conversation/ConversationThread.tsx
+index b073ccd..2baa7ba 100644
+--- a/src/renderer/src/features/conversation/ConversationThread.tsx
++++ b/src/renderer/src/features/conversation/ConversationThread.tsx
+@@ -1,3 +1,5 @@
++import { conversationFileTarget } from "./conversation-runtime";
++import { reportErrorBanner } from "../../error-reports";
+ import { supportedAttachmentExtensions } from "@openbot/contracts/attachment-files";
+ import { canPreviewAttachment } from "@openbot/contracts/ipc";
+ import type { AppTextKey } from "@openbot/i18n";
+@@ -38,6 +40,8 @@ export function ConversationThread() {
+   const {
+     props,
+     openExternalMessageUrl,
++    openSharedFile,
++    openWorkspaceFile,
+     previewAttachment,
+     attachmentAction,
+     attachmentDownloads,
+@@ -227,7 +231,10 @@ export function ConversationThread() {
+               multiple
+               hidden
+               tabindex={-1}
+-              data-openbot-attachment-picker="true"
++              data-openbot-attachment-picker={props.runtime ? undefined : "true"}
++              onChange={(event) => {
++                if (props.runtime?.importFiles) void props.runtime.importFiles(Array.from(event.currentTarget.files ?? []), conversationFileTarget(props));
++              }}
+             />
+           </Show>
+           <Show when={threadSearchOpen()}>
+@@ -267,12 +274,18 @@ export function ConversationThread() {
+                 : attachmentAction(attachment, "open")
+             }
+             onAttachFiles={current().threads.acceptsFiles ? openPicker : undefined}
++            onEditQueuedFiles={props.runtime?.openQueueAttachments && current().threads.open ? () => {
++              const target = conversationFileTarget(props);
++              if (target) void props.runtime?.openQueueAttachments?.(target).catch((error) => reportErrorBanner(error, "queue"));
++            } : undefined}
+             onSideQuestion={askSideQuestion()}
+             voice={voice()}
+             focusRequest={focusRequest()}
+             onSend={(text) => threadComposer.send(current().threads, text)}
+             onStop={() => current().threads.onStop()}
+             onOpenLink={(url) => void openExternalMessageUrl(url)}
++            onOpenSharedFile={openSharedFile}
++            onOpenWorkspaceFile={(path) => openWorkspaceFile(path)}
+             onPreview={(attachment) => void previewAttachment(attachment)}
+             onAttachmentAction={attachmentAction}
+             mediaSource={props.runtime?.attachmentMedia}
+diff --git a/src/renderer/src/features/conversation/ConversationTimeline.tsx b/src/renderer/src/features/conversation/ConversationTimeline.tsx
+index 7ca7c8a..94a8e01 100644
+--- a/src/renderer/src/features/conversation/ConversationTimeline.tsx
++++ b/src/renderer/src/features/conversation/ConversationTimeline.tsx
+@@ -60,7 +60,7 @@ import { McpSignInChatCard } from "./McpSignInChatCard";
+ import { createMessageImageFiles } from "./message-image-files";
+ import { RoutineChatCard } from "./RoutineChatCard";
+ import { createChatWebhookRoutines, RoutineWebhookChatCard } from "./RoutineWebhookChatCard";
+-import { desktopChatEventRoutinesApi } from "./routine-webhooks-api";
++import { chatEventRoutinesApi } from "./routine-webhooks-api";
+ import { PENDING_SEND_ID_PREFIX, pendingSendRetrySafe } from "./stores/pending-send-store";
+ import { createTurnSteps, SUBAGENT_SPAN_PREFIX } from "./turn-steps";
+ 
+@@ -450,38 +450,50 @@ export function ConversationTimeline() {
+     const routine = props.routines?.find((candidate) => candidate.id === cardMarker.routineId);
+     return routine && { action: cardMarker.action, routine, agentId };
+   };
+-  // Webhook routines load only for a person who can manage them, and only for a chat with an agent
+-  // record of a routine that is not a schedule routine.
++  // Resolve markers through the authorized event API when the schedule list does not know them.
+   const webhookRoutinesNeeded = createMemo(() => {
+     // Before the schedule routines load, every record looks like one that is not a schedule routine.
+-    if (!props.routines) return false;
+-    const scheduled = new Set(props.routines.map((routine) => routine.id));
++    if (!props.routines && !props.runtime?.admin?.eventRoutines) return false;
++    const scheduled = new Set(props.routines?.map((routine) => routine.id) ?? []);
+     return timelineMessages().some((message) => {
+-      const marker = routineCardMarker(message, message.actionMarker);
+-      return marker !== undefined && marker.action !== "deleted" && !scheduled.has(marker.routineId);
++      const marker = message.actionMarker;
++      return (
++        marker !== undefined &&
++        "routineId" in marker &&
++        !(marker.kind === "routine-lifecycle" && marker.action === "deleted") &&
++        !scheduled.has(marker.routineId)
++      );
+     });
+   });
+   const webhookRoutineSource = createMemo(
+     () => {
+       const agentId = props.agent?.id;
+-      const api = webhookRoutinesNeeded() ? desktopChatEventRoutinesApi(props.server, props.runtime) : undefined;
++      const api = webhookRoutinesNeeded() ? chatEventRoutinesApi(props.server, props.runtime) : undefined;
+       return agentId && api
+-        ? { api, agentId, serverId: props.server?.id, recovery: remoteRoutineRecovery(props.server) }
++        ? {
++            api,
++            agentId,
++            serverId: props.server?.id,
++            recovery: remoteRoutineRecovery(props.server),
++            routines: props.runtime?.routines,
++          }
+         : undefined;
+     },
+     // A new adapter for the same host, agent and routes is the same source: no reload.
+     {
+       equals: (left, right) =>
+-        left?.agentId === right?.agentId && left?.serverId === right?.serverId && left?.recovery === right?.recovery,
++        left?.agentId === right?.agentId &&
++        left?.serverId === right?.serverId &&
++        left?.recovery === right?.recovery &&
++        left?.routines === right?.routines,
+     },
+   );
+   const webhookRoutines = createChatWebhookRoutines(webhookRoutineSource);
+   // The plain marker of a webhook routine opens it too: the host lists those routines on their own.
+-  const availableRoutineIds = createMemo(() =>
+-    props.availableRoutineIds
+-      ? [...props.availableRoutineIds, ...webhookRoutines.state.routines.map((routine) => routine.id)]
+-      : undefined,
+-  );
++  const availableRoutineIds = createMemo(() => [
++    ...(props.availableRoutineIds ?? []),
++    ...webhookRoutines.state.availableRoutineIds,
++  ]);
+   /**
+    * An agent's newest record of a webhook routine it created or changed is a card with its URL, its
+    * signing secret and its events. An older record keeps the plain marker.
+diff --git a/src/renderer/src/features/conversation/ConversationView.tsx b/src/renderer/src/features/conversation/ConversationView.tsx
+index 309992c..b7ec1fe 100644
+--- a/src/renderer/src/features/conversation/ConversationView.tsx
++++ b/src/renderer/src/features/conversation/ConversationView.tsx
+@@ -1,3 +1,4 @@
++import { conversationFileTarget } from "./conversation-runtime";
+ import { agentProviderDescriptor, isKnownAgentProvider } from "@openbot/contracts/agent-providers";
+ import { DEFAULT_AGENT_ACCESS } from "@openbot/contracts/ipc";
+ import { AgentFolderDropOverlay, createAgentFolders } from "@openbot/ui/features/conversation/AgentFolders";
+@@ -106,7 +107,7 @@ export function ConversationView(props: ConversationProps) {
+         onDrop={(event) => {
+           event.preventDefault();
+           // The desktop preload imports a dropped file; a client with its own runtime imports it here.
+-          if (props.runtime?.importFiles) void props.runtime.importFiles([...(event.dataTransfer?.files ?? [])]);
++          if (props.runtime?.importFiles) void props.runtime.importFiles([...(event.dataTransfer?.files ?? [])], conversationFileTarget(props));
+         }}
+       >
+         <MessageSelectionActions
+diff --git a/src/renderer/src/features/conversation/RoutineWebhookChatCard.tsx b/src/renderer/src/features/conversation/RoutineWebhookChatCard.tsx
+index 3e17b59..64f6cff 100644
+--- a/src/renderer/src/features/conversation/RoutineWebhookChatCard.tsx
++++ b/src/renderer/src/features/conversation/RoutineWebhookChatCard.tsx
+@@ -14,7 +14,7 @@ import { RoutineWebhookCard, type RoutineWebhookCardState } from "@openbot/ui/fe
+ import { useText } from "@openbot/ui/text";
+ import { createEffect, createMemo, createStore } from "solid-js";
+ import type { EventRoutinesApi } from "./routine-webhooks-api";
+-import { agentRoutinesPort } from "./routines-port";
++import { type AgentRoutinesApi, agentRoutinesPort } from "./routines-port";
+ 
+ export type ChatWebhookRoutine = EventRoutine & { trigger: RoutineWebhookTrigger };
+ 
+@@ -40,17 +40,21 @@ function eventsKey(events: { eventType: string | null; filters: readonly EventFi
+  * A new signing secret stays here, not in its card: the timeline removes a card that leaves the
+  * view, and the old secret no longer works. It goes when the chat changes.
+  */
+-export function createChatWebhookRoutines(source: () => { api: EventRoutinesApi; agentId: string } | undefined) {
++export function createChatWebhookRoutines(
++  source: () => { api: EventRoutinesApi; agentId: string; routines?: AgentRoutinesApi } | undefined,
++) {
+   const [state, setState] = createStore<{
+     routines: ChatWebhookRoutine[];
++    availableRoutineIds: string[];
+     connected: boolean | null;
+     secrets: Record<string, string>;
+-  }>({ routines: [], connected: null, secrets: {} });
++  }>({ routines: [], availableRoutineIds: [], connected: null, secrets: {} });
+   let request = 0;
+   createEffect(source, (current) => {
+     request += 1;
+     setState((draft) => {
+       draft.routines = [];
++      draft.availableRoutineIds = [];
+       draft.connected = null;
+       draft.secrets = {};
+     });
+@@ -63,6 +67,7 @@ export function createChatWebhookRoutines(source: () => { api: EventRoutinesApi;
+           if (loading !== request) return;
+           setState((draft) => {
+             draft.routines = routines.filter(isWebhookRoutine);
++            draft.availableRoutineIds = routines.map((routine) => routine.id);
+             draft.connected = status.connected;
+           });
+         })
+@@ -70,7 +75,11 @@ export function createChatWebhookRoutines(source: () => { api: EventRoutinesApi;
+         .catch(() => undefined);
+     };
+     load();
+-    return agentRoutinesPort(current.agentId).subscribe(load);
++    const unsubscribe = agentRoutinesPort(current.agentId, false, false, current.routines).subscribe(load);
++    return () => {
++      request += 1;
++      unsubscribe();
++    };
+   });
+   return {
+     state,
+diff --git a/src/renderer/src/features/conversation/UiBlockPrompt.tsx b/src/renderer/src/features/conversation/UiBlockPrompt.tsx
+index c95747e..94dbce1 100644
+--- a/src/renderer/src/features/conversation/UiBlockPrompt.tsx
++++ b/src/renderer/src/features/conversation/UiBlockPrompt.tsx
+@@ -6,6 +6,8 @@ import {
+   type UiBlockResponse,
+   type UiBlockState,
+   type UiVaultRequestKind,
++  isSecretFormField,
++  uiBlockHasPrivilegedAction,
+   uiBlockAnswersFromResponse,
+   uiBlockFallbackQuestions,
+   uiBlockOutcomeText,
+@@ -160,7 +162,13 @@ export function UiBlockPrompt(props: UiBlockPromptProps) {
+ 
+   const vaultRequest = (): UiVaultRequestKind | undefined => props.block.vault?.kind;
+ 
++  const protectedTerminal = () => {
++    const block = props.block;
++    return block.state.status !== "pending" && (Boolean(block.vault) ||
++      (block.spec.type === "form" && block.spec.fields.some(isSecretFormField)) || uiBlockHasPrivilegedAction(block.spec));
++  };
+   return (
++    <Show when={protectedTerminal()} fallback={
+     <Show when={vaultRequest()} fallback={uiBlockCard()}>
+       {(kind) => (
+         <VaultRequestCard
+@@ -179,6 +187,9 @@ export function UiBlockPrompt(props: UiBlockPromptProps) {
+         />
+       )}
+     </Show>
++    }>
++      <p>{props.block.state.status === "answered" ? "Secure response submitted." : props.block.state.status === "expired" ? "Secure request expired." : "Secure request closed."}</p>
++    </Show>
+   );
+ 
+   function uiBlockCard() {
+diff --git a/src/renderer/src/features/conversation/conversation-runtime.ts b/src/renderer/src/features/conversation/conversation-runtime.ts
+index f6cfc13..a07397c 100644
+--- a/src/renderer/src/features/conversation/conversation-runtime.ts
++++ b/src/renderer/src/features/conversation/conversation-runtime.ts
+@@ -17,7 +17,19 @@ import type { ConversationProps } from "./conversation-types";
+ import type { EventRoutinesApi } from "./routine-webhooks-api";
+ import type { AgentRoutinesApi } from "./routines-port";
+ 
++export type ConversationFileTarget = { agentId: string; taskId: string | null };
++
++/** Capture the destination before any file read or network wait. New tasks have no upload identity yet. */
++export function conversationFileTarget(props: ConversationProps): ConversationFileTarget | undefined {
++  if (!props.agent || props.channel || props.threads?.open === null) return undefined;
++  return { agentId: props.agent.id, taskId: props.threads?.open?.id ?? null };
++}
++
++export type SecureConversationTarget = ConversationFileTarget & { turnId: string; blockId: string; requestId: string | number };
++
+ export interface ConversationRuntime {
++  openQueueAttachments?: (target: ConversationFileTarget) => Promise<void>;
++  openSecureResponse?: (target: SecureConversationTarget) => Promise<void>;
+   agent: Pick<
+     OpenBotDesktopApi["agent"],
+     | "discardDraftAttachment"
+@@ -80,7 +92,8 @@ export interface ConversationRuntime {
+    * has it: the frame shows the page as `srcdoc`, which the desktop renderer policy would block.
+    */
+   visualPage?: (attachment: AttachmentSummary) => Promise<string>;
+-  importFiles?: (files: File[]) => Promise<void>;
++  importFiles?: (files: File[], target?: ConversationFileTarget) => Promise<void>;
++  importScopedAttachmentData?: (data: Parameters<OpenBotDesktopApi["agent"]["importAttachmentData"]>[0], serverId: string, target: ConversationFileTarget) => Promise<AttachmentSummary[]>;
+   cancelImportFiles?: () => Promise<void>;
+   /**
+    * The browser profile calls of a host that serves `browser-profiles-v1`, for a client without the
+diff --git a/src/renderer/src/features/conversation/routine-webhooks-api.ts b/src/renderer/src/features/conversation/routine-webhooks-api.ts
+index 509a925..db74153 100644
+--- a/src/renderer/src/features/conversation/routine-webhooks-api.ts
++++ b/src/renderer/src/features/conversation/routine-webhooks-api.ts
+@@ -53,14 +53,14 @@ export interface EventRoutinesApi extends RoutineWebhooksApi {
+ }
+ 
+ /**
+- * The event API of the host of a desktop chat, when this person can manage its webhook routines.
+- * A chat with a `runtime` is the browser client, which has no desktop bridge.
++ * Uses the authenticated browser runtime when present; only native chats use the desktop bridge.
+  */
+-export function desktopChatEventRoutinesApi(
++export function chatEventRoutinesApi(
+   server: ServerSummary | undefined,
+   runtime: ConversationRuntime | undefined,
+ ): EventRoutinesApi | undefined {
+-  return !runtime && serverCanAdminister(server, "events-v1")
++  if (runtime) return runtime.admin?.eventRoutines;
++  return serverCanAdminister(server, "events-v1")
+     ? desktopEventRoutinesApi(server.id, remoteRoutineRecovery(server), serverSendsWebhookTests(server))
+     : undefined;
+ }
+diff --git a/src/renderer/src/features/conversation/stores/composer-actions.ts b/src/renderer/src/features/conversation/stores/composer-actions.ts
+index 6512e34..eb523ab 100644
+--- a/src/renderer/src/features/conversation/stores/composer-actions.ts
++++ b/src/renderer/src/features/conversation/stores/composer-actions.ts
+@@ -354,7 +354,9 @@ export function createComposerActions(deps: ComposerActionsDeps) {
+       const imported = await importPastedFiles(
+         files,
+         () => (deps.drafts()[key] ?? EMPTY_DRAFT).attachments.length,
+-        (data) => runtime.agent.importAttachmentData(data, target.serverId),
++        (data) => runtime.importScopedAttachmentData
++          ? runtime.importScopedAttachmentData(data, target.serverId, { agentId: target.agentId, taskId: null })
++          : runtime.agent.importAttachmentData(data, target.serverId),
+         previews.onAccepted,
+       );
+       const accepted = await addAttachments(imported, target);
+diff --git a/src/renderer/src/features/conversation/stores/thread-composer-actions.ts b/src/renderer/src/features/conversation/stores/thread-composer-actions.ts
+index a4dfee7..420a62a 100644
+--- a/src/renderer/src/features/conversation/stores/thread-composer-actions.ts
++++ b/src/renderer/src/features/conversation/stores/thread-composer-actions.ts
+@@ -229,7 +229,15 @@ export function createThreadComposerActions(deps: ThreadComposerActionsDeps) {
+       const imported = await importPastedFiles(
+         files,
+         () => draft(key).attachments.length,
+-        (data) => conversationRuntime(deps.props).agent.importAttachmentData(data, target.serverId),
++        (data) => {
++          const runtime = conversationRuntime(deps.props);
++          const taskId = key.slice(key.lastIndexOf("\0") + 1);
++          if (runtime.importScopedAttachmentData) {
++            if (taskId === DRAFT_THREAD_ID) throw new Error("Start the task before attaching a file.");
++            return runtime.importScopedAttachmentData(data, target.serverId, { agentId: target.agentId, taskId });
++          }
++          return runtime.agent.importAttachmentData(data, target.serverId);
++        },
+         previews.onAccepted,
+       );
+       // The draft refused the files and shows why. The pasted text still comes.
+diff --git a/src/renderer/src/features/tasks/TasksView.tsx b/src/renderer/src/features/tasks/TasksView.tsx
+index e63b3c9..e435fa7 100644
+--- a/src/renderer/src/features/tasks/TasksView.tsx
++++ b/src/renderer/src/features/tasks/TasksView.tsx
+@@ -13,6 +13,7 @@ import type {
+   AttachmentSummary,
+   ConversationSnapshot,
+   DraftAttachment,
++  FilePreview,
+ } from "@openbot/contracts/ipc";
+ import type { AppTextKey } from "@openbot/i18n";
+ import { plainTaskTitle, taskApproval } from "@openbot/team-client/agent-tasks";
+@@ -42,6 +43,7 @@ import { usePlatform } from "../../platform";
+ import { readAgentSelection, writeAgentSelection } from "../agents/agent-selection";
+ import { insertAtSelection, insertPastedText, rowAttachments } from "../conversation/composer-draft";
+ import { latestVisibleAgentMessageId } from "../conversation/conversation-read-state";
++import FilePreviewPanel from "../conversation/FilePreviewPanel";
+ import { importPastedFiles, type PastePreview, pastePreviewTracker } from "../conversation/stores/composer-actions";
+ import { createTurnSteps } from "../conversation/turn-steps";
+ import type { TaskEvent, TasksSource } from "./tasks-port";
+@@ -68,7 +70,7 @@ export interface TasksVoiceControls {
+  */
+ export interface TaskFiles {
+   accepted: () => boolean;
+-  import: (data: AttachmentDataInput[], serverId: string) => Promise<DraftAttachment[]>;
++  import: (data: AttachmentDataInput[], serverId: string, target?: AgentTaskInput) => Promise<DraftAttachment[]>;
+   discard: (id: string, serverId: string) => Promise<void>;
+ }
+ 
+@@ -82,6 +84,7 @@ interface TasksViewProps {
+   agentsOpen?: boolean | undefined;
+   onToggleAgents?: (() => void) | undefined;
+   source: TasksSource;
++  onEditQueuedFiles?: (target: AgentTaskInput) => Promise<void>;
+   agents: AgentProfile[];
+   /** Absent where the client cannot record. */
+   voice?: ((controls: TasksVoiceControls) => TasksVoiceAdapter) | undefined;
+@@ -89,6 +92,15 @@ interface TasksViewProps {
+   onAttachmentAction: (attachment: AttachmentSummary, action: "open" | "reveal" | "download") => void;
+   /** Absent where the client cannot send files with a task message. */
+   files?: TaskFiles | undefined;
++  fileAccess?: {
++    preview: (
++      target: AgentTaskInput,
++      path: string,
++      kind: "shared" | "workspace",
++      serverId: string,
++    ) => Promise<FilePreview>;
++    download: (target: AgentTaskInput, path: string, kind: "shared" | "workspace", serverId: string) => Promise<void>;
++  };
+   /** Loads the images of a client that gets no `previewUrl`. */
+   mediaSource?: AttachmentMediaSource | undefined;
+   /** The download state of attachments from a joined server. */
+@@ -208,12 +220,14 @@ export function TasksView(props: TasksViewProps) {
+     if (!port || !filesAccepted()) return fallback();
+     const current = generation;
+     const serverId = untrack(() => props.serverId);
++    const task = key === START_FILES ? undefined : taskOf(key);
++    const target = task ? { agentId: task.agentId, taskId: task.id } : undefined;
+     const previews = pastePreviewTracker(key, setPastePreviews);
+     try {
+       const imported = await importPastedFiles(
+         files,
+         () => filesOf(key).length,
+-        (data) => port.import(data, serverId),
++        (data) => port.import(data, serverId, target),
+         previews.onAccepted,
+       );
+       if (current !== generation) {
+@@ -659,6 +673,34 @@ export function TasksView(props: TasksViewProps) {
+       const current = hosted();
+       return current ? { agentId: current.agentId, taskId: current.id } : null;
+     };
++    const [file, setFile] = createSignal<{
++      preview: FilePreview;
++      path: string;
++      kind: "shared" | "workspace";
++      target: AgentTaskInput;
++      serverId: string;
++    } | null>(null);
++    let fileRequest = 0;
++    onCleanup(() => {
++      fileRequest++;
++    });
++    const closeFile = () => {
++      fileRequest++;
++      setFile(null);
++    };
++    const openFile = async (path: string, kind: "shared" | "workspace") => {
++      const target = input();
++      const access = props.fileAccess;
++      if (!target || !access) return;
++      const serverId = props.serverId;
++      const request = ++fileRequest;
++      try {
++        const preview = await access.preview(target, path, kind, serverId);
++        if (request === fileRequest && props.serverId === serverId) setFile({ preview, path, kind, target, serverId });
++      } catch (error) {
++        if (request === fileRequest) toastError(error, "attachment.error.download");
++      }
++    };
+     const approval = () => {
+       const current = hosted();
+       return current ? taskApproval(current, props.approvals) : undefined;
+@@ -725,67 +767,112 @@ export function TasksView(props: TasksViewProps) {
+     return (
+       <Show when={owner() ?? props.agents[0]}>
+         {(agent) => (
+-          <TaskPanel
+-            task={hosted()}
+-            title={task()?.title ?? ""}
+-            wait={wait()}
+-            onArchive={() => {
+-              const target = input();
+-              if (target)
+-                void runAction(() => props.source.close(target, props.serverId), "conversation.threads.error.archive");
+-            }}
+-            onRestore={() => {
+-              const target = input();
+-              if (target)
+-                void runAction(() => props.source.reopen(target, props.serverId), "conversation.threads.error.restore");
+-            }}
+-            onOpenInChat={chatAction()}
+-            onClose={() => select(null)}
++          <Show
++            when={file()}
++            fallback={
++              <TaskPanel
++                task={hosted()}
++                title={task()?.title ?? ""}
++                wait={wait()}
++                onArchive={() => {
++                  const target = input();
++                  if (target)
++                    void runAction(
++                      () => props.source.close(target, props.serverId),
++                      "conversation.threads.error.archive",
++                    );
++                }}
++                onRestore={() => {
++                  const target = input();
++                  if (target)
++                    void runAction(
++                      () => props.source.reopen(target, props.serverId),
++                      "conversation.threads.error.restore",
++                    );
++                }}
++                onOpenInChat={chatAction()}
++                onClose={() => select(null)}
++              >
++                <AgentThreadView
++                  task={hosted()}
++                  limit={state.snapshots[task()?.agentId ?? ""]?.limit ?? 1}
++                  agent={agent()}
++                  agents={props.agents}
++                  messages={messages}
++                  draft={state.drafts[taskId] ?? ""}
++                  draftAttachments={filesOf(taskId)}
++                  rowAttachments={rowFilesOf(taskId)}
++                  pendingImages={pendingImagesOf(taskId)}
++                  onRemoveAttachment={filesAccepted() ? (attachment) => removeFile(taskId, attachment) : undefined}
++                  onPasteFiles={
++                    filesAccepted() ? (files, selection, text) => pasteFiles(taskId, files, selection, text) : undefined
++                  }
++                  onDraftChange={(text) =>
++                    setState((draft) => {
++                      draft.drafts[taskId] = text;
++                    })
++                  }
++                  onEditQueuedFiles={
++                    props.onEditQueuedFiles
++                      ? () => {
++                          const target = input();
++                          if (target)
++                            void runAction(() => props.onEditQueuedFiles!(target), "conversation.tasks.error.send");
++                        }
++                      : undefined
++                  }
++                  onSend={send}
++                  onStop={() => {
++                    const target = input();
++                    if (target)
++                      void runAction(() => props.source.stop(target, props.serverId), "conversation.tasks.error.stop");
++                  }}
++                  onOpenLink={props.onOpenLink}
++                  onOpenSharedFile={props.fileAccess ? (path) => void openFile(path, "shared") : undefined}
++                  onOpenWorkspaceFile={props.fileAccess ? (path) => void openFile(path, "workspace") : undefined}
++                  onPreview={(attachment) => props.onAttachmentAction(attachment, "open")}
++                  onAttachmentAction={props.onAttachmentAction}
++                  mediaSource={props.mediaSource}
++                  downloads={props.downloads}
++                  approval={approval()}
++                  onRespondApproval={async (decision) => {
++                    const current = approval();
++                    return current ? props.onRespondApproval(current, decision) : false;
++                  }}
++                  waitsForAnswer={wait() === "answer"}
++                  attention={answerCard(agent().name)}
++                  stepsAbove={turnSteps.stepsAbove}
++                  factsAbove={turnSteps.factsAbove}
++                  activeSteps={turnSteps.activeSteps()}
++                  stepsOpenByDefault={showAgentSteps()}
++                  sendShortcut={props.sendShortcut}
++                />
++              </TaskPanel>
++            }
+           >
+-            <AgentThreadView
+-              task={hosted()}
+-              limit={state.snapshots[task()?.agentId ?? ""]?.limit ?? 1}
+-              agent={agent()}
+-              agents={props.agents}
+-              messages={messages}
+-              draft={state.drafts[taskId] ?? ""}
+-              draftAttachments={filesOf(taskId)}
+-              rowAttachments={rowFilesOf(taskId)}
+-              pendingImages={pendingImagesOf(taskId)}
+-              onRemoveAttachment={filesAccepted() ? (attachment) => removeFile(taskId, attachment) : undefined}
+-              onPasteFiles={
+-                filesAccepted() ? (files, selection, text) => pasteFiles(taskId, files, selection, text) : undefined
+-              }
+-              onDraftChange={(text) =>
+-                setState((draft) => {
+-                  draft.drafts[taskId] = text;
+-                })
+-              }
+-              onSend={send}
+-              onStop={() => {
+-                const target = input();
+-                if (target)
+-                  void runAction(() => props.source.stop(target, props.serverId), "conversation.tasks.error.stop");
+-              }}
+-              onOpenLink={props.onOpenLink}
+-              onPreview={(attachment) => props.onAttachmentAction(attachment, "open")}
+-              onAttachmentAction={props.onAttachmentAction}
+-              mediaSource={props.mediaSource}
+-              downloads={props.downloads}
+-              approval={approval()}
+-              onRespondApproval={async (decision) => {
+-                const current = approval();
+-                return current ? props.onRespondApproval(current, decision) : false;
+-              }}
+-              waitsForAnswer={wait() === "answer"}
+-              attention={answerCard(agent().name)}
+-              stepsAbove={turnSteps.stepsAbove}
+-              factsAbove={turnSteps.factsAbove}
+-              activeSteps={turnSteps.activeSteps()}
+-              stepsOpenByDefault={showAgentSteps()}
+-              sendShortcut={props.sendShortcut}
+-            />
+-          </TaskPanel>
++            {(shown) => (
++              <FilePreviewPanel
++                preview={shown().preview}
++                fileKey={shown().path}
++                agents={props.agents}
++                defaultWidth={() => 420}
++                maxWidth={() => 420}
++                onWidthChange={() => undefined}
++                onOpenLink={props.onOpenLink}
++                onOpenSharedFile={(path) => void openFile(path, "shared")}
++                onOpenWorkspaceFile={(path) => void openFile(path, "workspace")}
++                onOpenExternally={() => undefined}
++                allowExternalOpen={false}
++                onDownload={() => {
++                  const current = shown();
++                  void props.fileAccess
++                    ?.download(current.target, current.path, current.kind, current.serverId)
++                    .catch((error) => toastError(error, "attachment.error.download"));
++                }}
++                onClose={closeFile}
++              />
++            )}
++          </Show>
+         )}
+       </Show>
+     );
+diff --git a/src/renderer/src/features/web-client/WebWorkspace.tsx b/src/renderer/src/features/web-client/WebWorkspace.tsx
+index 8746629..ea36dd5 100644
+--- a/src/renderer/src/features/web-client/WebWorkspace.tsx
++++ b/src/renderer/src/features/web-client/WebWorkspace.tsx
+@@ -223,7 +223,7 @@ import { createWebAccountCalls } from "./web-account";
+ import { createWebAccountUsage } from "./web-account-usage";
+ import { createWebAgentImportCalls } from "./web-agent-import";
+ import { createWebAgentThreads } from "./web-agent-threads";
+-import { openWebLink } from "./web-attachments";
++import { createWebAttachmentFiles, openWebLink } from "./web-attachments";
+ import { createWebBillingCalls, createWebLicenseCalls, type WebAppStart } from "./web-billing";
+ import { webBitwardenConnectorPort } from "./web-bitwarden-connector";
+ import { createWebChannelsPort } from "./web-channels-runtime";
+@@ -301,6 +301,10 @@ type WebWorkspaceProps = {
+   accountSessionEnded?: () => boolean;
+   onLogout: () => Promise<void>;
+   createRuntime?: WebRuntimeFactory | undefined;
++  computer?: {
++    available: boolean;
++    open: (server: ServerSummary) => Promise<void>;
++  };
+   /** A shared agent that a `/app?agent=<id>` link named. The dialog installs it only on a press. */
+   agentTemplateId?: string | null;
+   onAgentTemplateClose?: () => void;
+@@ -534,7 +538,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
+         notificationsMuted: notice.muted,
+         notificationsMutedUntil: notice.mutedUntil,
+         notificationLevel: notice.level,
+-        remoteDesktopAvailable: false,
++        remoteDesktopAvailable: Boolean(props.computer?.available),
+         ...(host.memberLimit === undefined ? {} : { memberLimit: host.memberLimit }),
+         ...(host.hosted === undefined ? {} : { hosted: host.hosted }),
+         compatibility: {
+@@ -817,6 +821,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
+     webhookTestsEnabled,
+     () => workspace.state.capabilities.includes(BROWSER_PROFILES_CAPABILITY),
+   );
++  const taskFiles = createWebAttachmentFiles(workspace.runtime, () => workspace.state.host?.hostId ?? "");
++  const taskFileHost = (serverId: string) => {
++    if (workspace.state.host?.hostId !== serverId) throw new Error("The original task host is no longer selected");
++  };
+   const remoteAgentAdmin = createRemoteAgentAdmin(
+     () => {
+       const current = server();
+@@ -981,7 +989,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
+     return mounts;
+   }
+   const scheduleSource = webScheduleSource(workspace, hostRequest);
+-  const tasksSource = webTasksSource(workspace, hostRequest);
++  const tasksSource = webTasksSource(workspace, hostRequest, workspace.runtime.sendOriginalTaskFiles);
+   const tasksSupported = () => workspace.state.capabilities.includes(AGENT_TASKS_CAPABILITY);
+   // The Tasks page follows a host switch. An older host has no task routes and no Tasks button.
+   createEffect(
+@@ -1605,7 +1613,12 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
+     const root = untrack(() =>
+       createRoot((dispose) => ({
+         dispose,
+-        threads: createWebAgentThreads({ workspace, hostId, request: () => hostRequest(hostId) }),
++        threads: createWebAgentThreads({
++          workspace,
++          hostId,
++          request: () => hostRequest(hostId),
++          sendFiles: workspace.runtime.sendOriginalTaskFiles,
++        }),
+       })),
+     );
+     onCleanup(root.dispose);
+@@ -2461,10 +2474,30 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
+                       agentsOpen={!tasksAgentsHidden()}
+                       onToggleAgents={() => setTasksAgentsOpen(tasksAgentsHidden())}
+                       source={tasksSource}
++                      onEditQueuedFiles={runtime.openQueueAttachments}
+                       mediaSource={runtime.attachmentMedia}
++                      fileAccess={{
++                        preview: async (target, path, kind, serverId) => {
++                          taskFileHost(serverId);
++                          const preview = await (kind === "shared"
++                            ? taskFiles.previewShared(path, target.agentId)
++                            : taskFiles.previewWorkspace(target.agentId, path));
++                          taskFileHost(serverId);
++                          return preview;
++                        },
++                        download: (target, path, kind, serverId) => {
++                          taskFileHost(serverId);
++                          return kind === "shared"
++                            ? taskFiles.saveShared(path, target.agentId)
++                            : taskFiles.saveWorkspace(target.agentId, path);
++                        },
++                      }}
+                       files={{
+                         accepted: () => workspace.state.capabilities.includes(AGENT_THREAD_FILES_CAPABILITY),
+-                        import: (data, serverId) => runtime.agent.importAttachmentData(data, serverId),
++                        import: (data, serverId, target) =>
++                          target && runtime.importScopedAttachmentData
++                            ? runtime.importScopedAttachmentData(data, serverId, target)
++                            : runtime.agent.importAttachmentData(data, serverId),
+                         discard: (id, serverId) => runtime.agent.discardDraftAttachment(id, serverId),
+                       }}
+                       agents={workspace.profiles()}
+@@ -2619,7 +2652,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
+                         currentUserEmail={props.accountEmail ?? ""}
+                         isOwnSender={isOwnSender}
+                         browserEnabled={browserEnabled()}
+-                        remoteDesktopEnabled={false}
++                        remoteDesktopEnabled={props.computer?.available ?? false}
+                         remoteDesktopSessionActive={false}
+                         remoteDesktopVisible={false}
+                         prompt={channelView.prompt()}
+@@ -2659,7 +2692,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
+                         onReorderQueue={() => {}}
+                         onActivateBrowserTab={workspace.activateBrowserTab}
+                         onCloseBrowserTab={(tabId) => workspace.runtime.closeBrowserTab(tabId)}
+-                        onOpenRemoteDesktop={unavailable}
++                        onOpenRemoteDesktop={async () => {
++                          const current = server();
++                          if (current) await props.computer?.open(current);
++                        }}
+                         onStop={channelView.onStop}
+                       />
+                     );
+@@ -2782,7 +2818,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
+                     })
+                   }
+                   browserEnabled={browserEnabled()}
+-                  remoteDesktopEnabled={false}
++                  remoteDesktopEnabled={props.computer?.available ?? false}
+                   remoteDesktopSessionActive={false}
+                   remoteDesktopVisible={false}
+                   prompt={view.prompt()}
+@@ -2847,7 +2883,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
+                   onReorderQueue={workspace.reorderQueue}
+                   onActivateBrowserTab={workspace.activateBrowserTab}
+                   onCloseBrowserTab={(tabId) => workspace.runtime.closeBrowserTab(tabId)}
+-                  onOpenRemoteDesktop={unavailable}
++                  onOpenRemoteDesktop={async () => {
++                    const current = server();
++                    if (current) await props.computer?.open(current);
++                  }}
+                   onStop={() => {
+                     const page = workspace.conversation()?.page;
+                     if (page?.activeTurnId)
+diff --git a/src/renderer/src/features/web-client/web-agent-threads.ts b/src/renderer/src/features/web-client/web-agent-threads.ts
+index e5f0167..d252061 100644
+--- a/src/renderer/src/features/web-client/web-agent-threads.ts
++++ b/src/renderer/src/features/web-client/web-agent-threads.ts
+@@ -48,7 +48,7 @@ export function withoutPreviewUrls(snapshot: ConversationSnapshot): Conversation
+  * branch links are read after the tasks, so that each listed branch has its link. Each call reads the
+  * request again: it fails once the tab leaves the host.
+  */
+-function webAgentTasksPort(request: () => TeamApiRequest, branchable: () => boolean): AgentTasksPort {
++function webAgentTasksPort(request: () => TeamApiRequest, branchable: () => boolean, sendFiles?: AgentTasksPort["sendToTask"]): AgentTasksPort {
+   const run = async <A>(call: (request: TeamApiRequest) => Effect.Effect<A, TeamRequestError>) =>
+     runTeamEffect(call(request()).pipe(Effect.mapError((error) => error.cause)));
+   return {
+@@ -64,7 +64,9 @@ function webAgentTasksPort(request: () => TeamApiRequest, branchable: () => bool
+       ),
+     readTask: (input) => run((host) => readAgentTask(host, input).pipe(Effect.map(withoutPreviewUrls))),
+     startTask: (input) => run((host) => startAgentTask(host, input)),
+-    sendToTask: (input) => run((host) => sendAgentTaskMessage(host, input)),
++    sendToTask: (input) => input.attachmentDraftIds?.length && sendFiles
++      ? sendFiles(input)
++      : run((host) => sendAgentTaskMessage(host, input)),
+     stopTask: (input) => run((host) => agentTaskControl(host, "stop", input)),
+     closeTask: (input) => run((host) => agentTaskControl(host, "close", input)),
+     reopenTask: (input) => run((host) => agentTaskControl(host, "reopen", input)),
+@@ -84,10 +86,11 @@ export function createWebAgentThreads(options: {
+   workspace: Pick<WebWorkspace, "state" | "onHostEvent">;
+   hostId: string;
+   request: () => TeamApiRequest;
++  sendFiles?: AgentTasksPort["sendToTask"];
+ }) {
+   const { workspace, hostId } = options;
+   const branchable = () => workspace.state.capabilities.includes(AGENT_THREAD_BRANCHES_CAPABILITY);
+-  const port = webAgentTasksPort(options.request, branchable);
++  const port = webAgentTasksPort(options.request, branchable, options.sendFiles);
+   const tasks = createAgentTasks({
+     port: () => port,
+     activeAgentId: () => workspace.state.selectedId ?? undefined,
+diff --git a/src/renderer/src/features/web-client/web-attachments.ts b/src/renderer/src/features/web-client/web-attachments.ts
+index a4d35f2..b027b72 100644
+--- a/src/renderer/src/features/web-client/web-attachments.ts
++++ b/src/renderer/src/features/web-client/web-attachments.ts
+@@ -43,15 +43,15 @@ export function createWebAttachmentFiles(
+       }
+       return page;
+     },
+-    async saveShared(path: string): Promise<void> {
+-      save(await remote.sharedFile(path));
++    async saveShared(path: string, agentId?: string): Promise<void> {
++      save(await remote.sharedFile(path, agentId));
+     },
+     async saveWorkspace(agentId: string, path: string): Promise<void> {
+       save(await remote.workspaceFile(agentId, path));
+     },
+     // The host sends a shared or workspace file as `application/octet-stream`, so its name gives the type.
+-    async previewShared(path: string): Promise<FilePreview> {
+-      const file = await remote.sharedFile(path);
++    async previewShared(path: string, agentId?: string): Promise<FilePreview> {
++      const file = await remote.sharedFile(path, agentId);
+       return filePreview({ ...file, mimeType: attachmentMimeTypeForName(file.name) });
+     },
+     async previewWorkspace(agentId: string, path: string): Promise<FilePreview> {
+diff --git a/src/renderer/src/features/web-client/web-conversation-runtime.ts b/src/renderer/src/features/web-client/web-conversation-runtime.ts
+index ec0c956..5fd025b 100644
+--- a/src/renderer/src/features/web-client/web-conversation-runtime.ts
++++ b/src/renderer/src/features/web-client/web-conversation-runtime.ts
+@@ -27,7 +27,7 @@ import { listInstalledSkills, type TeamApiRequest, teamAgentRoutinesApi } from "
+ import { currentText } from "@openbot/ui/text";
+ import { Effect } from "effect";
+ import { onCleanup } from "solid-js";
+-import type { ConversationRuntime } from "../conversation/conversation-runtime";
++import type { ConversationRuntime, ConversationFileTarget } from "../conversation/conversation-runtime";
+ import { webEventRoutinesApi } from "../conversation/routine-webhooks-api";
+ import { createWebAttachmentMedia } from "./web-attachment-media";
+ import { createWebAttachmentFiles, openWebLink } from "./web-attachments";
+@@ -155,6 +155,7 @@ export function createWebConversationRuntime(
+     files: readonly File[],
+     serverId: string,
+     stopped: () => boolean,
++    target?: ConversationFileTarget,
+   ): Promise<AttachmentSummary[] | null> {
+     const attachments: AttachmentSummary[] = [];
+     const discard = async () => {
+@@ -164,7 +165,7 @@ export function createWebConversationRuntime(
+     try {
+       for (const file of files) {
+         if (stopped() || hostId() !== serverId) break;
+-        attachments.push(await remote.upload(file));
++        attachments.push(await remote.upload(file, target));
+       }
+     } catch (error) {
+       await discard();
+@@ -175,7 +176,7 @@ export function createWebConversationRuntime(
+     return null;
+   }
+   // The files and host of each failed import, for Retry, until the composer removes the chip.
+-  const failedImports = new Map<string, { serverId: string; files: readonly File[] }>();
++  const failedImports = new Map<string, { serverId: string; files: readonly File[]; target?: ConversationFileTarget }>();
+   // Cancel upload adds one. A pick stops its files that did not start when the value is not the one
+   // it saw at its start, so a later pick cannot hide the earlier one from Cancel.
+   let cancelGeneration = 0;
+@@ -192,13 +193,13 @@ export function createWebConversationRuntime(
+    * Each file is its own import, as on desktop, so a failed file does not drop the others. They go
+    * one after another, because the web client uploads one file at a time.
+    */
+-  async function importPick(files: readonly File[]) {
++  async function importPick(files: readonly File[], target?: ConversationFileTarget) {
+     // The pick belongs to the host on screen now. After a host change, its other files go nowhere.
+     const serverId = hostId();
+     if (files.length > INPUT_LIMITS.attachments) {
+       const requestId = crypto.randomUUID();
+       announceImport(requestId, serverId, files, false);
+-      await runImportFiles(requestId, serverId, files, false);
++      await runImportFiles(requestId, serverId, files, false, target);
+       return;
+     }
+     const generation = cancelGeneration;
+@@ -207,14 +208,14 @@ export function createWebConversationRuntime(
+     for (const item of imports) {
+       if (generation !== cancelGeneration || hostId() !== serverId)
+         emit({ type: "completed", serverId, requestId: item.requestId, attachments: [] });
+-      else await runImportFiles(item.requestId, serverId, item.files, true);
++      else await runImportFiles(item.requestId, serverId, item.files, true, target);
+     }
+   }
+   // `uploadFiles` stops when the host is no longer `serverId`, and the import then lands nowhere.
+-  async function runImportFiles(requestId: string, serverId: string, files: readonly File[], retryable: boolean) {
++  async function runImportFiles(requestId: string, serverId: string, files: readonly File[], retryable: boolean, target?: ConversationFileTarget) {
+     failedImports.delete(requestId);
+     if (importBusy) {
+-      if (retryable) failedImports.set(requestId, { serverId, files });
++      if (retryable) failedImports.set(requestId, { serverId, files, target });
+       emit({ type: "error", serverId, requestId, message: currentText().t("error.remote.attachmentBusy") });
+       return;
+     }
+@@ -224,14 +225,14 @@ export function createWebConversationRuntime(
+       try {
+         if (files.length > INPUT_LIMITS.attachments)
+           throw new Error(currentText().t("webClient.error.attachmentLimit", { limit: INPUT_LIMITS.attachments }));
+-        const attachments = await uploadFiles(files, serverId, () => job.cancelled);
++        const attachments = await uploadFiles(files, serverId, () => job.cancelled, target);
+         emit({ type: "completed", serverId, requestId, attachments: attachments ?? [] });
+       } catch (error) {
+         if (job.cancelled) {
+           emit({ type: "completed", serverId, requestId, attachments: [] });
+           return;
+         }
+-        if (retryable) failedImports.set(requestId, { serverId, files });
++        if (retryable) failedImports.set(requestId, { serverId, files, target });
+         emit({
+           type: "error",
+           serverId,
+@@ -259,6 +260,8 @@ export function createWebConversationRuntime(
+   const browserProfiles = adminRequest ? webBrowserProfileCalls(adminRequest, onHostEvent) : undefined;
+   const listLevels = remote.listAgentNotificationLevels;
+   return {
++    openQueueAttachments: remote.openQueueAttachments,
++    openSecureResponse: remote.openSecureResponse,
+     agent: {
+       ...messageLinks,
+       importAttachmentData: async (data, serverId) => {
+@@ -314,7 +317,7 @@ export function createWebConversationRuntime(
+         const failed = failedImports.get(requestId);
+         if (!failed) return;
+         announceImport(requestId, failed.serverId, failed.files, true);
+-        void runImportFiles(requestId, failed.serverId, failed.files, true);
++        void runImportFiles(requestId, failed.serverId, failed.files, true, failed.target);
+       },
+       discardAttachmentImport(requestId) {
+         failedImports.delete(requestId);
+@@ -376,8 +379,19 @@ export function createWebConversationRuntime(
+     previewAttachment: files.preview,
+     attachmentMedia,
+     visualPage: files.visualPage,
+-    async importFiles(files) {
+-      if (files.length > 0) await importPick(files);
++    async importFiles(files, target) {
++      if (files.length > 0) await importPick(files, target);
++    },
++    importScopedAttachmentData: async (data, serverId, target) => {
++      if (importBusy || serverId !== hostId()) throw new Error(currentText().t("error.remote.attachmentBusy"));
++      return runImport(async () => {
++        const job = { cancelled: false, serverId };
++        importing = job;
++        try {
++          const files = data.map((file) => new File([new Uint8Array(file.bytes)], file.name, { type: file.mimeType }));
++          return await uploadFiles(files, serverId, () => job.cancelled, target) ?? [];
++        } finally { importing = undefined; }
++      });
+     },
+     cancelImportFiles,
+     // `request()` names the connected host at call time, so a host switch reaches the new host.
+diff --git a/src/renderer/src/features/web-client/web-runtime.ts b/src/renderer/src/features/web-client/web-runtime.ts
+index 7d8052e..9a1e53f 100644
+--- a/src/renderer/src/features/web-client/web-runtime.ts
++++ b/src/renderer/src/features/web-client/web-runtime.ts
+@@ -279,12 +279,29 @@ export interface WebWorkspaceRuntime {
+   reorderQueue(input: ReorderQueueInput): Promise<void>;
+   approve(input: RespondToApprovalInput): Promise<void>;
+   answer(input: RespondToPromptInput): Promise<void>;
+-  upload(file: File): Promise<AttachmentSummary>;
++  /** A client whose durable file journal returns its own verified receipt. */
++  openQueueAttachments?: (
++    target: import("../conversation/conversation-runtime").ConversationFileTarget,
++  ) => Promise<void>;
++  openSecureResponse?: (
++    target: import("../conversation/conversation-runtime").SecureConversationTarget,
++  ) => Promise<void>;
++  sendOriginalTaskFiles?: (input: {
++    agentId: string;
++    taskId: string;
++    text: string;
++    attachmentDraftIds?: string[];
++    replyToMessageId?: string;
++  }) => Promise<unknown>;
++  upload(
++    file: File,
++    target?: import("../conversation/conversation-runtime").ConversationFileTarget,
++  ): Promise<AttachmentSummary>;
+   cancelUpload(): Promise<void>;
+   discard(attachmentId: string): Promise<void>;
+   download(attachmentId: string): Promise<WebFile>;
+   /** A file under the host's shared folder. */
+-  sharedFile(path: string): Promise<WebFile>;
++  sharedFile(path: string, agentId?: string): Promise<WebFile>;
+   /** A file in one agent's workspace on the host. */
+   workspaceFile(agentId: string, path: string): Promise<WebFile>;
+   /** A folder in one agent's workspace on the host. */
+@@ -1467,7 +1484,7 @@ function queueSnapshot(agentId: string, value: unknown): QueueSnapshot {
+   return value;
+ }
+ 
+-function decodeWebBrowserTab(tab: unknown): BrowserTab {
++export function decodeWebBrowserTab(tab: unknown): BrowserTab {
+   if (
+     !isDynamicRecord(tab) ||
+     typeof tab.loading !== "boolean" ||
+diff --git a/src/renderer/src/features/web-client/web-tasks.ts b/src/renderer/src/features/web-client/web-tasks.ts
+index 5fb621c..afd8368 100644
+--- a/src/renderer/src/features/web-client/web-tasks.ts
++++ b/src/renderer/src/features/web-client/web-tasks.ts
+@@ -17,6 +17,7 @@ import type { WebWorkspace } from "./web-client-context";
+ export function webTasksSource(
+   workspace: Pick<WebWorkspace, "state" | "onHostEvent">,
+   hostRequest: (serverId?: string) => TeamApiRequest,
++  sendFiles?: (input: Parameters<TasksSource["send"]>[0]) => Promise<unknown>,
+ ): TasksSource {
+   const run = <A>(effect: Effect.Effect<A, TeamRequestError>) =>
+     runTeamEffect(effect.pipe(Effect.mapError((error) => error.cause)));
+@@ -25,7 +26,13 @@ export function webTasksSource(
+     list: (agentId, serverId) => run(listAgentTasks(hostRequest(serverId), agentId)),
+     read: (input, serverId) => run(readAgentTask(hostRequest(serverId), input).pipe(Effect.map(withoutPreviewUrls))),
+     start: (input, serverId) => run(startAgentTask(hostRequest(serverId), input)),
+-    send: (input, serverId) => run(sendAgentTaskMessage(hostRequest(serverId), input)),
++    send: (input, serverId) => {
++      if (sendFiles && input.attachmentDraftIds?.length) {
++        if (serverId !== workspace.state.host?.hostId) return Promise.reject(new Error("The selected host changed"));
++        return sendFiles(input);
++      }
++      return run(sendAgentTaskMessage(hostRequest(serverId), input));
++    },
+     stop: (input, serverId) => run(agentTaskControl(hostRequest(serverId), "stop", input)),
+     close: (input, serverId) => run(agentTaskControl(hostRequest(serverId), "close", input)),
+     reopen: (input, serverId) => run(agentTaskControl(hostRequest(serverId), "reopen", input)),
+diff --git a/src/renderer/src/features/conversation/RoutineWebhookChatCard.dom.test.ts b/src/renderer/src/features/conversation/RoutineWebhookChatCard.dom.test.ts
+new file mode 100644
+--- /dev/null
++++ b/src/renderer/src/features/conversation/RoutineWebhookChatCard.dom.test.ts
+@@ -0,0 +1,82 @@
++import type { EventRoutine } from "@openbot/contracts/ipc-events";
++import { waitFor } from "@solidjs/testing-library";
++import { createRoot, createSignal, flush } from "solid-js";
++import { expect, it, vi } from "vitest";
++import { createChatWebhookRoutines } from "./RoutineWebhookChatCard";
++import type { EventRoutinesApi } from "./routine-webhooks-api";
++import type { AgentRoutinesApi } from "./routines-port";
++
++it("loads and refreshes the remote chat routine without a desktop bridge, ignoring a released source", async () => {
++  const routine: EventRoutine = {
++    id: "routine-owned",
++    owner: { kind: "agent", id: "agent-owned" },
++    name: "Owned",
++    instruction: "Owned",
++    active: false,
++    timezone: "UTC",
++    trigger: { kind: "webhook", url: null, eventType: null, filters: [] },
++    createdAt: "2026-11-05T11:00:00Z",
++    updatedAt: "2026-11-05T11:00:00Z",
++    limitPolicy: "wait",
++    missedPolicy: "skip",
++  };
++  let reload: (() => void) | undefined;
++  const unsubscribe = vi.fn();
++  const unexpected = async (): Promise<never> => {
++    throw new Error("Unexpected mutation or legacy read");
++  };
++  const routines: AgentRoutinesApi = {
++    listRoutines: unexpected,
++    listRoutineRuns: unexpected,
++    createRoutine: unexpected,
++    updateRoutine: unexpected,
++    deleteRoutine: unexpected,
++    testRoutine: unexpected,
++    onEvent(listener) {
++      reload = () => listener({ type: "routines-changed", agentId: "agent-owned" });
++      return unsubscribe;
++    },
++  };
++  const api: EventRoutinesApi = {
++    saveRoutine: unexpected,
++    deleteRoutine: unexpected,
++    testRoutine: unexpected,
++    rotateSecret: unexpected,
++    listActivity: unexpected,
++    listRoutines: vi.fn(async () => [routine]),
++    getStatus: vi.fn(async () => ({ supported: true, connected: false })),
++  };
++  let dispose = () => {};
++  const state = createRoot((stop) => {
++    dispose = stop;
++    const [source, setSource] = createSignal<
++      { api: EventRoutinesApi; agentId: string; routines: AgentRoutinesApi } | undefined
++    >({ api, agentId: "agent-owned", routines });
++    return { ...createChatWebhookRoutines(source), setSource };
++  });
++  try {
++    flush();
++    await waitFor(() => expect(state.state.routines.map((item) => item.id)).toEqual(["routine-owned"]));
++    expect(reload).toBeTypeOf("function");
++    api.listRoutines = vi.fn(async () => []);
++    reload?.();
++    await waitFor(() => expect(state.state.routines).toEqual([]));
++    let resolve!: (items: EventRoutine[]) => void;
++    api.listRoutines = vi.fn(
++      () =>
++        new Promise<EventRoutine[]>((done) => {
++          resolve = done;
++        }),
++    );
++    reload?.();
++    state.setSource(undefined);
++    flush();
++    expect(unsubscribe).toHaveBeenCalledOnce();
++    resolve([routine]);
++    await Promise.resolve();
++    flush();
++    expect(state.state.routines).toEqual([]);
++  } finally {
++    dispose();
++  }
++});

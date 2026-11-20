@@ -1,3 +1,4 @@
+import {BotQueueAttachmentsEnvironment} from "./BotQueueAttachmentsEnvironment";
 import { useEffect, useRef, useState } from "react";
 import {
   BotQueueEditSession,
@@ -14,6 +15,7 @@ export function BotConversationQueue({
   controller: ReturnType<typeof useBotConversationPanel>;
   agentId: string;
 }) {
+  const [attachmentsActive,setAttachmentsActive]=useState(false);
   const [edit, setEdit] = useState<BotQueueEdit | null>(null);
   const session = useRef(new BotQueueEditSession());
   const releaseOnLeave = useRef<(() => void) | null>(null);
@@ -29,7 +31,8 @@ export function BotConversationQueue({
     const acquired = await c.beginEdit(pending.deliveryId, pending.editId);
     if (acquired) setEdit(session.current.confirm(pending.editId, acquired));
   };
-  const disabled = c.busy || !c.permission;
+  if(c.taskId)return <BotQueueAttachmentsEnvironment controller={c} legacyEditing={false} onActiveChange={setAttachmentsActive}/>;
+  const disabled = c.busy || !c.permission || attachmentsActive;
   const queued =
     c.queue?.deliveries
       .filter((d) => d.status === "queued")
@@ -37,6 +40,7 @@ export function BotConversationQueue({
   return (
     <section aria-label="Bot queue" className="space-y-3">
       <h3>Queue</h3>
+      <BotQueueAttachmentsEnvironment controller={c} legacyEditing={edit!==null} onActiveChange={setAttachmentsActive}/>
       {c.queue?.hold && <p>Queue held by channel work.</p>}
       {(c.queue?.deliveries ?? [])
         .filter((d) => d.status !== "completed" && d.status !== "cancelled")

@@ -1,4 +1,7 @@
 /** Maintained Openbot service extension. No HTTP route or runtime capability is implied. */
+export class ChannelCodingAuthorityError extends Error {
+  override readonly name = "ChannelCodingAuthorityError";
+}
 export interface CodingBinding {
   channelId: string;
   taskId: string;
@@ -10,11 +13,50 @@ export interface CodingBinding {
   requesterId: string;
   operationId: string;
 }
+export interface CodingProgress {
+  eventId: string;
+  status: "executing" | "needs_input" | "needs_approval";
+  updatedAt: string;
+}
+export interface CodingProgressReceipt extends CodingProgress {
+  delivery: "accepted" | "rejected" | "uncertain";
+}
+export function decodeCodingProgress(value: unknown): CodingProgress {
+  if (
+    !isCodingObject(value) ||
+    !("eventId" in value) ||
+    !("status" in value) ||
+    !("updatedAt" in value) ||
+    typeof value.eventId !== "string" ||
+    !/^[a-f0-9]{64}$/.test(value.eventId) ||
+    (value.status !== "executing" &&
+      value.status !== "needs_input" &&
+      value.status !== "needs_approval") ||
+    typeof value.updatedAt !== "string" ||
+    !Number.isFinite(Date.parse(value.updatedAt))
+  )
+    throw new Error("Invalid coding progress.");
+  return {
+    eventId: value.eventId,
+    status: value.status,
+    updatedAt: value.updatedAt,
+  };
+}
 export interface CodingReceipt {
+  progress?: CodingProgressReceipt[];
   binding: CodingBinding;
+  /** Engine-private: never projected into tool arguments/results or model history. */
+  attestation?: {
+    credentialHash: string;
+    originRef: string | null;
+    requesterKind: "session" | "routine" | "agent";
+    payloadHash: string;
+    /** Definitive first-attempt refusal; no external coding work was accepted. */
+    refused?: true;
+  };
   result: null | { messageId: string; text: string };
   /** Absent on old receipts: old bindings never acquire a lease by replay. */
-  lease?: { reservedAt: number; expiresAt: number; providerCompleted: boolean };
+  lease?: { reservedAt: number; renewedAt?: number; expiresAt: number; providerCompleted: boolean };
 }
 export interface CodingActor {
   /** Supplied by a trusted, assignment-scoped transport, never by request JSON. */
@@ -133,17 +175,85 @@ export function decodeCodingReceipt(value: unknown): CodingReceipt {
       typeof source.expiresAt !== "number" ||
       !Number.isSafeInteger(source.expiresAt) ||
       source.expiresAt <= source.reservedAt ||
-      source.expiresAt - source.reservedAt > 30 * 60_000 ||
+      ("renewedAt" in source &&
+        (typeof source.renewedAt !== "number" ||
+          !Number.isSafeInteger(source.renewedAt) ||
+          source.renewedAt < source.reservedAt ||
+          source.renewedAt >= source.expiresAt)) ||
+      source.expiresAt -
+        ("renewedAt" in source && typeof source.renewedAt === "number"
+          ? source.renewedAt
+          : source.reservedAt) >
+        30 * 60_000 ||
       typeof source.providerCompleted !== "boolean"
     )
       throw new Error("Invalid coding lease.");
     lease = {
       reservedAt: source.reservedAt,
+      ...("renewedAt" in source && typeof source.renewedAt === "number"
+        ? { renewedAt: source.renewedAt }
+        : {}),
       expiresAt: source.expiresAt,
       providerCompleted: source.providerCompleted,
     };
   }
-  return { binding, result, ...(lease === undefined ? {} : { lease }) };
+  let attestation: CodingReceipt["attestation"];
+  if ("attestation" in value) {
+    const a = value.attestation;
+    if (
+      !isCodingObject(a) ||
+      !("credentialHash" in a) ||
+      !("originRef" in a) ||
+      !("requesterKind" in a) ||
+      !("payloadHash" in a) ||
+      typeof a.credentialHash !== "string" ||
+      !/^[a-f0-9]{64}$/.test(a.credentialHash) ||
+      (a.originRef !== null &&
+        (typeof a.originRef !== "string" || !/^[a-f0-9]{64}$/.test(a.originRef))) ||
+      (a.requesterKind !== "session" &&
+        a.requesterKind !== "routine" &&
+        a.requesterKind !== "agent") ||
+      typeof a.payloadHash !== "string" ||
+      !/^[a-f0-9]{64}$/.test(a.payloadHash)
+    )
+      throw new Error("Invalid coding attestation.");
+    if ("refused" in a && a.refused !== true) throw new Error("Invalid coding refusal.");
+    attestation = {
+      credentialHash: a.credentialHash,
+      originRef: a.originRef,
+      requesterKind: a.requesterKind,
+      payloadHash: a.payloadHash,
+      ...("refused" in a ? { refused: true as const } : {}),
+    };
+  }
+  return {
+    binding,
+    result,
+    ...("progress" in value
+      ? {
+          progress: (() => {
+            if (!Array.isArray(value.progress)) throw new Error("Invalid progress receipts.");
+            const ids = new Set<string>();
+            return value.progress.map((entry: unknown): CodingProgressReceipt => {
+              const event = decodeCodingProgress(entry);
+              if (
+                !isCodingObject(entry) ||
+                !("delivery" in entry) ||
+                (entry.delivery !== "accepted" &&
+                  entry.delivery !== "rejected" &&
+                  entry.delivery !== "uncertain") ||
+                ids.has(event.eventId)
+              )
+                throw new Error("Invalid progress receipt.");
+              ids.add(event.eventId);
+              return { ...event, delivery: entry.delivery };
+            });
+          })(),
+        }
+      : {}),
+    ...(lease === undefined ? {} : { lease }),
+    ...(attestation === undefined ? {} : { attestation }),
+  };
 }
 function same(a: CodingBinding, b: CodingBinding): boolean {
   return a.taskRevision === b.taskRevision && fields.every((field) => a[field] === b[field]);
@@ -154,7 +264,7 @@ export function channelCoding(
   port: CodingPort,
   actor: CodingActor,
   binding: CodingBinding,
-  action: "bind" | "receipt" | "submit",
+  action: "bind" | "receipt" | "submit" | "renew" | "refuse",
   text?: string,
 ): CodingReceipt | null {
   decodeCodingReceipt({ binding, result: null });
@@ -167,7 +277,7 @@ export function channelCoding(
     actor.requesterId !== binding.requesterId ||
     view.requesterId !== binding.requesterId
   )
-    throw new Error("Coding authority mismatch.");
+    throw new ChannelCodingAuthorityError("Coding authority mismatch.");
   const assignment = view.assignment;
   if (
     assignment.id !== binding.assignmentId ||
@@ -177,7 +287,7 @@ export function channelCoding(
     assignment.taskRevision !== binding.taskRevision ||
     assignment.requestMessageId !== binding.requestMessageId
   )
-    throw new Error("Coding assignment mismatch.");
+    throw new ChannelCodingAuthorityError("Coding assignment mismatch.");
   const receipt = view.receipt;
   if (receipt && !same(receipt.binding, binding)) throw new Error("Coding operation conflict.");
   // Historical receipt reads reconcile uncertain submission without reviving old work.
@@ -191,9 +301,33 @@ export function channelCoding(
     view.task.ownerAgentId !== binding.agentId ||
     view.task.requestMessageId !== binding.requestMessageId
   )
-    throw new Error("Coding assignment is stale.");
+    throw new ChannelCodingAuthorityError("Coding assignment is stale.");
+  if (receipt?.attestation?.refused)
+    throw new ChannelCodingAuthorityError("Coding request was refused.");
+  if (action === "refuse") {
+    if (!receipt?.attestation || receipt.result || view.result)
+      throw new ChannelCodingAuthorityError("Coding reservation cannot refuse.");
+    const next: CodingReceipt = {
+      ...receipt,
+      attestation: { ...receipt.attestation, refused: true },
+    };
+    port.commit(next, false);
+    return next;
+  }
   const now = port.now();
-  if (receipt?.lease && now >= receipt.lease.expiresAt) throw new Error("Coding lease expired.");
+  if (receipt?.lease && now >= receipt.lease.expiresAt)
+    throw new ChannelCodingAuthorityError("Coding lease expired.");
+  if (action === "renew") {
+    if (!receipt?.lease || receipt.result)
+      throw new ChannelCodingAuthorityError("Coding reservation cannot renew.");
+    const next = {
+      ...receipt,
+      lease: { ...receipt.lease, renewedAt: now, expiresAt: now + 30 * 60_000 },
+    };
+    decodeCodingReceipt(next);
+    port.commit(next, false);
+    return next;
+  }
   if (action === "bind") {
     if (receipt) return receipt;
     if (view.result) throw new Error("The assignment already has a result.");
@@ -233,7 +367,7 @@ export function codingLifetime(
   status: string,
 ): "hold" | "complete" | "interrupt" {
   const receipt = view.receipt;
-  if (!receipt?.lease || status !== "completed") return "complete";
+  if (!receipt?.lease || receipt.attestation?.refused || status !== "completed") return "complete";
   const b = receipt.binding;
   const a = view.assignment;
   if (

@@ -46,6 +46,19 @@ function row(value: Json): Json {
 // Frozen core routes use bot vocabulary; optional capability routes already use agent vocabulary.
 export function normalize(path: string, value: Json): Json {
   if (
+    new URL(path).pathname === "/v1/messages/search" &&
+    isObject(value) &&
+    Array.isArray(value.results)
+  )
+    return {
+      ...value,
+      results: value.results.map((hit) => {
+        if (!isObject(hit)) return hit;
+        const result = reference(hit, "botId", "agentId");
+        return isObject(result.message) ? { ...result, message: message(result.message) } : result;
+      }),
+    };
+  if (
     !/^\/v1\/agents\/[^/]+\/(?:conversation(?:-page)?|queue(?:\/edit)?|messages|memories(?:\/[^/]+)?|routines(?:\/[^/]+)?(?:\/(?:runs|test))?)$/.test(
       new URL(path).pathname,
     )

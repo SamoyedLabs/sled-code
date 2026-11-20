@@ -1,11 +1,16 @@
 import type { BrowserViewInput } from "@t3tools/contracts";
 
-export function browserTextInput(text: string): readonly BrowserViewInput[] {
+export function browserTextInput(
+  text: string,
+  { clipboard = false }: { readonly clipboard?: boolean } = {},
+): readonly BrowserViewInput[] {
   if (text.length > 64) throw new Error("Send at most 64 characters at a time.");
   if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(text))
     throw new Error("This text contains an unsupported control character.");
+  const normalized = text.replace(/\r\n?/g, "\n");
+  if (clipboard) return normalized ? [{ type: "paste", text: normalized }] : [];
   const inputs: BrowserViewInput[] = [];
-  for (const character of text.replace(/\r\n?/g, "\n")) {
+  for (const character of normalized) {
     if (character === "\n" || character === "\t") {
       const key = character === "\n" ? "Enter" : "Tab";
       inputs.push(

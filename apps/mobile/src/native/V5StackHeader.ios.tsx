@@ -152,6 +152,7 @@ function convertItems(items: NativeStackHeaderItem[], prefix: string): HeaderIte
 export function V5StackHeader(props: {
   readonly options: Options;
   readonly canGoBack: boolean;
+  readonly onBack?: () => void;
   /** Workspace split columns share the vertical bar with the workspace tab bar. */
   readonly column?: "primary" | "detail";
   /** The workspace's compose action, shown as its own group in this column's bar. */
@@ -165,6 +166,18 @@ export function V5StackHeader(props: {
   const searchRef = useRef<SearchBarCommands>(null);
   const itemProps = { tintColor: options.headerTintColor, canGoBack: props.canGoBack };
   const leading = convertItems(options.unstable_headerLeftItems?.(itemProps) ?? [], "leading");
+  // v5 blocks both native Back and swipes with preventNativeDismiss; keep button navigation explicit.
+  const explicitBack =
+    props.canGoBack && options.headerBackVisible !== false && options.gestureEnabled === false;
+  if (explicitBack && props.onBack) {
+    leading.unshift({
+      type: "item",
+      id: "explicit-back",
+      title: "Back",
+      icon: { type: "sfSymbol", name: "chevron.left" },
+      onPress: props.onBack,
+    });
+  }
   const trailing = convertItems(
     [
       ...(options.unstable_headerCenterItems?.() ?? []),
@@ -286,7 +299,9 @@ export function V5StackHeader(props: {
   const searchButton = !bottomSearch && searchOptions?.placement === "integratedButton";
   const itemsWidth =
     BAR_MARGINS +
-    (props.canGoBack && options.headerBackVisible !== false ? BAR_BUTTON_WIDTH : 0) +
+    (props.canGoBack && options.headerBackVisible !== false && !explicitBack
+      ? BAR_BUTTON_WIDTH
+      : 0) +
     (searchButton ? BAR_BUTTON_WIDTH : 0) +
     [...leading, ...trailing].reduce(
       (width, item) =>
@@ -323,7 +338,7 @@ export function V5StackHeader(props: {
         transparent={options.headerTransparent}
         title={title}
         subtitle={options.unstable_headerSubtitle ?? options.headerSubtitle}
-        backButtonHidden={options.headerBackVisible === false}
+        backButtonHidden={options.headerBackVisible === false || explicitBack}
         ios={{
           navigationItemStyle: options.unstable_navigationItemStyle,
           // Opt-ins apply only where the Duo is short: folded, or held landscape. The Duo

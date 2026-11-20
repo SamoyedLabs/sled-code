@@ -1,3 +1,4 @@
+import { BotChannelGrants } from "./BotChannelGrants";
 import { useState } from "react";
 import { Switch, View } from "react-native";
 import * as Crypto from "expo-crypto";
@@ -12,10 +13,22 @@ import { Button } from "../../components/ui/Button";
 import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
 import * as Dialog from "../../components/ui/Dialog";
 
-type Props = { environmentId: EnvironmentId; hostId: string };
+type Props = {
+  environmentId: EnvironmentId;
+  hostId: string;
+  initialChannelId?: string;
+  initialTaskId?: string;
+  defaultExpanded?: boolean;
+  createOnOpen?: boolean;
+  onCreated?: (channelId: string, name: string) => void;
+  onCancelCreation?: () => void;
+};
 type Controller = ReturnType<typeof useBotChannels>;
 export function BotChannels(props: Props) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(
+    props.defaultExpanded || props.initialChannelId !== undefined,
+  );
+  if (props.createOnOpen) return <ChannelsPanel {...props} />;
   return (
     <View className="gap-3">
       <Button
@@ -57,7 +70,13 @@ function confirm(title: string, message: string, action: () => void) {
     { text: "Continue", style: "destructive", onPress: action },
   ]);
 }
-function ChannelSettings({ controller }: { controller: Controller }) {
+function ChannelSettings({
+  controller,
+  onDiscard,
+}: {
+  controller: Controller;
+  onDiscard?: () => void;
+}) {
   const edit = controller.edit;
   if (!edit) return null;
   const visible = new Set(controller.agents.map((agent) => agent.id));
@@ -164,7 +183,7 @@ function ChannelSettings({ controller }: { controller: Controller }) {
       <Button
         label="Discard draft"
         disabled={controller.busy}
-        onPress={() => controller.setEdit(null)}
+        onPress={onDiscard ?? (() => controller.setEdit(null))}
       />
     </View>
   );
@@ -275,8 +294,19 @@ function TaskRow({ controller, task }: { controller: Controller; task: OpenbotCh
     </View>
   );
 }
-function ChannelsPanel({ environmentId, hostId }: Props) {
-  const controller = useBotChannels(environmentId, hostId, Crypto.randomUUID);
+function ChannelsPanel({
+  environmentId,
+  hostId,
+  initialChannelId,
+  initialTaskId,
+  createOnOpen,
+  onCreated,
+  onCancelCreation,
+}: Props) {
+  const controller = useBotChannels(environmentId, hostId, Crypto.randomUUID, initialChannelId, {
+    createOnOpen,
+    onCreated,
+  });
   const [archived, setArchived] = useState(false);
   const [messageLimit, setMessageLimit] = useState(50);
   const [taskLimit, setTaskLimit] = useState(25);
@@ -287,6 +317,17 @@ function ChannelsPanel({ environmentId, hostId }: Props) {
       return agent ? [{ id: agent.id, name: agent.name }] : [];
     }) ?? [];
   const disabled = controller.busy || !controller.canOperate;
+  if (createOnOpen)
+    return (
+      <View className="gap-4">
+        {controller.error && (
+          <Text accessibilityRole="alert" className="text-danger">
+            {controller.error}
+          </Text>
+        )}
+        <ChannelSettings controller={controller} onDiscard={onCancelCreation} />
+      </View>
+    );
   return (
     <View className="gap-4">
       <Text className="text-foreground-muted">
@@ -336,6 +377,15 @@ function ChannelsPanel({ environmentId, hostId }: Props) {
       <ChannelSettings controller={controller} />
       {channel && (
         <View className="gap-4">
+          {(controller.recipient ?? channel.leadAgentId) && (
+            <BotChannelGrants
+              key={`${environmentId}:${hostId}:${channel.id}:${controller.recipient ?? channel.leadAgentId}`}
+              environmentId={environmentId}
+              hostId={hostId}
+              channelId={channel.id}
+              agentId={(controller.recipient ?? channel.leadAgentId)!}
+            />
+          )}
           <Text accessibilityRole="header" className="font-t3-medium">
             {channel.name}
             {channel.archived ? " · archived" : ""}
@@ -462,14 +512,20 @@ function ChannelsPanel({ environmentId, hostId }: Props) {
             disabled={
               disabled || channel.archived || Boolean(controller.edit) || !controller.text.trim()
             }
-            onPress={controller.send}
+            onPress={() => void controller.send()}
           />
           <Text accessibilityRole="header" className="font-t3-medium">
             Tasks
           </Text>
-          {controller.tasks.slice(0, taskLimit).map((task) => (
-            <TaskRow key={task.id} controller={controller} task={task} />
-          ))}
+          {[...controller.tasks]
+            .sort(
+              (left, right) =>
+                Number(right.id === initialTaskId) - Number(left.id === initialTaskId),
+            )
+            .slice(0, taskLimit)
+            .map((task) => (
+              <TaskRow key={task.id} controller={controller} task={task} />
+            ))}
           {controller.tasks.length > taskLimit && (
             <Button label="Show more tasks" onPress={() => setTaskLimit(taskLimit + 25)} />
           )}

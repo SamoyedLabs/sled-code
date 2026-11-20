@@ -506,6 +506,9 @@ function WorkspaceStackView(props: ViewProps & { readonly nativeColumns: boolean
   const baseRoute = { key: `${props.state.key}:workspace`, name: "Workspace" };
   const visibleRoute = projection.detail.at(-1) ?? primaryRoute;
   const workspacePage = !workspaceUsesColumns(workspace.state.selectedTab, workspace.settingsOpen);
+  const botsCoverWorkspace = projection.overlays.some(
+    (route) => route.name === "Bots" || route.name === "BotNotification",
+  );
   const baseDescriptor: Descriptor = {
     ...primaryDescriptor,
     navigation: props.descriptors[visibleRoute.key]!.navigation,
@@ -513,37 +516,43 @@ function WorkspaceStackView(props: ViewProps & { readonly nativeColumns: boolean
     route: visibleRoute,
     options: { headerShown: false },
     render: () => (
-      <WorkspaceNativeTabs
-        hidden={
-          !workspacePage &&
-          projection.detail.length > 0 &&
-          !primaryVisible &&
-          !layout.usesSplitView &&
-          (metrics?.verticalBarEdge ?? "none") === "none"
-        }
+      <View
+        className="flex-1"
+        accessibilityElementsHidden={botsCoverWorkspace}
+        importantForAccessibility={botsCoverWorkspace ? "no-hide-descendants" : "auto"}
       >
-        {props.nativeColumns && !workspacePage ? (
-          <WorkspaceColumns
-            {...props}
-            descriptors={descriptors}
-            primary={primaryRoute}
-            detail={projection.detail}
-          />
-        ) : (
-          <V5CardStackView
-            {...props}
-            onRootVisibilityChange={setPrimaryVisible}
-            onNativePopChange={setNativelyPoppingWorkspaceRoute}
-            descriptors={descriptors}
-            state={{
-              ...props.state,
-              routes: [primaryRoute, ...projection.detail],
-              index: projection.detail.length,
-              preloadedRoutes: [],
-            }}
-          />
-        )}
-      </WorkspaceNativeTabs>
+        <WorkspaceNativeTabs
+          hidden={
+            !workspacePage &&
+            projection.detail.length > 0 &&
+            !primaryVisible &&
+            !layout.usesSplitView &&
+            (metrics?.verticalBarEdge ?? "none") === "none"
+          }
+        >
+          {props.nativeColumns && !workspacePage ? (
+            <WorkspaceColumns
+              {...props}
+              descriptors={descriptors}
+              primary={primaryRoute}
+              detail={projection.detail}
+            />
+          ) : (
+            <V5CardStackView
+              {...props}
+              onRootVisibilityChange={setPrimaryVisible}
+              onNativePopChange={setNativelyPoppingWorkspaceRoute}
+              descriptors={descriptors}
+              state={{
+                ...props.state,
+                routes: [primaryRoute, ...projection.detail],
+                index: projection.detail.length,
+                preloadedRoutes: [],
+              }}
+            />
+          )}
+        </WorkspaceNativeTabs>
+      </View>
     ),
   };
   const overlays = partitionStackPresentations(projection.overlays, (route) => {

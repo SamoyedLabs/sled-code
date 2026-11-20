@@ -32,7 +32,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import { Atom, AtomRegistry, AsyncResult } from "effect/reactivity";
 import { EnvironmentRegistry } from "../connection/registry.ts";
 import { createCommandPermissions } from "./commandPermissions.ts";
-import { createEnvironmentRpcCommand } from "./runtime.ts";
+import { createEnvironmentQueryAtomFamily, createEnvironmentRpcCommand } from "./runtime.ts";
 import { AVAILABLE_CONNECTION_STATE } from "../connection/model.ts";
 import { createPeerLinkEnvironmentAtoms } from "./peerLinks.ts";
 import { createOpenbotAtoms } from "../openbot/state.ts";
@@ -67,6 +67,68 @@ const setup = Effect.gen(function* () {
   registry.mount(sessions(env));
   yield* Effect.addFinalizer(() => Effect.sync(() => registry.dispose()));
   return registry;
+});
+
+describe("query permissions", () => {
+  it.live("uses the destination session for scoped reads and refuses an incomplete grant", () =>
+    Effect.gen(function* () {
+      const registry = yield* setup;
+      const calls: string[] = [];
+      const input = (agentId: string) => ({
+        hostId: "chosen-host",
+        request: { operation: "conversation.pins.list" as const, agentId },
+      });
+      const client = {
+        [WS_METHODS.openbotReadToHost]: (target: ReturnType<typeof input>) =>
+          Effect.sync(() => {
+            calls.push(target.request.agentId);
+            return { agentId: target.request.agentId, pins: [] };
+          }),
+      };
+      const supervisor = {
+        target: { environmentId: env },
+        session: yield* SubscriptionRef.make(Option.some({ client } as unknown as RpcSession)),
+        state: yield* SubscriptionRef.make({
+          ...AVAILABLE_CONNECTION_STATE,
+          phase: "connected" as const,
+        }),
+      } as EnvironmentSupervisor["Service"];
+      const queryRuntime = Atom.runtime(
+        Layer.succeed(EnvironmentRegistry, {
+          run: (id, effect) => {
+            expect(id).toBe(env);
+            return Effect.provideService(effect, EnvironmentSupervisor, supervisor);
+          },
+          followStream: (id, stream) => {
+            expect(id).toBe(env);
+            return Stream.provideService(stream, EnvironmentSupervisor, supervisor);
+          },
+        } as EnvironmentRegistry["Service"]),
+      );
+      const read = createEnvironmentQueryAtomFamily(queryRuntime, {
+        label: "test.scoped-openbot-query",
+        execute: (target: ReturnType<typeof input>) => requestGuarded(WS_METHODS.openbotReadToHost, target),
+      });
+      const readPins = (agentId: string) =>
+        Effect.gen(function* () {
+          const atom = read({ environmentId: env, input: input(agentId) });
+          yield* AtomRegistry.mount(registry, atom);
+          return yield* AtomRegistry.getResult(registry, atom, { suspendOnWaiting: true }).pipe(
+            Effect.tap(() => Effect.yieldNow),
+            Effect.timeout("2 seconds"),
+          );
+        }).pipe(Effect.scoped);
+      const scopes = [AuthOrchestrationReadScope, AuthOrchestrationOperateScope];
+      registry.set(sessions(env), AsyncResult.success({ ...grant(false), scopes, permissions: scopes }));
+      expect(yield* readPins("allowed")).toEqual({ agentId: "allowed", pins: [] });
+      const readOnly = [AuthOrchestrationReadScope];
+      registry.set(sessions(env), AsyncResult.success({ ...grant(false), scopes: readOnly, permissions: readOnly }));
+      expect(yield* readPins("denied").pipe(Effect.flip)).toMatchObject({
+        requiredScope: AuthOrchestrationOperateScope,
+      });
+      expect(calls).toEqual(["allowed"]);
+    }).pipe(Effect.scoped),
+  );
 });
 
 describe("command permissions", () => {

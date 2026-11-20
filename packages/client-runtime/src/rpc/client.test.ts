@@ -85,11 +85,15 @@ describe("environment RPC", () => {
       const { activeSession, supervisor } = yield* makeHarness();
       const client = {
         [WS_METHODS.openbotStatus]: () => Effect.succeed({ state: "stopped" as const }),
+        [WS_METHODS.openbotContinuityStatus]: () => Effect.succeed({ enabled: false }),
+        [WS_METHODS.openbotMaintenanceStatus]: () => Effect.succeed({ proposals: [] }),
         [WS_METHODS.openbotStart]: () => Effect.die("An unguarded mutation reached the server"),
       } as unknown as WsRpcProtocolClient;
       yield* SubscriptionRef.set(activeSession, Option.some(session(client)));
       yield* Effect.gen(function* () {
         expect(yield* requestGuarded(WS_METHODS.openbotStatus, {})).toEqual({ state: "stopped" });
+        expect(yield* requestGuarded(WS_METHODS.openbotContinuityStatus, {})).toEqual({ enabled: false });
+        expect(yield* requestGuarded(WS_METHODS.openbotMaintenanceStatus, {})).toEqual({ proposals: [] });
         expect((yield* Effect.flip(requestGuarded(WS_METHODS.openbotStart, {}))).message).toContain(
           "settings:write",
         );

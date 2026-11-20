@@ -1,7 +1,10 @@
+import { APPROVAL_SHUTDOWN_REASON } from "./ApprovalRecovery.ts";
+import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
 import { runRanAfter } from "@t3tools/shared/orchestrationV2ThreadError";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import {
   CommandId,
+  ProviderRequestKind,
   isProviderNativeSubagentThread,
   type OrchestrationV2DomainEvent,
   type ProviderThreadId,
@@ -385,6 +388,59 @@ export const make = Effect.gen(function* () {
         });
       }
       for (const run of runs) {
+        // Approval callbacks belong to the lost process. Retain their history,
+        // but never turn an expired approval into authority for a new turn.
+        const lostApproval = projection.runtimeRequests.some(
+          (request) =>
+            Schema.is(ProviderRequestKind)(request.kind) &&
+            (request.status === "pending" ||
+              ((request.status === "cancelled" || request.status === "expired") &&
+                request.responseCapability.type === "not_resumable" &&
+                request.responseCapability.reason === APPROVAL_SHUTDOWN_REASON)) &&
+            projection.providerTurns.some(
+              (turn) =>
+                turn.id === request.providerTurnId && turn.runAttemptId === run.activeAttemptId,
+            ),
+        );
+        if (lostApproval) {
+          events.push({
+            id: yield* allocateEventId(),
+            type: "turn-item.updated",
+            threadId: projection.thread.id,
+            runId: run.id,
+            occurredAt: now,
+            payload: {
+              id: ids.derive.runSignalTurnItem({ runId: run.id, signal: "approval-process-lost" }),
+              threadId: projection.thread.id,
+              runId: run.id,
+              nodeId: null,
+              providerThreadId: run.providerThreadId,
+              providerTurnId: null,
+              nativeItemRef: null,
+              parentItemId: null,
+              ordinal:
+                Math.max(
+                  0,
+                  ...projection.turnItems
+                    .filter((item) => item.runId === run.id)
+                    .map((item) => item.ordinal),
+                ) + 1,
+              type: "error",
+              status: "failed",
+              title: "Approval interrupted by server restart",
+              failure: makeProviderFailure({
+                class: "transport_error",
+                code: "approval_process_lost",
+                retryable: false,
+                message:
+                  "The provider process closed while waiting for approval. Its approval callback is no longer available. No approval was granted and this request cannot be answered. Resume this thread explicitly if the provider supports it; any protected action must request approval again. Check whether earlier actions took effect before repeating them.",
+              }),
+              startedAt: now,
+              completedAt: now,
+              updatedAt: now,
+            },
+          });
+        }
         events.push({
           id: yield* allocateEventId(),
           type: "run.updated",

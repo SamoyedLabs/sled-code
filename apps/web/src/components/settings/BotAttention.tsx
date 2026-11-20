@@ -13,8 +13,18 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Checkbox } from "../ui/checkbox";
+import { CheckCheckIcon, InboxIcon } from "lucide-react";
+import { WorkspacePageContainer } from "../WorkspacePageContainer";
+import { Skeleton } from "../ui/skeleton";
 
-export function BotAttention({ environmentId }: { environmentId: EnvironmentId }) {
+type RequestConversation = { label: string; onOpen: () => void };
+export function BotAttention({
+  environmentId,
+  conversationForRequest,
+}: {
+  environmentId: EnvironmentId;
+  conversationForRequest?: (request: OpenbotAttentionRequest) => RequestConversation | null;
+}) {
   const query = useEnvironmentQuery(openbot.attention({ environmentId, input: {} }));
   const changes = useEnvironmentQuery(openbot.changes({ environmentId, input: {} }));
   const agents = useEnvironmentQuery(openbot.agents({ environmentId, input: {} }));
@@ -22,61 +32,86 @@ export function BotAttention({ environmentId }: { environmentId: EnvironmentId }
   const snapshot = query.data;
   const ready = snapshot?.state === "ready" && !query.error && !changes.error && !query.isPending;
   return (
-    <section aria-label="Bot requests" className="space-y-3">
-      <h3 className="text-sm font-medium">Needs your input</h3>
-      {(query.error || changes.error) && (
-        <p role="alert" className="text-sm text-destructive">
-          {query.error ?? changes.error}
-        </p>
-      )}
-      {(!snapshot || snapshot.state !== "ready") && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {snapshot?.state === "disconnected"
-            ? "Bot requests are unavailable while the engine is offline."
-            : "Connecting to live bot requests…"}
-        </p>
-      )}
-      {snapshot?.state === "ready" && !snapshot.complete && (
-        <p role="status" className="text-sm text-muted-foreground">
-          Showing a partial set of requests. More may be waiting; this list updates as you respond.
-        </p>
-      )}
-      {ready && snapshot.complete && snapshot.requests.length === 0 && (
-        <p className="text-sm text-muted-foreground">No bot requests are waiting.</p>
-      )}
-      {!canRespond && (
-        <p className="text-sm text-muted-foreground">
-          Settings permission is required to respond to bot requests.
-        </p>
-      )}
-      {snapshot?.requests.map((request) => (
-        <AttentionRequest
-          key={`${snapshot.hostId}:${request.kind}:${request.requestId}`}
-          environmentId={environmentId}
-          hostId={snapshot?.hostId ?? null}
-          request={request}
-          agentName={
-            agents.data?.find((agent) => agent.id === request.agentId)?.name ?? request.agentId
-          }
-          disabled={!ready || !canRespond}
-        />
-      ))}
-    </section>
+    <WorkspacePageContainer>
+      <section aria-label="Bot requests" className="space-y-5">
+        <header className="space-y-2">
+          <h2 className="text-balance text-xl font-semibold">Needs your input</h2>
+          <p className="text-pretty text-sm text-muted-foreground">
+            Review questions, permissions and requests that are holding up your bots.
+          </p>
+        </header>
+        {(query.error || changes.error) && (
+          <p role="alert" className="text-sm text-destructive">
+            {query.error ?? changes.error}
+          </p>
+        )}
+        {(!snapshot || snapshot.state !== "ready") && (
+          <div role="status" className="space-y-3 rounded-xl border border-border/60 p-5">
+            <p className="text-sm text-muted-foreground">
+              {snapshot?.state === "disconnected"
+                ? "Bot requests are unavailable while the engine is offline."
+                : "Connecting to live bot requests…"}
+            </p>
+            {query.isPending && (
+              <>
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-4 w-2/3" />
+              </>
+            )}
+          </div>
+        )}
+        {snapshot?.state === "ready" && !snapshot.complete && (
+          <p role="status" className="text-sm text-muted-foreground">
+            Showing a partial set of requests. More may be waiting; this list updates as you
+            respond.
+          </p>
+        )}
+        {ready && snapshot.complete && snapshot.requests.length === 0 && (
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-border/60 px-6 py-12 text-center">
+            <CheckCheckIcon aria-hidden className="size-7 text-muted-foreground" />
+            <h3 className="text-base font-medium">You’re all caught up</h3>
+            <p className="text-pretty text-sm text-muted-foreground">
+              Questions and approvals will appear here when a bot needs you.
+            </p>
+          </div>
+        )}
+        {!canRespond && (
+          <p className="text-sm text-muted-foreground">
+            Settings permission is required to respond to bot requests.
+          </p>
+        )}
+        {snapshot?.requests.map((request) => (
+          <BotAttentionRequest
+            key={`${snapshot.hostId}:${request.kind}:${request.requestId}`}
+            environmentId={environmentId}
+            hostId={snapshot?.hostId ?? null}
+            request={request}
+            agentName={
+              agents.data?.find((agent) => agent.id === request.agentId)?.name ?? request.agentId
+            }
+            disabled={!ready || !canRespond}
+            conversation={conversationForRequest?.(request) ?? null}
+          />
+        ))}
+      </section>
+    </WorkspacePageContainer>
   );
 }
 
-function AttentionRequest({
+export function BotAttentionRequest({
   environmentId,
   request,
   hostId,
   agentName,
   disabled,
+  conversation = null,
 }: {
   environmentId: EnvironmentId;
   request: OpenbotAttentionRequest;
   hostId: string | null;
   agentName: string;
   disabled: boolean;
+  conversation?: RequestConversation | null;
 }) {
   const admin = useAtomCommand(openbot.admin, { reportFailure: false });
   const answerRequest = useAtomCommand(openbot.attentionRespond, { reportFailure: false });
@@ -103,13 +138,16 @@ function AttentionRequest({
     }
     setBusy(false);
   };
-  const answer = promptAnswerRequest(request, answers);
+  const secure =
+    request.kind === "prompt" && request.questions?.some((question) => question.isSecret);
+  const answer = secure ? null : promptAnswerRequest(request, answers);
   const unavailable = disabled || busy || submitted || hostId === null;
   const approval = request.approval;
   const tabId = request.tabId;
   return (
-    <div className="space-y-3 rounded-lg border p-4">
-      <p className="break-words text-sm font-medium">
+    <div className="min-w-0 space-y-4 rounded-xl border border-border/60 bg-card/40 p-5">
+      <p className="flex items-center gap-2 break-words text-sm font-medium">
+        <InboxIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
         {agentName} ·{" "}
         {request.kind === "approval"
           ? `${request.approvalKind ?? "Action"} approval`
@@ -214,7 +252,24 @@ function AttentionRequest({
           </div>
         </>
       )}
-      {request.kind === "prompt" && (
+      {request.kind === "prompt" && secure && (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            This bot is waiting for a private response. Open its conversation to review the secure
+            form.
+          </p>
+          {conversation ? (
+            <Button size="sm" variant="outline" onClick={conversation.onOpen}>
+              Open {conversation.label}
+            </Button>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Open the original conversation to respond.
+            </p>
+          )}
+        </div>
+      )}
+      {request.kind === "prompt" && !secure && (
         <form
           className="space-y-3"
           onSubmit={(event) => {

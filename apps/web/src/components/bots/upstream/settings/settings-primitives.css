@@ -1,0 +1,834 @@
+/* Selected unchanged OpenBot 0.60.0 primitive rules; see ../OPENBOT-LICENSE. */
+@scope (.openbot-react) {
+  :where(.ui-text, .ui-heading) {
+    margin: 0;
+    color: var(--openbot-text-primary);
+    font-family: var(--openbot-font-sans);
+  }
+
+  :where(.ui-text)[data-tone="secondary"],
+  :where(.ui-heading)[data-tone="secondary"] {
+    color: var(--openbot-text-secondary);
+  }
+
+  :where(.ui-text)[data-tone="muted"],
+  :where(.ui-heading)[data-tone="muted"] {
+    color: var(--openbot-text-muted);
+  }
+
+  :where(.ui-text, .ui-heading)[data-tone="danger"] {
+    color: var(--openbot-danger);
+  }
+
+  :where(.ui-text, .ui-heading)[data-tone="success"] {
+    color: var(--openbot-success);
+  }
+
+  :where(.ui-text, .ui-heading)[data-tone="warning"] {
+    color: var(--openbot-warning);
+  }
+
+  :where(.ui-text)[data-variant="caption"] {
+    font-size: var(--openbot-text-sm);
+    font-weight: var(--openbot-weight-regular);
+    line-height: var(--openbot-leading-sm);
+  }
+
+  :where(.ui-text)[data-variant="label-sm"] {
+    font-size: var(--openbot-text-sm);
+    font-weight: var(--openbot-weight-medium);
+    line-height: var(--openbot-leading-sm);
+  }
+
+  :where(.ui-text)[data-variant="label"] {
+    font-size: var(--openbot-text-md);
+    font-weight: var(--openbot-weight-medium);
+    line-height: var(--openbot-leading-md);
+  }
+
+  :where(.ui-text)[data-variant="body-sm"] {
+    font-size: var(--openbot-text-md);
+    font-weight: var(--openbot-weight-regular);
+    line-height: var(--openbot-leading-md);
+  }
+
+  :where(.ui-text)[data-variant="body"] {
+    font-size: var(--openbot-text-lg);
+    font-weight: var(--openbot-weight-regular);
+    line-height: var(--openbot-leading-lg);
+  }
+
+  :where(.ui-heading)[data-size="sm"] {
+    font-size: var(--openbot-text-lg);
+    line-height: var(--openbot-leading-lg);
+  }
+
+  :where(.ui-heading)[data-size="md"] {
+    font-size: var(--openbot-text-xl);
+    line-height: var(--openbot-leading-xl);
+  }
+
+  :where(.ui-heading)[data-size="lg"] {
+    font-size: var(--openbot-text-2xl);
+    line-height: var(--openbot-leading-2xl);
+  }
+
+  :where(.ui-heading) {
+    font-weight: var(--openbot-weight-semibold);
+    letter-spacing: var(--openbot-tracking-tight);
+  }
+
+  .ui-text-truncate {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  :where(.ui-button) {
+    min-width: 0;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    gap: var(--openbot-space-1-5);
+    border: 1px solid transparent;
+    border-radius: var(--openbot-radius-md);
+    padding: 0 var(--openbot-space-4);
+    color: var(--openbot-text-primary);
+    font-family: var(--openbot-font-sans);
+    font-size: var(--openbot-text-md);
+    font-weight: var(--openbot-weight-medium);
+    line-height: 1;
+    text-decoration: none;
+    user-select: none;
+    white-space: nowrap;
+    transition:
+      background-color var(--openbot-duration-hover) ease,
+      border-color var(--openbot-duration-hover) ease,
+      color var(--openbot-duration-hover) ease,
+      box-shadow var(--openbot-duration-hover) ease,
+      opacity var(--openbot-duration-hover) ease;
+  }
+
+  .ui-button {
+    font-family: var(--openbot-font-sans);
+    font-size: var(--openbot-text-lg);
+    font-weight: var(--openbot-weight-medium);
+  }
+
+  :where(.ui-button-size-xs) {
+    height: var(--openbot-control-xs);
+    padding-inline: var(--openbot-space-2);
+    font-size: var(--openbot-text-sm);
+  }
+
+  :where(.ui-button-size-sm) {
+    height: var(--openbot-control-md);
+    padding-inline: var(--openbot-space-3);
+    font-size: var(--openbot-text-sm);
+  }
+
+  :where(.ui-button-size-default) {
+    height: var(--openbot-control-lg);
+  }
+
+  :where(.ui-button-size-lg) {
+    height: var(--openbot-control-xl);
+    padding-inline: var(--openbot-space-6);
+  }
+
+  /* A Lucide icon keeps width="24" when the caller sets no size, which is too large next to button
+   text. These rules have no specificity, so a size prop or a feature rule still wins. */
+  :where(.ui-button > svg[width="24"]) {
+    width: var(--openbot-icon-md);
+    height: var(--openbot-icon-md);
+    flex: 0 0 auto;
+    stroke-width: var(--openbot-icon-stroke);
+  }
+
+  :where(.ui-button-size-xs > svg[width="24"], .ui-button-size-sm > svg[width="24"]) {
+    width: var(--openbot-icon-sm);
+    height: var(--openbot-icon-sm);
+  }
+
+  :where(.ui-button-variant-default) {
+    background: var(--openbot-surface-light);
+    color: var(--openbot-text-on-light);
+  }
+
+  :where(.ui-button-variant-outline) {
+    border-color: var(--openbot-border);
+    background: var(--openbot-bg-control);
+    color: var(--openbot-text-secondary);
+  }
+
+  :where(.ui-button-variant-secondary) {
+    background: var(--openbot-bg-control-hover);
+    color: var(--openbot-text-primary);
+  }
+
+  :where(.ui-button-variant-ghost) {
+    background: transparent;
+    color: var(--openbot-text-muted);
+  }
+
+  :where(.ui-button-variant-destructive) {
+    background: var(--openbot-danger-soft);
+    color: var(--openbot-danger);
+  }
+
+  :where(.ui-button-variant-destructive-ghost) {
+    background: transparent;
+    color: var(--openbot-text-muted);
+  }
+
+  :where(.ui-button-variant-link) {
+    height: auto;
+    border-radius: var(--openbot-radius-xs);
+    background: transparent;
+    padding: 0;
+    color: var(--openbot-text-primary);
+    text-underline-offset: 4px;
+  }
+
+  :where(
+    .ui-button-variant-outline,
+    .ui-button-variant-secondary,
+    .ui-button-variant-ghost
+  )[aria-expanded="true"] {
+    background: var(--openbot-bg-control-hover);
+    color: var(--openbot-text-primary);
+  }
+
+  :where(.ui-button):focus-visible {
+    outline: 0;
+    box-shadow: var(--openbot-focus-ring);
+  }
+
+  :where(.ui-button-variant-destructive):focus-visible {
+    border-color: var(--openbot-danger-focus);
+  }
+
+  :where(.ui-button)[aria-invalid="true"] {
+    border-color: var(--openbot-danger-border);
+    box-shadow: 0 0 0 3px var(--openbot-danger-focus);
+  }
+
+  :where(.ui-button):disabled,
+  :where(.ui-button)[data-disabled] {
+    cursor: default;
+    opacity: 0.42;
+    pointer-events: none;
+  }
+
+  .ui-button-full {
+    width: 100%;
+  }
+
+  :where(.ui-button-size-icon-xs) {
+    width: var(--openbot-control-xs);
+    height: var(--openbot-control-xs);
+    padding: 0;
+  }
+
+  :where(.ui-button-size-icon-sm) {
+    width: var(--openbot-control-md);
+    height: var(--openbot-control-md);
+    padding: 0;
+  }
+
+  :where(.ui-button-size-icon) {
+    width: var(--openbot-control-lg);
+    height: var(--openbot-control-lg);
+    padding: 0;
+  }
+
+  :where(.ui-button-size-icon-lg) {
+    width: var(--openbot-control-xl);
+    height: var(--openbot-control-xl);
+    padding: 0;
+  }
+
+  :where(.ui-button-size-icon-xs) svg {
+    width: var(--openbot-icon-sm);
+    height: var(--openbot-icon-sm);
+  }
+
+  :where(.ui-input, .ui-textarea, .ui-native-select) {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--openbot-border-strong);
+    border-radius: var(--openbot-radius-md);
+    outline: 0;
+    background: var(--openbot-bg-control);
+    color: var(--openbot-text-primary);
+    font-family: var(--openbot-font-sans);
+    font-size: var(--openbot-text-md);
+    line-height: var(--openbot-leading-md);
+    transition:
+      background-color var(--openbot-duration-hover) ease,
+      border-color var(--openbot-duration-hover) ease,
+      box-shadow var(--openbot-duration-hover) ease;
+  }
+
+  :where(.ui-input, .ui-native-select)[data-size="sm"] {
+    height: var(--openbot-control-sm);
+    padding-inline: var(--openbot-space-2);
+  }
+
+  :where(.ui-input, .ui-native-select)[data-size="md"] {
+    height: var(--openbot-control-md);
+    padding-inline: var(--openbot-space-3);
+  }
+
+  :where(.ui-input, .ui-native-select)[data-size="lg"] {
+    height: var(--openbot-control-lg);
+    padding-inline: var(--openbot-space-3);
+  }
+
+  :where(.ui-textarea) {
+    min-height: 76px;
+    resize: vertical;
+    padding: var(--openbot-space-2) var(--openbot-space-3);
+  }
+
+  :where(.ui-textarea)::-webkit-resizer {
+    background-color: var(--openbot-bg-control);
+    background-image: linear-gradient(
+      135deg,
+      transparent 46%,
+      var(--openbot-text-muted) 46% 50%,
+      transparent 50% 62%,
+      var(--openbot-text-muted) 62% 66%,
+      transparent 66%
+    );
+    background-repeat: no-repeat;
+    background-position: 100% 100%;
+    background-size: 50% 50%;
+  }
+
+  .ui-textarea-resizable {
+    position: relative;
+    display: grid;
+  }
+
+  /* The grip sits inside the bottom-right corner. It changes only the height. */
+  .ui-textarea-resizer {
+    --ui-textarea-grip: var(--openbot-text-dim);
+
+    position: absolute;
+    inset-inline-end: 1px;
+    bottom: 1px;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    border: 0;
+    border-end-end-radius: var(--openbot-radius-md);
+    padding: 0;
+    background-image: linear-gradient(
+      135deg,
+      transparent 48%,
+      var(--ui-textarea-grip) 48% 56%,
+      transparent 56% 68%,
+      var(--ui-textarea-grip) 68% 76%,
+      transparent 76%
+    );
+    background-repeat: no-repeat;
+    background-position: right 3px bottom 3px;
+    background-size: 12px 12px;
+    cursor: ns-resize;
+    touch-action: none;
+    user-select: none;
+  }
+
+  .ui-textarea-resizer:hover,
+  .ui-textarea-resizer:focus-visible,
+  .ui-textarea-resizer[data-active] {
+    --ui-textarea-grip: var(--openbot-text-primary);
+  }
+
+  .ui-textarea-resizer:focus-visible {
+    outline: 0;
+  }
+
+  /* In a right-to-left page the grip sits in the bottom-left corner, so its lines turn with it. */
+  .ui-textarea-resizer:dir(rtl) {
+    scale: -1 1;
+  }
+
+  html.ui-textarea-resizing {
+    cursor: ns-resize;
+    user-select: none;
+  }
+
+  :where(.ui-input, .ui-textarea)::placeholder {
+    color: var(--openbot-text-placeholder);
+  }
+
+  /* A focused field gets a neutral border and no ring. */
+  :where(.ui-input, .ui-textarea, .ui-native-select):focus-visible {
+    border-color: var(--openbot-border-focus);
+  }
+
+  :where(.ui-input, .ui-textarea, .ui-native-select)[aria-invalid="true"] {
+    border-color: var(--openbot-danger);
+  }
+
+  :where(.ui-input, .ui-textarea, .ui-native-select):disabled {
+    cursor: not-allowed;
+    opacity: 0.42;
+  }
+
+  .ui-select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .ui-select-trigger {
+    width: 100%;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--openbot-space-1-5);
+    cursor: pointer;
+    border: 1px solid var(--openbot-border-strong);
+    border-radius: var(--openbot-radius-md);
+    outline: 0;
+    background: transparent;
+    padding-block: var(--openbot-space-2);
+    padding-inline: 10px var(--openbot-space-2);
+    box-shadow: 0 1px 2px var(--openbot-shadow-popover-ambient);
+    color: var(--openbot-text-primary);
+    font-family: var(--openbot-font-sans);
+    font-size: var(--openbot-text-md);
+    line-height: var(--openbot-leading-md);
+    text-align: start;
+    transition:
+      background-color var(--openbot-duration-hover) ease,
+      border-color var(--openbot-duration-hover) ease,
+      box-shadow var(--openbot-duration-hover) ease;
+  }
+
+  .ui-select-trigger[data-size="sm"] {
+    height: var(--openbot-control-md);
+    font-size: var(--openbot-text-sm);
+  }
+
+  .ui-select-trigger[data-size="md"] {
+    height: var(--openbot-control-lg);
+  }
+
+  .ui-select-trigger[data-expanded] {
+    border-color: var(--openbot-border-strong);
+    background: var(--openbot-hover);
+  }
+
+  .ui-select .ui-select-trigger:focus-visible {
+    border-color: var(--openbot-border-focus);
+    outline: 0;
+  }
+
+  .ui-select-trigger[data-disabled] {
+    cursor: not-allowed;
+    opacity: 0.42;
+  }
+
+  .ui-select-trigger[aria-invalid="true"] {
+    border-color: var(--openbot-danger);
+    box-shadow: 0 0 0 3px var(--openbot-danger-soft);
+  }
+
+  .ui-select-value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ui-select-trigger-icon {
+    width: var(--openbot-icon-md);
+    height: var(--openbot-icon-md);
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    color: var(--openbot-text-muted);
+  }
+
+  .ui-select-trigger-icon svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .ui-select-content {
+    z-index: var(--openbot-layer-popover);
+    max-height: 320px;
+    min-width: 144px;
+    overflow: hidden auto;
+    border: 0;
+    border-radius: var(--openbot-radius-md);
+    background: var(--openbot-bg-surface-raised);
+    box-shadow:
+      0 4px 6px -1px var(--openbot-shadow-popover-ambient),
+      0 2px 4px -2px var(--openbot-shadow-popover-ambient),
+      0 0 0 1px var(--openbot-border-strong);
+    color: var(--openbot-text-primary);
+    transform-origin: var(--kb-select-content-transform-origin);
+    animation: ui-select-content-in var(--openbot-duration-dialog) var(--openbot-ease-out) both;
+  }
+
+  .ui-select-listbox {
+    margin: 0;
+    padding: var(--openbot-space-1);
+    outline: 0;
+  }
+
+  .ui-search-select-content .ui-select-listbox {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+  }
+
+  .ui-select-footer {
+    border-top: 1px solid var(--openbot-border);
+    padding: var(--openbot-space-1);
+  }
+
+  .ui-select-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    cursor: default;
+    user-select: none;
+    border-radius: var(--openbot-radius-sm);
+    outline: 0;
+    padding-block: var(--openbot-space-1-5);
+    padding-inline: var(--openbot-space-2) var(--openbot-space-8);
+    color: var(--openbot-text-primary);
+    font-size: var(--openbot-text-sm);
+    line-height: var(--openbot-leading-sm);
+    transition:
+      background-color var(--openbot-duration-hover) ease,
+      color var(--openbot-duration-hover) ease;
+  }
+
+  .ui-select-item[data-highlighted] {
+    background: var(--openbot-hover);
+    color: var(--openbot-text-primary);
+  }
+
+  .ui-select-item[data-selected] {
+    background: transparent;
+    color: var(--openbot-text-primary);
+  }
+
+  .ui-select-item[data-selected][data-highlighted] {
+    background: var(--openbot-hover);
+  }
+
+  .ui-select-item[data-disabled] {
+    pointer-events: none;
+    opacity: 0.42;
+  }
+
+  .ui-select-item-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ui-select-item-indicator {
+    position: absolute;
+    inset-inline-end: var(--openbot-space-2);
+    width: var(--openbot-icon-md);
+    height: var(--openbot-icon-md);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: currentColor;
+  }
+
+  .ui-select-item-indicator svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .ui-switch {
+    --ui-switch-thumb-size: var(--openbot-switch-thumb);
+    --ui-switch-inset: var(--openbot-switch-inset);
+    --ui-switch-travel: calc(
+      var(--openbot-switch-width) - var(--ui-switch-thumb-size) - (var(--ui-switch-inset) * 2)
+    );
+    position: relative;
+    z-index: 0;
+    width: var(--openbot-switch-width);
+    height: var(--openbot-switch-height);
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    border: 0;
+    border-radius: var(--openbot-radius-pill);
+    outline: none;
+    background: var(--openbot-bg-control);
+    box-shadow:
+      inset 0 0 0 1px var(--openbot-border-strong),
+      0 1px 2px var(--openbot-shadow-ring);
+    transition:
+      background-color var(--openbot-duration-hover) ease,
+      box-shadow var(--openbot-duration-hover) ease,
+      opacity var(--openbot-duration-hover) ease;
+  }
+
+  .ui-switch[data-size="sm"] {
+    --ui-switch-thumb-size: var(--openbot-switch-sm-thumb);
+    --ui-switch-inset: var(--openbot-switch-sm-inset);
+    --ui-switch-travel: calc(
+      var(--openbot-switch-sm-width) - var(--ui-switch-thumb-size) - (var(--ui-switch-inset) * 2)
+    );
+    width: var(--openbot-switch-sm-width);
+    height: var(--openbot-switch-sm-height);
+  }
+
+  .ui-switch[data-checked] {
+    background: var(--openbot-surface-light);
+  }
+
+  .ui-switch[data-invalid] {
+    box-shadow: 0 0 0 3px var(--openbot-danger-focus);
+  }
+
+  .ui-switch:not([data-pointer-focus]):has(.ui-switch-input:focus-visible) {
+    box-shadow: var(--openbot-focus-ring);
+  }
+
+  .ui-switch[data-invalid]:not([data-pointer-focus]):has(.ui-switch-input:focus-visible) {
+    box-shadow: 0 0 0 3px var(--openbot-danger-focus);
+  }
+
+  .ui-switch-field {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--openbot-space-3);
+  }
+
+  .ui-switch-copy {
+    min-width: 0;
+    display: grid;
+    gap: var(--openbot-space-0-5);
+  }
+
+  .ui-switch-label {
+    color: var(--openbot-text-primary);
+    font-size: var(--openbot-text-md);
+    font-weight: var(--openbot-weight-medium);
+    line-height: var(--openbot-leading-md);
+    cursor: pointer;
+  }
+
+  .ui-switch-description {
+    color: var(--openbot-text-muted);
+    font-size: var(--openbot-text-sm);
+    line-height: var(--openbot-leading-sm);
+  }
+
+  .ui-switch-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .ui-switch-control {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    border-radius: inherit;
+    cursor: pointer;
+  }
+
+  .ui-switch-control[data-dragging] {
+    cursor: grabbing;
+  }
+
+  .ui-switch-thumb {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: var(--ui-switch-thumb-size);
+    height: var(--ui-switch-thumb-size);
+    display: block;
+    border-radius: var(--openbot-radius-pill);
+    background: var(--openbot-text-primary);
+    box-shadow: 0 1px 2px var(--openbot-shadow-ring);
+    transform: translate3d(
+        calc(var(--ui-switch-inset) + (var(--ui-switch-position, 0) * var(--ui-switch-travel))),
+        -50%,
+        0
+      )
+      scale(var(--ui-switch-scale-x, 1), var(--ui-switch-scale-y, 1));
+    transform-origin: center;
+    will-change: transform;
+    transition: background-color var(--openbot-duration-fast) var(--openbot-ease-out);
+  }
+
+  .ui-switch-thumb[data-checked] {
+    background: var(--openbot-text-on-light);
+  }
+
+  .ui-switch[data-disabled] {
+    opacity: 0.5;
+  }
+
+  .ui-switch[data-disabled] .ui-switch-control {
+    cursor: not-allowed;
+  }
+
+  .ui-item-group {
+    display: grid;
+    overflow: hidden;
+    border: 1px solid var(--openbot-border);
+    border-radius: var(--openbot-radius-card);
+    background: var(--openbot-bg-surface);
+  }
+
+  .ui-item-group[data-surface="subtle"] {
+    background: var(--openbot-bg-control);
+  }
+
+  .ui-item-group > :not(:first-child) {
+    border-top: 1px solid var(--openbot-border);
+  }
+
+  .ui-item {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--openbot-space-3);
+    padding-inline: var(--openbot-space-4);
+  }
+
+  .ui-item[data-size="compact"] {
+    min-height: 52px;
+    padding-block: var(--openbot-space-2);
+  }
+
+  .ui-item[data-size="default"] {
+    min-height: 64px;
+    padding-block: var(--openbot-space-3);
+  }
+
+  .ui-item[data-size="spacious"] {
+    min-height: 72px;
+    padding-block: var(--openbot-space-4);
+  }
+
+  .ui-item-media,
+  .ui-item-actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+  }
+
+  .ui-item-media {
+    color: var(--openbot-text-muted);
+  }
+
+  .ui-item-content {
+    min-width: 0;
+    display: grid;
+    flex: 1 1 auto;
+    gap: var(--openbot-space-0-5);
+  }
+
+  .ui-item-title {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--openbot-text-primary);
+    font-size: var(--openbot-text-md);
+    font-weight: var(--openbot-weight-medium);
+    line-height: var(--openbot-leading-md);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ui-item-description {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--openbot-text-muted);
+    font-size: var(--openbot-text-sm);
+    line-height: var(--openbot-leading-sm);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ui-item-actions {
+    justify-content: flex-end;
+    gap: var(--openbot-space-2);
+  }
+
+  .ui-item.ui-dynamic-island-identity {
+    min-width: 0;
+    width: 100%;
+    min-height: 43px;
+    display: grid;
+    grid-template-columns: 35px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--openbot-space-2);
+    padding: 0;
+  }
+
+  .ui-confirm-dialog-actions .ui-button svg {
+    width: var(--openbot-icon-md);
+    height: var(--openbot-icon-md);
+    stroke-width: var(--openbot-icon-stroke);
+  }
+
+  /* Status text on a tinted fill reads the text step of its colour: the solid danger step measures
+ * 3.7:1 on its own soft fill, under the 4.5:1 a label needs. */
+  .ui-confirm-dialog-confirm.ui-button-variant-destructive {
+    color: var(--openbot-danger-text);
+  }
+
+  .ui-confirm-dialog-actions .ui-button:active:not(:disabled):not([data-disabled]) {
+    transform: scale(0.97);
+  }
+  .ui-settings-section {
+    display: grid;
+    gap: var(--openbot-space-2);
+  }
+  .ui-settings-section-header {
+    min-width: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--openbot-space-3);
+    padding-inline: var(--openbot-space-1);
+  }
+  .ui-settings-section-copy {
+    min-width: 0;
+    display: grid;
+    gap: var(--openbot-space-1);
+  }
+  .ui-settings-section-heading {
+    font-weight: var(--openbot-weight-regular);
+  }
+  .ui-settings-section-description {
+    display: block;
+  }
+  .ui-settings-section-actions {
+    min-width: 0;
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--openbot-space-2);
+  }
+}

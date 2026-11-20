@@ -4,6 +4,7 @@ import type {
 } from "./openbotConversation.ts";
 import {
   normalizeConversationUiBlock,
+  isSecretFormField,
   uiBlockAnswersFromResponse,
   uiBlockActionIsPrivileged,
   validateUiBlockResponse,
@@ -43,7 +44,8 @@ export function blockAnswers(
     block.blockId !== command.blockId ||
     block.state.status !== "pending" ||
     block.vault ||
-    command.response.actionId === "_text" ||
+    (block.spec.type === "form" && block.spec.fields.some(isSecretFormField)) ||
+    (command.response.actionId === "_text" && block.spec.type !== "quick_replies") ||
     uiBlockActionIsPrivileged(block.spec, command.response.actionId)
   )
     return null;

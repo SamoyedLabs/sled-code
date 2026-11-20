@@ -1,3 +1,8 @@
+import * as ConnectWebhookRouting from "./ConnectWebhookRouting.ts";
+import * as ChangeJournal from "./ChangeJournal.ts";
+import * as RetainedManagedHost from "./RetainedManagedHost.ts";
+import { resolveRuntimeExecutable } from "./RuntimeExecutable.ts";
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import type { ComputerSession } from "./ComputerViewSession.ts";
 import {
   type OpenbotAgentList,
@@ -8,11 +13,19 @@ import {
   type OpenbotApiResponse,
   type OpenbotAttentionSnapshot,
   type OpenbotChange,
+  OpenbotContextState,
   type OpenbotUpstreamInstallInput,
   type OpenbotInstalledRuntime,
+  type OpenbotLibraryPreviewRequest,
+  type OpenbotLiveVoiceCommand,
+  type OpenbotLiveVoiceResult,
+  OPENBOT_LIVE_VOICE_CAPABILITY,
+  OPENBOT_LIBRARY_PREVIEW_LIMIT,
+  OpenbotLibraryPictureMime,
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
+import * as Clock from "effect/Clock";
 import * as Base64 from "effect/encoding/Base64";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -32,6 +45,13 @@ import * as TeamClient from "./TeamClient.ts";
 import * as RuntimeInstallation from "./RuntimeInstallation.ts";
 import * as HostRecovery from "./HostRecovery.ts";
 
+const sameContext = Schema.toEquivalence(OpenbotContextState);
+const decodeWorkflowWebhookRoute = Schema.decodeUnknownEffect(
+  Schema.Struct({
+    routeId: Schema.NullOr(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512))),
+  }),
+);
+
 export class IntegrationError extends Schema.TaggedError<IntegrationError>()(
   "OpenbotIntegrationError",
   {
@@ -43,6 +63,14 @@ export class IntegrationError extends Schema.TaggedError<IntegrationError>()(
 export class Integration extends Context.Service<
   Integration,
   {
+    readonly receiveConnectWebhook: (input: {
+      hookId: string;
+      token: string;
+      deliveryId: string;
+      timestamp: string;
+      signature: string;
+      body: Uint8Array;
+    }) => Effect.Effect<{ status: number }, IntegrationError>;
     readonly status: Effect.Effect<OpenbotHostStatus>;
     readonly readyHostId: Effect.Effect<string | null>;
     readonly readyChanges: Stream.Stream<string | null>;
@@ -55,9 +83,34 @@ export class Integration extends Context.Service<
     ) => Effect.Effect<OpenbotHostStatus, IntegrationError>;
     readonly rollbackRuntime: Effect.Effect<OpenbotHostStatus, IntegrationError>;
     readonly listAgents: Effect.Effect<typeof OpenbotAgentList.Type, IntegrationError>;
+    readonly withInstanceTransferToHost: <A>(
+      hostId: string,
+      action: (
+        transfer: NonNullable<TeamClient.Session["instanceTransfer"]>,
+      ) => Effect.Effect<A, TeamClient.TeamClientError>,
+    ) => Effect.Effect<A, IntegrationError>;
+    readonly withImportToHost: <A>(
+      hostId: string,
+      action: (
+        imports: NonNullable<TeamClient.Session["agentImport"]>,
+      ) => Effect.Effect<A, TeamClient.TeamClientError>,
+    ) => Effect.Effect<A, IntegrationError>;
+    readonly withPrivilegedToHost: <A>(
+      hostId: string,
+      action: (
+        transport: NonNullable<TeamClient.Session["privileged"]>,
+      ) => Effect.Effect<A, TeamClient.TeamClientError>,
+    ) => Effect.Effect<A, IntegrationError>;
     readonly withFilesToHost: <A>(
       hostId: string,
       action: (files: TeamClient.Session["files"]) => Effect.Effect<A, TeamClient.TeamClientError>,
+    ) => Effect.Effect<A, IntegrationError>;
+    readonly withChannelToHost: <A>(
+      hostId: string,
+      action: (
+        channel: NonNullable<TeamClient.Session["channel"]>,
+        identity: { readonly hostId: string; readonly fingerprint: string },
+      ) => Effect.Effect<A, TeamClient.TeamClientError>,
     ) => Effect.Effect<A, IntegrationError>;
     readonly withComputerToHost: (
       hostId: string,
@@ -68,6 +121,10 @@ export class Integration extends Context.Service<
         browser: NonNullable<TeamClient.Session["browser"]>,
       ) => Effect.Effect<A, TeamClient.TeamClientError>,
     ) => Effect.Effect<A, IntegrationError>;
+    readonly liveVoiceCommand?: (
+      principal: string,
+      command: OpenbotLiveVoiceCommand,
+    ) => Effect.Effect<OpenbotLiveVoiceResult, IntegrationError>;
     readonly apiRead: (
       input: OpenbotReadRequest,
     ) => Effect.Effect<typeof OpenbotApiResponse.Type, IntegrationError>;
@@ -98,6 +155,7 @@ const isTeamClientError = Schema.is(TeamClient.TeamClientError);
 const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string | undefined) {
   const host = yield* ManagedHost.ManagedHost;
   const client = yield* TeamClient.TeamClient;
+  const webhookRouting = yield* ConnectWebhookRouting.ConnectWebhookRouting;
   const recovery = Option.getOrUndefined(yield* Effect.serviceOption(HostRecovery.HostRecovery));
   const installation = Option.getOrUndefined(
     yield* Effect.serviceOption(RuntimeInstallation.RuntimeInstallation),
@@ -115,13 +173,16 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
   });
   const scope = yield* Effect.scope;
   const gate = yield* Semaphore.make(1);
-  const eventChanges = yield* PubSub.sliding<OpenbotChange>(1);
+  const eventChanges = yield* ChangeJournal.make();
   let attention: OpenbotAttentionSnapshot = {
     hostId: null,
     state: "disconnected",
     complete: false,
     requests: [],
   };
+  let contexts = new Map<string, OpenbotContextState>();
+  const contextKey = (agentId: string, threadId: string) =>
+    `${agentId.length}:${agentId}${threadId}`;
   const changes = yield* PubSub.unbounded<string | null>();
   const readyHostId = host.getStatus.pipe(
     Effect.map((value) => (value.status === "ready" ? value.ready.serverId : null)),
@@ -134,11 +195,35 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
     }),
   ).pipe(Stream.changes);
   let connection: { readonly key: string; readonly session: TeamClient.Session } | undefined;
+  type ActiveVoice = {
+    principal: string;
+    hostId: string;
+    session: TeamClient.Session;
+    sessionId: string;
+    expiresAt: number;
+    ended: boolean;
+    failed: boolean;
+    user: string;
+    assistant: string;
+  };
+  let voice: ActiveVoice | null = null;
+  const VOICE_LEASE_MS = 15_000;
+  const stopVoice = Effect.fn("OpenbotIntegration.stopVoice")(function* (owned: ActiveVoice) {
+    if (voice !== owned) return;
+    if (!owned.ended) yield* owned.session.liveVoice?.stop(owned.sessionId) ?? Effect.void;
+    voice = null;
+  }, Effect.withTracerEnabled(false));
   const clearConnection = Effect.fn("OpenbotIntegration.clearConnection")(function* () {
     const previous = connection;
+    const activeVoice = voice;
+    if (activeVoice) yield* stopVoice(activeVoice).pipe(Effect.ignore);
+    voice = null;
+    const changed = previous !== undefined || attention.state !== "disconnected";
     connection = undefined;
     attention = { hostId: null, state: "disconnected", complete: false, requests: [] };
-    yield* PubSub.publish(eventChanges, { hostId: null, resource: "all" });
+    contexts.clear();
+    // Refused reads against an already stopped host must not invalidate themselves.
+    if (changed) yield* eventChanges.publish({ hostId: null, resource: "all" });
     if (previous) yield* previous.session.close.pipe(Effect.ignore);
   });
   yield* Effect.addFinalizer(() => gate.withPermit(clearConnection()));
@@ -190,7 +275,10 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
     return result;
   });
   const withSession = <A>(
-    action: (session: TeamClient.Session) => Effect.Effect<A, TeamClient.TeamClientError>,
+    action: (
+      session: TeamClient.Session,
+      identity: { readonly hostId: string; readonly fingerprint: string },
+    ) => Effect.Effect<A, TeamClient.TeamClientError>,
     message: string,
     expectedHostId?: string,
     initializes = false,
@@ -219,7 +307,7 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
               complete: false,
               requests: [],
             };
-            yield* PubSub.publish(eventChanges, {
+            yield* eventChanges.publish({
               hostId: current.ready.serverId,
               resource: "all",
             });
@@ -228,7 +316,12 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
           }
           const active = connection;
           if (!active) return yield* Effect.die("Openbot session was not established");
-          return yield* readyAction(active.session, action, initializes).pipe(
+          const runAction = (session: TeamClient.Session) =>
+            action(session, {
+              hostId: current.ready.serverId,
+              fingerprint: current.ready.fingerprint,
+            });
+          return yield* readyAction(active.session, runAction, initializes).pipe(
             Effect.catch((error) =>
               Effect.gen(function* () {
                 // Expiry/revocation needs a new login; normal reads reuse the session to respect upstream limits.
@@ -240,7 +333,7 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
                   complete: false,
                   requests: [],
                 };
-                yield* PubSub.publish(eventChanges, {
+                yield* eventChanges.publish({
                   hostId: current.ready.serverId,
                   resource: "all",
                 });
@@ -249,7 +342,7 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
                   ownerSecret,
                 });
                 connection = { key, session };
-                return yield* readyAction(session, action, initializes);
+                return yield* readyAction(session, runAction, initializes);
               }),
             ),
           );
@@ -260,7 +353,10 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
           isIntegrationError(cause)
             ? cause
             : new IntegrationError({
-                message,
+                message:
+                  isTeamClientError(cause) && cause.publicCode === "host_account_required"
+                    ? "Sign in to OpenBot on this host to browse the Marketplace."
+                    : message,
                 cause,
               }),
         ),
@@ -285,15 +381,56 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
                     if (connection?.session !== session) return;
                     const current = yield* readyHostId;
                     if (current !== hostId) return;
-                    if (frame.type === "snapshot")
+                    if (frame.type === "live-voice") {
+                      if (
+                        !voice ||
+                        voice.session !== session ||
+                        voice.sessionId !== frame.event.sessionId
+                      )
+                        return;
+                      if (frame.event._tag === "transcript")
+                        voice[frame.event.role] = frame.event.text;
+                      else {
+                        voice.ended = true;
+                        voice.failed = frame.event.error !== null;
+                      }
+                      return;
+                    }
+                    if (frame.type === "snapshot") {
                       attention = {
                         hostId,
                         state: "ready",
                         complete: frame.complete,
                         requests: frame.requests,
                       };
-                    // A sliding notification may replace another resource, so invalidate the whole Openbot cache.
-                    yield* PubSub.publish(eventChanges, { hostId, resource: "all" });
+                      const next = new Map(
+                        (frame.contexts ?? []).map((state) => [
+                          contextKey(state.botId, state.threadId),
+                          state,
+                        ]),
+                      );
+                      const changed = new Set<string>();
+                      for (const [key, state] of contexts) {
+                        if (!next.has(key)) changed.add(state.botId);
+                      }
+                      for (const [key, state] of next) {
+                        const previous = contexts.get(key);
+                        if (!previous || !sameContext(previous, state)) changed.add(state.botId);
+                      }
+                      contexts = next;
+                      for (const agentId of changed)
+                        yield* eventChanges.publish({ hostId, resource: "activity", agentId });
+                    }
+                    yield* eventChanges.publish(
+                      frame.type === "snapshot"
+                        ? { hostId, resource: "attention" }
+                        : {
+                            hostId,
+                            resource: frame.resource,
+                            ...(frame.agentId ? { agentId: frame.agentId } : {}),
+                            ...(frame.taskId ? { taskId: frame.taskId } : {}),
+                          },
+                    );
                   }),
                 ),
               ),
@@ -301,8 +438,13 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
                 gate.withPermit(
                   Effect.gen(function* () {
                     if (connection?.session !== session) return;
+                    if (voice?.session === session) {
+                      voice.ended = true;
+                      voice.failed = true;
+                    }
                     attention = { hostId, state: "connecting", complete: false, requests: [] };
-                    yield* PubSub.publish(eventChanges, { hostId, resource: "all" });
+                    contexts.clear();
+                    yield* eventChanges.publish({ hostId, resource: "all" });
                   }),
                 ),
               ),
@@ -325,12 +467,103 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
     };
     yield* Effect.forkIn(watch, scope);
   }, Effect.uninterruptible);
+  const voiceUnavailable = () =>
+    new IntegrationError({
+      message: "The voice session is unavailable. Reconnect to the bot computer and try again.",
+      cause: new Error("live-voice-unavailable"),
+    });
+  const liveVoiceCommand = Effect.fn("OpenbotIntegration.liveVoiceCommand")(function* (
+    principal: string,
+    command: OpenbotLiveVoiceCommand,
+  ): Effect.fn.Return<OpenbotLiveVoiceResult, IntegrationError> {
+    if (command.action === "start") {
+      if ((yield* readyHostId) !== command.hostId) return yield* voiceUnavailable();
+      yield* ensureEventsStarted();
+      const owned = yield* withSession(
+        (session) =>
+          Effect.gen(function* () {
+            if (voice?.ended) voice = null;
+            if (voice || !session.liveVoice || attention.state !== "ready")
+              return yield* new TeamClient.TeamClientError({ reason: "invalid-configuration" });
+            const compatibility = yield* session.apiRead({ operation: "compatibility.read" });
+            if (
+              typeof compatibility !== "object" ||
+              compatibility === null ||
+              !("capabilities" in compatibility) ||
+              !Array.isArray(compatibility.capabilities) ||
+              !compatibility.capabilities.includes(OPENBOT_LIVE_VOICE_CAPABILITY)
+            )
+              return yield* new TeamClient.TeamClientError({ reason: "invalid-configuration" });
+            const answer = yield* session.liveVoice.start(command.offer);
+            const active: ActiveVoice = {
+              principal,
+              hostId: command.hostId,
+              session,
+              sessionId: answer.sessionId,
+              expiresAt: (yield* Clock.currentTimeMillis) + VOICE_LEASE_MS,
+              ended: false,
+              failed: false,
+              user: "",
+              assistant: "",
+            };
+            voice = active;
+            return { active, answer };
+          }),
+        "Could not start a live voice call on this bot computer.",
+        command.hostId,
+      );
+      yield* Effect.forkIn(
+        Effect.gen(function* () {
+          while (voice === owned.active) {
+            yield* Effect.sleep("3 seconds");
+            yield* gate.withPermit(
+              Effect.gen(function* () {
+                if (
+                  voice !== owned.active ||
+                  (yield* Clock.currentTimeMillis) <= owned.active.expiresAt
+                )
+                  return;
+                yield* stopVoice(owned.active).pipe(Effect.ignore);
+              }),
+            );
+          }
+        }),
+        scope,
+      );
+      return { _tag: "started", answer: owned.answer };
+    }
+    return yield* gate.withPermit(
+      Effect.gen(function* (): Effect.fn.Return<OpenbotLiveVoiceResult, IntegrationError> {
+        const active = voice;
+        if (
+          !active ||
+          active.principal !== principal ||
+          active.hostId !== command.hostId ||
+          active.sessionId !== command.sessionId ||
+          connection?.session !== active.session
+        )
+          return yield* voiceUnavailable();
+        if (command.action === "stop") {
+          yield* stopVoice(active).pipe(Effect.mapError(() => voiceUnavailable()));
+          return { _tag: "stopped" };
+        }
+        active.expiresAt = (yield* Clock.currentTimeMillis) + VOICE_LEASE_MS;
+        return {
+          _tag: "state",
+          user: active.user,
+          assistant: active.assistant,
+          ended: active.ended,
+          failed: active.failed,
+        };
+      }),
+    );
+  }, Effect.withTracerEnabled(false));
   const attentionSnapshot = ensureEventsStarted().pipe(
     Effect.andThen(Effect.sync(() => attention)),
   );
   const subscribeChanges = Stream.unwrap(
     Effect.gen(function* () {
-      const subscription = yield* PubSub.subscribe(eventChanges);
+      const subscription = yield* PubSub.subscribe(eventChanges.events);
       yield* ensureEventsStarted();
       const hostId = yield* readyHostId;
       return Stream.concat(
@@ -345,14 +578,70 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
     undefined,
     true,
   );
-  const apiRead = (input: OpenbotReadRequest) =>
-    withSession((session) => session.apiRead(input), "Unable to read Openbot data.");
-  const apiReadToHost = (hostId: string, input: OpenbotReadRequest) =>
-    withSession(
-      (session) => session.apiRead(input),
-      "Unable to read the expected Openbot host.",
-      hostId,
+  const readContext = (
+    input: Extract<OpenbotReadRequest, { operation: "context.read" }>,
+    expectedHost?: string,
+  ) =>
+    gate.withPermit(
+      Effect.gen(function* () {
+        const current = yield* host.getStatus;
+        const ready = current.status === "ready" ? current.ready : null;
+        if (expectedHost && expectedHost !== ready?.serverId)
+          return yield* new IntegrationError({
+            message: "Unable to read the expected Openbot host.",
+            cause: new Error("host-mismatch"),
+          });
+        if (!ready || connection?.key !== `${ready.serverId}:${ready.fingerprint}:${ready.apiUrl}`)
+          return null;
+        return contexts.get(contextKey(input.agentId, input.threadId)) ?? null;
+      }),
     );
+  const isLibraryPictureMime = Schema.is(OpenbotLibraryPictureMime);
+  const libraryPicture = Effect.fn("OpenbotIntegration.libraryPicture")(function* (
+    session: TeamClient.Session,
+    input: OpenbotLibraryPreviewRequest,
+  ) {
+    const source = {
+      kind: "library" as const,
+      fileId: input.fileId,
+      ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+    };
+    const metadata = yield* session.files.attachment(null, source);
+    const { mimeType, size } = metadata;
+    if (!isLibraryPictureMime(mimeType) || size <= 0 || size > OPENBOT_LIBRARY_PREVIEW_LIMIT)
+      return null;
+    const result = yield* session.files.download(null, source);
+    if (
+      result.size !== size ||
+      (result.mimeType !== mimeType && result.mimeType !== "application/octet-stream")
+    )
+      return yield* new TeamClient.TeamClientError({ reason: "decode" });
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    yield* result.body.pipe(
+      Stream.runForEach((chunk) => {
+        if (offset + chunk.length > size)
+          return Effect.fail(new TeamClient.TeamClientError({ reason: "decode" }));
+        bytes.set(chunk, offset);
+        offset += chunk.length;
+        return Effect.void;
+      }),
+    );
+    if (offset !== size) return yield* new TeamClient.TeamClientError({ reason: "decode" });
+    return { mimeType, base64: Base64.encode(bytes) };
+  });
+  const apiRead = (input: OpenbotReadRequest, expectedHostId?: string) =>
+    input.operation === "context.read"
+      ? readContext(input, expectedHostId)
+      : withSession(
+          (session) =>
+            input.operation === "library.files.preview"
+              ? libraryPicture(session, input)
+              : session.apiRead(input),
+          "Unable to read Openbot data.",
+          expectedHostId,
+        );
+  const apiReadToHost = (hostId: string, input: OpenbotReadRequest) => apiRead(input, hostId);
   const apiWrite = (input: OpenbotWriteRequest) =>
     withSession((session) => session.apiWrite(input), "Unable to update Openbot work.");
   const apiWriteToHost = (hostId: string, input: OpenbotWriteRequest) =>
@@ -361,14 +650,110 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
       "Unable to update the expected Openbot host.",
       hostId,
     );
-  const apiAdminToHost = (hostId: string, input: OpenbotAdminRequest) =>
-    withSession(
-      (session) => session.apiAdmin(input),
-      "Unable to configure the expected Openbot host.",
-      hostId,
+  const isBrowserNavigation = (input: OpenbotAdminRequest) =>
+    input.operation === "browser.open" ||
+    input.operation === "browser.load" ||
+    input.operation === "browser.navigate" ||
+    input.operation === "browser.reload";
+  const browserNavigation = Effect.fn("OpenbotIntegration.browserNavigation")(function* (
+    input: OpenbotAdminRequest,
+    expectedHostId?: string,
+  ) {
+    const message = "Unable to navigate the expected bot browser.";
+    const captured = yield* withSession(
+      (session) => Effect.succeed({ session, key: connection?.key }),
+      message,
+      expectedHostId,
     );
+    // Loading may wait on the page; Stop and loading events must still acquire the session gate.
+    const result = yield* captured.session
+      .apiAdmin(input)
+      .pipe(Effect.mapError((cause) => new IntegrationError({ message, cause })));
+    return yield* gate.withPermit(
+      Effect.gen(function* () {
+        const current = yield* host.getStatus;
+        if (
+          connection?.session !== captured.session ||
+          current.status !== "ready" ||
+          captured.key !==
+            `${current.ready.serverId}:${current.ready.fingerprint}:${current.ready.apiUrl}`
+        )
+          return yield* new IntegrationError({
+            message: "The bot browser connection changed while navigating.",
+            cause: new Error("session-replaced"),
+          });
+        return result;
+      }),
+    );
+  });
+  const admin = Effect.fn("Integration.admin")(function* (
+    session: TeamClient.Session,
+    hostId: string,
+    input: OpenbotAdminRequest,
+  ) {
+    if (input.operation === "workflow.webhookConfiguration") {
+      const compatibility = yield* session.apiRead({ operation: "compatibility.read" });
+      const capabilities =
+        compatibility && typeof compatibility === "object" && "capabilities" in compatibility
+          ? compatibility.capabilities
+          : null;
+      if (
+        !webhookRouting ||
+        !Array.isArray(capabilities) ||
+        !capabilities.includes("sled-connect-workflow-webhooks-v1")
+      )
+        return yield* new TeamClient.TeamClientError({ reason: "invalid-configuration" });
+      const result = yield* session.apiAdmin(input);
+      const { routeId } = yield* decodeWorkflowWebhookRoute(result).pipe(
+        Effect.mapError((cause) => new TeamClient.TeamClientError({ reason: "decode", cause })),
+      );
+      return {
+        workflowId: input.workflowId,
+        nodeId: input.nodeId,
+        configured: routeId !== null,
+        webhookUrl: routeId === null ? null : yield* webhookRouting.address(hostId, routeId),
+        relayService: "sled-connect",
+      };
+    }
+    if (
+      input.operation === "events.configuration" &&
+      input.owner.kind === "agent" &&
+      webhookRouting &&
+      session.connectWebhooks
+    ) {
+      const compatibility = yield* session.apiRead({ operation: "compatibility.read" });
+      const capabilities =
+        compatibility !== null &&
+        typeof compatibility === "object" &&
+        "capabilities" in compatibility
+          ? compatibility.capabilities
+          : null;
+      if (Array.isArray(capabilities) && capabilities.includes("sled-connect-webhooks-v1")) {
+        const { routeId } = yield* session.connectWebhooks.configuration({
+          owner: { kind: "agent", id: input.owner.id },
+          id: input.id,
+        });
+        const webhookUrl = yield* webhookRouting.address(hostId, routeId);
+        return { owner: input.owner, id: input.id, webhookUrl, relayService: "sled-connect" };
+      }
+    }
+    return yield* session.apiAdmin(input);
+  });
+  const apiAdminToHost = (hostId: string, input: OpenbotAdminRequest) =>
+    isBrowserNavigation(input)
+      ? browserNavigation(input, hostId)
+      : withSession(
+          (session, identity) => admin(session, identity.hostId, input),
+          "Unable to configure the expected Openbot host.",
+          hostId,
+        );
   const apiAdmin = (input: OpenbotAdminRequest) =>
-    withSession((session) => session.apiAdmin(input), "Unable to configure Openbot.");
+    isBrowserNavigation(input)
+      ? browserNavigation(input)
+      : withSession(
+          (session, identity) => admin(session, identity.hostId, input),
+          "Unable to configure Openbot.",
+        );
   const switchRuntime = Effect.fn("OpenbotIntegration.switchRuntime")(
     function* (runtime: OpenbotInstalledRuntime) {
       if (!installation || !ownerSecret || environment.T3CODE_OPENBOT_EXECUTABLE?.trim())
@@ -376,7 +761,10 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
           message: "Runtime activation is unavailable while an executable override is configured.",
           cause: new Error("runtime-override"),
         });
-      if (runtime.compatibility !== "pinned-baseline" || runtime.platform !== platform)
+      if (
+        (runtime.compatibility !== "pinned-baseline" && runtime.compatibility !== "validated") ||
+        runtime.platform !== platform
+      )
         return yield* new IntegrationError({
           message: "This runtime requires compatibility validation on this host before activation.",
           cause: new Error("runtime-compatibility"),
@@ -387,7 +775,13 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
         yield* clearConnection();
         const desired = recovery ? (yield* recovery.getState).desiredRunning : true;
         yield* host
-          .switchExecutable(previous?.executablePath ?? null, { start: desired })
+          .switchExecutable(
+            resolveRuntimeExecutable({
+              installed: previous?.executablePath,
+              bundled: environment.T3CODE_BUNDLED_OPENBOT_EXECUTABLE,
+            }).executablePath ?? null,
+            { start: desired },
+          )
           .pipe(Effect.ignore);
         yield* PubSub.publish(changes, yield* readyHostId);
       });
@@ -482,7 +876,7 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
       Effect.gen(function* () {
         const hostId = yield* readyHostId;
         yield* PubSub.publish(changes, hostId);
-        yield* PubSub.publish(eventChanges, { hostId, resource: "all" });
+        yield* eventChanges.publish({ hostId, resource: "all" });
         if (hostId === null)
           yield* gate.withPermit(
             Effect.gen(function* () {
@@ -494,6 +888,19 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
     Effect.forkIn(scope),
   );
   return Integration.of({
+    receiveConnectWebhook: Effect.fn("Integration.receiveConnectWebhook")(function* (input) {
+      const target = webhookRouting?.target(input.hookId, input.token);
+      if (!target) return { status: 404 };
+      const { hookId: _hookId, token: _token, ...delivery } = input;
+      return yield* withSession(
+        (session) =>
+          session.connectWebhooks
+            ? session.connectWebhooks.receive({ ...delivery, routeId: target.routeId })
+            : Effect.succeed({ status: 503 }),
+        "Sled Connect could not reach this bot host.",
+        target.hostId,
+      );
+    }),
     status,
     readyHostId,
     readyChanges,
@@ -526,8 +933,42 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
           )
       : rollbackRuntime,
     listAgents,
+    liveVoiceCommand,
     apiRead,
     apiReadToHost,
+    withInstanceTransferToHost: Effect.fn("Integration.withInstanceTransferToHost")(
+      (hostId, action) =>
+        withSession(
+          (session) =>
+            session.instanceTransfer
+              ? action(session.instanceTransfer)
+              : Effect.fail(new TeamClient.TeamClientError({ reason: "invalid-configuration" })),
+          "Server transfer is unavailable on this host.",
+          hostId,
+        ),
+    ),
+    withImportToHost: Effect.fn("Integration.withImportToHost")((hostId, action) =>
+      withSession(
+        (session) =>
+          session.agentImport
+            ? action(session.agentImport)
+            : Effect.fail(new TeamClient.TeamClientError({ reason: "invalid-configuration" })),
+        "This bot host does not support durable import.",
+        hostId,
+      ),
+    ),
+    withPrivilegedToHost: Effect.fn("OpenbotIntegration.withPrivilegedToHost")(
+      (hostId, action) =>
+        withSession(
+          (session) =>
+            session.privileged
+              ? action(session.privileged)
+              : Effect.fail(new TeamClient.TeamClientError({ reason: "invalid-configuration" })),
+          "Secure response unavailable.",
+          hostId,
+        ),
+      Effect.withTracerEnabled(false),
+    ),
     withFilesToHost: Effect.fn("OpenbotIntegration.withFilesToHost")(
       <A>(
         hostId: string,
@@ -535,6 +976,23 @@ const make = Effect.fn("OpenbotIntegration.make")(function* (ownerSecret: string
           files: TeamClient.Session["files"],
         ) => Effect.Effect<A, TeamClient.TeamClientError>,
       ) => withSession((session) => action(session.files), "Unable to transfer bot files.", hostId),
+    ),
+    withChannelToHost: Effect.fn("OpenbotIntegration.withChannelToHost")(
+      <A>(
+        hostId: string,
+        action: (
+          channel: NonNullable<TeamClient.Session["channel"]>,
+          identity: { readonly hostId: string; readonly fingerprint: string },
+        ) => Effect.Effect<A, TeamClient.TeamClientError>,
+      ) =>
+        withSession(
+          (session, identity) =>
+            session.channel
+              ? action(session.channel, identity)
+              : Effect.fail(new TeamClient.TeamClientError({ reason: "invalid-configuration" })),
+          "The expected bot host does not support channel coding.",
+          hostId,
+        ),
     ),
     withComputerToHost: Effect.fn("OpenbotIntegration.withComputerToHost")((hostId: string) =>
       withSession(
@@ -590,20 +1048,39 @@ export const layer = Layer.unwrap(
       ),
       Effect.orElseSucceed(() => null),
     );
-    const executablePath = override ?? selected?.executablePath;
+    const executable = resolveRuntimeExecutable({
+      override,
+      installed: selected?.executablePath,
+      bundled: environment.T3CODE_BUNDLED_OPENBOT_EXECUTABLE,
+    });
     const config = yield* ServerConfig.ServerConfig;
     const path = yield* Path.Path;
     const secrets = yield* ServerSecretStore.ServerSecretStore;
     const ownerSecret = Base64.encode(yield* secrets.getOrCreateRandom("openbot-owner", 32));
     const hostConfig: ManagedHost.ManagedHostConfig = {
-      ...(executablePath === undefined ? {} : { executablePath }),
-      allowExecutableSwitch: !override,
+      ...(executable.executablePath === undefined
+        ? {}
+        : { executablePath: executable.executablePath }),
+      allowExecutableSwitch: executable.allowExecutableSwitch,
       userDataDirectory: path.join(config.stateDir, "openbot", "profile"),
       agentRoot: path.join(config.stateDir, "openbot", "agents"),
       serverName: "Sled bots",
+      sledEnvironmentId: yield* (yield* ServerEnvironment.ServerEnvironment).getEnvironmentId,
       ownerSecret,
     };
-    const managed = ManagedHost.layer(hostConfig);
+    const managed =
+      environment.T3CODE_OPENBOT_PRIVILEGED_PROOF === "1" ||
+      Boolean(environment.T3CODE_OPENBOT_PRIVILEGED_OWNER_CONFIG)
+        ? RetainedManagedHost.layer({
+            host: hostConfig,
+            activationConfigPath: environment.T3CODE_OPENBOT_PRIVILEGED_OWNER_CONFIG,
+            authDatabase: config.dbPath,
+            ownerDirectory: path.join(config.stateDir, "openbot", "privileged-owner"),
+            controllerKey: Base64.encode(
+              yield* secrets.getOrCreateRandom("openbot-privileged-owner", 32),
+            ),
+          })
+        : ManagedHost.layer(hostConfig);
     return layerWithHost(ownerSecret).pipe(
       Layer.provide(Layer.succeed(RuntimeInstallation.RuntimeInstallation, installation)),
       Layer.provide(HostRecovery.layer.pipe(Layer.provide(managed))),

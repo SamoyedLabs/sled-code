@@ -1,10 +1,39 @@
 import * as Schema from "effect/Schema";
 import * as Result from "effect/Result";
-import { OpenbotBrowserDisplay, type OpenbotAdminRequest } from "@t3tools/contracts";
-const displayDecoder = Schema.decodeUnknownResult(OpenbotBrowserDisplay);
-export function browserDisplay(value: unknown) {
+import {
+  OpenbotBrowserDisplay,
+  OpenbotBrowserTab,
+  type OpenbotAdminRequest,
+} from "@t3tools/contracts";
+const displayDecoder = Schema.decodeUnknownResult(
+  Schema.Struct({
+    ...OpenbotBrowserDisplay.fields,
+    tabs: Schema.Array(
+      Schema.Union([
+        OpenbotBrowserTab,
+        Schema.Struct({
+          ...OpenbotBrowserTab.fields,
+          ownerAgentId: Schema.optional(Schema.NullOr(Schema.String)),
+          ownerBotId: Schema.NullOr(Schema.String),
+        }),
+      ]),
+    ),
+  }),
+);
+export function browserDisplay(value: unknown): typeof OpenbotBrowserDisplay.Type | null {
   const result = displayDecoder(value);
-  return Result.isSuccess(result) ? result.success : null;
+  if (Result.isFailure(result)) return null;
+  return {
+    ...result.success,
+    tabs: result.success.tabs.map((tab) => {
+      if (!("ownerBotId" in tab)) return tab;
+      const { ownerBotId, ...current } = tab;
+      return {
+        ...current,
+        ownerAgentId: current.ownerAgentId === undefined ? ownerBotId : current.ownerAgentId,
+      };
+    }),
+  };
 }
 const profilesDecoder = Schema.decodeUnknownResult(
   Schema.Struct({

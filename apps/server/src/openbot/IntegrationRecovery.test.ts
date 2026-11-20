@@ -16,9 +16,9 @@ import * as ManagedHost from "./ManagedHost.ts";
 import * as RuntimeInstallation from "./RuntimeInstallation.ts";
 import * as TeamClient from "./TeamClient.ts";
 
-it.effect(
-  "Stop cancels an activation that holds the integration gate and leaves the prior runtime stopped",
-  () =>
+it.effect.each(["installed", "bundled"])(
+  "Stop cancels an activation that holds the integration gate and leaves the prior %s runtime stopped",
+  (baseline) =>
     Effect.gen(function* () {
       const entered = yield* Deferred.make<void>();
       const ready: ManagedHost.HostReady = {
@@ -31,6 +31,7 @@ it.effect(
       };
       let state: ManagedHost.HostStatus = { status: "stopped" };
       let restoredWithoutStart = false;
+      let restoredPath: string | null = null;
       const prior: OpenbotInstalledRuntime = {
         version: "v0.60.0",
         platform: "darwin-arm64",
@@ -55,6 +56,7 @@ it.effect(
           path === next.executablePath
             ? Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never))
             : Effect.sync(() => {
+                restoredPath = path;
                 restoredWithoutStart = options?.start === false;
                 state = { status: "stopped" };
                 return null;
@@ -71,6 +73,9 @@ it.effect(
         yield* service.stop;
         expect(Exit.isFailure(yield* Fiber.await(activation))).toBe(true);
         expect(restoredWithoutStart).toBe(true);
+        expect(restoredPath).toBe(
+          baseline === "installed" ? prior.executablePath : "/fixture/bundled",
+        );
         expect(yield* service.status).toMatchObject({ state: "stopped", desiredRunning: false });
       }).pipe(
         Effect.provide(
@@ -81,7 +86,7 @@ it.effect(
               Layer.mock(RuntimeInstallation.RuntimeInstallation)({
                 getStatus: Effect.succeed({
                   installed: [prior, next],
-                  active: prior,
+                  active: baseline === "installed" ? prior : null,
                   previous: null,
                 }),
                 resolve: () => Effect.succeed(next),
@@ -95,7 +100,9 @@ it.effect(
             ),
           ),
         ),
-        Effect.provideService(HostProcess.Environment, {}),
+        Effect.provideService(HostProcess.Environment, {
+          T3CODE_BUNDLED_OPENBOT_EXECUTABLE: "/fixture/bundled",
+        }),
         Effect.provideService(HostProcess.Platform, "darwin"),
         Effect.provideService(HostProcess.Architecture, "arm64"),
       );

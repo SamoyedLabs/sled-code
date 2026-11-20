@@ -1,6 +1,11 @@
+import { taskQueueAttachmentChoices } from "@t3tools/client-runtime/openbot/queue-attachments";
 import { selectableDraft, acceptedDraft } from "@t3tools/client-runtime/openbot/rich-conversation";
-import { useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { useIsFocused } from "@react-navigation/native";
+import { AppState } from "react-native";
 import { useAtomValue } from "@effect/atom-react";
+import * as Schema from "effect/Schema";
+import { OpenbotPinnedThread, OpenbotThreadBranchResult } from "@t3tools/contracts";
 import type {
   EnvironmentId,
   OpenbotWriteRequest,
@@ -19,17 +24,24 @@ import { useEnvironmentQuery } from "../../state/query";
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
 import { useAtomCommand } from "../../state/use-atom-command";
 
+const decodePinnedThread = Schema.decodeUnknownOption(OpenbotPinnedThread);
+const decodeThreadBranch = Schema.decodeUnknownOption(OpenbotThreadBranchResult);
+
 export function useBotConversationPanel(
   environmentId: EnvironmentId,
   hostId: string,
   agentId: string,
   taskId: string | null,
   newId: () => string,
+  watchActiveTurn = false,
+  anchorMessageId?: string,
 ) {
   const [pages, setPages] = useState<readonly OpenbotConversationPage[]>([]);
   const [text, setText] = useState("");
-  const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
-  const [fileAttempt, setFileAttempt] = useState<{ id: string; text: string } | null>(null);
+  const [selectedDraftIds, setSelectedDraftIds] = useState<readonly string[]>([]);
+  const selectedDraftId = selectedDraftIds[0] ?? null;
+  const setSelectedDraftId = (id: string | null) => setSelectedDraftIds(id ? [id] : []);
+  const [fileAttempt, setFileAttempt] = useState<{ id: string; ids: readonly string[]; text: string; reply: string | null } | null>(null);
   const target = taskId ? { kind: "task" as const, taskId } : { kind: "main" as const };
   const scope = { hostId, agentId };
   const drafts = useEnvironmentQuery(openbot.fileDrafts({ environmentId, input: scope }));
@@ -53,20 +65,61 @@ export function useBotConversationPanel(
       input: {
         hostId,
         request: taskId
-          ? { operation: "task.read", agentId, taskId }
-          : { operation: "conversation.page", agentId, anchor: { type: "latest" }, limit: 50 },
+          ? anchorMessageId
+            ? {
+                operation: "conversation.pins.readThread",
+                agentId,
+                taskId,
+                messageId: anchorMessageId,
+                limit: 50,
+              }
+            : { operation: "task.read", agentId, taskId }
+          : {
+              operation: "conversation.page",
+              agentId,
+              anchor: anchorMessageId
+                ? { type: "around", messageId: anchorMessageId }
+                : { type: "latest" },
+              limit: 50,
+            },
       },
     }),
   );
   const queueQuery = useEnvironmentQuery(
     openbot.readFromHost({
       environmentId,
-      input: { hostId, request: { operation: "queue.read", agentId } },
+      input: {
+        hostId,
+        request: taskId ? { operation: "task.list", agentId } : { operation: "queue.read", agentId },
+      },
     }),
   );
-  const latest = botConversationPage(history.data);
-  const snapshot = latest ?? botConversationSnapshot(history.data);
-  const queue = botQueueSnapshot(queueQuery.data);
+  const latest = useMemo(() => botConversationPage(history.data), [history.data]);
+  const snapshot = useMemo(() => {
+    if (taskId && anchorMessageId) {
+      const result = decodePinnedThread(history.data);
+      return result._tag === "Some" && result.value.conversation.agentId === agentId
+        ? result.value.conversation
+        : null;
+    }
+    return latest ?? botConversationSnapshot(history.data);
+  }, [latest, history.data, taskId, anchorMessageId, agentId]);
+  const focused = useIsFocused();
+  const refreshStreamingPage = useEffectEvent(() => {
+    if (AppState.currentState === "active" && history.isSuccess && !history.isPending)
+      history.refresh();
+  });
+  const activeTurnId = snapshot?.activeTurnId;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Some linked hosts publish turn lifecycle events without forwarding text deltas. Read only the visible chat while its turn runs.
+  useEffect(() => {
+    if (!watchActiveTurn || !focused || !activeTurnId) return;
+    const interval = setInterval(refreshStreamingPage, 350);
+    return () => clearInterval(interval);
+  }, [watchActiveTurn, focused, activeTurnId]);
+  const queue = taskId ? null : botQueueSnapshot(queueQuery.data);
+  const taskQueueChoices = taskId
+    ? taskQueueAttachmentChoices(queueQuery.data, { agentId, taskId, threadId: snapshot?.agentId === agentId ? snapshot.threadId : null })
+    : null;
   const permission = useAtomValue(
     openbot.writeToHost.permissionAtom(environmentId, {
       hostId,
@@ -132,13 +185,14 @@ export function useBotConversationPanel(
     receipts.current.set(key, id);
     return id;
   };
-  const send = async () => {
+  const send = async (committedText = text) => {
     if (selectedDraftId) {
-      if (lock.current || !filePermission || reply) return;
+      if (lock.current || !filePermission) return;
       const draft = drafts.data?.find((d) => d.attachment.id === selectedDraftId);
       if (draft && acceptedDraft(scope, target, selectedDraftId, draft)) {
         setSelectedDraftId(null);
         setFileAttempt(null);
+        setReply(null);
         setText("");
         refresh();
         return;
@@ -147,7 +201,9 @@ export function useBotConversationPanel(
         setError("Refresh Files to reconcile this draft before sending.");
         return;
       }
-      const attempt = fileAttempt ?? { id: selectedDraftId, text: draft.sendText ?? text };
+      const ids = draft.batchAttachmentIds ?? selectedDraftIds;
+      if (ids.some(id => !drafts.data?.some(item => item.attachment.id === id && selectableDraft(scope, target, item)))) { setError("Refresh Files before selecting this batch."); return; }
+      const attempt = fileAttempt ?? { id: ids[0]!, ids, text: draft.sendText ?? committedText, reply: draft.replyToMessageId ?? reply };
       setFileAttempt(attempt);
       lock.current = true;
       setBusy(true);
@@ -155,7 +211,7 @@ export function useBotConversationPanel(
       const result = await settlePromise(() =>
         fileSend({
           environmentId,
-          input: { ...scope, attachmentId: attempt.id, text: attempt.text, target },
+          input: { ...scope, attachmentId: attempt.id, attachmentIds: attempt.ids, text: attempt.text, target, ...(attempt.reply === null ? {} : { replyToMessageId: attempt.reply }) },
         }),
       );
       lock.current = false;
@@ -169,6 +225,7 @@ export function useBotConversationPanel(
       ) {
         setSelectedDraftId(null);
         setFileAttempt(null);
+        setReply(null);
         setText("");
       } else
         setError(
@@ -176,8 +233,8 @@ export function useBotConversationPanel(
         );
       return;
     }
-    if (!text.trim()) return;
-    const key = JSON.stringify(["send", text, reply]);
+    if (!committedText.trim()) return;
+    const key = JSON.stringify(["send", committedText, reply]);
     const clientMessageId = stableId(key);
     const ok = await act(
       taskId
@@ -186,16 +243,16 @@ export function useBotConversationPanel(
               operation: "thread.reply",
               agentId,
               taskId,
-              text,
+              text: committedText,
               replyToMessageId: reply,
               attachmentDraftIds: [],
               clientMessageId,
             }
-          : { operation: "task.send", agentId, taskId, text, clientMessageId }
+          : { operation: "task.send", agentId, taskId, text: committedText, clientMessageId }
         : {
             operation: "conversation.send",
             agentId,
-            text,
+            text: committedText,
             replyToMessageId: reply,
             clientMessageId,
           },
@@ -208,16 +265,28 @@ export function useBotConversationPanel(
   };
   const branch = async (messageId: string) => {
     const key = `branch:${messageId}`;
+    const response = await execute({
+      operation: "thread.branch",
+      agentId,
+      taskId,
+      messageId,
+      requestId: stableId(key),
+    });
+    if (!response) return null;
+    const branch = decodeThreadBranch(response.value);
     if (
-      await act({
-        operation: "thread.branch",
-        agentId,
-        taskId,
-        messageId,
-        requestId: stableId(key),
-      })
-    )
-      receipts.current.delete(key);
+      branch._tag === "None" ||
+      branch.value.branch.sourceTaskId !== taskId ||
+      branch.value.branch.sourceMessageId !== messageId
+    ) {
+      setError("The host has not confirmed this branch. Retry from the same message.");
+      return null;
+    }
+    receipts.current.delete(key);
+    return {
+      id: branch.value.id,
+      title: typeof branch.value.title === "string" ? branch.value.title : "Thread",
+    };
   };
   // A new latest revision invalidates cached older pages after reconnect or remote mutation.
   const validPages = latest ? pages.filter((page) => page.revision === latest.revision) : [];
@@ -259,7 +328,10 @@ export function useBotConversationPanel(
     setBusy(false);
   };
   return {
+    environmentId,hostId,agentId,taskId,
     selectedDraftId,
+    selectedDraftIds,
+    toggleDraft: (id: string) => { if (!fileAttempt && !busy) setSelectedDraftIds(current => current.includes(id) ? current.filter(value => value !== id) : current.length < 10 ? [...current, id] : current); },
     setSelectedDraftId: (id: string | null) => {
       if (!fileAttempt) setSelectedDraftId(id);
     },
@@ -273,12 +345,15 @@ export function useBotConversationPanel(
     text,
     setText,
     reply,
-    setReply,
+    setReply: (value: string | null) => { if (!fileAttempt) setReply(value); },
     busy,
     error:
       error ??
       history.error ??
       queueQuery.error ??
+      (taskId && snapshot && queueQuery.data !== null && taskQueueChoices === null
+        ? "The task queue could not be matched to this conversation."
+        : null) ??
       (history.data !== null && !snapshot
         ? "The host returned an unsupported conversation format."
         : null),
@@ -286,6 +361,23 @@ export function useBotConversationPanel(
     loading: history.isPending,
     permission,
     act,
+    sendVoice: async (spoken: string, clientMessageId: string) => {
+      const payload = { agentId, text: spoken, clientMessageId };
+      const receipt = await execute(
+        taskId
+          ? { operation: "task.send", taskId, ...payload }
+          : { operation: "conversation.send", ...payload },
+      );
+      if (!receipt) return null;
+      const value = receipt?.value;
+      return value &&
+        typeof value === "object" &&
+        "messageId" in value &&
+        typeof value.messageId === "string" &&
+        value.messageId.length <= 512
+        ? value.messageId
+        : clientMessageId;
+    },
     beginEdit,
     releaseEdit: (deliveryId: string, editId: string) =>
       write({
@@ -306,6 +398,9 @@ export function useBotConversationPanel(
       : snapshot?.agentId === agentId
         ? snapshot.messages.slice(-500)
         : [],
+    queueAttachmentChoices: taskId
+      ? taskQueueChoices ?? []
+      : queue?.agentId === agentId ? queue.deliveries.filter(delivery => delivery.status === "queued") : [],
     queue: queue?.agentId === agentId ? queue : null,
   };
 }

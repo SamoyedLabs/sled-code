@@ -113,12 +113,15 @@ export const OpenbotChannelCodingReceipt = Schema.Struct({
   lease: Schema.optional(
     Schema.Struct({
       reservedAt: NonNegativeInt,
+      renewedAt: Schema.optional(NonNegativeInt),
       expiresAt: NonNegativeInt,
       providerCompleted: Schema.Boolean,
     }).check(
       Schema.makeFilter(
         (lease) =>
-          lease.expiresAt > lease.reservedAt && lease.expiresAt - lease.reservedAt <= 30 * 60_000,
+          lease.expiresAt > (lease.renewedAt ?? lease.reservedAt) &&
+          (lease.renewedAt ?? lease.reservedAt) >= lease.reservedAt &&
+          lease.expiresAt - (lease.renewedAt ?? lease.reservedAt) <= 30 * 60_000,
       ),
     ),
   ),

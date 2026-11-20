@@ -1,3 +1,4 @@
+import { APPROVAL_SHUTDOWN_REASON } from "./ApprovalRecovery.ts";
 import { AgentScope } from "@t3tools/shared/AgentScope";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
@@ -646,7 +647,9 @@ export const layerWithOptions = (
         const reason =
           input.reason === "runtime_error"
             ? "Provider session failed before this runtime request was resolved."
-            : "Provider session was closed before this runtime request was resolved.";
+            : input.reason === "server_shutdown"
+              ? APPROVAL_SHUTDOWN_REASON
+              : "Provider session was closed before this runtime request was resolved.";
 
         const events: Array<OrchestrationV2DomainEvent> = [];
         for (const threadId of input.entry.attachedThreadIds) {

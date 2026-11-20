@@ -1,0 +1,1687 @@
+/* React-scoped translation of OpenBot conversation/styles/{layout,timeline,messages,composer}.css
+   and styles/primitives.css (bubble). Keep the source geometry and motion tokens. */
+.ob-chat {
+  --conversation-column-width: clamp(1440px, 65vw, 1920px);
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  color: var(--openbot-text-primary, var(--foreground));
+  background: var(--openbot-bg-canvas, var(--background));
+}
+.ob-chat:not([data-workspace]) {
+  max-height: 42rem;
+  min-height: 20rem;
+}
+.ob-chat-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-anchor: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  margin: 0;
+  padding: 8px max(12px, calc((100% - var(--conversation-column-width)) / 2))
+    var(--openbot-space-6, 24px);
+  list-style: none;
+}
+.ob-chat-history-status {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm, 11px);
+}
+.ob-chat-message {
+  min-width: 0;
+  padding-top: var(--openbot-chat-entry-gap, 12px);
+}
+.ob-chat-message-shell {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+.ob-chat-message[data-author="user"] .ob-chat-message-shell {
+  justify-content: flex-end;
+}
+.ob-chat-bubble {
+  position: relative;
+  display: flex;
+  width: fit-content;
+  min-width: 0;
+  max-width: min(100%, max(720px, 70%), 1200px);
+  flex-direction: column;
+  gap: var(--openbot-space-1, 4px);
+  letter-spacing: -0.15px;
+}
+.ob-chat-message[data-author="user"] .ob-chat-bubble {
+  max-width: min(92%, max(420px, 50%), 800px);
+}
+.ob-chat-bubble-content {
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: var(--openbot-radius-bubble, 16px);
+  padding: 8px 12px;
+  background: var(--openbot-bg-surface, var(--muted));
+  color: var(--openbot-text-primary, var(--foreground));
+  font-size: var(--openbot-text-lg, 14px);
+  line-height: 1.625;
+  overflow-wrap: anywhere;
+  transition:
+    border-color var(--openbot-duration-hover, 150ms) ease,
+    background var(--openbot-duration-hover, 150ms) ease,
+    color var(--openbot-duration-hover, 150ms) ease;
+}
+.ob-chat-message[data-author="user"] .ob-chat-bubble-content {
+  background: var(--openbot-bg-surface-raised, var(--muted));
+}
+.ob-chat-markdown {
+  font-size: inherit;
+  line-height: inherit;
+}
+.ob-chat-markdown p {
+  white-space: pre-wrap;
+}
+.ob-chat-author {
+  padding-inline: 12px;
+  color: var(--openbot-text-muted);
+  overflow-wrap: anywhere;
+}
+.ob-chat-message[data-author="user"] .ob-chat-author {
+  text-align: end;
+}
+.ob-chat-action-row {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  gap: var(--openbot-space-1, 4px);
+  padding-inline: var(--openbot-space-1, 4px);
+}
+.ob-chat-message[data-author="user"] .ob-chat-action-row {
+  justify-content: flex-end;
+}
+.ob-chat-message-actions {
+  position: relative;
+  z-index: 4;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--openbot-duration-hover, 150ms) ease;
+}
+.ob-chat-message-time {
+  padding-inline: var(--openbot-space-1, 4px);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm, 11px);
+  line-height: var(--openbot-leading-sm, 16px);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity var(--openbot-duration-hover, 150ms) ease;
+}
+.ob-chat-message[data-author="user"] .ob-chat-message-time {
+  order: -1;
+}
+.ob-chat-message:hover .ob-chat-message-actions,
+.ob-chat-message:focus-within .ob-chat-message-actions,
+.ob-chat-message-actions:has(> [aria-expanded="true"]) {
+  opacity: 1;
+  pointer-events: auto;
+}
+.ob-chat-message:hover .ob-chat-message-time,
+.ob-chat-message:focus-within .ob-chat-message-time,
+.ob-chat-message:has(> .ob-chat-action-row > .ob-chat-message-actions > [aria-expanded="true"]) .ob-chat-message-time {
+  opacity: 1;
+}
+.ob-chat-action-button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--openbot-radius-sm, 4px);
+  background: transparent;
+  padding: 0;
+  color: var(--openbot-text-muted);
+  transition:
+    background var(--openbot-duration-hover, 150ms) ease,
+    color var(--openbot-duration-hover, 150ms) ease;
+}
+.ob-chat-action-button:hover,
+.ob-chat-action-button:focus-visible,
+.ob-chat-action-button[aria-expanded="true"] {
+  background: var(--openbot-bg-control-hover, var(--muted));
+  color: var(--openbot-text-primary);
+  outline: none;
+}
+.ob-chat-action-button svg {
+  width: 17px;
+  height: 17px;
+}
+.ob-chat button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.ob-chat-message-status {
+  font-size: var(--openbot-text-sm, 11px);
+  color: var(--openbot-danger, var(--destructive));
+}
+.ob-chat-reply-quote {
+  border: 0;
+  background: transparent;
+  text-align: start;
+  cursor: pointer;
+  margin: 0 0 6px;
+  border-inline-start: 2px solid var(--openbot-text-muted);
+  padding-inline-start: 8px;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm, 11px);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.ob-chat-utilities {
+  position: absolute;
+  top: 4px;
+  right: 12px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ob-chat-queue-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: var(--openbot-bg-canvas);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm, 11px);
+}
+.ob-chat-queue-label svg {
+  width: 14px;
+  height: 14px;
+}
+.ob-chat-composer-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 0
+    max(var(--openbot-space-1-5, 6px), calc((100% - var(--conversation-column-width) - 12px) / 2))
+    var(--openbot-space-1-5, 6px);
+}
+.ob-chat-composer {
+  position: relative;
+  z-index: 11;
+  display: grid;
+  min-height: 96px;
+  gap: 4px;
+  margin: 0 auto;
+  border: 0.5px solid var(--openbot-border, var(--border));
+  border-radius: var(--openbot-radius-lg, 12px);
+  background: var(--openbot-bg-surface, var(--background));
+  padding: 10px;
+  box-shadow: none;
+  transition:
+    border-color var(--openbot-duration-hover, 150ms) var(--openbot-ease-out, ease-out),
+    box-shadow var(--openbot-duration-hover, 150ms) var(--openbot-ease-out, ease-out);
+}
+.ob-chat-composer[data-compact] {
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  min-height: 48px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+.ob-chat-composer:focus-within {
+  border-color: var(--openbot-text-dim);
+  box-shadow: 0 0 0 3px var(--openbot-hover);
+}
+.ob-chat-composer-button,
+.ob-chat-dictation-button,
+.ob-chat-send-button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: var(--openbot-hover, var(--muted));
+  color: var(--openbot-text-secondary, var(--foreground));
+  transition:
+    background-color var(--openbot-duration-hover, 150ms) var(--openbot-ease-out, ease-out),
+    color var(--openbot-duration-hover, 150ms) var(--openbot-ease-out, ease-out),
+    transform var(--openbot-duration-fast, 120ms) var(--openbot-ease-out, ease-out);
+}
+.ob-chat-composer-button:hover,
+.ob-chat-dictation-button:hover:not(:disabled) {
+  background: var(--openbot-border);
+  color: var(--openbot-text-primary);
+}
+.ob-chat-composer-button svg,
+.ob-chat-dictation-button svg,
+.ob-chat-send-button svg {
+  width: 16px;
+  height: 16px;
+}
+.ob-chat-send-button {
+  background: var(--openbot-text-primary, var(--foreground));
+  color: var(--openbot-bg-sidebar, var(--background));
+}
+.ob-chat-send-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--openbot-text-primary) 84%, var(--openbot-bg-sidebar));
+  color: var(--openbot-bg-sidebar);
+}
+.ob-chat-primary-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ob-chat-input-label {
+  display: flex;
+  min-width: 0;
+  min-height: 48px;
+  max-height: max(48px, 33dvh);
+  align-items: flex-end;
+  cursor: text;
+}
+.ob-chat-composer-toolbar {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ob-chat-composer[data-compact] .ob-chat-input-label {
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 28px;
+}
+.ob-chat-composer[data-compact] .ob-chat-composer-toolbar {
+  display: contents;
+}
+.ob-chat-composer[data-compact] .ob-chat-composer-button {
+  grid-column: 1;
+  grid-row: 1;
+}
+.ob-chat-composer[data-compact] .ob-chat-primary-actions {
+  grid-column: 3;
+  grid-row: 1;
+}
+.ob-chat-editor-root {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  max-height: max(48px, 33dvh);
+  cursor: text;
+}
+.ob-chat-editor-root textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  height: auto;
+  min-height: 48px;
+  max-height: max(48px, 33dvh);
+  margin: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  resize: none;
+  border: 0;
+  outline: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 2px 4px 8px;
+  caret-color: var(--openbot-text-primary);
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-lg, 14px);
+  line-height: 20px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  unicode-bidi: plaintext;
+}
+.ob-chat-editor-root textarea::placeholder {
+  color: var(--openbot-text-muted);
+}
+.ob-chat-composer[data-compact] .ob-chat-editor-root,
+.ob-chat-composer[data-compact] .ob-chat-editor-root textarea {
+  min-height: 28px;
+}
+.ob-chat-composer[data-compact] .ob-chat-editor-root textarea {
+  padding: 4px 0;
+}
+.ob-chat-composer[data-has-attachments] .ob-chat-input-label,
+.ob-chat-composer[data-has-attachments] .ob-chat-editor-root,
+.ob-chat-composer[data-has-attachments] .ob-chat-editor-root textarea {
+  min-height: 28px;
+}
+.ob-chat-composer[data-has-attachments] .ob-chat-editor-root textarea {
+  padding: 4px;
+}
+.ob-chat-reply-preview {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 10px;
+  margin: 0 10px 6px;
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-control);
+  padding: 6px 8px 6px 12px;
+  box-shadow: 0 7px 22px var(--openbot-shadow-popover-ambient);
+}
+.ob-chat-reply-preview > div {
+  min-width: 0;
+  flex: 1;
+}
+.ob-chat-reply-preview > div > span {
+  display: block;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm, 11px);
+  font-weight: 550;
+  line-height: 14px;
+}
+.ob-chat-reply-preview .ob-chat-reply-quote {
+  margin: 1px 0 0;
+}
+.ob-chat-reply-preview > button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--openbot-text-muted);
+}
+.ob-chat-reply-preview > button svg {
+  width: 14px;
+  height: 14px;
+}
+.ob-chat-error {
+  margin: 0 10px 6px;
+  color: var(--openbot-danger, var(--destructive));
+  font-size: var(--openbot-text-sm, 11px);
+}
+.ob-chat-attachments {
+  position: relative;
+  z-index: 11;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 4px;
+}
+
+.ob-chat-attachment {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.ob-chat-attachment[data-kind="image"] {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-control);
+  padding: 0;
+}
+
+.ob-chat-attachment[data-kind="file"] {
+  width: 220px;
+  max-width: 100%;
+  height: 52px;
+  gap: 10px;
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-control);
+  padding-block: 7px;
+  padding-inline: 8px 12px;
+}
+
+.ob-chat-attachment-copy {
+  display: block;
+  min-width: 0;
+  flex: 1;
+}
+
+.ob-chat-attachment-copy strong,
+.ob-chat-attachment-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ob-chat-attachment-copy strong {
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-sm);
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.ob-chat-attachment-copy small {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  line-height: 14px;
+}
+
+.ob-chat-attachment-preview {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  overflow: hidden;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: var(--openbot-radius-md);
+  background: var(--file-reference-soft, var(--openbot-hover));
+  color: var(--file-reference-color, var(--openbot-text-muted));
+  font-size: var(--openbot-text-sm);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ob-chat-attachment[data-kind="image"] .ob-chat-attachment-preview {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--openbot-radius-media-preview);
+}
+
+.ob-chat-attachment-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* A pasted image that is still importing: its local preview, dimmed, under a spinner. */
+.ob-chat-attachment[data-pending] .ob-chat-attachment-preview img {
+  opacity: 0.5;
+}
+
+.ob-chat-attachment[data-pending] > .ui-spinner {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+}
+
+/* A file on its way to the server. The dashed edge says that it is not there yet; the ring takes
+   the place of the extension badge. */
+.ob-chat-attachment[data-upload="uploading"] {
+  border-style: dashed;
+}
+
+.ob-chat-attachment[data-upload="failed"] {
+  border-color: var(--openbot-danger);
+}
+
+.ob-chat-attachment[data-upload="failed"] .ob-chat-attachment-copy small {
+  color: var(--openbot-danger-text);
+}
+
+.ob-chat-upload-ring {
+  width: 28px;
+}
+
+.ob-chat-upload-failed-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--openbot-danger-text);
+}
+
+.ob-chat-upload-retry {
+  flex: none;
+  margin-inline-end: -4px;
+  color: var(--openbot-danger-text);
+}
+.ob-chat-attachment-remove {
+  position: absolute;
+  z-index: 1;
+  top: -8px;
+  inset-inline-end: -8px;
+  border: 1px solid var(--openbot-border-strong);
+  border-radius: var(--openbot-radius-pill);
+  background: color-mix(in srgb, var(--openbot-bg-surface-raised) 72%, transparent);
+  backdrop-filter: blur(8px) saturate(1.1);
+  -webkit-backdrop-filter: blur(8px) saturate(1.1);
+  opacity: 0;
+  scale: 0.9;
+  transition:
+    opacity var(--openbot-duration-hover) ease,
+    scale var(--openbot-duration-hover) ease,
+    background-color var(--openbot-duration-hover) ease;
+}
+
+.ob-chat-attachment:hover > .ob-chat-attachment-remove,
+.ob-chat-attachment:focus-within > .ob-chat-attachment-remove {
+  opacity: 1;
+  scale: 1;
+}
+
+@media (hover: none) {
+  .ob-chat-attachment-remove {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+.ob-chat-attachment-remove {
+  display: grid;
+  place-items: center;
+  width: var(--openbot-control-xs);
+  height: var(--openbot-control-xs);
+  padding: 0;
+  color: var(--openbot-text-secondary);
+}
+.ob-chat-attachment-remove svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+}
+.ob-chat-upload-retry {
+  border: 0;
+  background: transparent;
+  padding: 4px;
+}
+.ob-chat-upload-retry svg {
+  width: 12px;
+  height: 12px;
+}
+.ob-chat-attachment-preview > .ob-chat-spinner {
+  width: 18px;
+  height: 18px;
+}
+.ob-chat-menu {
+  font-family: var(--openbot-font-sans, inherit);
+}
+.ob-chat-reactions {
+  display: flex;
+  gap: 1px;
+}
+.ob-chat-reactions [role="menuitem"] {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  min-height: 31px;
+  padding: 0;
+  place-items: center;
+  font-size: var(--openbot-text-xl, 18px);
+}
+.ob-chat-spinner {
+  animation: ob-chat-spin 720ms linear infinite;
+}
+@keyframes ob-chat-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (hover: none), (pointer: coarse) {
+  .ob-chat-message-actions,
+  .ob-chat-message-time {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ob-chat *,
+  .ob-chat-menu * {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* VoiceRecordingMorph source timing: sampled 320/17 spring, 600ms open and 360ms close. */
+.ob-chat-voice-morph {
+  --voice-morph-duration: 600ms;
+  --voice-morph-exit-duration: 360ms;
+  --voice-morph-ease: linear(
+    0,
+    0.057 3.3%,
+    0.199 6.7%,
+    0.386 10%,
+    0.587 13.3%,
+    0.773 16.7%,
+    0.93 20%,
+    1.049 23.3%,
+    1.128 26.7%,
+    1.171 30%,
+    1.183 33.3%,
+    1.172 36.7%,
+    1.146 40%,
+    1.111 43.3%,
+    1.075 46.7%,
+    1.041 50%,
+    1.012 53.3%,
+    0.991 56.7%,
+    0.976 60%,
+    0.967 66.7%,
+    0.974 73.3%,
+    0.987 80%,
+    0.998 86.7%,
+    1.004 93.3%,
+    1
+  );
+  --voice-bar-width: 152px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ob-chat-voice-morph-filter {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+/* Inset past the controls so the blur is not cut off at the layer edge. */
+.ob-chat-voice-morph-goo {
+  position: absolute;
+  inset: -12px;
+  pointer-events: none;
+}
+
+/* The goo threshold needs opaque shapes, so the layer, not the shape, carries the
+   --openbot-hover transparency of the microphone button. */
+.ob-chat-voice-morph-goo-bar {
+  opacity: 0.06;
+}
+
+.ob-chat-voice-morph-bar,
+.ob-chat-voice-morph-send-blob,
+.ob-chat-voice-morph-finish-blob {
+  position: absolute;
+  top: 12px;
+  height: 28px;
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-text-primary);
+}
+
+.ob-chat-voice-morph-bar {
+  inset-inline-end: 46px;
+  width: 28px;
+  transition: width var(--voice-morph-exit-duration) var(--openbot-ease-out);
+}
+
+.ob-chat-voice-morph-send-blob,
+.ob-chat-voice-morph-finish-blob {
+  inset-inline-end: 12px;
+  width: 28px;
+  opacity: 0;
+  transition: opacity 0s linear var(--voice-morph-exit-duration);
+}
+
+.ob-chat-voice-morph-finish-blob {
+  transform: scale(0.5);
+  transition:
+    transform var(--voice-morph-exit-duration) var(--openbot-ease-out),
+    opacity 0s linear var(--voice-morph-exit-duration);
+}
+
+.ob-chat-voice-morph[data-recording] .ob-chat-voice-morph-bar {
+  width: var(--voice-bar-width);
+  transition: width var(--voice-morph-duration) var(--voice-morph-ease);
+}
+
+.ob-chat-voice-morph[data-recording] .ob-chat-voice-morph-send-blob {
+  opacity: 1;
+  transition: none;
+}
+
+.ob-chat-voice-morph[data-recording] .ob-chat-voice-morph-finish-blob {
+  opacity: 1;
+  transform: translateX(-34px) scale(0.8);
+  transition: transform var(--voice-morph-duration) var(--voice-morph-ease);
+}
+
+:dir(rtl) .ob-chat-voice-morph[data-recording] .ob-chat-voice-morph-finish-blob {
+  transform: translateX(34px) scale(0.8);
+}
+
+/* Positioned, so the controls paint over the goo layers before them. */
+.ob-chat-voice-morph-send {
+  position: relative;
+  display: flex;
+}
+
+.ob-chat-voice-morph-slot {
+  position: relative;
+  display: flex;
+  width: 28px;
+  height: 28px;
+  justify-content: flex-end;
+  transition: width var(--voice-morph-exit-duration) var(--openbot-ease-out);
+}
+
+.ob-chat-voice-morph[data-recording] .ob-chat-voice-morph-slot {
+  width: var(--voice-bar-width);
+  transition: width var(--voice-morph-duration) var(--voice-morph-ease);
+}
+
+.ob-chat-voice-morph .ob-chat-dictation-button {
+  background: transparent;
+}
+
+.ob-chat-voice-recording-status {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  border: 0;
+  overflow: hidden;
+  padding-block: 0;
+  padding-inline: 12px 3px;
+  color: var(--openbot-text-secondary);
+  animation: ob-chat-voice-morph-content-in var(--openbot-duration-slow) var(--openbot-ease-out)
+    var(--openbot-duration-fast) both;
+}
+
+/* The last seconds before the time limit: the bar widens for the time left. */
+.ob-chat-voice-morph[data-countdown] {
+  --voice-bar-width: 188px;
+}
+
+.ob-chat-voice-recording-status[data-tone="warning"] {
+  color: var(--openbot-warning-text);
+}
+
+.ob-chat-voice-recording-remaining {
+  flex: 0 0 auto;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.ob-chat-voice-recording-status[data-tone="warning"] .ob-chat-voice-recording-remaining {
+  color: var(--openbot-warning-text);
+}
+
+.ob-chat-voice-waveform {
+  display: flex;
+  min-width: 0;
+  height: 20px;
+  flex: 1;
+  align-items: center;
+  justify-content: flex-end;
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent, currentColor 24px);
+  /* A time axis: the newest sample is at the right in every language. */
+  direction: ltr;
+}
+
+.ob-chat-voice-waveform-track {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+}
+
+/* Quiet dots stay round; speech stretches them into bars. */
+.ob-chat-voice-waveform-dot {
+  width: 3px;
+  height: calc(3px + var(--voice-level, 0) * 15px);
+  flex: 0 0 auto;
+  border-radius: var(--openbot-radius-pill);
+  background: currentColor;
+}
+
+.ob-chat-voice-recording-cancel,
+.ob-chat-voice-recording-finish {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: var(--openbot-radius-pill);
+  padding: 0;
+  background: transparent;
+  transition:
+    background-color var(--openbot-duration-hover) var(--openbot-ease-out),
+    color var(--openbot-duration-hover) var(--openbot-ease-out),
+    transform var(--openbot-duration-fast) var(--openbot-ease-out);
+}
+
+.ob-chat-voice-recording-cancel {
+  color: var(--openbot-text-secondary);
+}
+
+.ob-chat-voice-recording-finish {
+  color: var(--openbot-bg-sidebar);
+  animation: ob-chat-voice-morph-content-in var(--openbot-duration-slow) var(--openbot-ease-out)
+    var(--openbot-duration-overlay) both;
+}
+
+/* Cancel sits on the bar itself, so its hover disc stays faint, like the bar. */
+.ob-chat-voice-morph .ob-chat-voice-recording-cancel:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--openbot-text-primary) 10%, transparent);
+  color: var(--openbot-text-primary);
+}
+
+.ob-chat-voice-recording-cancel:active,
+.ob-chat-voice-recording-finish:active {
+  transform: scale(0.94);
+}
+
+.ob-chat-voice-recording-cancel svg,
+.ob-chat-voice-recording-finish svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ob-chat-voice-recording-finish svg {
+  stroke-width: 3;
+}
+
+@keyframes ob-chat-voice-morph-content-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ob-chat-voice-morph *,
+  .ob-chat-voice-recording-status,
+  .ob-chat-voice-recording-finish {
+    transition: none;
+    animation: none;
+  }
+}
+
+.ob-chat-voice-notice {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-surface);
+  font-size: var(--openbot-text-sm);
+}
+
+.ob-chat-content-resize {
+  min-width: 0;
+}
+.ob-chat-content-resize[data-resizing="true"] {
+  overflow: hidden;
+  will-change: height;
+}
+
+.ob-chat button:not(:disabled) {
+  cursor: pointer;
+}
+.ob-chat-reaction-pill {
+  width: fit-content;
+  height: var(--openbot-icon-lg);
+  font-size: var(--openbot-text-lg);
+  line-height: 1;
+  padding-inline: 4px;
+}
+.ob-chat-message[data-author="user"] .ob-chat-reaction-pill {
+  margin-inline-start: auto;
+}
+.ob-chat-reactions-more {
+  margin-top: 3px;
+  border-top: 1px solid var(--openbot-border);
+  padding-top: 4px;
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+.ob-chat-reactions [role="menuitem"] {
+  transition:
+    background var(--openbot-duration-hover) ease,
+    transform var(--openbot-duration-hover) ease;
+}
+.ob-chat-reactions [role="menuitem"]:is(:hover, :focus-visible, [data-highlighted]) {
+  background: var(--openbot-border);
+  transform: scale(1.08);
+}
+
+/* Source composer.css mention-picker, scoped for the React editor. */
+.ob-chat-mention-picker {
+  --mention-picker-overlap: 14px;
+  --mention-picker-side-inset: calc(var(--openbot-space-1-5) + 12px);
+  --mention-picker-row-height: 29px;
+  --mention-picker-gutter: 5px;
+  --mention-picker-visible-rows: 7;
+
+  position: absolute;
+  z-index: 10;
+  right: var(--mention-picker-side-inset);
+  bottom: calc(var(--mention-picker-bottom, 0px) - var(--mention-picker-overlap));
+  left: var(--mention-picker-side-inset);
+  border: 1px solid var(--openbot-queue-border);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-queue-surface);
+  padding-bottom: var(--mention-picker-overlap);
+  color: var(--openbot-queue-text);
+  box-shadow: none;
+  transform-origin: bottom center;
+  animation: ob-chat-mention-picker-in var(--openbot-duration-normal) cubic-bezier(0.23, 1, 0.32, 1)
+    both;
+}
+
+/*
+ * The scroll lives on the list, not the panel, so the scroll fade masks the rows and leaves the
+ * panel border and background whole. The scrollbar stays hidden: the fade carries the same news.
+ */
+.ob-chat-mention-picker-list {
+  display: grid;
+  /* A plain auto track grows to the widest row, which would push the badges out of view. */
+  grid-template-columns: minmax(0, 1fr);
+  /*
+   * Every row is the same height, so the list can state the height its rows need instead of
+   * leaving it to the content. A length on both sides of the change is what lets the panel
+   * travel to its new size while the query narrows, rather than jump to it.
+   */
+  height: calc(
+    var(--mention-picker-rows, 0) * var(--mention-picker-row-height) + 2 *
+      var(--mention-picker-gutter)
+  );
+  max-height: calc(
+    var(--mention-picker-visible-rows) * var(--mention-picker-row-height) + 2 *
+      var(--mention-picker-gutter)
+  );
+  overflow-y: auto;
+  /* An even inset all round: the row's own 8px carries the rest of the gap beside the text. */
+  padding: var(--mention-picker-gutter);
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  transition: height var(--openbot-duration-normal) var(--openbot-ease-out);
+  will-change: height;
+}
+
+.ob-chat-mention-picker-list::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes ob-chat-mention-picker-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px) scaleY(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
+}
+
+/* The queue panel's row rhythm and colors: a 29px row, a small leading glyph, muted trailing text. */
+.ob-chat-mention-picker-option {
+  display: flex;
+  width: 100%;
+  /* The list computes its own height from this one, so the two must not drift apart. */
+  height: var(--mention-picker-row-height);
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: var(--openbot-radius-md);
+  background: transparent;
+  padding: 0 8px;
+  color: var(--openbot-queue-text);
+  text-align: start;
+}
+
+.ob-chat-mention-picker-file-option .attachment-reference-visual {
+  width: 20px;
+  height: 20px;
+}
+
+.ob-chat-mention-picker-option:hover,
+.ob-chat-mention-picker-option-active {
+  background: var(--openbot-hover);
+}
+
+.ob-chat-mention-picker-option .agent-avatar {
+  --agent-avatar-optical-offset: -2px;
+
+  width: 20px;
+  height: 20px;
+}
+
+.ob-chat-mention-picker-skill-icon {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--openbot-queue-action);
+}
+
+.ob-chat-mention-picker-skill-icon > svg {
+  width: 15px;
+  height: 15px;
+}
+
+.ob-chat-mention-picker-option > strong {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  font-size: var(--openbot-text-lg);
+  font-weight: 500;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ob-chat-mention-picker-description {
+  min-width: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+  color: var(--openbot-queue-action);
+  font-size: var(--openbot-text-md);
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Shown only beside a skill whose name another listed skill shares: the slug tells them apart. */
+.ob-chat-mention-picker-slug {
+  flex: 0 0 auto;
+  color: var(--openbot-queue-action);
+  font-size: var(--openbot-text-md);
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+/* Takes the list's place when `$` finds nothing, at the height of one row in the list. */
+.ob-chat-mention-picker-status {
+  display: flex;
+  height: calc(var(--mention-picker-row-height) + 2 * var(--mention-picker-gutter));
+  align-items: center;
+  margin: 0;
+  padding: 0 calc(var(--mention-picker-gutter) + 8px);
+  color: var(--openbot-queue-action);
+  font-size: var(--openbot-text-md);
+  line-height: 18px;
+}
+
+.ob-chat-mention-picker-badge {
+  margin-inline-start: auto;
+  flex: 0 0 auto;
+  color: var(--openbot-queue-action);
+}
+
+.ob-chat-reference-chip,
+/* Every composer token, including the ones for a reference whose agent or skill is gone. */
+.ob-chat-reference-chip {
+  display: inline-flex;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  height: var(--openbot-space-6);
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--openbot-space-1);
+  margin: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--openbot-radius-sm);
+  background: var(--openbot-border);
+  padding-block: var(--openbot-space-1);
+  padding-inline: var(--openbot-space-1) var(--openbot-space-1-5);
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-sm);
+  font-weight: 500;
+  line-height: var(--openbot-space-4);
+  vertical-align: middle;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+/* A plugin and an MCP server read as the skill chips do: each names something the agent was given. */
+.ob-chat-reference-chip[data-kind="mcp"],
+.ob-chat-reference-chip[data-kind="plugin"],
+.ob-chat-reference-chip[data-kind="skill"] {
+  background: var(--openbot-accent-soft);
+  color: var(--openbot-accent-text);
+}
+
+/* A quote is a passage, not a name: it stops at a short width, and its title shows all of it. */
+.ob-chat-reference-chip[data-kind="quote"] {
+  max-width: min(240px, 100%);
+  font-weight: 450;
+}
+
+.ob-chat-reference-chip[data-kind="agent"]:hover,
+button.ob-chat-reference-chip[data-kind="quote"]:hover {
+  background: var(--openbot-border-strong);
+  color: var(--openbot-text-primary);
+}
+
+.ob-chat-reference-chip .ob-chat-reference-chip-icon {
+  display: inline-grid;
+  width: var(--openbot-space-4);
+  height: var(--openbot-space-4);
+  flex: 0 0 var(--openbot-space-4);
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--openbot-radius-xs);
+  color: inherit;
+}
+
+.ob-chat-reference-chip-icon > img,
+.ob-chat-reference-chip-icon > svg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* In the text, a line icon has the size and stroke of a file chip's page icon. Agent faces and logos
+   keep the full box. */
+:is(.ob-chat-reference-chip, .ob-chat-reference-chip) .ob-chat-reference-chip-icon > svg.lucide {
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
+  stroke-width: var(--openbot-icon-stroke);
+}
+
+.ob-chat-reference-chip-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ob-chat-rich-editor {
+  width: 100%;
+  min-width: 0;
+}
+.ob-chat-editor-surface {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  max-height: max(48px, 33dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  outline: none;
+  border: 0;
+  padding: 2px 4px 8px;
+  font-size: var(--openbot-text-lg);
+  line-height: 20px;
+  color: var(--openbot-text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  unicode-bidi: plaintext;
+}
+.ob-chat-editor-surface p {
+  margin: 0;
+}
+.ob-chat-editor-surface:has(p:only-child > br.ProseMirror-trailingBreak:only-child)::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  pointer-events: none;
+  color: var(--openbot-text-muted);
+}
+.ob-chat-editor-surface[aria-disabled="true"] {
+  pointer-events: none;
+}
+.ob-chat-composer[data-compact] .ob-chat-editor-surface {
+  min-height: 28px;
+  padding: 4px 0;
+}
+.ob-chat-composer[data-has-attachments] .ob-chat-editor-surface {
+  min-height: 28px;
+  padding: 4px;
+}
+.ob-chat-mention-picker-badge {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  font-size: var(--openbot-text-sm);
+}
+.ob-chat-mention-picker-badge > svg {
+  width: 12px;
+  height: 12px;
+}
+.ob-chat-mention-picker-option {
+  cursor: pointer;
+}
+.ob-chat-reference-chip > .ob-chat-reference-chip-icon {
+  display: inline-flex;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ob-chat-mention-picker,
+  .ob-chat-mention-picker-list {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* Source renderer/styles.css and conversation/styles/message-content.css. */
+.ob-chat {
+  --stream-gap: 40ms;
+  --stream-fade: 300ms;
+  --stream-catch-up: 400ms;
+  --stream-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ob-chat-stream-word {
+  animation: ob-chat-stream-in var(--stream-fade) var(--stream-ease) both;
+}
+@keyframes ob-chat-stream-in {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ob-chat-stream-word {
+    animation: none;
+  }
+}
+
+/* SelectionActions.tsx / message-content.css: source quote popover, placement and motion. */
+.ob-chat-selection-highlight {
+  position: fixed;
+  z-index: 18;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ob-chat-selection-highlight span {
+  position: fixed;
+  border-radius: var(--openbot-radius-xs);
+  background: var(--openbot-accent-strong);
+}
+
+.ob-chat-selection-layer {
+  position: fixed;
+  z-index: 25;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px) scale(0.97);
+  transform-origin: 50% 0;
+  transition:
+    opacity var(--openbot-duration-slow) ease-out,
+    transform var(--openbot-duration-overlay) cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ob-chat-selection-layer[data-placement="top"] {
+  transform-origin: 50% 100%;
+}
+
+.ob-chat-selection-layer[data-ready="true"] {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+
+.ob-chat-selection-bar {
+  display: flex;
+  max-width: calc(100vw - 24px);
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--openbot-border-strong);
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-bg-surface-raised);
+  padding: 4px;
+  box-shadow:
+    0 14px 34px var(--openbot-shadow-popover-ambient),
+    0 3px 10px var(--openbot-shadow-popover-ambient),
+    inset 0 0 0 1px var(--openbot-shadow-ring);
+  color: var(--openbot-text-primary);
+  transition: width var(--openbot-duration-overlay) cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ob-chat-selection-content,
+.ob-chat-selection-presets,
+.ob-chat-selection-more-presets {
+  display: flex;
+  width: max-content;
+  min-width: 0;
+  align-items: center;
+}
+
+.ob-chat-selection-content {
+  height: 28px;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.ob-chat-selection-form-shell {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  overflow: hidden;
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    max-width var(--openbot-duration-overlay) cubic-bezier(0.23, 1, 0.32, 1),
+    opacity var(--openbot-duration-overlay) cubic-bezier(0.23, 1, 0.32, 1),
+    transform var(--openbot-duration-overlay) cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ob-chat-selection-form-shell-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-8px);
+}
+
+.ob-chat-selection-form {
+  display: flex;
+  height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  overflow: hidden;
+  transition: width var(--openbot-duration-overlay) cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ob-chat-selection-form input {
+  width: 100%;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  padding-block: 0;
+  padding-inline: 11px 10px;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-sm);
+  font-weight: 400;
+  line-height: 28px;
+  outline: 0;
+}
+
+.ob-chat-selection-form input::placeholder {
+  color: var(--openbot-text-muted);
+}
+
+.ob-chat-selection-form input:focus-visible {
+  outline: 0;
+}
+
+.ob-chat-selection-presets {
+  max-width: 224px;
+  gap: 2px;
+  overflow: hidden;
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    max-width var(--openbot-duration-overlay) cubic-bezier(0.23, 1, 0.32, 1),
+    opacity var(--openbot-duration-overlay) cubic-bezier(0.23, 1, 0.32, 1),
+    transform var(--openbot-duration-overlay) cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ob-chat-selection-presets-hidden {
+  max-width: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-8px);
+}
+
+/* Hidden parts slide toward the start side. */
+:dir(rtl) :is(.ob-chat-selection-form-shell-hidden, .ob-chat-selection-presets-hidden) {
+  transform: translateX(8px);
+}
+
+.ob-chat-selection-more-presets {
+  max-width: 0;
+  gap: 2px;
+  margin-inline-start: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition:
+    max-width var(--openbot-duration-overlay) cubic-bezier(0.23, 1, 0.32, 1),
+    opacity var(--openbot-duration-overlay) cubic-bezier(0.23, 1, 0.32, 1),
+    margin-inline-start var(--openbot-duration-overlay) cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ob-chat-selection-presets-expanded .ob-chat-selection-more-presets {
+  max-width: 262px;
+  margin-inline-start: 2px;
+  opacity: 1;
+}
+
+.ob-chat-selection-send-shell {
+  display: flex;
+  min-width: 0;
+  max-width: 0;
+  align-items: center;
+  overflow: hidden;
+  opacity: 0;
+  transform: scale(0.88);
+  transition:
+    max-width var(--openbot-duration-overlay) cubic-bezier(0.23, 1, 0.32, 1),
+    opacity var(--openbot-duration-overlay) cubic-bezier(0.23, 1, 0.32, 1),
+    transform var(--openbot-duration-overlay) cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ob-chat-selection-send-shell-visible {
+  max-width: 30px;
+  opacity: 1;
+  transform: scale(1);
+}
+
+.ob-chat-selection-control,
+.ob-chat-selection-icon-button,
+.ob-chat-selection-send {
+  display: inline-flex;
+  height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--openbot-radius-pill);
+  padding: 0;
+  transition:
+    background-color var(--openbot-duration-hover) ease,
+    border-color var(--openbot-duration-hover) ease,
+    box-shadow var(--openbot-duration-hover) ease,
+    color var(--openbot-duration-hover) ease,
+    opacity var(--openbot-duration-hover) ease,
+    transform var(--openbot-duration-normal) ease;
+}
+
+.ob-chat-selection-control {
+  gap: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 0 9px;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  font-weight: 430;
+  white-space: nowrap;
+}
+
+.ob-chat-selection-icon-button,
+.ob-chat-selection-send {
+  width: 28px;
+}
+
+.ob-chat-selection-icon-button {
+  background: transparent;
+  color: var(--openbot-text-secondary);
+}
+
+.ob-chat-selection-send {
+  background: var(--openbot-text-primary);
+  color: var(--openbot-bg-canvas);
+}
+
+.ob-chat-selection-control:active,
+.ob-chat-selection-icon-button:active,
+.ob-chat-selection-send:active {
+  transform: scale(0.94);
+}
+
+.ob-chat-selection-divider {
+  width: 1px;
+  height: 16px;
+  flex: 0 0 auto;
+  margin: 0 3px;
+  background: var(--openbot-border-strong);
+}
+
+.ob-chat-selection-more-divider {
+  margin-inline-start: 1px;
+}
+
+.ob-chat-selection-expand svg {
+  transition: transform var(--openbot-duration-overlay) cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* The chevron points to the end side, where the extra presets open. `scale` mirrors it and keeps the
+   open state's `transform` rotation. */
+:dir(rtl) .ob-chat-selection-expand svg {
+  scale: -1 1;
+}
+
+.ob-chat-selection-expand[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.ob-chat-selection-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ob-chat-selection-status,
+.ob-chat-selection-error {
+  display: inline-flex;
+  height: 28px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  font-size: var(--openbot-text-sm);
+  white-space: nowrap;
+}
+
+.ob-chat-selection-status {
+  color: var(--openbot-text-secondary);
+}
+
+.ob-chat-selection-error {
+  color: var(--openbot-danger);
+}
+
+.ob-chat-selection-spinner {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--openbot-border-strong);
+  border-top-color: var(--openbot-text-secondary);
+  border-radius: var(--openbot-radius-pill);
+  animation: ob-chat-selection-spin 700ms linear infinite;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ob-chat-selection-control:hover {
+    border-color: var(--openbot-border-focus);
+    background: var(--openbot-accent-strong);
+    box-shadow: 0 0 0 1px var(--openbot-accent-soft);
+    color: var(--openbot-text-primary);
+  }
+
+  .ob-chat-selection-icon-button:hover {
+    background: var(--openbot-bg-control-hover);
+    color: var(--openbot-text-primary);
+  }
+
+  .ob-chat-selection-send:hover {
+    opacity: 0.9;
+  }
+}
+
+@media (max-width: 480px) {
+  .ob-chat-selection-control {
+    width: 28px;
+    padding: 0;
+  }
+
+  .ob-chat-selection-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .ob-chat-selection-presets-expanded .ob-chat-selection-more-presets {
+    max-width: 88px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ob-chat-selection-layer,
+  .ob-chat-selection-bar,
+  .ob-chat-selection-form,
+  .ob-chat-selection-form-shell,
+  .ob-chat-selection-presets,
+  .ob-chat-selection-more-presets,
+  .ob-chat-selection-send-shell,
+  .ob-chat-selection-expand svg {
+    transition: none;
+  }
+
+  .ob-chat-selection-spinner {
+    animation-duration: 1.4s;
+  }
+}
+
+@keyframes ob-chat-selection-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ob-chat-attachment[draggable="true"] {
+  cursor: grab;
+}
+.ob-chat-attachment[draggable="true"]:active {
+  cursor: grabbing;
+}
+.ob-chat-attachment[draggable="true"]:focus-visible,
+.ob-chat-selection-control:focus-visible {
+  outline: 0;
+  box-shadow: var(--openbot-focus-ring);
+}
+
+.ob-chat ::highlight(ob-chat-message-selection) {
+  background: var(--openbot-accent-strong);
+  color: inherit;
+}
+
+/* OpenBot message-content.css selected-instruction quote. */
+.ob-chat-selection-quote {
+  max-width: 100%;
+  max-height: 124px;
+  overflow: auto;
+  margin: 0;
+  border-inline-start: 2px solid var(--openbot-accent);
+  border-start-start-radius: 0;
+  border-start-end-radius: var(--openbot-radius-sm);
+  border-end-end-radius: var(--openbot-radius-sm);
+  border-end-start-radius: 0;
+  background: var(--openbot-bg-control);
+  padding: 6px 8px;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  line-height: 17px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}

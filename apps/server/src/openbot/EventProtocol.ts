@@ -1,4 +1,5 @@
 import {
+  SLED_ONCE_ROUTINES_ROUTES,
   OpenbotEventRoutine,
   OpenbotRoutineRun,
   OpenbotEventActivity,
@@ -18,6 +19,7 @@ export class RoutineResponseError extends Schema.TaggedError<RoutineResponseErro
 }
 type Request = OpenbotEventAdminRequest;
 const paths: Readonly<Record<Request["operation"], string>> = {
+  "events.configuration": "/v1/admin/routine-recovery/routines/list",
   "events.status": "/v1/admin/events/status",
   "events.list": "/v1/admin/routine-recovery/routines/list",
   "events.save": "/v1/admin/routine-recovery/routines/save",
@@ -32,7 +34,23 @@ export function isRequest(input: { readonly operation: string }): input is Reque
   return Object.hasOwn(paths, input.operation);
 }
 export function route(request: Request) {
-  const { operation, ...body } = request;
+  const { operation, ...rest } = request;
+  if (
+    (request.operation === "events.list" || request.operation === "events.save") &&
+    request.includeOneTime
+  ) {
+    const { operation: _operation, includeOneTime: _include, ...body } = request;
+    return {
+      method: "POST" as const,
+      path:
+        request.operation === "events.list"
+          ? SLED_ONCE_ROUTINES_ROUTES.list
+          : SLED_ONCE_ROUTINES_ROUTES.save,
+      body,
+      eventProjection: operation,
+    };
+  }
+  const body = request.operation === "events.configuration" ? { owner: request.owner } : rest;
   return { method: "POST" as const, path: paths[operation], body, eventProjection: operation };
 }
 // Future fields survive validation; reserved configuration keys never enter general read results.
@@ -75,11 +93,49 @@ const decoders = {
 };
 export const project = Effect.fn("OpenbotEventProtocol.project")(
   function* (operation: Request["operation"], value: unknown) {
+    if (operation === "events.configuration") return yield* new RoutineResponseError({});
     yield* decoders[operation](value);
     const json = yield* decodeJson(value);
     return operation === "events.save" || operation === "events.rotateSecret"
       ? json
       : publicRoutineJson(json);
+  },
+  Effect.mapError(() => new RoutineResponseError({})),
+);
+
+export const configuration = Effect.fn("OpenbotEventProtocol.configuration")(
+  function* (request: Extract<Request, { operation: "events.configuration" }>, value: unknown) {
+    yield* decoders["events.list"](value);
+    const rows = yield* Schema.decodeUnknownEffect(
+      Schema.Array(
+        Schema.Struct({
+          id: Schema.String,
+          owner: Schema.Struct({ kind: Schema.Literals(["agent", "channel"]), id: Schema.String }),
+          trigger: Schema.Struct({
+            kind: Schema.String,
+            url: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMaxLength(8192)))),
+            webhookUrl: Schema.optional(
+              Schema.NullOr(Schema.String.check(Schema.isMaxLength(8192))),
+            ),
+          }),
+        }),
+      ).check(Schema.isMaxLength(10000)),
+    )(value);
+    const routine = rows.find(
+      (row) =>
+        row.id === request.id &&
+        row.owner.id === request.owner.id &&
+        row.owner.kind === request.owner.kind,
+    );
+    if (!routine) return yield* new RoutineResponseError({});
+    return {
+      owner: request.owner,
+      id: request.id,
+      webhookUrl:
+        routine.trigger.kind === "webhook"
+          ? (routine.trigger.url ?? routine.trigger.webhookUrl ?? null)
+          : null,
+    };
   },
   Effect.mapError(() => new RoutineResponseError({})),
 );

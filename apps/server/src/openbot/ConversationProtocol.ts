@@ -1,11 +1,15 @@
 import {
+  OpenbotPinnedMessages,
+  OpenbotPinnedThread,
   OpenbotThreadReadState,
   OpenbotThreadBranchLink,
   OpenbotThreadBranchResult,
   OpenbotConversationReceipt,
   OpenbotConversationPage,
+  OpenbotConversationSearchPage,
   OpenbotConversationSnapshot,
   OpenbotConversationReadState,
+  OpenbotConversationDetail,
   type OpenbotConversationReadRequest,
   type OpenbotConversationCommand,
 } from "@t3tools/contracts";
@@ -18,18 +22,76 @@ export function isRequest(request: { readonly operation: string }): request is R
     [
       "conversation.blockRespond",
       "conversation.page",
+      "conversation.detail",
+      "conversation.search",
       "conversation.markRead",
       "conversation.markUnread",
       "conversation.react",
-    ].includes(request.operation) || request.operation.startsWith("thread.")
+      "conversation.message.delete",
+    ].includes(request.operation) ||
+    request.operation.startsWith("conversation.pins.") ||
+    request.operation.startsWith("thread.")
   );
 }
 export function route(request: Request) {
   if (request.operation === "conversation.blockRespond")
     throw new Error("UI block responses require fresh snapshot validation.");
+  if (request.operation === "conversation.search") {
+    const query = new URLSearchParams({ q: request.query, limit: String(request.limit) });
+    if (request.agentId !== undefined) query.set("botId", request.agentId);
+    if (request.cursor !== undefined) query.set("cursor", request.cursor);
+    return {
+      method: "GET" as const,
+      path: `/v1/messages/search?${query}`,
+      conversationProjection: request.operation,
+    };
+  }
+  if (request.operation === "conversation.message.delete") {
+    return {
+      method: "POST" as const,
+      path: request.taskId === null ? "/v1/messages/delete" : "/v1/messages/delete-task",
+      body:
+        request.taskId === null
+          ? { agentId: request.agentId, messageId: request.messageId }
+          : { agentId: request.agentId, taskId: request.taskId, messageId: request.messageId },
+      conversationProjection: request.operation,
+    };
+  }
   const { operation, agentId, ...input } = request;
   const agent = `/v1/agents/${encodeURIComponent(agentId)}`;
+  if (
+    operation === "conversation.pins.list" ||
+    operation === "conversation.pins.set" ||
+    operation === "conversation.pins.readThread"
+  ) {
+    const suffix = operation.split(".").at(-1);
+    return {
+      method: "POST" as const,
+      path: `/v1/message-pins/${suffix === "readThread" ? "read-thread" : suffix}`,
+      body: { agentId, ...input },
+      conversationProjection: operation,
+    };
+  }
+  if (request.operation === "conversation.detail")
+    return {
+      method: "POST" as const,
+      path: "/v1/sled/conversation/detail",
+      body: { agentId, ...input },
+      conversationProjection: operation,
+    };
   if (request.operation === "conversation.page") {
+    if (request.deferDetails || request.taskId !== undefined)
+      return {
+        method: "POST" as const,
+        path: "/v1/sled/conversation/page",
+        body: {
+          agentId,
+          taskId: request.taskId ?? null,
+          anchor: request.anchor,
+          limit: request.limit,
+        },
+        conversationProjection: operation,
+      };
     const query = new URLSearchParams({ limit: String(request.limit) });
     if (request.anchor.type === "before") query.set("before", request.anchor.cursor);
     if (request.anchor.type === "around") query.set("around", request.anchor.messageId);
@@ -68,7 +130,7 @@ export function publicRichValue(value: Schema.Json, depth = 0): Schema.Json {
       Object.entries(value)
         .filter(
           ([key, item]) =>
-            (key === "secret" && typeof item === "boolean") ||
+            ((key === "secret" || key === "isSecret") && typeof item === "boolean") ||
             !/token|secret|password|authorization|apiKey|cookie|credential|rawEvent|rawLog/i.test(
               key,
             ),
@@ -81,7 +143,12 @@ export function publicRichValue(value: Schema.Json, depth = 0): Schema.Json {
   return value;
 }
 const decoders = {
+  "conversation.pins.list": Schema.decodeUnknownEffect(OpenbotPinnedMessages),
+  "conversation.pins.set": Schema.decodeUnknownEffect(OpenbotPinnedMessages),
+  "conversation.pins.readThread": Schema.decodeUnknownEffect(OpenbotPinnedThread),
+  "conversation.search": Schema.decodeUnknownEffect(OpenbotConversationSearchPage),
   "conversation.page": Schema.decodeUnknownEffect(OpenbotConversationPage),
+  "conversation.detail": Schema.decodeUnknownEffect(OpenbotConversationDetail),
   "conversation.read": Schema.decodeUnknownEffect(OpenbotConversationSnapshot),
   "task.read": Schema.decodeUnknownEffect(OpenbotConversationSnapshot),
   "conversation.markRead": Schema.decodeUnknownEffect(OpenbotConversationReadState),
@@ -101,6 +168,7 @@ const decoders = {
   "thread.reply": Schema.decodeUnknownEffect(OpenbotConversationReceipt),
   "thread.rename": Schema.decodeUnknownEffect(Schema.Struct({})),
   "thread.delete": Schema.decodeUnknownEffect(Schema.Struct({})),
+  "conversation.message.delete": Schema.decodeUnknownEffect(Schema.Struct({})),
   "conversation.react": Schema.decodeUnknownEffect(Schema.Struct({})),
 };
 const decodeJson = Schema.decodeUnknownEffect(Schema.Json);

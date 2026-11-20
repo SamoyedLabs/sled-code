@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { AppState } from "react-native";
 import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId, OpenbotChannelPage } from "@t3tools/contracts";
 import {
@@ -20,9 +21,21 @@ import { useEnvironmentQuery } from "../../state/query";
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
 import { useAtomCommand } from "../../state/use-atom-command";
 
-export function useBotChannels(environmentId: EnvironmentId, hostId: string, newId: () => string) {
-  const [selected, setSelected] = useState<string | null>(null);
-  const [edit, setEdit] = useState<ChannelEdit | null>(null);
+export function useBotChannels(
+  environmentId: EnvironmentId,
+  hostId: string,
+  newId: () => string,
+  initialChannelId?: string,
+  options?: {
+    createOnOpen?: boolean;
+    onCreated?: (channelId: string, name: string) => void;
+    watchActiveTasks?: boolean;
+  },
+) {
+  const [selected, setSelected] = useState<string | null>(initialChannelId ?? null);
+  const [edit, setEdit] = useState<ChannelEdit | null>(() =>
+    options?.createOnOpen ? channelNewDraft(newId()) : null,
+  );
   const [pages, setPages] = useState<readonly OpenbotChannelPage[]>([]);
   const [text, setText] = useState("");
   const [recipient, setRecipient] = useState<string | null>(null);
@@ -52,7 +65,31 @@ export function useBotChannels(environmentId: EnvironmentId, hostId: string, new
       input: { hostId, request: { operation: "agent.list" } },
     }),
   );
-  const latest = channelPage(pageQuery.data);
+  const latest = useMemo(() => channelPage(pageQuery.data), [pageQuery.data]);
+  const messages = useMemo(
+    () => selected ? channelMessages(selected, [...pages, ...(latest ? [latest] : [])]) : [],
+    [selected, pages, latest],
+  );
+  const activeTaskIds = useMemo(
+    () =>
+      new Set(
+        latest?.tasks
+          .filter((task) => task.state === "queued" || task.state === "running")
+          .map((task) => task.id),
+      ),
+    [latest?.tasks],
+  );
+  const hasActiveTasks = activeTaskIds.size > 0;
+  const refreshActivePage = useEffectEvent(() => {
+    if (AppState.currentState === "active" && pageQuery.isSuccess && !pageQuery.isPending)
+      pageQuery.refresh();
+  });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Refresh the focused group page while its host has active tasks, since the link can omit text deltas.
+  useEffect(() => {
+    if (!selected || !options?.watchActiveTasks || !hasActiveTasks) return;
+    const timer = setInterval(refreshActivePage, 350);
+    return () => clearInterval(timer);
+  }, [selected, options?.watchActiveTasks, hasActiveTasks]);
   const canSettings = useAtomValue(openbot.adminToHost.permissionAtom(environmentId));
   const canManage = useAtomValue(
     openbot.adminToHost.permissionAtom(environmentId, {
@@ -109,6 +146,7 @@ export function useBotChannels(environmentId: EnvironmentId, hostId: string, new
       if (request.operation === "channel.save") {
         setSelected(request.channelId);
         setEdit(null);
+        if (!request.update) options?.onCreated?.(request.channelId, request.draft.name);
       } else if (request.operation === "channel.send") {
         setText("");
         setReply(null);
@@ -160,8 +198,9 @@ export function useBotChannels(environmentId: EnvironmentId, hostId: string, new
     channels: channelList(listQuery.data),
     agents: workflowAgents(agentsQuery.data),
     channel: latest?.channel ?? null,
-    messages: selected ? channelMessages(selected, [...pages, ...(latest ? [latest] : [])]) : [],
+    messages,
     tasks: latest?.tasks ?? [],
+    activeTaskIds,
     throughSequence: latest?.throughSequence ?? 0,
     olderCursor,
     older,
@@ -211,16 +250,57 @@ export function useBotChannels(environmentId: EnvironmentId, hostId: string, new
           );
       }
     },
-    send: () => {
-      if (selected && text.trim())
-        void act({
+    send: async (committedText = text) => {
+      if (selected && committedText.trim())
+        await act({
           operation: "channel.send",
           channelId: selected,
-          text: text.trim(),
+          text: committedText.trim(),
           recipientAgentId: recipient,
           replyToMessageId: reply,
           attachmentDraftIds: [],
         });
+    },
+    sendVoice: async (spoken: string, operationId: string) => {
+      if (lock.current || !selected || !canOperate || !spoken.trim()) return null;
+      lock.current = true;
+      setBusy(true);
+      setError(null);
+      return (async () => {
+        const result = await admin({
+          environmentId,
+          input: { hostId, request: {
+            operation: "channel.send",
+            channelId: selected,
+            operationId,
+            includeReceipt: true,
+            text: spoken.trim(),
+            recipientAgentId: recipient,
+            replyToMessageId: null,
+            attachmentDraftIds: [],
+          } },
+        });
+        refresh();
+        const value = result._tag === "Success" ? result.value : null;
+        return value && typeof value === "object" &&
+          "acceptedOperationId" in value && value.acceptedOperationId === operationId &&
+          "acceptedMessageId" in value && typeof value.acceptedMessageId === "string"
+          ? value.acceptedMessageId : null;
+      })().finally(() => {
+        setBusy(false);
+        lock.current = false;
+      });
+    },
+    stopVoice: async (taskId: string) => {
+      if (!selected || !canOperate || lock.current) return false;
+      const result = await admin({
+        environmentId,
+        input: { hostId, request: {
+          operation: "channel.stop", channelId: selected, operationId: newId(), taskId, recipientAgentId: null,
+        } },
+      });
+      refresh();
+      return result._tag === "Success";
     },
   };
 }

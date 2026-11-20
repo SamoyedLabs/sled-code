@@ -1,3 +1,4 @@
+import { OpenbotContinuity } from "./OpenbotContinuity";
 import { openbotMaintenanceProgress } from "@t3tools/client-runtime/openbot/presentation";
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
@@ -28,6 +29,7 @@ export function OpenbotMaintenance({ environmentId }: { environmentId: Environme
   return (
     <section className="space-y-3" aria-label="Upstream maintenance">
       <h3 className="text-sm font-medium">Upstream maintenance</h3>
+      <OpenbotContinuity environmentId={environmentId} />
       <p className="text-sm text-muted-foreground">
         Check new bot engine releases and review changes in a separate workspace. Your decision is
         required before staging. Activation remains a separate step.
@@ -208,8 +210,8 @@ function MaintenanceForm({
       </label>
       <p className="text-xs text-muted-foreground">
         Reviews use plan mode and ask before actions. They cannot authorize activation, profile
-        changes, pushes, merges or deployment. Source patches require a separate implementation
-        step.
+        changes, pushes, merges or deployment. Accepted source preparation runs in a separate
+        workspace; independent checks are required before an artifact becomes eligible.
       </p>
       <Button size="sm" onClick={save} disabled={locked}>
         Save policy
@@ -251,8 +253,7 @@ function MaintenanceForm({
             Download: {p.release.assets.find((a) => a.platform === p.platform)?.sha256}
           </p>
           <p className="text-xs">
-            Compatibility still requires validation.{" "}
-            {p.stagedAt ? `Staged ${p.stagedAt}` : "Not staged"}
+            Compatibility: {p.compatibility}. {p.stagedAt ? `Staged ${p.stagedAt}` : "Not staged"}
           </p>
           {p.reviewThreadId && (
             <Link
@@ -319,6 +320,65 @@ function MaintenanceForm({
                 Reject release
               </Button>
             </div>
+          )}
+          {p.state === "accepted" && (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={locked || !state.policy?.enabled || state.policy.authority !== "stage"}
+                onClick={() => void send({ action: "prepare", proposalId: p.id })}
+              >
+                {p.preparationThreadId ? "Resume source preparation" : "Prepare source and patches"}
+              </Button>
+              {p.preparationThreadId && (
+                <>
+                  <Link
+                    to="/$environmentId/$threadId"
+                    params={{ environmentId, threadId: p.preparationThreadId }}
+                    className="text-sm text-primary underline underline-offset-4"
+                  >
+                    Open preparation thread
+                  </Link>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      locked || !state.policy?.enabled || state.policy.authority !== "stage"
+                    }
+                    onClick={() => void send({ action: "validate-prepared", proposalId: p.id })}
+                  >
+                    Run compatibility checks
+                  </Button>
+                </>
+              )}
+              {p.validation?.state === "eligible" &&
+                p.validationRunId &&
+                p.compatibility !== "validated" && (
+                  <Button
+                    size="sm"
+                    disabled={
+                      locked || !state.policy?.enabled || state.policy.authority !== "stage"
+                    }
+                    onClick={() =>
+                      void send({ action: "promote", proposalId: p.id, runId: p.validationRunId! })
+                    }
+                  >
+                    Accept verified artifact
+                  </Button>
+                )}
+            </div>
+          )}
+          {p.validation?.state==="running"&&<Button size="sm" variant="outline" disabled={locked} onClick={()=>void send({action:"cancel-validation",proposalId:p.id})}>Cancel compatibility checks</Button>}
+          {p.validation && (
+            <section className="space-y-1" aria-label="Independent compatibility checks">
+              <p className="text-sm">Checks: {p.validation.state}</p>
+              {p.validation.checks.map((check) => (
+                <p className="text-xs" key={`${check.kind}:${check.outcome}:${check.detail}`}>
+                  {check.kind}: {check.outcome} · {check.detail}
+                </p>
+              ))}
+            </section>
           )}
           {p.state === "accepted" && !p.stagedAt && (
             <Button

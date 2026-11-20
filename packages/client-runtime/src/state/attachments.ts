@@ -1,9 +1,9 @@
 import {
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
   WS_METHODS,
-  type AttachmentCreateUploadUrlInput,
   type AttachmentCreateUploadUrlResult,
   type AttachmentDeleteInput,
+  type AttachmentUploadRequest,
   type EnvironmentId,
 } from "@t3tools/contracts";
 import type { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
@@ -83,7 +83,7 @@ export async function verifyPersistedAttachmentUpload<A, E>(input: {
 }
 
 type AttachmentCreateUploadUrlCommand<E> = AtomCommand<
-  { readonly environmentId: EnvironmentId; readonly input: AttachmentCreateUploadUrlInput },
+  { readonly environmentId: EnvironmentId; readonly input: AttachmentUploadRequest },
   AttachmentCreateUploadUrlResult,
   E
 >;
@@ -134,7 +134,7 @@ export async function runAttachmentUploadCycle<E, RE>(input: {
   readonly createUploadUrl: AttachmentCreateUploadUrlCommand<E>;
   readonly remove: AttachmentRemoveCommand<RE>;
   readonly environmentId: EnvironmentId;
-  readonly upload: AttachmentCreateUploadUrlInput;
+  readonly upload: AttachmentUploadRequest;
   readonly resolveUploadUrl: (relativeUrl: string) => string | null;
   readonly transport: (url: string) => AttachmentByteUpload;
   readonly onMinted?: (attachmentId: string) => "continue" | "cancel";

@@ -1,3 +1,4 @@
+/* oxlint-disable shadcn/no-unknown-classes -- Pinned DiagramView selectors come from the imported diagram stylesheet. */
 import { useState } from "react";
 import type {
   EnvironmentId,
@@ -6,6 +7,8 @@ import type {
 } from "@t3tools/contracts";
 import { routineTriggerDescription } from "@t3tools/client-runtime/openbot/presentation";
 import { useBotRoutineFlows, useBotRoutineDiscovery } from "./useBotRoutines";
+import { RoutineFlowWorkspace } from "./upstream/diagrams/RoutineFlowWorkspace";
+import { BotRoutineCanvas } from "./BotRoutineCanvas";
 import {
   RoutineGroup,
   RoutineText,
@@ -15,9 +18,31 @@ import {
   RoutineField,
   RoutineChoice,
 } from "./BotEvents";
-type Props = { environmentId: EnvironmentId; hostId: string };
+type Props = {
+  environmentId: EnvironmentId;
+  hostId: string;
+  workspace?: boolean;
+  agentId?: string;
+  onCreateRoutine?: (agentId: string) => void;
+  onEditRoutine?: (agentId: string, routineId: string) => void;
+};
 type Agent = { id: string; name: string };
 export function BotRoutineFlows(props: Props) {
+  if (props.workspace)
+    return props.agentId ? (
+      <RoutineFlowWorkspace
+        key={`${props.environmentId}:${props.hostId}:${props.agentId}`}
+        environmentId={props.environmentId}
+        hostId={props.hostId}
+        agentId={props.agentId}
+        onCreateRoutine={props.onCreateRoutine ?? (() => undefined)}
+        onEditRoutine={props.onEditRoutine ?? (() => undefined)}
+      />
+    ) : (
+      <div className="diagram-view diagram-flows-notice">
+        Choose an agent in the sidebar to view its routines.
+      </div>
+    );
   return (
     <RoutineDisclosure label="Inter-agent routine flows">
       <CanvasPicker key={`${props.environmentId}:${props.hostId}`} {...props} />
@@ -26,7 +51,10 @@ export function BotRoutineFlows(props: Props) {
 }
 function CanvasPicker(props: Props) {
   const discovery = useBotRoutineDiscovery(props.environmentId, props.hostId);
-  const [agentId, setAgentId] = useState("");
+  const [selectedAgent, setAgentId] = useState("");
+  const agentId =
+    discovery.agents.find((agent) => agent.id === selectedAgent)?.id ??
+    (props.workspace ? (discovery.agents[0]?.id ?? "") : "");
   return (
     <RoutineGroup>
       <RoutineText>
@@ -35,7 +63,7 @@ function CanvasPicker(props: Props) {
       <RoutineAction label="Refresh bots" onClick={discovery.refresh} />
       {discovery.error && <RoutineText alert>{discovery.error}</RoutineText>}
       <RoutineChoice
-        label="Canvas bot"
+        label="Bot"
         value={agentId}
         options={discovery.agents.map((agent) => ({ id: agent.id, name: agent.name }))}
         disabled={false}
@@ -93,19 +121,46 @@ function FlowPanel({
   return (
     <RoutineGroup>
       <RoutineHeading>{agentName(agentId)} routine flows</RoutineHeading>
-      <RoutineText>
-        Changes require permission to manage every bot in the flow. Cycles and unavailable bots are
-        rejected by the host.
-      </RoutineText>
       <RoutineAction label="Refresh canvas" onClick={c.refresh} disabled={c.busy} />
       {c.error && <RoutineText alert>{c.error}</RoutineText>}
       {!canvas && (
         <RoutineText>
-          Canvas unavailable. Check the engine connection and bot visibility.
+          {c.loading ? "Loading routine flows…" : "No routine flows available."}
         </RoutineText>
       )}
       {canvas && (
         <RoutineGroup>
+          <BotRoutineCanvas
+            canvas={canvas}
+            agents={agents}
+            selected={nodeKey}
+            disabled={disabled}
+            onSelect={(key) => {
+              setNodeKey(key);
+              if (key.startsWith("routine:")) {
+                const id = key.slice(8);
+                setRoutineId(id);
+                setFrom(
+                  canvas.routines.find((flow) => flow.routine.id === id)?.routine.agentId ??
+                    agentId,
+                );
+              }
+              const position = canvas.positions.find((p) => p.nodeKey === key);
+              setX(String(position?.x ?? 0));
+              setY(String(position?.y ?? 0));
+            }}
+            onMove={(key, point) => {
+              setNodeKey(key);
+              setX(String(point.x));
+              setY(String(point.y));
+              void c.act({
+                operation: "routineFlow.savePosition",
+                agentId,
+                nodeKey: key,
+                ...point,
+              });
+            }}
+          />
           <RoutineText>
             Placed bots: {canvas.placedAgentIds.map(agentName).join(", ") || "None"}
           </RoutineText>
@@ -284,7 +339,7 @@ function AnswerLink({
   name: string;
   link: typeof OpenbotRoutineFlowLink.Type;
   disabled: boolean;
-  act: (request: OpenbotRoutineFlowCommand) => Promise<void>;
+  act: (request: OpenbotRoutineFlowCommand) => Promise<unknown>;
 }) {
   const [text, setText] = useState(link.instruction);
   return (

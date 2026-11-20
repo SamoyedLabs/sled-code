@@ -1,6 +1,7 @@
 import {
   AuthOrchestrationOperateScope,
   PROVIDER_SEND_TURN_SUPPORTED_IMAGE_MIME_TYPES,
+  type AttachmentUploadRequest,
   type ChatAttachment,
   type EnvironmentId,
 } from "@t3tools/contracts";
@@ -225,13 +226,21 @@ async function runUpload(job: UploadJob): Promise<void> {
     }
   }
 
-  const mimeType =
-    job.image.type === "file"
-      ? job.image.mimeType.toLowerCase()
-      : PROVIDER_SEND_TURN_SUPPORTED_IMAGE_MIME_TYPES.find(
-          (supportedMimeType) => supportedMimeType === job.image.mimeType.toLowerCase(),
-        );
-  if (!mimeType) {
+  const name = job.image.name;
+  const sizeBytes = job.image.file?.size;
+  const mimeType = job.image.mimeType.toLowerCase();
+  const imageMimeType = PROVIDER_SEND_TURN_SUPPORTED_IMAGE_MIME_TYPES.find(
+    (supported) => supported === mimeType,
+  );
+  const upload: AttachmentUploadRequest | null =
+    sizeBytes === undefined
+      ? null
+      : job.image.type === "file"
+        ? { type: "file", name, mimeType, sizeBytes }
+        : imageMimeType
+          ? { name, mimeType: imageMimeType, sizeBytes }
+          : null;
+  if (sizeBytes !== undefined && !upload) {
     setUploadState(job.image.id, {
       status: "failed",
       environmentId: job.environmentId,
@@ -241,7 +250,7 @@ async function runUpload(job: UploadJob): Promise<void> {
     return;
   }
   const file = job.image.file;
-  if (!file) {
+  if (!file || !upload) {
     setUploadState(job.image.id, {
       status: "failed",
       environmentId: job.environmentId,
@@ -266,12 +275,7 @@ async function runUpload(job: UploadJob): Promise<void> {
     createUploadUrl: attachmentEnvironment.createUploadUrl,
     remove: attachmentEnvironment.remove,
     environmentId: job.environmentId,
-    upload: {
-      ...(job.image.type === "file" ? { type: "file" as const } : {}),
-      name: job.image.name,
-      mimeType,
-      sizeBytes: file.size,
-    },
+    upload,
     resolveUploadUrl: (relativeUrl) => {
       if (
         job.cancelled ||

@@ -20,6 +20,13 @@ describe("released routine flow adapter", () => {
       path: "/v1/routine-flows/links/connect",
       body: { routineId: "r", fromAgentId: "a", toAgentId: "b", instruction: "continue" },
     });
+    expect(
+      RoutineFlowProtocol.route({
+        operation: "routineFlow.canvas",
+        agentId: "a",
+        includeOneTime: true,
+      }),
+    ).toMatchObject({ path: "/v1/sled/once-routines/canvas", body: { agentId: "a" } });
     expect(() =>
       decodeCommand({
         operation: "routineFlow.savePosition",

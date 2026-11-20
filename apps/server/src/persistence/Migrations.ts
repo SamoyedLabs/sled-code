@@ -97,6 +97,12 @@ import Migration0089 from "./Migrations/089_OpenbotMaintenance.ts";
 
 import Migration0090 from "./Migrations/090_OpenbotChannelOrigins.ts";
 import Migration0091 from "./Migrations/091_OpenbotChannelCodingTasks.ts";
+import Migration0092 from "./Migrations/092_OpenbotChannelRuntime.ts";
+import Migration0098 from "./Migrations/098_OpenbotRosterPins.ts";
+import Migration0097 from "./Migrations/097_PrivilegedCommitBarrier.ts";
+import Migration0096 from "./Migrations/096_OpenbotOriginalUploads.ts";
+import Migration0095 from "./Migrations/095_OpenbotFileBatches.ts";
+import Migration0094 from "./Migrations/094_OpenbotContinuity.ts";
 
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -191,6 +197,12 @@ const migrationEntries = [
   [89, "OpenbotMaintenance", Migration0089],
   [90, "OpenbotChannelOrigins", Migration0090],
   [91, "OpenbotChannelCodingTasks", Migration0091],
+  [92, "OpenbotChannelRuntime", Migration0092],
+  [94, "OpenbotContinuity", Migration0094],
+  [95, "OpenbotFileBatches", Migration0095],
+  [96, "OpenbotOriginalUploads", Migration0096],
+  [97, "PrivilegedCommitBarrier", Migration0097],
+  [98, "OpenbotRosterPins", Migration0098],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

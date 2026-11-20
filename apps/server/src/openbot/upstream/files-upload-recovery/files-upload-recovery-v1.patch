@@ -1,0 +1,535 @@
+diff --git a/src/backend/mailbox-store.ts b/src/backend/mailbox-store.ts
+--- a/src/backend/mailbox-store.ts
++++ b/src/backend/mailbox-store.ts
+@@ -34,7 +34,7 @@
+ import { QueueEditRejectedError } from "@openbot/contracts/team-protocol/queue-edit-v1";
+ import { sourceText } from "@openbot/i18n/source";
+ import { redactText } from "@openbot/logging";
+-import { Effect, Result } from "effect";
++import { Semaphore, Effect, Result } from "effect";
+ import {
+   AttachmentFiles,
+   type ExportedAttachmentFile,
+@@ -165,6 +165,21 @@
+   return delivery.status === "queued" || delivery.status === "starting" || delivery.status === "running";
+ }
+ 
++export interface OriginalUploadIdentity {
++  operationId: string;
++  principal: string;
++  environmentId: string;
++  hostId: string;
++  agentId: string;
++  threadId: string;
++  taskId: string | null;
++  name: string;
++  mimeType: string;
++  size: number;
++  sha256: string;
++}
++export interface OriginalUploadReceipt { state: "ready" | "released"; attachment: DraftAttachment }
++
+ interface StoredState {
+   version: 3;
+   messages: StoredMessage[];
+@@ -185,6 +200,7 @@
+ }
+ 
+ interface EnqueueInput {
++  originalUploadOwner?: Pick<OriginalUploadIdentity, "principal" | "environmentId" | "hostId" | "agentId" | "threadId" | "taskId">;
+   /** Synchronous original-owner/thread predicate, rechecked at the durable commit boundary. */
+   validateAuthority?: () => void;
+   idempotencyAuthorityKey?: string;
+@@ -325,6 +341,92 @@
+     }
+   }, Effect.uninterruptible).bind(this);
+ 
++  readonly #originalUploadGate = Semaphore.makeUnsafe(1);
++
++  assertOriginalUploadDraftOwner(ids: readonly string[], owner?: { principal: string; environmentId: string; hostId: string; agentId: string; threadId: string; taskId: string | null }): void {
++    for (const [key, raw] of Object.entries(this.#state.idempotency)) {
++      if (!key.startsWith("sled-upload:")) continue;
++      const saved = JSON.parse(raw) as { identity: OriginalUploadIdentity; attachment: DraftAttachment; released: boolean };
++      if (!ids.includes(saved.attachment.id)) continue;
++      if (!owner || saved.released || Object.entries(owner).some(([name, value]) => saved.identity[name as keyof OriginalUploadIdentity] !== value))
++        throw new Error("Original draft owner differs");
++    }
++  }
++
++  originalUploadStatus(input: OriginalUploadIdentity, validateAuthority: () => void): OriginalUploadReceipt | null {
++    validateAuthority();
++    const raw = this.#state.idempotency[`sled-upload:${input.operationId}`];
++    if (raw === undefined) return null;
++    const saved = JSON.parse(raw) as { identity: OriginalUploadIdentity; attachment: DraftAttachment; released: boolean };
++    if (JSON.stringify(saved.identity) !== JSON.stringify(input)) throw new Error("Original upload authority differs");
++    return { state: saved.released || !this.#state.drafts.some(d => d.id === saved.attachment.id) ? "released" : "ready", attachment: saved.attachment };
++  }
++
++  prepareOriginalUpload = Effect.fn("MailboxStore.prepareOriginalUpload")(function* (
++    this: MailboxStore, input: OriginalUploadIdentity, bytes: Uint8Array, validateAuthority: () => void,
++  ): Effect.fn.Return<OriginalUploadReceipt, StoredStateFailure> {
++    return yield* this.#originalUploadGate.withPermit(Effect.gen({ self: this }, function* () {
++      try {
++        validateAuthority();
++        if (!input.operationId || input.operationId.length > 128 || !input.principal || !input.environmentId || !input.hostId || !input.agentId || !input.threadId ||
++          bytes.byteLength !== input.size || bytes.byteLength > 104857600 || createHash("sha256").update(bytes).digest("hex") !== input.sha256)
++          throw new Error("Original upload identity invalid");
++        const previous = this.originalUploadStatus(input, validateAuthority);
++        if (previous) return previous;
++        if (this.#state.drafts.length >= INPUT_LIMITS.draftAttachments) throw new Error("Draft limit reached");
++        const prepared = yield* this.#files.prepareDrafts([], [{ name: input.name, mimeType: input.mimeType, bytes }])
++          .pipe(Effect.mapError(({ cause }) => new StoredStateFailure({ cause })));
++        const draft = prepared[0]!;
++        const key = `sled-upload:${input.operationId}`;
++        try {
++          validateAuthority();
++          if (draft.sha256 !== input.sha256 || draft.size !== input.size || draft.name !== input.name || draft.mimeType !== input.mimeType) throw new Error("Original upload bytes differ");
++          draft.preserveOnRestart = true;
++          this.#state.drafts.push(draft);
++          this.#changes.draftIds.add(draft.id);
++          const attachment = toAttachmentSummary(draft);
++          this.#state.idempotency[key] = JSON.stringify({ identity: input, attachment, released: false });
++          this.#persist("attachments.original-upload");
++          return { state: "ready" as const, attachment };
++        } catch (cause) {
++          delete this.#state.idempotency[key];
++          this.#state.drafts = this.#state.drafts.filter(d => d.id !== draft.id);
++          yield* this.#files.removeAttachmentDirectories([draft.path]).pipe(Effect.ignore);
++          throw cause;
++        }
++      } catch (cause) { return yield* new StoredStateFailure({ cause }); }
++    }));
++  }, Effect.uninterruptible).bind(this);
++
++  cancelOriginalUpload = Effect.fn("MailboxStore.cancelOriginalUpload")(function* (
++    this: MailboxStore, input: OriginalUploadIdentity, validateAuthority: () => void,
++  ): Effect.fn.Return<OriginalUploadReceipt | null, StoredStateFailure> {
++    return yield* this.#originalUploadGate.withPermit(Effect.gen({ self: this }, function* () {
++      try {
++        const receipt = this.originalUploadStatus(input, validateAuthority);
++        if (!receipt) {
++          const attachment: DraftAttachment = { id: input.operationId, name: input.name, size: input.size, mimeType: input.mimeType, kind: "file", previewKind: "none", previewUrl: null };
++          const key = `sled-upload:${input.operationId}`;
++          this.#state.idempotency[key] = JSON.stringify({ identity: input, attachment, released: true });
++          try { this.#persist("attachments.original-upload-cancelled"); }
++          catch (cause) { delete this.#state.idempotency[key]; throw cause; }
++          return { state: "released" as const, attachment };
++        }
++        if (receipt.state === "released") return receipt;
++        const key = `sled-upload:${input.operationId}`;
++        const old = this.#state.idempotency[key]!;
++        const draft = this.#state.drafts.find(d => d.id === receipt.attachment.id)!;
++        this.#state.drafts = this.#state.drafts.filter(d => d.id !== draft.id);
++        this.#changes.draftIds.add(draft.id);
++        this.#state.idempotency[key] = JSON.stringify({ identity: input, attachment: receipt.attachment, released: true });
++        try { this.#persist("attachments.original-upload-cancelled", undefined, [draft.path]); }
++        catch (cause) { this.#state.idempotency[key] = old; this.#state.drafts.push(draft); throw cause; }
++        yield* this.#drainFileDeletionOutboxEffect();
++        return { ...receipt, state: "released" as const };
++      } catch (cause) { return yield* new StoredStateFailure({ cause }); }
++    }));
++  }, Effect.uninterruptible).bind(this);
++
+   prepareAttachments = Effect.fn("MailboxStore.prepareAttachments")(function* (
+     this: MailboxStore,
+     paths: string[],
+@@ -376,6 +478,7 @@
+     id: string,
+   ): Effect.fn.Return<void, StoredStateFailure> {
+     try {
++      this.assertOriginalUploadDraftOwner([id]);
+       const index = this.#state.drafts.findIndex((draft) => draft.id === id);
+       if (index < 0) return;
+       const [draft] = this.#state.drafts.splice(index, 1);
+@@ -502,6 +605,7 @@
+     input: EnqueueInput,
+   ): Effect.fn.Return<QueuedMessageReceipt, StoredStateFailure> {
+     try {
++      this.assertOriginalUploadDraftOwner([...(input.draftIds ?? []), ...(input.voiceRecordingDraftId ? [input.voiceRecordingDraftId] : [])], input.originalUploadOwner);
+       input.validateAuthority?.();
+       if (input.idempotencyKey) {
+         const existingMessageId = this.#state.idempotency[input.idempotencyKey];
+@@ -583,7 +687,8 @@
+         : undefined;
+       try {
+         validateRecipients();
+-        input.validateAuthority?.();
++        this.assertOriginalUploadDraftOwner([...(input.draftIds ?? []), ...(input.voiceRecordingDraftId ? [input.voiceRecordingDraftId] : [])], input.originalUploadOwner);
++      input.validateAuthority?.();
+       } catch (error) {
+         yield* removeTransfers;
+         throw error;
+@@ -681,6 +786,7 @@
+     },
+   ): Effect.fn.Return<CommittedChannelAttachments, StoredStateFailure> {
+     try {
++      this.assertOriginalUploadDraftOwner(input.draftIds);
+       const ids = new Set(input.draftIds);
+       if (ids.size !== input.draftIds.length) throw new Error("Duplicate attachment drafts.");
+       const drafts = input.draftIds.map((id) => {
+diff --git a/src/backend/agent-service.ts b/src/backend/agent-service.ts
+--- a/src/backend/agent-service.ts
++++ b/src/backend/agent-service.ts
+@@ -236,7 +236,7 @@
+ import type { HostMemory } from "./host-memory";
+ import type { SignInRegion } from "./kimi-region";
+ import type { LinkWallet } from "./link-wallet";
+-import type { MailboxStore } from "./mailbox-store";
++import type { MailboxStore, OriginalUploadIdentity } from "./mailbox-store";
+ import { toMcpOperationError } from "./mcp-effects";
+ import type { McpSignInOpener } from "./mcp-oauth-provider";
+ import { McpServerStore } from "./mcp-server-store";
+@@ -4756,7 +4756,12 @@
+       throw new Error("Original message authority differs.");
+   }
+ 
++  validateOriginalUpload(identity: OriginalUploadIdentity): void {
++    this.#validateMessageThread({ agentId: identity.agentId, expectedThreadId: identity.threadId, text: "", ...(identity.taskId === null ? {} : { taskId: identity.taskId }) });
++  }
++
+   #validateMessageThread(input: SendMessageInput): void {
++    this.#mailbox.assertOriginalUploadDraftOwner([...(input.attachmentDraftIds ?? []), ...(input.voiceRecordingDraftId ? [input.voiceRecordingDraftId] : [])], input.sledUploadOwner);
+     if (input.expectedThreadId === undefined) return;
+     this.#requireNotHidden(input.agentId);
+     const agent = this.#store.list().find((entry) => entry.id === input.agentId);
+@@ -4809,6 +4814,7 @@
+       : null;
+     const receipt = yield* this.#mailbox
+       .enqueue({
++        originalUploadOwner: input.sledUploadOwner,
+         validateAuthority: () => this.#validateMessageThread(input),
+         idempotencyAuthorityKey: this.#messageAuthorityKey(input, sender),
+         sender: { kind: "user" },
+diff --git a/packages/contracts/src/ipc-conversations.ts b/packages/contracts/src/ipc-conversations.ts
+--- a/packages/contracts/src/ipc-conversations.ts
++++ b/packages/contracts/src/ipc-conversations.ts
+@@ -168,6 +168,8 @@
+ }
+ 
+ export interface SendMessageInput {
++  /** Trusted local adapter only; never decoded from caller JSON. */
++  sledUploadOwner?: { principal: string; environmentId: string; hostId: string; agentId: string; threadId: string; taskId: string | null };
+   /** Exact existing conversation identity; never a current-selection hint. */
+   expectedThreadId?: string;
+   /** Never create an effect when reconciling an uncertain guarded send. */
+diff --git a/src/main/team-api/route-sled-files-identity.ts b/src/main/team-api/route-sled-files-identity.ts
+--- a/src/main/team-api/route-sled-files-identity.ts
++++ b/src/main/team-api/route-sled-files-identity.ts
+@@ -1,14 +1,23 @@
++import { createHash } from "node:crypto";
++import { verifyFilesPrincipalBinding } from "./files-principal-binding";
+ import { runCauseEffect } from "../../backend/effect-boundary";
+ import type { TeamApiAgents } from "./dependencies";
+ import { HttpError } from "./http-error";
+ import type { TeamApiRequestContext, RouteOutcome } from "./request-context";
+-import { readJson, requireListedAgent, requireAgentLevel, memberSender, stringField, stringArray, nullableString } from "./request-helpers";
++import { readJson, requireListedAgent, requireAgentLevel, memberSender, stringField, stringArray, nullableString, readBinary } from "./request-helpers";
+ 
+ /** Exact existing main/task send. The negotiated codec is mandatory; there is no legacy fallback. */
+-export async function routeSledFilesIdentity(context: TeamApiRequestContext, agents: TeamApiAgents, hiddenAgentIds: ReadonlySet<string>): Promise<RouteOutcome> {
++export async function routeSledFilesIdentity(context: TeamApiRequestContext, agents: TeamApiAgents, hiddenAgentIds: ReadonlySet<string>, trusted?: { secret: string; hostId: string; environmentId: string }): Promise<RouteOutcome> {
+   if (context.method !== "POST" || context.url.pathname !== "/v1/sled/files/send") return "unmatched";
+   if (!context.capabilities.has("sled-files-identity-v1")) throw new HttpError(400, "Guarded Files unavailable.");
+-  const body = await readJson(context.request);
++  const signed = context.request.headers["x-sled-files-principal"];
++  const raw = signed === undefined ? null : await readBinary(context.request, 120000);
++  const body = raw === null ? await readJson(context.request) : JSON.parse(Buffer.from(raw).toString("utf8"));
++  let principal: string | undefined;
++  if (raw !== null) {
++    if (!context.capabilities.has("sled-files-upload-recovery-v1") || !trusted || typeof signed !== "string" || body.environmentId !== trusted.environmentId) throw new HttpError(403, "Original draft owner unavailable");
++    principal = verifyFilesPrincipalBinding(trusted.secret, signed, { hostId: trusted.hostId, method: "POST", path: "/v1/sled/files/send", bodySha256: createHash("sha256").update(raw).digest("hex") }, Date.now());
++  }
+   const agentId = stringField(body, "agentId");
+   if (hiddenAgentIds.has(agentId)) throw new HttpError(404, "Agent unavailable.");
+   requireListedAgent(agents, agentId);
+@@ -16,6 +25,7 @@
+   if (typeof body.receiptOnly !== "boolean") throw new HttpError(400, "Invalid receipt lookup.");
+   const taskId = nullableString(body, "taskId");
+   return context.json(202, await runCauseEffect(agents.sendMessage({
++    ...(principal === undefined ? {} : { sledUploadOwner: { principal, environmentId: trusted!.environmentId, hostId: trusted!.hostId, agentId, threadId: stringField(body, "expectedThreadId"), taskId } }),
+     agentId, expectedThreadId: stringField(body, "expectedThreadId"),
+     clientMessageId: stringField(body, "clientMessageId"), receiptOnly: body.receiptOnly,
+     text: stringField(body, "text", true, 100_000), attachmentDraftIds: stringArray(body, "attachmentDraftIds"),
+diff --git a/packages/contracts/src/team-protocol/sled-files-identity-v1.ts b/packages/contracts/src/team-protocol/sled-files-identity-v1.ts
+--- a/packages/contracts/src/team-protocol/sled-files-identity-v1.ts
++++ b/packages/contracts/src/team-protocol/sled-files-identity-v1.ts
+@@ -7,7 +7,7 @@
+   [SLED_FILES_IDENTITY_ROUTES.send, {
+     request: fields({ agentId: identifier, expectedThreadId: identifier, clientMessageId: identifier,
+       text: string(100_000), attachmentDraftIds: list(identifier, 10), taskId: nullable(identifier),
+-      replyToMessageId: nullable(identifier), receiptOnly: boolean }),
++      replyToMessageId: nullable(identifier), receiptOnly: boolean }, { environmentId: identifier }),
+     response: receipt.response,
+   }],
+ ]);
+diff --git a/src/main/team-api/files-principal-binding.ts b/src/main/team-api/files-principal-binding.ts
+new file mode 100644
+--- /dev/null
++++ b/src/main/team-api/files-principal-binding.ts
+@@ -0,0 +1,95 @@
++// @effect-diagnostics nodeBuiltinImport:off -- shared server/engine authentication boundary.
++import { createHmac, timingSafeEqual } from "node:crypto";
++
++export interface FilesPrincipalBindingRequest {
++  readonly principal: string;
++  readonly hostId: string;
++  readonly method: string;
++  readonly path: string;
++  readonly bodySha256: string;
++}
++const domain = "sled-files-principal-v1\n";
++const fail = (): never => {
++  throw new Error("Invalid Files principal binding");
++};
++const signature = (secret: string, payload: string) =>
++  createHmac("sha256", secret)
++    .update(domain + payload)
++    .digest();
++const validRequest = (request: FilesPrincipalBindingRequest) =>
++  request.principal.length > 0 &&
++  request.principal.length <= 256 &&
++  request.hostId.length > 0 &&
++  request.hostId.length <= 256 &&
++  request.method === "POST" &&
++  ["/v1/sled/files/upload", "/v1/sled/files/upload-status", "/v1/sled/files/upload-cancel", "/v1/sled/files/send"].includes(request.path) &&
++  /^[a-f0-9]{64}$/.test(request.bodySha256);
++
++/** Called only with the authenticated Sled caller; never accept a caller-supplied principal. */
++export function signFilesPrincipalBinding(
++  secret: string,
++  request: FilesPrincipalBindingRequest,
++  now: number,
++): string {
++  if (!secret || !validRequest(request) || !Number.isSafeInteger(now)) return fail();
++  const payload = Buffer.from(
++    JSON.stringify({ v: 1, ...request, issuedAt: now, expiresAt: now + 30_000 }),
++  ).toString("base64url");
++  return `${payload}.${signature(secret, payload).toString("base64url")}`;
++}
++
++/** A normal upstream member cannot choose a Sled owner by sending an unsigned header. */
++export function verifyFilesPrincipalBinding(
++  secret: string,
++  token: string,
++  expected: Omit<FilesPrincipalBindingRequest, "principal">,
++  now: number,
++): string {
++  if (!secret || token.length > 4096 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token))
++    return fail();
++  const [payload, mac] = token.split(".");
++  if (!payload || !mac) return fail();
++  const actual = Buffer.from(mac, "base64url"),
++    wanted = signature(secret, payload);
++  if (actual.length !== wanted.length || !timingSafeEqual(actual, wanted)) return fail();
++  let value: unknown;
++  try {
++    value = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
++  } catch {
++    return fail();
++  }
++  if (typeof value !== "object" || value === null) return fail();
++  const claim = value as Record<string, unknown>;
++  if (
++    claim.v !== 1 ||
++    typeof claim.principal !== "string" ||
++    typeof claim.hostId !== "string" ||
++    typeof claim.method !== "string" ||
++    typeof claim.path !== "string" ||
++    typeof claim.bodySha256 !== "string" ||
++    typeof claim.issuedAt !== "number" ||
++    typeof claim.expiresAt !== "number"
++  )
++    return fail();
++  const request = {
++    principal: claim.principal,
++    hostId: claim.hostId,
++    method: claim.method,
++    path: claim.path,
++    bodySha256: claim.bodySha256,
++  };
++  if (
++    !validRequest(request) ||
++    !Number.isSafeInteger(now) ||
++    !Number.isSafeInteger(claim.issuedAt) ||
++    claim.expiresAt !== claim.issuedAt + 30_000 ||
++    now < claim.issuedAt ||
++    now >= claim.expiresAt ||
++    request.hostId !== expected.hostId ||
++    request.method !== expected.method ||
++    request.path !== expected.path ||
++    request.bodySha256 !== expected.bodySha256
++  )
++    return fail();
++  return request.principal;
++}
+diff --git a/src/main/team-api/route-sled-files-upload.ts b/src/main/team-api/route-sled-files-upload.ts
+new file mode 100644
+--- /dev/null
++++ b/src/main/team-api/route-sled-files-upload.ts
+@@ -0,0 +1,30 @@
++import { createHash } from "node:crypto";
++import { runCauseEffect } from "../../backend/effect-boundary";
++import type { MailboxStore, OriginalUploadIdentity } from "../../backend/mailbox-store";
++import { verifyFilesPrincipalBinding } from "./files-principal-binding";
++import { HttpError } from "./http-error";
++import type { TeamApiRequestContext, RouteOutcome } from "./request-context";
++import { readBinary, requireAgentLevel } from "./request-helpers";
++import { decodeOriginalUpload } from "../../../packages/contracts/src/team-protocol/sled-files-upload-v1";
++
++export async function routeSledFilesUpload(context: TeamApiRequestContext, mailbox: MailboxStore, trusted: {
++  secret: string; hostId: string; environmentId: string;
++  validate: (identity: OriginalUploadIdentity) => void;
++}): Promise<RouteOutcome> {
++  const path = context.url.pathname;
++  if (context.method !== "POST" || !["/v1/sled/files/upload", "/v1/sled/files/upload-status", "/v1/sled/files/upload-cancel"].includes(path)) return "unmatched";
++  if (context.url.search || !context.capabilities.has("sled-files-upload-recovery-v1")) throw new HttpError(400, "Original upload unavailable");
++  const raw = await readBinary(context.request, path.endsWith("/upload") ? 139820000 : 8192);
++  const header = context.request.headers["x-sled-files-principal"];
++  if (typeof header !== "string") throw new HttpError(403, "Original upload unavailable");
++  const principal = verifyFilesPrincipalBinding(trusted.secret, header, { hostId: trusted.hostId, method: "POST", path, bodySha256: createHash("sha256").update(raw).digest("hex") }, Date.now());
++  const body = decodeOriginalUpload(JSON.parse(Buffer.from(raw).toString("utf8")), path.endsWith("/upload"));
++  if (body.hostId !== trusted.hostId || body.environmentId !== trusted.environmentId) throw new HttpError(403, "Original upload unavailable");
++  const identity: OriginalUploadIdentity = { operationId: body.operationId, principal, environmentId: body.environmentId, hostId: body.hostId, agentId: body.agentId, threadId: body.threadId, taskId: body.taskId, name: body.name, mimeType: body.mimeType, size: body.size, sha256: body.sha256 };
++  const validate = () => { requireAgentLevel(context, identity.agentId, "chat"); trusted.validate(identity); };
++  validate();
++  if (path.endsWith("/upload-status")) return context.json(200, mailbox.originalUploadStatus(identity, validate));
++  if (path.endsWith("/upload-cancel")) return context.json(200, await runCauseEffect(mailbox.cancelOriginalUpload(identity, validate)));
++  const bytes = Buffer.from(body.dataBase64!, "base64");
++  return context.json(200, await runCauseEffect(mailbox.prepareOriginalUpload(identity, bytes, validate)));
++}
+diff --git a/packages/contracts/src/team-protocol/sled-files-upload-v1.ts b/packages/contracts/src/team-protocol/sled-files-upload-v1.ts
+new file mode 100644
+--- /dev/null
++++ b/packages/contracts/src/team-protocol/sled-files-upload-v1.ts
+@@ -0,0 +1,20 @@
++import { fields, identifier, nullable, string, count, oneOf, type OptionalRouteCodec } from "./admin-wire";
++import { isDynamicRecord } from "../runtime-values";
++const identityFields = { operationId: identifier, environmentId: identifier, hostId: identifier, agentId: identifier, threadId: identifier, taskId: nullable(identifier), name: string(1024), mimeType: string(255), size: count, sha256: string(64) };
++export interface OriginalUploadBody { operationId: string; environmentId: string; hostId: string; agentId: string; threadId: string; taskId: string | null; name: string; mimeType: string; size: number; sha256: string; dataBase64?: string }
++export function decodeOriginalUpload(value: unknown, upload: boolean): OriginalUploadBody {
++  const shape = upload ? { ...identityFields, dataBase64: string(139810136) } : identityFields;
++  if (!isDynamicRecord(value) || Object.keys(value).some(key => !Object.hasOwn(shape, key))) throw new Error("Invalid original upload keys");
++  const decoded = fields(shape)(value) as unknown as OriginalUploadBody;
++  if (!/^[a-f0-9]{64}$/.test(decoded.sha256) || decoded.size > 104857600 ||
++      (upload && (decoded.dataBase64!.length !== 4 * Math.ceil(decoded.size / 3) || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(decoded.dataBase64!)))) throw new Error("Invalid original upload bytes");
++  return decoded;
++}
++const attachment = fields({ id: identifier, name: string(1024), size: count, kind: oneOf("image", "file"), mimeType: string(255), previewKind: oneOf("image", "pdf", "text", "none") });
++export const SLED_FILES_UPLOAD_CAPABILITY = "sled-files-upload-recovery-v1";
++export const SLED_FILES_UPLOAD_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map(
++  ["upload", "upload-status", "upload-cancel"].map(action => [`/v1/sled/files/${action}`, {
++    request: value => ({ ...decodeOriginalUpload(value, action === "upload") }),
++    response: (_status, value) => nullable(fields({ state: oneOf("ready", "released"), attachment }))(value),
++  }]),
++);
+diff --git a/src/backend/original-upload.test.ts b/src/backend/original-upload.test.ts
+new file mode 100644
+--- /dev/null
++++ b/src/backend/original-upload.test.ts
+@@ -0,0 +1,106 @@
++import { createHash } from "node:crypto";
++import { mkdtemp, rm } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { expect, it } from "vitest";
++import { MailboxStore } from "./mailbox-store";
++import { OpenBotDatabase } from "./openbot-database";
++import { runCauseEffect } from "./effect-boundary";
++
++it("atomically recovers one retained original draft after response loss/reopen and isolates sessions", async () => {
++  const root = await mkdtemp(join(tmpdir(), "original-upload-"));
++  let db = new OpenBotDatabase(root);
++  const bytes = Buffer.from("owned source bytes");
++  const input = { operationId: "original-operation", principal: "session-a", environmentId: "env-a", hostId: "host-a", agentId: "chief", threadId: "thread-a", taskId: null, name: "original.txt", mimeType: "text/plain", size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
++  try {
++    let mailbox = new MailboxStore(root, join(root, "shared"), db);
++    await runCauseEffect(mailbox.initialize());
++    expect(mailbox.originalUploadStatus(input, () => {})).toBeNull();
++    let calls = 0;
++    await expect(runCauseEffect(mailbox.prepareOriginalUpload(input, bytes, () => { if (++calls === 3) throw new Error("revoked during preparation"); }))).rejects.toThrow("revoked during preparation");
++    expect(mailbox.originalUploadStatus(input, () => {})).toBeNull();
++    const [first, duplicate] = await Promise.all([runCauseEffect(mailbox.prepareOriginalUpload(input, bytes, () => {})), runCauseEffect(mailbox.prepareOriginalUpload(input, bytes, () => {}))]);
++    expect(duplicate).toEqual(first);
++    await expect(runCauseEffect(mailbox.discardDraft(first.attachment.id))).rejects.toThrow("Original draft owner differs");
++    await expect(runCauseEffect(mailbox.enqueue({sender:{kind:"user"},recipientAgentIds:[input.agentId],text:"forbidden",draftIds:[first.attachment.id]}))).rejects.toThrow("Original draft owner differs");
++    expect(() => mailbox.assertOriginalUploadDraftOwner([first.attachment.id])).toThrow("Original draft owner differs");
++    const owner = { principal: input.principal, environmentId: input.environmentId, hostId: input.hostId, agentId: input.agentId, threadId: input.threadId, taskId: input.taskId };
++    expect(() => mailbox.assertOriginalUploadDraftOwner([first.attachment.id], { ...owner, principal: "session-b" })).toThrow();
++    expect(() => mailbox.assertOriginalUploadDraftOwner([first.attachment.id], owner)).not.toThrow();
++    const cancelledBeforeArrival = { ...input, operationId: "delayed-operation" };
++    expect((await runCauseEffect(mailbox.cancelOriginalUpload(cancelledBeforeArrival, () => {})))?.state).toBe("released");
++    expect((await runCauseEffect(mailbox.prepareOriginalUpload(cancelledBeforeArrival, bytes, () => {}))).state).toBe("released");
++    // Discard the transport response; reopen the real SQLite store before looking up the operation.
++    db.close(); db = new OpenBotDatabase(root);
++    mailbox = new MailboxStore(root, join(root, "shared"), db);
++    await runCauseEffect(mailbox.initialize());
++    expect(mailbox.originalUploadStatus(input, () => {})).toEqual(first);
++    expect(await runCauseEffect(mailbox.prepareOriginalUpload(input, bytes, () => {}))).toEqual(first);
++    for (const changed of [{ principal: "session-b" }, { hostId: "host-b" }, { environmentId: "env-b" }, { agentId: "other" }, { threadId: "thread-b" }, { taskId: "task-b" }, { sha256: "a".repeat(64) }]) {
++      expect(() => mailbox.originalUploadStatus({ ...input, ...changed }, () => {})).toThrow();
++    }
++    expect(() => mailbox.originalUploadStatus(input, () => { throw new Error("expired session"); })).toThrow("expired session");
++    await expect(runCauseEffect(mailbox.prepareOriginalUpload(input, Buffer.from("changed"), () => {}))).rejects.toThrow();
++    const cancelled = await runCauseEffect(mailbox.cancelOriginalUpload(input, () => {}));
++    expect(cancelled?.state).toBe("released");
++    db.close(); db = new OpenBotDatabase(root);
++    mailbox = new MailboxStore(root, join(root, "shared"), db);
++    await runCauseEffect(mailbox.initialize());
++    expect(await runCauseEffect(mailbox.prepareOriginalUpload(input, bytes, () => {}))).toEqual(cancelled);
++    expect(() => mailbox.originalUploadStatus(input, () => { throw new Error("revoked"); })).toThrow();
++    const sendUpload = await runCauseEffect(mailbox.prepareOriginalUpload({ ...input, operationId: "send-operation" }, bytes, () => {}));
++    const send = { sender: { kind: "user" as const }, recipientAgentIds: [input.agentId], text: "explicit send", draftIds: [sendUpload.attachment.id], originalUploadOwner: owner, idempotencyKey: "owned-send", idempotencyAuthorityKey: "owned-send-v2-fingerprint" };
++    const sent = await runCauseEffect(mailbox.enqueue(send));
++    db.close(); db = new OpenBotDatabase(root); mailbox = new MailboxStore(root, join(root, "shared"), db);
++    await runCauseEffect(mailbox.initialize());
++    expect(await runCauseEffect(mailbox.enqueue(send))).toEqual(sent);
++    await expect(runCauseEffect(mailbox.enqueue({ ...send, originalUploadOwner: { ...owner, principal: "session-b" } }))).rejects.toThrow("Original draft owner differs");
++  } finally { db.close(); await rm(root, { recursive: true, force: true }); }
++});
++
++it("recovers the signed HTTP operation after the accepted response socket is lost", async () => {
++  const { createServer } = await import("node:http");
++  const { routeSledFilesUpload } = await import("../main/team-api/route-sled-files-upload");
++  const { signFilesPrincipalBinding } = await import("../main/team-api/files-principal-binding");
++  const root = await mkdtemp(join(tmpdir(), "original-upload-http-"));
++  let db = new OpenBotDatabase(root);
++  let mailbox = new MailboxStore(root, join(root, "shared"), db);
++  await runCauseEffect(mailbox.initialize());
++  const secret = "owned-test-secret", hostId = "host", environmentId = "environment";
++  const bytes = Buffer.from("fixture payload");
++  const identity = { operationId: "http-original", hostId, environmentId, agentId: "agent", threadId: "original-thread", taskId: null, name: "file.txt", mimeType: "text/plain", size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
++  let lose = true;
++  let currentThread = identity.threadId;
++  const server = createServer(async (request, response) => {
++    try {
++      await routeSledFilesUpload({ request, response, method: request.method!, url: new URL(request.url!, "http://fixture"), protocol: 9, capabilities: new Set(["sled-files-upload-recovery-v1"]), member: {} as never, token: "fixture", sessionId: "upstream-shared-member-session", sessionExpiresAt: "2099-01-01", agentLevel: () => "manage", json: (_status, value) => {
++        if (lose) { lose = false; response.destroy(); return "handled"; }
++        response.setHeader("content-type", "application/json"); response.end(JSON.stringify(value)); return "handled";
++      }, empty: () => { response.end(); return "handled"; } }, mailbox, { secret, hostId, environmentId, validate: owned => { if (owned.threadId !== currentThread) throw new Error("original thread changed"); } });
++    } catch { response.writeHead(403).end(); }
++  });
++  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
++  const address = server.address();
++  if (!address || typeof address === "string") throw new Error("missing test address");
++  const invoke = (action: string, principal = "sled-session-a", changed = {}) => {
++    const path = `/v1/sled/files/${action}`;
++    const body = JSON.stringify({ ...identity, ...changed, ...(action === "upload" ? { dataBase64: bytes.toString("base64") } : {}) });
++    const token = signFilesPrincipalBinding(secret, { principal, hostId, method: "POST", path, bodySha256: createHash("sha256").update(body).digest("hex") }, Date.now());
++    return fetch(`http://127.0.0.1:${address.port}${path}`, { method: "POST", headers: { "x-sled-files-principal": token }, body });
++  };
++  try {
++    await expect(invoke("upload")).rejects.toThrow();
++    db.close(); db = new OpenBotDatabase(root); mailbox = new MailboxStore(root, join(root, "shared"), db);
++    await runCauseEffect(mailbox.initialize());
++    const recovered = await (await invoke("upload-status")).json();
++    expect(recovered.state).toBe("ready");
++    expect(await (await invoke("upload")).json()).toEqual(recovered);
++    expect((await invoke("upload-status", "sled-session-b")).status).toBe(403);
++    expect((await invoke("upload-status", "sled-session-a", { hostId: "changed" })).status).toBe(403);
++    currentThread = "changed";
++    expect((await invoke("upload-status")).status).toBe(403);
++  } finally {
++    server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
++    db.close(); await rm(root, { recursive: true, force: true });
++  }
++});

@@ -6,7 +6,10 @@ import {
   type OpenbotBrowserViewerGrant,
   decodeBrowserViewFrame,
   browserViewInputForHost,
+  decodeBrowserViewHostMessage,
+  type OpenbotBrowserViewFeatures,
 } from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -68,6 +71,7 @@ const make = Effect.gen(function* () {
   const repository = yield* AuthSessions.AuthSessionRepository;
   const sessions = yield* SessionStore.SessionStore;
   const clock = yield* Clock.Clock;
+  const platform = yield* HostProcess.Platform;
   // Private HTTP/socket callbacks cross the Promise transport seam with the application context.
   const run = Effect.runPromiseWith(yield* Effect.context<never>());
   // Frame/input checks share the enclosing socket span instead of creating spans for every frame.
@@ -92,11 +96,11 @@ const make = Effect.gen(function* () {
   const views = new BrowserViews({
     now: () => clock.currentTimeMillisUnsafe(),
     authorize: (principal, hostId) => run(authorize(AuthSessionId.make(principal), hostId)),
-    create: (hostId, tabId) =>
+    create: (hostId, tabId, features) =>
       run(
         integration.withBrowserToHost(hostId, (session) =>
           Effect.tryPromise({
-            try: () => session.create(tabId),
+            try: () => session.create(tabId, features),
             catch: (cause) =>
               isTeamClientError(cause)
                 ? cause
@@ -121,10 +125,35 @@ const make = Effect.gen(function* () {
     input: OpenbotBrowserViewCommand,
   ) {
     yield* authorize(sessionId, input.hostId);
+    let features: OpenbotBrowserViewFeatures | undefined;
+    if (input.operation === "open" && (input.advanced || input.viewport)) {
+      const support = yield* integration
+        .apiReadToHost(input.hostId, { operation: "compatibility.read" })
+        .pipe(Effect.mapError(requestError));
+      const available =
+        typeof support === "object" &&
+        support !== null &&
+        "capabilities" in support &&
+        Array.isArray(support.capabilities)
+          ? support.capabilities
+          : [];
+      if (input.viewport && !available.includes("browser-view-viewport"))
+        return yield* requestError(
+          new Error("This host does not support a requested browser viewport."),
+        );
+      features = {
+        ...(input.viewport ? { viewport: input.viewport } : {}),
+        framePoint: input.ackFrames === true && available.includes("browser-view-frame-point"),
+        clipboard: available.includes("browser-view-clipboard"),
+        cursor: available.includes("browser-view-cursor"),
+        contextMenu: available.includes("browser-view-context-menu"),
+        selectAllModifiers: platform === "darwin" ? 4 : 2,
+      };
+    }
     return yield* Effect.tryPromise({
       try: () =>
         input.operation === "open"
-          ? views.open(sessionId, input.hostId, input.tabId, input.ackFrames)
+          ? views.open(sessionId, input.hostId, input.tabId, input.ackFrames, features)
           : views.close(sessionId, input.hostId, input.id).then(() => null),
       catch: requestError,
     });
@@ -151,6 +180,10 @@ const make = Effect.gen(function* () {
         catch: requestError,
       }),
     );
+    const features = yield* Effect.tryPromise({
+      try: () => views.features(sessionId, input.hostId, input.id),
+      catch: requestError,
+    });
     const held = new BrowserHeldInput();
     const release = () => {
       const inputs = held.release();
@@ -169,15 +202,43 @@ const make = Effect.gen(function* () {
     });
     type Output =
       | { readonly _tag: "frame"; readonly bytes: Uint8Array }
+      | { readonly _tag: "text"; readonly text: string }
       | { readonly _tag: "closed" };
-    const output = yield* Queue.sliding<Output>(1);
+    const output = yield* Queue.dropping<Output>(18);
+    let newestFrame: Uint8Array | undefined;
+    let frameQueued = false;
     let endedStream = false;
     const ended = () => {
       endedStream = true;
       Queue.offerUnsafe(output, { _tag: "closed" });
     };
+    const offerFrame = (bytes: Uint8Array) => {
+      newestFrame = bytes;
+      if (!frameQueued) {
+        frameQueued = true;
+        if (!Queue.offerUnsafe(output, { _tag: "frame", bytes })) ended();
+      }
+    };
     const frame = (bytes: import("@effect/platform-node/NodeWS").RawData, binary: boolean) => {
-      if (endedStream || !binary) return;
+      if (endedStream) return;
+      if (!binary) {
+        try {
+          const text = Array.isArray(bytes)
+            ? Buffer.concat(bytes).toString("utf8")
+            : (bytes instanceof ArrayBuffer ? Buffer.from(bytes) : Buffer.from(bytes)).toString(
+                "utf8",
+              );
+          const message = decodeBrowserViewHostMessage(text);
+          if (
+            message &&
+            !Queue.offerUnsafe(output, { _tag: "text", text: JSON.stringify(message) })
+          )
+            ended();
+        } catch {
+          ended();
+        }
+        return;
+      }
       try {
         const data = new Uint8Array(
           Array.isArray(bytes)
@@ -188,7 +249,7 @@ const make = Effect.gen(function* () {
         );
         const frame = decodeBrowserViewFrame(data);
         const offered = delivery.offer(frame.sequence, data);
-        if (offered) Queue.offerUnsafe(output, { _tag: "frame", bytes: offered });
+        if (offered) offerFrame(offered);
       } catch {
         ended();
       }
@@ -217,19 +278,28 @@ const make = Effect.gen(function* () {
           const sendOutput = Queue.take(output).pipe(
             Effect.flatMap((value) =>
               Effect.gen(function* () {
+                if (value._tag === "closed" || endedStream)
+                  return yield* new BrowserViewGatewayError({ reason: "transport" });
+                const data = value._tag === "text" ? value.text : newestFrame;
+                if (value._tag === "frame") {
+                  frameQueued = false;
+                  newestFrame = undefined;
+                }
                 if (
-                  value._tag === "closed" ||
-                  bufferedBytes() + value.bytes.byteLength > 4 * 1024 * 1024
+                  data === undefined ||
+                  bufferedBytes() +
+                    (typeof data === "string" ? Buffer.byteLength(data) : data.byteLength) >
+                    4 * 1024 * 1024
                 )
                   return yield* new BrowserViewGatewayError({ reason: "transport" });
                 yield* check;
-                yield* writer.write(value.bytes);
+                yield* writer.write(data);
               }),
             ),
           );
           // Serial input shares the socket span and cannot grow a separate application queue.
           const receive = Effect.fnUntraced(function* (chunk: Uint8Array | string) {
-            if (typeof chunk !== "string" || Buffer.byteLength(chunk) > 8192)
+            if (typeof chunk !== "string" || Buffer.byteLength(chunk) > 604096)
               return yield* new BrowserViewGatewayError({ reason: "transport" });
             const message = yield* Effect.try({
               try: () => decodeOpenbotBrowserViewerInput(chunk),
@@ -241,11 +311,26 @@ const make = Effect.gen(function* () {
               return;
             }
             if (message.type === "ack") {
+              const previous = delivery.drawnSequence;
               const bytes = delivery.acknowledge(message.sequence);
-              if (bytes) Queue.offerUnsafe(output, { _tag: "frame", bytes });
+              if (features?.framePoint && delivery.drawnSequence !== previous) {
+                const packet = yield* encodeInput(message);
+                yield* Effect.try({ try: () => upstream.send(packet), catch: requestError });
+              }
+              if (bytes) offerFrame(bytes);
               return;
             }
-            const wire = browserViewInputForHost(message, false, false);
+            if (
+              features?.framePoint &&
+              message.type === "pointer" &&
+              (message.sequence === undefined || message.sequence !== delivery.drawnSequence)
+            )
+              return;
+            const wire = browserViewInputForHost(
+              message,
+              features?.framePoint === true,
+              features?.clipboard === true,
+            );
             if (!wire) return;
             if (upstream.readyState !== WebSocket.OPEN || upstream.bufferedAmount >= 8192)
               return yield* new BrowserViewGatewayError({ reason: "transport" });

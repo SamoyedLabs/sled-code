@@ -52,6 +52,41 @@ describe("consumeLastAgentNotificationResponse", () => {
 });
 
 describe("extractAgentNotificationDeepLink", () => {
+  it("routes bot attention to its exact task and channel without inventing a thread", () => {
+    const deepLink = "/bots/env/host/bot/tasks/assignment/channels/channel";
+    expect(extractAgentNotificationDeepLink(responseWithData({ deepLink }))).toBe(deepLink);
+    const routine = "/bots/env/host/bot/routines/reminder/runs/run";
+    expect(extractAgentNotificationDeepLink(responseWithData({ deepLink: routine }))).toBe(routine);
+    expect(
+      extractAgentNotificationDeepLink(
+        responseWithData({ deepLink: "/bots/env/host/bot/tasks/task/routines/reminder" }),
+      ),
+    ).toBeNull();
+    expect(
+      extractAgentNotificationDeepLink(
+        responseWithData({
+          kind: "bot",
+          environmentId: "env",
+          hostId: "host",
+          agentId: "bot",
+          taskId: "assignment",
+          channelId: "channel",
+        }),
+      ),
+    ).toBe(deepLink);
+    expect(
+      extractAgentNotificationDeepLink(responseWithData({ deepLink: deepLink + "?token=secret" })),
+    ).toBeNull();
+    expect(
+      extractAgentNotificationDeepLink(responseWithData({ deepLink: "/bots/env/host/%E0%A4%A" })),
+    ).toBeNull();
+    expect(
+      extractAgentNotificationDeepLink(
+        responseWithData({ kind: "bot", environmentId: "env", hostId: "", agentId: "bot" }),
+      ),
+    ).toBeNull();
+  });
+
   it("uses explicit deep links from APNs payload data", () => {
     expect(
       extractAgentNotificationDeepLink(

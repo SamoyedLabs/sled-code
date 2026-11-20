@@ -55,6 +55,11 @@ export class SledTools extends Context.Service<
   SledTools,
   {
     readonly status: Effect.Effect<OpenbotSledToolsStatus, SledToolsError>;
+    readonly connectorSession: (hostId: string) => Effect.Effect<AuthSessionId, SledToolsError>;
+    readonly assertConnector: (
+      sessionId: string,
+      hostId: string,
+    ) => Effect.Effect<void, SledToolsError>;
     readonly connect: (
       input: OpenbotSledToolsConnectInput,
     ) => Effect.Effect<OpenbotSledToolsStatus, SledToolsError>;
@@ -252,6 +257,7 @@ const make = Effect.gen(function* () {
           operation: "connect",
           cause: new Error("Missing upstream MCP configuration receipt"),
         });
+      yield* integration.withChannelToHost(hostId, (channel) => channel.configure(savedRow.id));
       yield* save({
         active,
         revoke: [
@@ -309,6 +315,39 @@ const make = Effect.gen(function* () {
     return yield* status;
   });
   return SledTools.of({
+    connectorSession: Effect.fn("SledTools.connectorSession")(function* (hostId: string) {
+      const record = yield* load;
+      const state = yield* status;
+      if (
+        !record.active ||
+        record.active.hostId !== hostId ||
+        record.active.access === "read-only" ||
+        state.state !== "connected"
+      )
+        return yield* new SledToolsError({
+          operation: "status",
+          cause: new Error("No active connector"),
+        });
+      return record.active.sessionId;
+    }),
+    assertConnector: Effect.fn("SledTools.assertConnector")(function* (
+      sessionId: string,
+      hostId: string,
+    ) {
+      const record = yield* load;
+      const state = yield* status;
+      if (
+        !record.active ||
+        record.active.sessionId !== sessionId ||
+        record.active.hostId !== hostId ||
+        state.state !== "connected" ||
+        record.active.access === "read-only"
+      )
+        return yield* new SledToolsError({
+          operation: "status",
+          cause: new Error("Unregistered coding connector"),
+        });
+    }),
     status: gate.withPermit(status),
     connect: Effect.fn("SledTools.connectSerialized")((input: OpenbotSledToolsConnectInput) =>
       gate.withPermit(Effect.uninterruptible(connect(input))),

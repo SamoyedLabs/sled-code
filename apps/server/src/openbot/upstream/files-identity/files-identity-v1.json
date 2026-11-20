@@ -1,0 +1,38 @@
+{
+  "patchSha256": "b321212e7cc277f449e51133dfeb9682e8e35e91a758b0081f5e9cca089313b0",
+  "files": [
+    {
+      "path": "src/backend/agent-service.ts",
+      "originalSha256": "f892a430932266cc768e7cab6082712add47be6d6960c6a43801c46ebb8e4c46",
+      "finalSha256": "6e488de3b3320f0506ce7efc4e41fcd476102032d66c31cc916fb322e5a54c41"
+    },
+    {
+      "path": "src/backend/mailbox-store.ts",
+      "originalSha256": "613b26646355adee9bfabf55e44b5c6f82e64bd5d28028bd136fb8872a47b03d",
+      "finalSha256": "ee8169f35127d0830bc6429c63845600f2ff6815fdf225ef38801f4aee538add"
+    },
+    {
+      "path": "packages/contracts/src/ipc-conversations.ts",
+      "originalSha256": "51208c4309d2da28159828e0ca14cecf3b798cb20af2e44191434347bb80075d",
+      "finalSha256": "8f53ec5129fa025ec175f20b559ce59850eb8068b077571d6fd2e612ccd6c1c8"
+    },
+    {
+      "path": "src/main/team-api/route-sled-files-identity.ts",
+      "originalSha256": null,
+      "finalSha256": "174e63d8ffba0be5f0fec44972c3f67e0a3a2eafc0cb9ef52cd7f0f28a7d6c2d"
+    },
+    {
+      "path": "packages/contracts/src/team-protocol/sled-files-identity-v1.ts",
+      "originalSha256": null,
+      "finalSha256": "5e4f0b01e265dd1338f03f15ae8cb474207c421cfb466c9eb82770e84330914d"
+    },
+    {
+      "path": "src/backend/files-identity.test.ts",
+      "originalSha256": null,
+      "finalSha256": "c07aadd3118dbbfef4aa4a5b887f513a272356b38b96bef8b1ad9008fa45f0a4"
+    }
+  ],
+  "forwardCheck": true,
+  "reverseCheck": true,
+  "runtimeAccepted": false
+}

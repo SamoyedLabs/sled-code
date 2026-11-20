@@ -14,6 +14,7 @@ import {
   ProviderThreadId,
   ProviderTurnId,
   RunId,
+  RunAttemptId,
   RuntimeRequestId,
   ThreadId,
   TurnItemId,
@@ -1208,4 +1209,78 @@ it.effect("startup ends the provider turn of a native child root it cancels", ()
       "a root startup recovery cancelled left its provider turn running",
     );
   }).pipe(Effect.provide(layerRecoveryTest)),
+);
+
+it.effect("retains a shutdown-closed approval only while its run needs reconciliation", () =>
+  Effect.gen(function* () {
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const now = yield* DateTime.now;
+    const threadId = yield* createThread("closed-approval");
+    const attemptId = RunAttemptId.make("attempt:closed-approval");
+    yield* createRun(threadId, "running", { activeAttemptId: attemptId });
+    const providerTurnId = ProviderTurnId.make("turn:closed-approval");
+    const nodeId = NodeId.make("node:closed-approval");
+    yield* projections.apply({
+      id: EventId.make("event:closed-approval:turn"),
+      type: "provider-turn.updated",
+      threadId,
+      occurredAt: now,
+      payload: {
+        id: providerTurnId,
+        providerThreadId: ProviderThreadId.make("provider-thread:closed-approval"),
+        nodeId,
+        runAttemptId: attemptId,
+        nativeTurnRef: null,
+        ordinal: 1,
+        status: "running",
+        startedAt: now,
+        completedAt: null,
+      },
+    });
+    yield* projections.apply({
+      id: EventId.make("event:closed-approval:request"),
+      type: "runtime-request.updated",
+      threadId,
+      occurredAt: now,
+      payload: {
+        id: RuntimeRequestId.make("request:closed-approval"),
+        nodeId,
+        providerTurnId,
+        nativeRequestRef: null,
+        kind: "command",
+        status: "cancelled",
+        responseCapability: {
+          type: "not_resumable",
+          reason: "The server shut down before this runtime request was resolved.",
+        },
+        createdAt: now,
+        resolvedAt: now,
+      },
+    });
+    assert.lengthOf((yield* projections.getRuntimeRecoveryProjection(threadId)).runtimeRequests, 1);
+    const request = (yield* projections.getThreadProjection(threadId)).runtimeRequests[0]!;
+    yield* projections.apply({
+      id: EventId.make("event:closed-approval:manual"),
+      type: "runtime-request.updated",
+      threadId,
+      occurredAt: now,
+      payload: {
+        ...request,
+        responseCapability: {
+          type: "not_resumable",
+          reason: "Provider session was closed before this runtime request was resolved.",
+        },
+      },
+    });
+    assert.lengthOf((yield* projections.getRuntimeRecoveryProjection(threadId)).runtimeRequests, 0);
+    yield* projections.apply({
+      id: EventId.make("event:closed-approval:restore"),
+      type: "runtime-request.updated",
+      threadId,
+      occurredAt: now,
+      payload: request,
+    });
+    yield* createRun(threadId, "cancelled", { activeAttemptId: attemptId });
+    assert.lengthOf((yield* projections.getRuntimeRecoveryProjection(threadId)).runtimeRequests, 0);
+  }).pipe(Effect.provide(layerTest)),
 );

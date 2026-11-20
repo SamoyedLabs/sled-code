@@ -1,3 +1,4 @@
+import { BOT_HOST_SETTINGS } from "./unifiedBotSettings";
 import { HOSTED_APP_CHANNEL } from "~/branding";
 import { isElectron, isSecretsFeatureEnabled } from "~/env";
 import { isMacPlatform, isWindowsPlatform, normalizeSearchText } from "~/lib/utils";
@@ -219,6 +220,13 @@ const SOURCE_CONTROL_HOST_TERMS = sourceControlClients.definitions
   .join(" ");
 
 export const SETTINGS_SEARCH_ITEMS = [
+  ...BOT_HOST_SETTINGS.map((item) => ({
+    id: `bot-host-${item.id}`,
+    title: item.label,
+    to: "/settings/bots" as const,
+    scope: "environment" as const,
+    searchTerms: ["bots", "openbot", item.id],
+  })),
   {
     id: "bots",
     title: "Bots",

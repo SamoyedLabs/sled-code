@@ -133,7 +133,11 @@ export function useBotWorkflows(environmentId: EnvironmentId, hostId: string, ne
           JSON.stringify([
             request.operation,
             "workflowId" in request ? request.workflowId : null,
-            "nodeId" in request ? request.nodeId : null,
+            "nodeId" in request
+              ? request.nodeId
+              : "fromNodeId" in request
+                ? request.fromNodeId
+                : null,
             "stepId" in request ? request.stepId : null,
           ]),
         );
@@ -226,6 +230,18 @@ export function useBotWorkflows(environmentId: EnvironmentId, hostId: string, ne
     setDraft,
     act,
     start,
+    startFrom: (nodeId: string) => {
+      if (!selected) return;
+      const key = JSON.stringify(["workflow.startRun", selected, nodeId, null]);
+      const requestId = receipts.current.get(key) ?? newId();
+      receipts.current.set(key, requestId);
+      void act({
+        operation: "workflow.startRun",
+        workflowId: selected,
+        fromNodeId: nodeId,
+        requestId,
+      });
+    },
     refresh,
     loading: listQuery.isPending || detailQuery.isPending || runsQuery.isPending,
     select: (id: string) => {

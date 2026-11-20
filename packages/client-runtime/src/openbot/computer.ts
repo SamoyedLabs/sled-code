@@ -31,5 +31,5 @@ export function computerReadiness(
   if (!capabilities.displays.length) return "No displays are available on this host.";
   if (capabilities.activeSessions >= capabilities.maxSessions)
     return "The host has reached its remote desktop session limit.";
-  return "Host checks passed. The authenticated computer viewer is not available in Sled yet.";
+  return "Host checks passed. Start the computer viewer to connect.";
 }

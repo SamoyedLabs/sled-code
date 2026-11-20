@@ -14,7 +14,7 @@ export const OpenbotRuntimePlatform = Schema.Literals([
 export type OpenbotRuntimePlatform = typeof OpenbotRuntimePlatform.Type;
 const Commit = Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/));
 const Sha256 = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
-const Compatibility = Schema.Literals(["pinned-baseline", "requires-validation"]);
+const Compatibility = Schema.Literals(["pinned-baseline", "requires-validation", "validated"]);
 export const OpenbotUpstreamAsset = Schema.Struct({
   platform: OpenbotRuntimePlatform,
   name: Schema.String.check(Schema.isMaxLength(128)),

@@ -1,0 +1,13 @@
+import { fields, identifier, list, string, nullable, boolean, type OptionalRouteCodec } from "./admin-wire";
+import { AGENT_TASKS_CODECS, AGENT_TASKS_ROUTES } from "./agent-tasks-v1";
+export const SLED_FILES_IDENTITY_CAPABILITY = "sled-files-identity-v1";
+export const SLED_FILES_IDENTITY_ROUTES = { send: "/v1/sled/files/send" } as const;
+const receipt = AGENT_TASKS_CODECS.get(AGENT_TASKS_ROUTES.send)!;
+export const SLED_FILES_IDENTITY_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
+  [SLED_FILES_IDENTITY_ROUTES.send, {
+    request: fields({ agentId: identifier, expectedThreadId: identifier, clientMessageId: identifier,
+      text: string(100_000), attachmentDraftIds: list(identifier, 10), taskId: nullable(identifier),
+      replyToMessageId: nullable(identifier), receiptOnly: boolean }, { environmentId: identifier }),
+    response: receipt.response,
+  }],
+]);

@@ -1,0 +1,46 @@
+.openbot-react .routine-planner {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.openbot-react .routine-planner button {
+  cursor: pointer;
+}
+.openbot-react .routine-planner button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.openbot-react :where(.routine-planner .ui-button, .routine-planner .ui-icon-button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.openbot-react .routine-planner button:focus-visible,
+.openbot-react .routine-planner select:focus-visible {
+  outline: 2px solid var(--openbot-text-muted);
+  outline-offset: 2px;
+}
+.openbot-react .routine-planner button:hover {
+  background: var(--openbot-bg-control-hover);
+}
+.openbot-react .routine-planner-toolbar {
+  flex: 1;
+}
+.openbot-react .routine-planner-empty {
+  flex: 1;
+  min-height: 440px;
+}
+.openbot-react .routine-planner select {
+  background: var(--openbot-bg-surface);
+  color: inherit;
+  padding: 8px;
+  border-radius: 8px;
+}

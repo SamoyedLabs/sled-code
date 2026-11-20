@@ -85,18 +85,25 @@ export * from "./openbotChannels.ts";
 
 export * from "./openbotCoding.ts";
 export * from "./openbotCodingPolicy.ts";
+export * from "./openbotChannelGrants.ts";
 
 export * from "./openbotSledTools.ts";
 
 export * from "./openbotEvents.ts";
+export * from "./openbotContext.ts";
 
 export * from "./openbotUpstream.ts";
 export * from "./openbotMaintenance.ts";
+export * from "./openbotContinuity.ts";
 export * from "./openbotFiles.ts";
 
 export * from "./threadLaunchReceipt.ts";
 export * from "./openbotBrowser.ts";
 export {
+  decodeBrowserViewHostMessage,
+  type BrowserViewCursor,
+  type BrowserViewHostMessage,
+  type BrowserViewContextMenu,
   decodeBrowserViewFrame,
   decodeBrowserViewInput,
   browserViewInputForHost,
@@ -110,8 +117,28 @@ export * from "./openbotRoutineFlows.ts";
 export * from "./openbotComputer.ts";
 
 export * from "./openbotVault.ts";
+export * from "./openbotTwoStepCode.ts";
 
 export * from "./openbotData.ts";
+export * from "./openbotLibrary.ts";
+export * from "./openbotLiveVoice.ts";
 
 export * from "./openbotCatalog.ts";
 export * from "./openbotTemplates.ts";
+
+export {
+  OpenbotSettingsReadRequest,
+  OpenbotSettingsAdminRequest,
+  settingsRequiredScopes,
+  type OpenbotSettingsRequest,
+} from "./openbotSettings.ts";
+
+export * from "./openbotImportBridge.ts";
+
+export * from "./openbotDirect.ts";
+
+export * from "./openbotInstanceTransfer.ts";
+
+export * from "./openbotOnceRoutinesWire.ts";
+
+export * from "./openbotConnectWebhooksWire.ts";

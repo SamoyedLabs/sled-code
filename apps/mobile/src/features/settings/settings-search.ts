@@ -14,6 +14,10 @@ const SETTINGS_SEARCH_TERMS = {
     "tailscale",
   ],
   SettingsNotifications: ["push", "alerts", "live activity", "agent activity"],
+  SettingsBotQuickActions: ["home screen", "app icon", "launcher", "bot shortcuts"],
+  SettingsAppLock: ["privacy", "pin", "passcode", "face id", "touch id", "biometrics"],
+  SettingsBotMotion: ["animations", "reduce motion", "bot faces", "text reveal", "search transitions"],
+  SettingsBotHaptics: ["vibration", "reply feedback", "touch feedback"],
   SettingsAppearance: [
     "theme",
     "dark mode",
@@ -77,6 +81,8 @@ const SETTINGS_SEARCH_TERMS = {
     "default branch",
     "automatically pull",
   ],
+  SettingsBotVoice: ["read aloud", "reply voice", "supertonic", "speech"],
+  SettingsBotConversations: ["swipe", "pull up", "chat info", "photo quality", "media", "browser"],
   SettingsWorktrees: [
     "worktree",
     "branch naming",

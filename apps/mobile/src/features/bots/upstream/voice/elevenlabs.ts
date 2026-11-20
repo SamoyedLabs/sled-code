@@ -1,0 +1,183 @@
+// Adapted from OpenBot mobile 1.4.11 a09baff9, features/voice/model/elevenlabs.ts.
+import * as Schema from "effect/Schema";
+
+const isDynamicRecord = Schema.is(Schema.Record(Schema.String, Schema.Unknown));
+const isString = Schema.is(Schema.String);
+type ElevenLabsVoice = { id: string; name: string };
+
+const API = "https://api.elevenlabs.io";
+/** The `model_id` of each model, as desktop sends it. */
+export const SPEECH_MODELS = {
+  "elevenlabs-flash-v2.5": "eleven_flash_v2_5",
+  "elevenlabs-multilingual-v2": "eleven_multilingual_v2",
+  "elevenlabs-v3": "eleven_v3",
+  "elevenlabs-v4-turbo": "eleven_v4_turbo",
+  "elevenlabs-v4": "eleven_v4",
+} as const;
+export type ElevenLabsSpeechModelId = keyof typeof SPEECH_MODELS;
+/** The sample rate of `pcm_24000`, which every ElevenLabs plan has. */
+export const ELEVENLABS_SAMPLE_RATE = 24_000;
+
+/**
+ * The permissions of a restricted ElevenLabs key that the phone uses: Voices: Read lists the voices,
+ * Text to Speech: Access reads the replies, and Speech to Text: Access recognizes the user's speech.
+ * A key without restrictions has all of them.
+ */
+type ElevenLabsPermission = "voices_read" | "text_to_speech" | "speech_to_text";
+
+const MISSING_PERMISSION = {
+  voices_read: "missing-voices-permission",
+  text_to_speech: "missing-speech-permission",
+  speech_to_text: "missing-transcription-permission",
+} as const;
+
+type ElevenLabsFailure =
+  | "invalid-key"
+  | (typeof MISSING_PERMISSION)[ElevenLabsPermission]
+  | "network"
+  | "failed";
+
+/** The longest ElevenLabs reason that the phone shows. */
+const REASON_MAX_LENGTH = 300;
+
+/**
+ * Why a request failed. `reason` is the `detail.message` that ElevenLabs sends with a refusal, such
+ * as a plan that does not allow a voice, with the key removed. The message stays the code, so a log
+ * never holds the reason.
+ */
+export class ElevenLabsError extends Error {
+  constructor(
+    readonly code: ElevenLabsFailure,
+    readonly reason: string | null = null,
+  ) {
+    super(code);
+  }
+}
+
+/** The `detail` of an ElevenLabs error answer: `{ status, message }`, or one text. */
+function errorDetail(body: string, key: string): { status: string | null; reason: string | null } {
+  let answer: unknown;
+  try {
+    answer = JSON.parse(body);
+  } catch {
+    return { status: null, reason: null };
+  }
+  const detail = isDynamicRecord(answer) ? answer.detail : null;
+  const status = isDynamicRecord(detail) && isString(detail.status) ? detail.status : null;
+  const message = isString(detail)
+    ? detail
+    : isDynamicRecord(detail) && isString(detail.message)
+      ? detail.message
+      : "";
+  const reason = (key ? message.replaceAll(key, "…") : message).trim().slice(0, REASON_MAX_LENGTH);
+  return { status, reason: reason || null };
+}
+
+async function request(
+  path: string,
+  key: string,
+  permission: ElevenLabsPermission,
+  init: RequestInit = {},
+): Promise<Response> {
+  let response: Response;
+  try {
+    const headers = new Headers(init.headers);
+    headers.set("xi-api-key", key);
+    response = await fetch(`${API}${path}`, { ...init, redirect: "error", headers });
+  } catch (error) {
+    if (init.signal?.aborted) throw error;
+    throw new ElevenLabsError("network");
+  }
+  if (response.ok) return response;
+  const body = await response.text().catch(() => "");
+  const { status, reason } = errorDetail(body, key);
+  if (response.status === 401 || response.status === 403) {
+    // A restricted key without the permission answers `missing_permissions` and names it.
+    if (body.includes("missing_permissions") || body.includes(permission))
+      throw new ElevenLabsError(MISSING_PERMISSION[permission]);
+    // A valid key can also be refused, for example when ElevenLabs stops the free plan of an
+    // account. Its own reason is then more accurate than "invalid key".
+    if (status === "invalid_api_key" || !reason) throw new ElevenLabsError("invalid-key");
+  }
+  throw new ElevenLabsError("failed", reason);
+}
+
+/** The voices of the account: premade, cloned and saved. A key that lists none is still valid. */
+export async function listElevenLabsVoices(key: string): Promise<ElevenLabsVoice[]> {
+  const response = await request("/v2/voices?page_size=100", key, "voices_read");
+  const body = await response.json().catch(() => null);
+  if (!isDynamicRecord(body) || !Array.isArray(body.voices)) throw new ElevenLabsError("failed");
+  return body.voices.flatMap((voice: unknown) =>
+    isDynamicRecord(voice) && isString(voice.voice_id) && isString(voice.name)
+      ? [{ id: voice.voice_id, name: voice.name }]
+      : [],
+  );
+}
+
+/** One part of a reply as little-endian 16-bit mono PCM at `ELEVENLABS_SAMPLE_RATE`. */
+export async function elevenLabsSpeech(
+  key: string,
+  voiceId: string,
+  model: ElevenLabsSpeechModelId,
+  text: string,
+  signal: AbortSignal,
+): Promise<Uint8Array> {
+  const response = await request(
+    `/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=pcm_${ELEVENLABS_SAMPLE_RATE}`,
+    key,
+    "text_to_speech",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, model_id: SPEECH_MODELS[model] }),
+      signal,
+    },
+  );
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (!bytes.length || bytes.length % 2 || bytes.length > 32 * 1024 * 1024)
+    throw new ElevenLabsError("failed");
+  return bytes;
+}
+
+/**
+ * A single-use token for one Scribe v2 Realtime session, so the key itself never goes into the
+ * socket. ElevenLabs answers a key without Speech to Text here, where the refusal can be read.
+ */
+export async function scribeToken(key: string, signal: AbortSignal): Promise<string> {
+  const response = await request("/v1/single-use-token/realtime_scribe", key, "speech_to_text", {
+    method: "POST",
+    signal,
+  });
+  const body = await response.json().catch(() => null);
+  if (!isDynamicRecord(body) || !isString(body.token)) throw new ElevenLabsError("failed");
+  return body.token;
+}
+
+/**
+ * Tests both permissions before the key is saved: it lists the voices, and reads one character with
+ * the first of them and Flash v2.5, which costs one character of the account's quota.
+ */
+export async function testElevenLabsKey(key: string): Promise<ElevenLabsVoice[]> {
+  const voices = await listElevenLabsVoices(key);
+  const first = voices[0];
+  if (first)
+    await elevenLabsSpeech(
+      key,
+      first.id,
+      "elevenlabs-flash-v2.5",
+      ".",
+      new AbortController().signal,
+    );
+  return voices;
+}
+
+/**
+ * An ElevenLabs voice name such as "George - Warm, Captivating Storyteller": the name, and the
+ * description after it, so a list can show the description on its own line.
+ */
+export function elevenLabsVoiceParts(name: string): { title: string; description: string | null } {
+  const at = name.indexOf(" - ");
+  return at > 0
+    ? { title: name.slice(0, at), description: name.slice(at + 3) }
+    : { title: name, description: null };
+}

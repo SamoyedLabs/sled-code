@@ -1,3 +1,4 @@
+import * as BotAttention from "../agentActivity/BotAttention.ts";
 import { createClerkClient, verifyToken } from "@clerk/backend";
 import { sql as drizzleSql } from "drizzle-orm";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -1210,6 +1211,7 @@ export const layerServerApi = HttpApiBuilder.group(
   "server",
   Effect.fnUntraced(function* (handlers) {
     const publisher = yield* AgentActivityPublisher.AgentActivityPublisher;
+    const botAttention = yield* BotAttention.BotAttention;
     const publishSignatures = yield* EnvironmentPublishSignatures.EnvironmentPublishSignatures;
     const heldHooks = yield* HeldHooks.HeldHooks;
     const requireOwnEnvironment =
@@ -1350,6 +1352,36 @@ export const layerServerApi = HttpApiBuilder.group(
     );
 
     return activityHandlers
+      .handle(
+        "publishBotAttention",
+        Effect.fn("relay.api.server.publishBotAttention")(function* ({ params, payload }) {
+          const principal = yield* RelayEnvironmentPrincipal;
+          if (principal.environmentId !== params.environmentId)
+            return yield* relayAuthInvalidError("not_authorized");
+          const traceId = yield* currentTraceId;
+          return yield* botAttention
+            .publish({
+              environmentId: params.environmentId,
+              environmentPublicKey: principal.environmentPublicKey,
+              request: payload,
+            })
+            .pipe(
+              Effect.mapError((error) =>
+                error.reason === "authority"
+                  ? new RelayAuthInvalidError({
+                      code: "auth_invalid",
+                      reason: "not_authorized",
+                      traceId,
+                    })
+                  : new RelayInternalError({
+                      code: "internal_error",
+                      reason: "internal_error",
+                      traceId,
+                    }),
+              ),
+            );
+        }),
+      )
       .handle(
         "registerManagedEndpointRecovery",
         Effect.fn("relay.api.server.registerManagedEndpointRecovery")(

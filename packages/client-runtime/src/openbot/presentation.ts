@@ -154,3 +154,14 @@ export type { ComputerActions } from "./computerController.ts";
 export * from "./data.ts";
 
 export { computerViewerUrl } from "./computerViewer.ts";
+
+export * from "./notificationTarget.ts";
+
+export {
+  botQuoteHref,
+  botQuoteReference,
+  botFileQuoteId,
+  botFileQuoteTarget,
+  resolveBotQuotedFileSource,
+  type BotFileQuoteTarget,
+} from "./quoteReferences.ts";

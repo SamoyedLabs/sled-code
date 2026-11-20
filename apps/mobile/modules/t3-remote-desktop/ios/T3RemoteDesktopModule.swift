@@ -1,4 +1,6 @@
+import AVFoundation
 import ExpoModulesCore
+import LiveKitWebRTC
 import SwiftUI
 import UIKit
 import Combine
@@ -8,9 +10,50 @@ private enum T3Acceptance {
 }
 
 public final class T3RemoteDesktopModule: Module {
+    private var botVoice: T3BotVoicePeer?
+
+    private func closeBotVoice() {
+        let previous = botVoice
+        botVoice = nil
+        previous?.close()
+    }
+
     public func definition() -> ModuleDefinition {
         Name("T3RemoteDesktop")
         Constants(["acceptanceEnabled": T3Acceptance.enabled])
+        Events("onBotVoiceState")
+        AsyncFunction("createBotVoiceOffer") { (id: String, promise: Promise) in
+            guard self.botVoice == nil, UUID(uuidString: id) != nil else {
+                promise.reject(T3BotVoicePeer.failure("Another voice call is active."))
+                return
+            }
+            do {
+                let voice = try T3BotVoicePeer(identifier: id) { [weak self] state in
+                    self?.sendEvent("onBotVoiceState", ["id": id, "state": state])
+                }
+                self.botVoice = voice
+                voice.offer(promise)
+            } catch { promise.reject(error) }
+        }.runOnQueue(.main)
+        AsyncFunction("acceptBotVoiceAnswer") { (id: String, answer: String, promise: Promise) in
+            guard let voice = self.botVoice, voice.identifier == id else {
+                promise.reject(T3BotVoicePeer.failure("The voice call has closed."))
+                return
+            }
+            voice.accept(answer, promise: promise)
+        }.runOnQueue(.main)
+        AsyncFunction("setBotVoiceMuted") { (id: String, muted: Bool) in
+            guard let voice = self.botVoice, voice.identifier == id else { return }
+            voice.setMuted(muted)
+        }.runOnQueue(.main)
+        AsyncFunction("interruptBotVoice") { (id: String) in
+            if let voice = self.botVoice, voice.identifier == id { voice.interrupt() }
+        }.runOnQueue(.main)
+        AsyncFunction("closeBotVoice") { (id: String) in
+            if self.botVoice?.identifier == id { self.closeBotVoice() }
+        }.runOnQueue(.main)
+        OnDestroy { self.closeBotVoice() }
+
         View(T3RemoteDesktopView.self) {
             Events("onNativeState")
             AsyncFunction("createNativeOffer") { (view: T3RemoteDesktopView, fingerprint: String, promise: Promise) in
@@ -286,4 +329,176 @@ private final class T3RemoteHostingController: UIHostingController<T3RemoteRootV
         guard builder.system == .main, MacMenuHub.hasMenuBar else { return }
         if #available(iOS 26.0, *) { MacMenuBar.build(builder) }
     }
+}
+
+/// An audio-only peer for the OpenBot Codex live-voice offer. It shares the shipped WebRTC binary.
+private final class T3BotVoicePeer: NSObject, LKRTCDataChannelDelegate {
+    private static let factory: LKRTCPeerConnectionFactory = {
+        _ = LKRTCInitializeSSL()
+        return LKRTCPeerConnectionFactory()
+    }()
+
+    let identifier: String
+    private let peer: NativePeer
+    private var microphone: LKRTCAudioTrack?
+    private var events: LKRTCDataChannel?
+    private var offering: Promise?
+    private var answering: Promise?
+    private let onState: (String) -> Void
+    private let previousAudio: (AVAudioSession.Category, AVAudioSession.Mode, AVAudioSession.CategoryOptions)
+    private var closed = false
+    private var currentReply: String?
+    private var silencedReply: String?
+    private var silenceNextReply = false
+
+    init(identifier: String, onState: @escaping (String) -> Void) throws {
+        self.identifier = identifier
+        self.onState = onState
+        let session = AVAudioSession.sharedInstance()
+        previousAudio = (session.category, session.mode, session.categoryOptions)
+        peer = NativePeer(factory: Self.factory, queue: .main)
+        super.init()
+        guard let connection = peer.connection else { throw Self.failure("Could not create the audio connection.") }
+
+        let constraints = LKRTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
+        let audio = Self.factory.audioSource(with: constraints)
+        let track = Self.factory.audioTrack(with: audio, trackId: "sled-live-voice")
+        let config = LKRTCDataChannelConfiguration()
+        config.isOrdered = true
+        guard connection.add(track, streamIds: ["sled-live-voice"]) != nil,
+              let channel = connection.dataChannel(forLabel: "oai-events", configuration: config) else {
+            peer.close()
+            throw Self.failure("Could not add the microphone to the call.")
+        }
+        microphone = track
+        events = channel
+        channel.delegate = self
+
+        do {
+            try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetoothHFP])
+            try session.setActive(true)
+        } catch {
+            close()
+            throw Self.failure("Could not start a phone audio session.")
+        }
+
+        peer.onFailure = { [weak self] _ in self?.fail() }
+        peer.onConnectionLost = { [weak self] in self?.onState("reconnecting") }
+        peer.onConnectionRestored = { [weak self] in self?.onState("connected") }
+    }
+
+    func offer(_ promise: Promise) {
+        guard !closed, offering == nil else {
+            promise.reject(Self.failure("The audio connection is busy."))
+            return
+        }
+        offering = promise
+        peer.offer { [weak self] description in
+            guard let self, let promise = self.offering else { return }
+            self.offering = nil
+            promise.resolve(description.sdp)
+        }
+    }
+
+    func accept(_ answer: String, promise: Promise) {
+        guard !closed, answering == nil, !answer.isEmpty, answer.utf8.count <= 65_536 else {
+            promise.reject(Self.failure("The voice answer is invalid."))
+            return
+        }
+        answering = promise
+        peer.accept(LKRTCSessionDescription(type: .answer, sdp: answer)) { [weak self] in
+            guard let self, let promise = self.answering else { return }
+            self.answering = nil
+            promise.resolve(nil)
+        }
+    }
+
+    func setMuted(_ muted: Bool) {
+        microphone?.isEnabled = !muted
+    }
+
+    func close() {
+        guard !closed else { return }
+        closed = true
+        microphone?.isEnabled = false
+        events?.delegate = nil
+        events?.close()
+        events = nil
+        microphone = nil
+        if peer.connection != nil { peer.close() }
+        let error = Self.failure("The audio connection closed.")
+        offering?.reject(error)
+        answering?.reject(error)
+        offering = nil
+        answering = nil
+        let session = AVAudioSession.sharedInstance()
+        if session.category == .playAndRecord && session.mode == .voiceChat {
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            try? session.setCategory(previousAudio.0, mode: previousAudio.1, options: previousAudio.2)
+        }
+    }
+
+    func interrupt() {
+        if let currentReply { silencedReply = currentReply }
+        else { silenceNextReply = true }
+        setReplyAudible(false)
+    }
+
+    private func setReplyAudible(_ audible: Bool) {
+        for receiver in peer.connection.receivers {
+            (receiver.track as? LKRTCAudioTrack)?.isEnabled = audible
+        }
+    }
+
+    func dataChannelDidChangeState(_ dataChannel: LKRTCDataChannel) {}
+
+    func dataChannel(_ dataChannel: LKRTCDataChannel, didReceiveMessageWith buffer: LKRTCDataBuffer) {
+        guard !buffer.isBinary, buffer.data.count <= 262_144,
+              let event = try? JSONSerialization.jsonObject(with: buffer.data) as? [String: Any],
+              let type = event["type"] as? String, type == "turn.created" || type == "turn.done",
+              let turn = event["turn"] as? [String: Any], let id = turn["id"] as? String, id.count <= 512,
+              let role = turn["role"] as? String else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.turnEvent(role: role, id: id, done: type == "turn.done")
+        }
+    }
+
+    private func turnEvent(role: String, id: String, done: Bool) {
+        guard !closed else { return }
+        if role == "user" {
+            if !done {
+                silenceNextReply = false
+                if silencedReply == nil { setReplyAudible(true) }
+            }
+            onState(done ? "thinking" : "listening")
+        } else if role == "assistant" {
+            if done {
+                if currentReply == id { currentReply = nil }
+                if silencedReply == id {
+                    silencedReply = nil
+                    setReplyAudible(true)
+                }
+                onState("listening")
+            } else {
+                currentReply = id
+                if silenceNextReply {
+                    silenceNextReply = false
+                    silencedReply = id
+                    setReplyAudible(false)
+                } else { onState("speaking") }
+            }
+        }
+    }
+
+    private func fail() {
+        guard !closed else { return }
+        close()
+        onState("failed")
+    }
+
+    static func failure(_ message: String) -> NSError {
+        NSError(domain: "SledBotLiveVoice", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+    }
+
+    deinit { close() }
 }

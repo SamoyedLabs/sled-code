@@ -1,3 +1,4 @@
+import {BotQueueAttachmentsEnvironment} from "./BotQueueAttachmentsEnvironment";
 import { useEffect, useRef, useState } from "react";
 import {
   BotQueueEditSession,
@@ -16,6 +17,7 @@ export function BotConversationQueue({
   controller: ReturnType<typeof useBotConversationPanel>;
   agentId: string;
 }) {
+  const [attachmentsActive,setAttachmentsActive]=useState(false);
   const [edit, setEdit] = useState<BotQueueEdit | null>(null);
   const session = useRef(new BotQueueEditSession());
   const releaseOnLeave = useRef<(() => void) | null>(null);
@@ -31,13 +33,15 @@ export function BotConversationQueue({
     const acquired = await c.beginEdit(pending.deliveryId, pending.editId);
     if (acquired) setEdit(session.current.confirm(pending.editId, acquired));
   };
-  const disabled = c.busy || !c.permission;
+  if(c.taskId)return <BotQueueAttachmentsEnvironment controller={c} legacyEditing={false} onActiveChange={setAttachmentsActive}/>;
+  const disabled = c.busy || !c.permission || attachmentsActive;
   const queued =
     c.queue?.deliveries
       .filter((d) => d.status === "queued")
       .sort((a, b) => (a.position ?? 0) - (b.position ?? 0)) ?? [];
   return (
     <View className="gap-3">
+      <BotQueueAttachmentsEnvironment controller={c} legacyEditing={edit!==null} onActiveChange={setAttachmentsActive}/>
       <Text accessibilityRole="header">Queue</Text>
       {c.queue?.hold && <Text>Queue held by channel work.</Text>}
       {(c.queue?.deliveries ?? [])

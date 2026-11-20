@@ -1,0 +1,55 @@
+@scope (.openbot-react) {
+  .ui-progress {
+    width: 100%;
+  }
+
+  .ui-progress-track {
+    width: 100%;
+    height: 3px;
+    overflow: hidden;
+    border-radius: var(--openbot-radius-pill);
+    background: var(--openbot-border-strong);
+  }
+
+  .ui-progress-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: var(--openbot-text-secondary);
+    transition: width var(--openbot-duration-normal) var(--openbot-ease-out);
+  }
+
+  .ui-progress-fill[data-indeterminate] {
+    width: 35%;
+    animation: ui-progress-travel 1.4s var(--openbot-ease-in-out) infinite;
+    transition: none;
+  }
+
+  .ui-progress-fill[data-indeterminate]:dir(rtl) {
+    animation-name: ui-progress-travel-rtl;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ui-progress-fill {
+      animation: none;
+      transition: none;
+    }
+  }
+}
+@keyframes ui-progress-travel {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(286%);
+  }
+}
+@keyframes ui-progress-travel-rtl {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(-286%);
+  }
+}

@@ -16,6 +16,7 @@ function layerManagedRelayTest(
   fetchFn: typeof globalThis.fetch,
   relayUrl = "https://relay.example.test",
   accessTokenStore?: ManagedRelay.ManagedRelayAccessTokenStore,
+  propagateTraceContext = true,
 ) {
   const layerHttpClient = RpcHttp.layerRemoteHttpClient(fetchFn);
   const layerSigner = Layer.succeed(
@@ -29,6 +30,7 @@ function layerManagedRelayTest(
   return ManagedRelay.layer({
     relayUrl,
     clientId: "t3-mobile",
+    propagateTraceContext,
     ...(accessTokenStore ? { accessTokenStore } : {}),
   }).pipe(Layer.provide(layerSigner), Layer.provide(layerHttpClient));
 }
@@ -40,6 +42,22 @@ function clerkToken(subject: string, nonce: string): string {
 }
 
 describe("ManagedRelayClient", () => {
+  it.effect("keeps auth but omits unnegotiated tracing headers for personal relays", () => {
+    const requests: Headers[] = [];
+    const fetchFn = ((_input, init) => {
+      requests.push(new Headers(init?.headers));
+      return Promise.resolve(Response.json({ environments: [] }));
+    }) satisfies typeof globalThis.fetch;
+    return Effect.gen(function* () {
+      const relay = yield* ManagedRelay.ManagedRelayClient;
+      yield* relay.listEnvironments({ clerkToken: "owned-test-token" }).pipe(Effect.exit);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.get("authorization")).toBe("Bearer owned-test-token");
+      expect(requests[0]?.has("traceparent")).toBe(false);
+      expect(requests[0]?.has("tracestate")).toBe(false);
+    }).pipe(Effect.provide(layerManagedRelayTest(fetchFn, undefined, undefined, false)));
+  });
+
   it.effect("rejects unsafe relay URLs before sending credentials", () => {
     let requestCount = 0;
     const fetchFn = (() => {

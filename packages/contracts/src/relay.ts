@@ -1,3 +1,4 @@
+import { OpenbotNotification } from "./openbotContinuity.ts";
 import * as Context from "effect/Context";
 import * as Schema from "effect/Schema";
 import * as HttpApi from "effect/http-api/HttpApi";
@@ -257,6 +258,29 @@ export const RelayManagedEndpointRecoveryProofPayload = Schema.Union([
 ]);
 export type RelayManagedEndpointRecoveryProofPayload =
   typeof RelayManagedEndpointRecoveryProofPayload.Type;
+
+export const RelayBotAttentionRequest = Schema.Struct({
+  notification: OpenbotNotification,
+  recipientUserId: TrimmedNonEmptyString,
+  proof: TrimmedNonEmptyString,
+});
+export type RelayBotAttentionRequest = typeof RelayBotAttentionRequest.Type;
+export const RelayBotAttentionProof = Schema.Struct({
+  ...RelaySignedJwtRegisteredClaims,
+  notification: OpenbotNotification,
+  recipientUserId: TrimmedNonEmptyString,
+});
+export const RelayBotAttentionResponse = Schema.Struct({
+  outcome: Schema.Literals([
+    "delivered",
+    "configuration-required",
+    "unsupported",
+    "recipient-revoked",
+    "no-device",
+    "retry",
+  ]),
+});
+export type RelayBotAttentionResponse = typeof RelayBotAttentionResponse.Type;
 
 export const RelayAgentActivityPublishProofPayload = Schema.Struct({
   ...RelaySignedJwtRegisteredClaims,
@@ -1239,6 +1263,12 @@ const RelayServerGroup = HttpApiGroup.make("server")
       success: RelayManagedEndpointRecoveryResponse,
       error: RelayAuthAndInternalErrors,
     }).annotate(OpenApi.Summary, "Recover an environment's managed tunnel"),
+    HttpApiEndpoint.post("publishBotAttention", "/v1/environments/:environmentId/bot-attention", {
+      params: Schema.Struct({ environmentId: EnvironmentId }),
+      payload: RelayBotAttentionRequest,
+      success: RelayBotAttentionResponse,
+      error: RelayAuthAndInternalErrors,
+    }),
     HttpApiEndpoint.post(
       "publishAgentActivity",
       "/v1/environments/:environmentId/threads/:threadId/agent-activity",

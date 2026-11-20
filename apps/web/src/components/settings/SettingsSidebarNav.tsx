@@ -9,6 +9,12 @@ import {
 } from "react";
 import {
   ArchiveIcon,
+  ArrowLeftRightIcon,
+  BlocksIcon,
+  DownloadIcon,
+  HardDriveIcon,
+  MonitorIcon,
+  UsersIcon,
   FlaskConicalIcon,
   BotIcon,
   createLucideIcon,
@@ -34,6 +40,7 @@ import {
 } from "lucide-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 
+import { BOT_HOST_SETTINGS, botHostSettingsSection } from "./unifiedBotSettings";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { Kbd } from "../ui/kbd";
@@ -82,6 +89,21 @@ const T3ConnectSidebarAvatar = lazy(() =>
     default: module.T3ConnectSidebarAvatar,
   })),
 );
+
+const BOT_SETTINGS_ICONS = {
+  general: ServerIcon,
+  agents: BotIcon,
+  account: UsersIcon,
+  providers: BotIcon,
+  mcp: BlocksIcon,
+  vault: KeyRoundIcon,
+  "browser-profiles": GlobeIcon,
+  desktop: MonitorIcon,
+  storage: HardDriveIcon,
+  import: DownloadIcon,
+  transfer: ArrowLeftRightIcon,
+  routines: CalendarClockIcon,
+} satisfies Record<(typeof BOT_HOST_SETTINGS)[number]["id"], ComponentType<{ className?: string }>>;
 
 const SETTINGS_SECTION_ICONS: Readonly<
   Record<SettingsPath, ComponentType<{ className?: string }>>
@@ -377,6 +399,51 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                     </SidebarMenuItem>
                   </SidebarMenu>
                 )}
+                {pathname === "/settings/bots" && (
+                  <nav
+                    aria-label="Bot host settings"
+                    className="space-y-1 border-b border-sidebar-border pb-4 max-md:hidden"
+                  >
+                    <h3
+                      className={cn(
+                        "px-2 pb-1 text-xs font-medium text-sidebar-muted-foreground",
+                        !compactSearchOpen && "max-md:sr-only",
+                      )}
+                    >
+                      Bots
+                    </h3>
+                    <SidebarMenu>
+                      {BOT_HOST_SETTINGS.map((item) => {
+                        const Icon = BOT_SETTINGS_ICONS[item.id];
+                        const active = botHostSettingsSection(currentHash) === item.id;
+                        return (
+                          <SidebarMenuItem key={item.id}>
+                            <SidebarMenuButton
+                              aria-label={item.label}
+                              aria-current={active ? "page" : undefined}
+                              isActive={active}
+                              onClick={() =>
+                                void navigate({
+                                  to: "/settings/bots",
+                                  search: scopeSearch,
+                                  hash: `bot-host-${item.id}`,
+                                  resetScroll: true,
+                                })
+                              }
+                            >
+                              <Icon aria-hidden />
+                              <span
+                                className={cn("truncate", !compactSearchOpen && "max-md:sr-only")}
+                              >
+                                {item.navLabel}
+                              </span>
+                            </SidebarMenuButton>
+                          </SidebarMenuItem>
+                        );
+                      })}
+                    </SidebarMenu>
+                  </nav>
+                )}
                 <div
                   {...sectionNavigation.containerProps}
                   role="tree"
@@ -405,7 +472,9 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                       <SidebarMenu role="presentation">
                         {group.paths.map((to) => {
                           const Icon = SETTINGS_SECTION_ICONS[to];
-                          const isActive = activePath === to || activePath.startsWith(`${to}/`);
+                          const isActive =
+                            (activePath === to || activePath.startsWith(`${to}/`)) &&
+                            !(to === "/settings/bots" && pathname === "/settings/bots");
                           return (
                             <SidebarMenuItem key={to} role="presentation">
                               <SidebarMenuButton

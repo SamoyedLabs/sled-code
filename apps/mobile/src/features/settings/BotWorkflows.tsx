@@ -21,6 +21,18 @@ import { Picker } from "./BotConnectionControls";
 import { Button } from "../../components/ui/Button";
 import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
 import * as Dialog from "../../components/ui/Dialog";
+import { Sheet } from "../../components/ui/Sheet";
+import { ScreenScrollView } from "../../components/ui/ScreenScrollView";
+import { ListActionRow } from "../../components/ui/ListActionRow";
+import { BotWorkflowFlow } from "../bots/BotWorkflowFlow";
+import type { GraphPlace } from "../bots/upstream/workflow-flow-tree";
+import {
+  addableKinds,
+  insertAtPlace,
+  placeAfter,
+  placeKinds,
+  type AddableKind,
+} from "../bots/upstream/workflow-flow-edit";
 
 type Props = { environmentId: EnvironmentId; hostId: string };
 export function BotWorkflows(props: Props) {
@@ -52,6 +64,10 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
   const [port, setPort] = useState("text");
   const [branch, setBranch] = useState("none");
   const [shownSteps, setShownSteps] = useState(25);
+  const [view, setView] = useState<"flow" | "list">("flow");
+  const [place, setPlace] = useState<GraphPlace | null>(null);
+  const [moving, setMoving] = useState<string | null>(null);
+  const [runNodeId, setRunNodeId] = useState("");
   const graph = controller.graph;
   const detail = controller.detail;
   const versionGraph = controller.versionGraph;
@@ -60,6 +76,79 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
   const disabled = controller.busy || !controller.canManage;
   const changeGraph = (next: OpenbotWorkflowGraph) => {
     if (controller.draft) controller.setDraft({ ...controller.draft, graph: next });
+  };
+  const insert = (kind: AddableKind) => {
+    if (!graph || !place || !editing || disabled) return;
+    const id = Crypto.randomUUID();
+    const created = workflowAddNode(graph, kind, id).nodes.find((item) => item.id === id);
+    const next = created && insertAtPlace(graph, place, kind, created, Crypto.randomUUID);
+    if (!next) {
+      controller.reportError("This step can no longer be added here.");
+      return;
+    }
+    changeGraph(next);
+    setNodeId(id);
+    setPlace(null);
+  };
+  const editFlowStep = (id: string, action: "duplicate" | "move") => {
+    if (!graph || !editing || disabled) return;
+    const source = graph.nodes.find((item) => item.id === id);
+    if (!source || source.locked) return;
+    const kind = addableKinds.find((item) => item === source.kind);
+    if (action === "move" && kind) {
+      setMoving(id);
+      return;
+    }
+    if (action !== "duplicate" || graph.nodes.length >= 200) return;
+    const copy = {
+      ...source,
+      id: Crypto.randomUUID(),
+      locked: false,
+      at: { x: source.at.x + 48, y: source.at.y + 48 },
+    };
+    const position = placeAfter(graph, source.id);
+    const next =
+      kind && placeKinds(graph, position, [kind]).length > 0
+        ? insertAtPlace(graph, position, kind, copy, Crypto.randomUUID)
+        : null;
+    changeGraph(next ?? { ...graph, nodes: [...graph.nodes, copy] });
+    setNodeId(copy.id);
+  };
+  const chooseFlowPlace = (target: GraphPlace) => {
+    if (!graph || !editing || disabled) return;
+    if (!moving) {
+      setPlace(target);
+      return;
+    }
+    const source = graph.nodes.find((item) => item.id === moving);
+    const kind = addableKinds.find((item) => item === source?.kind);
+    const before = graph.edges.filter((edge) => edge.to === moving);
+    const after = graph.edges.filter((edge) => edge.from === moving);
+    if (
+      !source ||
+      !kind ||
+      source.locked ||
+      kind === "condition" ||
+      before.length > 1 ||
+      after.length > 1
+    ) {
+      controller.reportError("Move is available for unlocked steps on a single path.");
+      setMoving(null);
+      return;
+    }
+    const without = workflowRemoveNode(graph, moving);
+    const first = before[0];
+    const next = after[0];
+    const rejoined = first && next ? workflowConnect(without, { ...first, to: next.to }) : without;
+    const moved =
+      rejoined && placeKinds(rejoined, target, [kind]).length > 0
+        ? insertAtPlace(rejoined, target, kind, source, Crypto.randomUUID)
+        : null;
+    if (moved) {
+      changeGraph(moved);
+      setNodeId(source.id);
+      setMoving(null);
+    } else controller.reportError("Choose a compatible connection or path for this step.");
   };
   const addConnection = () => {
     if (!graph) return;
@@ -78,6 +167,30 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
   };
   return (
     <View className="gap-4">
+      {graph && place && editing && (
+        <Sheet title="Add a step" onClose={() => setPlace(null)}>
+          <ScreenScrollView contentContainerClassName="gap-2 px-5 py-4">
+            {placeKinds(graph, place, addableKinds).map((option) => (
+              <ListActionRow
+                key={option}
+                icon="plus"
+                label={
+                  option === "llm"
+                    ? "Model"
+                    : option === "agent"
+                      ? "Bot"
+                      : option[0]!.toUpperCase() + option.slice(1)
+                }
+                disabled={disabled}
+                onPress={() => insert(option)}
+              />
+            ))}
+            {placeKinds(graph, place, addableKinds).length === 0 && (
+              <Text className="text-foreground-muted">No supported steps fit here.</Text>
+            )}
+          </ScreenScrollView>
+        </Sheet>
+      )}
       <Text className="text-foreground-muted">
         Workflows connect bots, models and decisions. Runs and schedules stay with this bot engine.
       </Text>
@@ -122,6 +235,9 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
           onPress={() => {
             controller.select(workflow.id);
             setNodeId("");
+            setRunNodeId("");
+            setMoving(null);
+            setPlace(null);
           }}
         />
       ))}
@@ -207,16 +323,57 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
               }}
             />
           )}
-          <Picker
-            label="Workflow step"
-            value={nodeId}
-            options={graph.nodes.map((item) => ({
-              id: item.id,
-              name: workflowNodeTitle(graph, item.id),
-            }))}
-            disabled={controller.busy}
-            onChange={setNodeId}
-          />
+          <View className="flex-row gap-2">
+            <Button
+              label="Flow"
+              tone={view === "flow" ? "primary" : "secondary"}
+              onPress={() => setView("flow")}
+            />
+            <Button
+              label="List"
+              tone={view === "list" ? "primary" : "secondary"}
+              onPress={() => setView("list")}
+            />
+          </View>
+          {view === "flow" && (
+            <>
+              {moving && (
+                <View className="flex-row items-center gap-2">
+                  <Text className="flex-1">
+                    Choose where to move {workflowNodeTitle(graph, moving)}.
+                  </Text>
+                  <Button label="Cancel move" onPress={() => setMoving(null)} />
+                </View>
+              )}
+              <BotWorkflowFlow
+                graph={graph}
+                selected={nodeId}
+                onSelect={setNodeId}
+                onAdd={editing && !disabled ? chooseFlowPlace : undefined}
+                onEdit={editing && !disabled ? editFlowStep : undefined}
+                onRemove={
+                  editing && !disabled
+                    ? (id) => {
+                        changeGraph(workflowRemoveNode(graph, id));
+                        if (nodeId === id) setNodeId("");
+                      }
+                    : undefined
+                }
+              />
+            </>
+          )}
+          {view === "list" && (
+            <Picker
+              label="Workflow step"
+              value={nodeId}
+              options={graph.nodes.map((item) => ({
+                id: item.id,
+                name: workflowNodeTitle(graph, item.id),
+              }))}
+              disabled={controller.busy}
+              onChange={setNodeId}
+            />
+          )}
           {node && (
             <View className="gap-3">
               {node.locked && <Text className="text-foreground-muted">This step is locked.</Text>}
@@ -416,6 +573,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
               onPress={() => {
                 controller.inspectRun(run.run.id);
                 setShownSteps(25);
+                setRunNodeId("");
               }}
             />
           ))}
@@ -450,7 +608,18 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
                   }}
                 />
               )}
-              {controller.activeRun.steps.slice(0, shownSteps).map((step) => (
+              {view === "flow" && (
+                <BotWorkflowFlow
+                  graph={detail.graph}
+                  selected={runNodeId}
+                  steps={controller.activeRun.steps}
+                  onSelect={setRunNodeId}
+                />
+              )}
+              {(view === "flow"
+                ? controller.activeRun.steps.filter((step) => step.nodeId === runNodeId)
+                : controller.activeRun.steps.slice(0, shownSteps)
+              ).map((step) => (
                 <View key={step.id} className="gap-2">
                   <Text>
                     {workflowNodeTitle(graph, step.nodeId)} · {step.status} · attempt {step.attempt}
@@ -505,7 +674,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
                   )}
                 </View>
               ))}
-              {controller.activeRun.steps.length > shownSteps && (
+              {view === "list" && controller.activeRun.steps.length > shownSteps && (
                 <Button label="Show more steps" onPress={() => setShownSteps(shownSteps + 25)} />
               )}
             </View>

@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./openbot/privileged-target":"./src/openbot/privilegedTarget.ts",
+    "./openbot/queue-attachments": "./src/openbot/queueAttachments.ts",
+    "./openbot/queue-attachments-storage": "./src/openbot/queueAttachmentsStorage.ts",
     "./assembly-highlighting": {
       "types": "./src/assemblyHighlighting.ts",
       "default": "./src/assemblyHighlighting.ts"
@@ -542,6 +545,24 @@
     "./openbot/template-atoms": {
       "types": "./src/openbot/TemplateAtoms.ts",
       "default": "./src/openbot/TemplateAtoms.ts"
+    },
+    "./openbot/routineCalendar": "./src/openbot/routineCalendar.ts",
+    "./openbot/routineCalendarDates": "./src/openbot/routineCalendarDates.ts",
+    "./openbot/routineSchedule": "./src/openbot/routineSchedule.ts",
+    "./openbot/usage-analytics": "./src/openbot/usageAnalytics.ts",
+    "./openbot/usage-series": "./src/openbot/usageSeries.ts",
+    "./openbot/marketplace": "./src/openbot/marketplace.ts",
+    "./openbot/settings": "./src/openbot/settings.ts",
+    "./openbot/storage": "./src/openbot/storage.ts",
+    "./openbot/channelGrants": "./src/openbot/channelGrants.ts",
+    "./openbot/agent-import": "./src/openbot/agentImport.ts",
+    "./openbot/incoming-share": {
+      "types": "./src/openbot/incomingShare.ts",
+      "default": "./src/openbot/incomingShare.ts"
+    },
+    "./openbot/privileged-response": {
+      "types": "./src/openbot/privilegedResponse.ts",
+      "default": "./src/openbot/privilegedResponse.ts"
     }
   },
   "scripts": {

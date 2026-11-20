@@ -3500,10 +3500,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             />
 
             {isComposerCollapsedMobile ? null : (
-              <div
-                data-chat-composer-footer="true"
+              <ComposerSurface.Footer
                 className={cn(
-                  "flex min-w-0 flex-nowrap items-center overflow-visible px-2 pb-2",
                   pendingUserInputs.length > 0 && "pt-2",
                   showMobilePendingAnswerActions && "hidden sm:flex",
                 )}
@@ -3594,7 +3592,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       : {})}
                   />
                 </div>
-              </div>
+              </ComposerSurface.Footer>
             )}
             {showInlineRestingControls ? (
               <div className="h-8">

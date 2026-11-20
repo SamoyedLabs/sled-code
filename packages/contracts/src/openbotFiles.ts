@@ -11,7 +11,8 @@ const Path = Schema.String.check(
   Schema.isMaxLength(4096),
   Schema.isPattern(/^[^\u0000]+$/),
 );
-const Size = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 104_857_600 }));
+export const OPENBOT_MAX_FILE_BYTES = 100 * 1024 * 1024;
+const Size = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: OPENBOT_MAX_FILE_BYTES }));
 const Mime = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(255),
@@ -74,10 +75,21 @@ export const OpenbotConversationFilePage = Schema.Struct({
   nextCursor: Schema.NullOr(Schema.String.check(Schema.isMaxLength(2048))),
 });
 export type OpenbotConversationFilePage = typeof OpenbotConversationFilePage.Type;
-export const OpenbotFileMaterializeInput = Schema.Struct({
+const OpenbotAgentFileMaterializeInput = Schema.Struct({
   ...OpenbotFileScope.fields,
   source: Schema.Union([
+    Schema.Struct({
+      kind: Schema.Literal("stored"),
+      fileId: Id,
+      conversationId: Schema.optional(Id),
+    }),
+    Schema.Struct({
+      kind: Schema.Literal("local-skill"),
+      skillId: Id.check(Schema.isPattern(/^local-skill-[0-9a-f-]{36}$/)),
+      revision: Schema.Int.check(Schema.isGreaterThan(0)),
+    }),
     Schema.Struct({ kind: Schema.Literal("workspace"), path: Path }),
+    Schema.Struct({ kind: Schema.Literal("shared"), path: Path }),
     Schema.Struct({
       kind: Schema.Literal("attachment"),
       attachmentId: Id,
@@ -88,6 +100,18 @@ export const OpenbotFileMaterializeInput = Schema.Struct({
     }),
   ]),
 });
+export type OpenbotAgentFileSource = (typeof OpenbotAgentFileMaterializeInput.Type)["source"];
+export const OpenbotFileMaterializeInput = Schema.Union([
+  OpenbotAgentFileMaterializeInput,
+  Schema.Struct({
+    hostId: OpenbotFileScope.fields.hostId,
+    source: Schema.Struct({
+      kind: Schema.Literal("library"),
+      fileId: Id,
+      conversationId: Schema.optional(Id),
+    }),
+  }),
+]);
 export type OpenbotFileMaterializeInput = typeof OpenbotFileMaterializeInput.Type;
 export const OpenbotMaterializedFile = Schema.Struct({
   attachmentId: Schema.String.check(Schema.isMaxLength(256)),
@@ -97,6 +121,24 @@ export const OpenbotMaterializedFile = Schema.Struct({
   sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
 });
 export type OpenbotMaterializedFile = typeof OpenbotMaterializedFile.Type;
+export const OPENBOT_CHANNEL_UPLOAD_RECOVERY_CAPABILITY = "sled-channel-files-upload-recovery-v1";
+export const OpenbotOriginalUploadIdentity = Schema.Struct({
+  operationId: Id,
+  ...OpenbotFileScope.fields,
+  threadId: Id,
+  taskId: Schema.NullOr(Id),
+  channelId: Schema.optionalKey(Id),
+  name: Name,
+  mimeType: Mime,
+  size: Size,
+  sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+});
+export type OpenbotOriginalUploadIdentity = typeof OpenbotOriginalUploadIdentity.Type;
+export const OpenbotOriginalUploadInput = Schema.Struct({
+  ...OpenbotOriginalUploadIdentity.fields,
+  attachmentId: Schema.String.check(Schema.isMaxLength(256)),
+});
+export type OpenbotOriginalUploadInput = typeof OpenbotOriginalUploadInput.Type;
 export const OpenbotFileUploadInput = Schema.Struct({
   ...OpenbotFileScope.fields,
   attachmentId: Schema.String.check(Schema.isMaxLength(256)),
@@ -106,6 +148,7 @@ export const OpenbotFileUploadInput = Schema.Struct({
 });
 export type OpenbotFileUploadInput = typeof OpenbotFileUploadInput.Type;
 export const OpenbotDraftFile = Schema.Struct({
+  expectedThreadId: Schema.optional(Id),
   ...OpenbotFileScope.fields,
   attachment: OpenbotFileSummary,
   sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
@@ -118,12 +161,19 @@ export const OpenbotDraftFile = Schema.Struct({
     Schema.Array(OpenbotFileSummary).check(Schema.isMaxLength(10)),
   ),
   target: Schema.NullOr(OpenbotFileTarget),
+  batchAttachmentIds: Schema.optional(Schema.Array(Id).check(Schema.isMaxLength(10))),
+  replyToMessageId: Schema.optional(Id),
   taskId: Schema.NullOr(Id),
 });
 export type OpenbotDraftFile = typeof OpenbotDraftFile.Type;
 export const OpenbotFileSendInput = Schema.Struct({
+  expectedThreadId: Schema.optional(Id),
   ...OpenbotFileScope.fields,
   attachmentId: Id,
+  attachmentIds: Schema.optional(
+    Schema.Array(Id).check(Schema.isMinLength(1), Schema.isMaxLength(10)),
+  ),
+  replyToMessageId: Schema.optional(Id),
   text: Schema.String.check(Schema.isMaxLength(100_000)),
   target: Schema.optional(OpenbotFileTarget),
 });

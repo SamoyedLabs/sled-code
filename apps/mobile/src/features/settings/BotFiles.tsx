@@ -1,60 +1,25 @@
 import { useAtomValue } from "@effect/atom-react";
-import { PROVIDER_SEND_TURN_MAX_FILE_BYTES } from "@t3tools/contracts";
 import type {
   EnvironmentId,
-  OpenbotFileMaterializeInput,
+  OpenbotAgentFileSource,
   OpenbotFileTarget,
 } from "@t3tools/contracts";
-import {
-  formatAttachmentSize,
-  runAttachmentUploadCycle,
-  deletePendingAttachmentUpload,
-} from "@t3tools/client-runtime/state/attachments";
-import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
+import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import { channelPage, channelList, taskViews } from "@t3tools/client-runtime/openbot/presentation";
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { useRef, useState } from "react";
 import { View } from "react-native";
-import * as Option from "effect/Option";
 import { FilePreviewModal, type FilePreviewSource } from "../../components/FilePreviewModal";
 import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
 import { Menu } from "../../components/ui/Menu";
 import { ControlPill } from "../../components/ui/ControlPill";
-import { beginForegroundHandoff } from "../../lib/foreground-handoff";
 import { downloadAndShareAttachment } from "../../lib/attachmentDownload";
-import { appAtomRegistry } from "../../state/atom-registry";
-import { attachmentEnvironment } from "../../state/attachments";
-import { environmentSession } from "../../state/session";
 import { refreshAssetUrl } from "../../state/assets";
 import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
-
-async function pickBotFile() {
-  const { getDocumentAsync } = await import("expo-document-picker");
-  const endHandoff = beginForegroundHandoff();
-  const picked = await getDocumentAsync({ multiple: false, copyToCacheDirectory: true }).finally(
-    endHandoff,
-  );
-  if (picked.canceled) return null;
-  const selected = picked.assets[0];
-  if (!selected) return null;
-  const { File, UploadType } = await import("expo-file-system");
-  const file = new File(selected.uri);
-  const size = file.size;
-  if (!file.exists || size === null || size <= 0 || size > PROVIDER_SEND_TURN_MAX_FILE_BYTES)
-    throw new Error(
-      `Choose an available, nonempty file up to ${formatAttachmentSize(PROVIDER_SEND_TURN_MAX_FILE_BYTES)}.`,
-    );
-  return {
-    file,
-    size,
-    name: selected.name || "file",
-    mimeType: selected.mimeType || "application/octet-stream",
-    uploadType: UploadType.BINARY_CONTENT,
-  };
-}
+import { useBotFileUpload } from "./useBotFileUpload";
 
 type Props = { environmentId: EnvironmentId; hostId: string; agentId: string };
 export function BotFiles(props: Props) {
@@ -71,6 +36,9 @@ export function BotFiles(props: Props) {
       )}
     </View>
   );
+}
+export function BotFilesWorkspace(props: Props) {
+  return <FilesPanel key={JSON.stringify(props)} {...props} />;
 }
 function FilesPanel({ environmentId, hostId, agentId }: Props) {
   const scope = { hostId, agentId };
@@ -169,10 +137,10 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
     setChannelBefore(undefined);
   };
   const canRead = useAtomValue(openbot.fileMaterialize.permissionAtom(environmentId));
-  const canUpload = useAtomValue(openbot.fileUploadDraft.permissionAtom(environmentId));
+  const fileUpload = useBotFileUpload(environmentId, hostId);
+  const canUpload = fileUpload.canUpload;
   const canSend = useAtomValue(openbot.fileSendDraft.permissionAtom(environmentId));
   const materialize = useAtomCommand(openbot.fileMaterialize, { reportFailure: false });
-  const upload = useAtomCommand(openbot.fileUploadDraft, { reportFailure: false });
   const send = useAtomCommand(openbot.fileSendDraft, { reportFailure: false });
   const discard = useAtomCommand(openbot.fileDiscardDraft, { reportFailure: false });
   const act = async (action: () => Promise<void>) => {
@@ -195,7 +163,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
     taskQuery.refresh();
   };
   const open = (
-    source: OpenbotFileMaterializeInput["source"],
+    source: OpenbotAgentFileSource,
     sourceAgentId: string,
     save: boolean,
   ) =>
@@ -242,56 +210,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
     });
   const pick = () =>
     act(async () => {
-      const picked = await pickBotFile();
-      if (!picked) return;
-      const { file, size, name, mimeType, uploadType } = picked;
-      const controller = new AbortController();
-      const pending = await runAttachmentUploadCycle({
-        registry: appAtomRegistry,
-        createUploadUrl: attachmentEnvironment.createUploadUrl,
-        remove: attachmentEnvironment.remove,
-        environmentId,
-        upload: { type: "file", name, sizeBytes: size, mimeType },
-        resolveUploadUrl: (relativeUrl) => {
-          const connection = appAtomRegistry.get(
-            environmentSession.preparedConnectionValueAtom(environmentId),
-          );
-          return Option.isSome(connection)
-            ? resolveAssetUrl(connection.value.httpBaseUrl, relativeUrl)
-            : null;
-        },
-        transport: (url) => ({
-          abort: () => controller.abort(),
-          done: file
-            .upload(url, {
-              httpMethod: "POST",
-              uploadType,
-              headers: { "Content-Type": mimeType },
-              signal: controller.signal,
-            })
-            .then((response) => {
-              if (response.status < 200 || response.status >= 300)
-                throw new Error("Could not upload this file to the environment.");
-            }),
-        }),
-      });
-      const delivered = await settlePromise(async () => {
-        if (pending.status === "cancelled") return;
-        if (pending.status === "failed") throw pending.error;
-        const result = await upload({
-          environmentId,
-          input: { ...scope, attachmentId: pending.attachmentId, name, mimeType, size },
-        });
-        if (result._tag === "Failure") throw squashAtomCommandFailure(result);
-      });
-      if (pending.attachmentId)
-        deletePendingAttachmentUpload({
-          registry: appAtomRegistry,
-          remove: attachmentEnvironment.remove,
-          environmentId,
-          attachmentId: pending.attachmentId,
-        });
-      if (delivered._tag === "Failure") throw squashAtomCommandFailure(delivered);
+      await fileUpload.pick(agentId, "files");
     });
   return (
     <View className="gap-4 rounded-xl bg-grouped-card p-3">

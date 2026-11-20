@@ -69,8 +69,18 @@ export const OpenbotChange = Schema.Struct({
     "browser",
     "attention",
     "configuration",
+    "activity",
+    "library",
   ]),
   agentId: Schema.optional(Identifier),
+  taskId: Schema.optional(Identifier),
+  epoch: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  versions: Schema.optional(
+    Schema.Record(
+      Schema.String.check(Schema.isMaxLength(4096)),
+      Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    ).check(Schema.makeFilter((value) => Object.keys(value).length <= 512)),
+  ),
 });
 export type OpenbotChange = typeof OpenbotChange.Type;
 
@@ -128,6 +138,15 @@ export const OpenbotRoutineSchedule = Schema.Union([
   }),
 ]);
 
+export const OpenbotLocalRoutineSchedule = Schema.Union([
+  OpenbotRoutineSchedule,
+  Schema.Struct({
+    kind: Schema.Literal("once"),
+    date: Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)),
+    time: Time,
+  }),
+]);
+
 const EventId = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128));
 const EventText = Schema.String.check(Schema.isMaxLength(100_000));
 export const OpenbotRoutineOwner = Schema.Struct({
@@ -135,7 +154,7 @@ export const OpenbotRoutineOwner = Schema.Struct({
   id: EventId,
 });
 export const OpenbotRoutineTriggerInput = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal("schedule"), schedule: OpenbotRoutineSchedule }),
+  Schema.Struct({ kind: Schema.Literal("schedule"), schedule: OpenbotLocalRoutineSchedule }),
   Schema.Struct({
     kind: Schema.Literal("webhook"),
     eventType: Schema.NullOr(Schema.String.check(Schema.isMaxLength(256))),
@@ -216,9 +235,22 @@ export const OpenbotEventActivity = Schema.Struct({
   occurredAt: Timestamp,
 });
 export const OpenbotEventAdminRequest = Schema.Union([
+  Schema.Struct({
+    operation: Schema.Literal("events.configuration"),
+    owner: OpenbotRoutineOwner,
+    id: EventId,
+  }),
   Schema.Struct({ operation: Schema.Literal("events.status") }),
-  Schema.Struct({ operation: Schema.Literal("events.list"), owner: OpenbotRoutineOwner }),
-  Schema.Struct({ operation: Schema.Literal("events.save"), ...OpenbotEventRoutineInput.fields }),
+  Schema.Struct({
+    operation: Schema.Literal("events.list"),
+    owner: OpenbotRoutineOwner,
+    includeOneTime: Schema.optional(Schema.Boolean),
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("events.save"),
+    ...OpenbotEventRoutineInput.fields,
+    includeOneTime: Schema.optional(Schema.Boolean),
+  }),
   Schema.Struct({
     operation: Schema.Literals([
       "events.delete",

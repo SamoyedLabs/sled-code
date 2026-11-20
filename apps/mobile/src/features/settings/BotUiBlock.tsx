@@ -1,3 +1,4 @@
+import { isSecretFormField, uiBlockHasPrivilegedAction } from "@t3tools/contracts/openbot-ui-blocks";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
@@ -37,6 +38,7 @@ export function BotUiBlock({
   const [values, setValues] = useState<Record<string, string | string[]>>(() =>
     blockInitialValues(message.uiBlock),
   );
+  const [replyText, setReplyText] = useState("");
   const [submitted, setSubmitted] = useState(false);
   if (!block)
     return message.uiBlock == null ? null : (
@@ -44,6 +46,25 @@ export function BotUiBlock({
     );
   if (!snapshot) return null;
   const { spec } = block;
+  const protectedBlock =
+    Boolean(block.vault) ||
+    (spec.type === "form" && spec.fields.some(isSecretFormField)) ||
+    uiBlockHasPrivilegedAction(spec);
+  if (protectedBlock && block.state.status !== "pending") {
+    const status =
+      block.state.status === "answered"
+        ? "Secure response submitted."
+        : block.state.status === "expired"
+          ? "Secure request expired."
+          : "Secure request closed.";
+    return <Text>{status}</Text>;
+  }
+  if (spec.type === "form" && spec.fields.some(isSecretFormField))
+    return (
+      <Text>
+        This secret form requires a dedicated secure response path, which is not available here yet.
+      </Text>
+    );
   const prompt = message.questionPrompt;
   const requestId =
     prompt && typeof prompt === "object" && !Array.isArray(prompt) && "requestId" in prompt
@@ -60,7 +81,14 @@ export function BotUiBlock({
           messageId: message.id,
           blockId: block.blockId,
           requestId,
-          response: { actionId, ...(spec.type === "quick_replies" ? {} : { values }) },
+          response: {
+            actionId,
+            ...(actionId === "_text"
+              ? { text: replyText }
+              : spec.type === "quick_replies"
+                ? {}
+                : { values }),
+          },
         }
       : null;
   const send = async (action: string) => {
@@ -75,6 +103,7 @@ export function BotUiBlock({
           result._tag === "Success" && result.value,
         ),
       );
+      setReplyText("");
       setSubmitted(false);
     }
   };
@@ -157,6 +186,26 @@ export function BotUiBlock({
             )}
           </View>
         ))}
+      {spec.type === "quick_replies" && spec.allowText && (
+        <View>
+          <Text>Reply in your own words</Text>
+          <AppTextInput
+            accessibilityLabel="Reply in your own words"
+            value={replyText}
+            maxLength={8000}
+            editable={!frozen}
+            onChangeText={setReplyText}
+          />
+          <BlockAction
+            environmentId={environmentId}
+            hostId={hostId}
+            command={command("_text")}
+            disabled={frozen || !replyText.trim()}
+            label="Send reply"
+            onPress={() => void send("_text")}
+          />
+        </View>
+      )}
       {(spec.type === "confirm"
         ? spec.actions
         : spec.type === "quick_replies"

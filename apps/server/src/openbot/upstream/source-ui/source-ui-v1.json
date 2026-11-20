@@ -1,0 +1,83 @@
+{
+  "upstreamCommit": "0c7753fa622c38419939cd230657f40e5883d098",
+  "patchSha256": "3a79b345beceefb1c1bc2d0e361a154e53a747954b6eda23718a738063eb9171",
+  "status": "packaged-read-paths-verified-account-mutations-not-exercised",
+  "requires": "Previously composed Sled engine patches; exact per-file bases below are authoritative.",
+  "files": [
+    {
+      "path": "packages/contracts/package.json",
+      "baseSha256": "b208ae170cc37390c707069c6a4ec9c861d636fc5f88869df51c58355b9725fa",
+      "finalSha256": "dc2ffdd13c7f23ac815d2a5dad2b943d4a69e851d95e13f25509f287f3649c92"
+    },
+    {
+      "path": "packages/contracts/src/team-protocol/current.ts",
+      "baseSha256": "e724173b207c957b39d0924c5d0199fcbe217d6d20fe23e5ed0715d1e14f6221",
+      "finalSha256": "c478a9a8d7bcf1591db4013007ef4a341cb2db30276d51388770136ef07a415f"
+    },
+    {
+      "path": "packages/contracts/src/team-protocol/host-account-v1.ts",
+      "baseSha256": null,
+      "finalSha256": "d90e94380bc4b0dc946ca212059eb86c9476d6a86ead52d8f907b35142d69eae"
+    },
+    {
+      "path": "packages/contracts/src/team-protocol/local-skill-catalog-v1.test.ts",
+      "baseSha256": null,
+      "finalSha256": "590c5a2df850a27e3664b0dd40ba2583f1030d7e574a0a36d4ae50c23c36c016"
+    },
+    {
+      "path": "packages/contracts/src/team-protocol/local-skill-catalog-v1.ts",
+      "baseSha256": null,
+      "finalSha256": "20fa72e8edf46fc80743f2dbd62fd30e7abbfede9485615f0036a27fc3ee4bb7"
+    },
+    {
+      "path": "packages/contracts/src/team-protocol/optional-routes.ts",
+      "baseSha256": "aa3eaee091d30c46be5ec99c130850db1a87dad7f3c4fd9ac9f4017863322935",
+      "finalSha256": "5e5485ac6124752e3d37f33685068fc15a64f822a423b45fd5887193b6f0c830"
+    },
+    {
+      "path": "src/main/application-services.ts",
+      "baseSha256": "45e73677091b0e6d8a1612bebeda5135ee56fcd017940317c35b316d4fe97373",
+      "finalSha256": "e355ce668dc14f772991ee075af094ea86bdb909dcf918693367a733b2e45134"
+    },
+    {
+      "path": "src/main/central-auth-manager.ts",
+      "baseSha256": "92b2989a8b43be68a0130aff9bd560d34f6ab730fdf88b9a78a4b965dfeca9c5",
+      "finalSha256": "ac2e9f645a043c7c5a0dab50e4ecc0f896c9f24662cea44bdaae04f5df6a98e2"
+    },
+    {
+      "path": "src/main/company-sign-in-browser.ts",
+      "baseSha256": "301333b0140db9946086c596ec67c202eb02dd609a0e121f785d40c929b39c8b",
+      "finalSha256": "425522d6557b8026b227739740f0db8980bf32435911d298538e86bb37680e1a"
+    },
+    {
+      "path": "src/main/host-account-service.ts",
+      "baseSha256": null,
+      "finalSha256": "43b5b6209a86bd44082cf038d0092589045529e8485342b77886a0e63f67cada"
+    },
+    {
+      "path": "src/main/local-skill-tools.ts",
+      "baseSha256": "b077cad0e3670954e71b3bc6458ff8fcbad53032b8eef07a16b426dc3905e62d",
+      "finalSha256": "6e380fe126ee7c083dd81fd7880c89cb37205a582e5bad35beabd4b7a15a0c96"
+    },
+    {
+      "path": "src/main/team-api-server.ts",
+      "baseSha256": "dcf243b400b04905f2cc25e8f6b7a76bc4ecf7bed5c8fecfa7bc8f7529ed19a3",
+      "finalSha256": "5a307a0a2dc7d8c8e367070294d1fbd0cb0c86a4901d9b45409efa2090aba0fa"
+    },
+    {
+      "path": "src/main/team-api/dependencies.ts",
+      "baseSha256": "6864eeee8e14e8355233a1a69fe4fe4d89ea883a48a025e0c33386e493dd0eff",
+      "finalSha256": "7eea7ce8e316b572eca959853a0267f9d6015fd7927f5757380f8f242b1600e4"
+    },
+    {
+      "path": "src/main/team-api/route-host-account.ts",
+      "baseSha256": null,
+      "finalSha256": "b6e7be9222a00842c600418b2074f0408b270518bbdc3796acdc1d96bb6150c9"
+    },
+    {
+      "path": "src/main/team-api/route-local-catalog.ts",
+      "baseSha256": null,
+      "finalSha256": "b9bc5903a74901a1d593abe71061f7740a74c12e5e37beb8161c5b19689975b9"
+    }
+  ]
+}

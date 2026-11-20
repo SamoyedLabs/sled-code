@@ -1,3 +1,4 @@
+import type { VerifiedCompatibilityEvidence } from "./CompatibilityEvidence.ts";
 // @effect-diagnostics nodeBuiltinImport:off -- Node crypto hashes streamed release artifacts without buffering them in memory.
 import * as NodeCrypto from "node:crypto";
 import {
@@ -90,6 +91,11 @@ const suffixes: ReadonlyArray<readonly [OpenbotRuntimePlatform, string]> = [
 export class UpstreamRuntime extends Context.Service<
   UpstreamRuntime,
   {
+    readonly installValidated: (input: {
+      readonly version: OpenbotStagedRuntime["version"];
+      readonly platform: OpenbotStagedRuntime["platform"];
+      readonly proof: VerifiedCompatibilityEvidence;
+    }) => Effect.Effect<OpenbotInstalledRuntime, UpstreamRuntimeError>;
     readonly getStatus: Effect.Effect<OpenbotUpstreamStatus, UpstreamRuntimeError>;
     readonly checkLatest: Effect.Effect<OpenbotUpstreamRelease, UpstreamRuntimeError>;
     readonly checkVersion: (
@@ -411,6 +417,13 @@ const make = Effect.fn("UpstreamRuntime.make")(function* (config: {
     );
   }, gate.withPermits(1));
   return UpstreamRuntime.of({
+    installValidated: Effect.fn("UpstreamRuntime.installValidated")((input) =>
+      installation
+        .installValidated(input)
+        .pipe(
+          Effect.mapError((cause) => new UpstreamRuntimeError({ reason: cause.reason, cause })),
+        ),
+    ),
     // Atomic manifests let clients read the last completed status during a long download.
     getStatus: Effect.gen(function* () {
       const state = yield* readState();
@@ -424,7 +437,9 @@ const make = Effect.fn("UpstreamRuntime.make")(function* (config: {
         activationAllowed:
           !environment.T3CODE_OPENBOT_EXECUTABLE?.trim() &&
           installed.installed.some(
-            (entry) => entry.platform === platform && entry.compatibility === "pinned-baseline",
+            (entry) =>
+              entry.platform === platform &&
+              (entry.compatibility === "pinned-baseline" || entry.compatibility === "validated"),
           ),
       };
     }),

@@ -1,0 +1,36 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { expect, it } from "vitest";
+import { MailboxStore } from "./mailbox-store";
+import { OpenBotDatabase } from "./openbot-database";
+import { runCauseEffect } from "./effect-boundary";
+
+it("refuses changed thread after copy, retains draft, and revalidates receipt replay after reopen", async () => {
+  const root = await mkdtemp(join(tmpdir(), "files-identity-"));
+  let db = new OpenBotDatabase(root);
+  try {
+    let mailbox = new MailboxStore(root, join(root, "shared"), db);
+    await runCauseEffect(mailbox.initialize());
+    const path = join(root, "original.txt");
+    await writeFile(path, "original bytes");
+    const [draft] = await runCauseEffect(mailbox.prepareImportedAttachments([path], []));
+    let checks = 0;
+    const input = {
+      sender: { kind: "user" as const }, recipientAgentIds: ["chief"], text: "original",
+      draftIds: [draft!.id], idempotencyKey: "identity-operation", idempotencyAuthorityKey: "original-authority",
+      validateAuthority: () => { if (++checks === 2) throw new Error("thread replaced during copy"); },
+    };
+    await expect(runCauseEffect(mailbox.enqueue(input))).rejects.toThrow("thread replaced during copy");
+    expect(mailbox.receiptForKey(input.idempotencyKey)).toBeNull();
+    // The same draft remains usable, with its original bytes, after refusal.
+    const accepted = await runCauseEffect(mailbox.enqueue({ ...input, validateAuthority: () => {} }));
+    expect(accepted.deliveries).toHaveLength(1);
+    db.close(); db = new OpenBotDatabase(root);
+    mailbox = new MailboxStore(root, join(root, "shared"), db);
+    await runCauseEffect(mailbox.initialize());
+    await expect(runCauseEffect(mailbox.enqueue({ ...input, validateAuthority: () => { throw new Error("revoked original thread"); } }))).rejects.toThrow("revoked original thread");
+    await expect(runCauseEffect(mailbox.enqueue({ ...input, idempotencyAuthorityKey: "changed-thread-or-bytes", validateAuthority: () => {} }))).rejects.toThrow("Original message authority differs");
+    expect(await runCauseEffect(mailbox.enqueue({ ...input, validateAuthority: () => {} }))).toEqual(accepted);
+  } finally { db.close(); await rm(root, { recursive: true, force: true }); }
+});

@@ -1,0 +1,1042 @@
+--- a/packages/contracts/package.json
++++ b/packages/contracts/package.json
+@@ -89,6 +89,7 @@
+     "./team-protocol/connectors-v1": "./src/team-protocol/connectors-v1.ts",
+     "./team-protocol/onepassword-connector-v1": "./src/team-protocol/onepassword-connector-v1.ts",
+     "./team-protocol/bitwarden-connector-v1": "./src/team-protocol/bitwarden-connector-v1.ts",
++    "./team-protocol/host-account-v1": "./src/team-protocol/host-account-v1.ts",
+     "./team-protocol/current": "./src/team-protocol/current.ts",
+     "./team-protocol/current-agent-keys": "./src/team-protocol/current-agent-keys.ts",
+     "./team-protocol/http-codecs": "./src/team-protocol/http-codecs.ts",
+@@ -142,6 +143,7 @@
+     "./team-protocol/instance-transfer-v1": "./src/team-protocol/instance-transfer-v1.ts",
+     "./team-protocol/agent-install-v1": "./src/team-protocol/agent-install-v1.ts",
+     "./team-protocol/sled-channel-coding-v1": "./src/team-protocol/sled-channel-coding-v1.ts",
++    "./team-protocol/local-skill-catalog-v1": "./src/team-protocol/local-skill-catalog-v1.ts",
+     "./team-protocol/agent-review-v1": "./src/team-protocol/agent-review-v1.ts",
+     "./team-protocol/agent-publish-v1": "./src/team-protocol/agent-publish-v1.ts",
+     "./team-protocol/agent-update-v1": "./src/team-protocol/agent-update-v1.ts",
+--- a/packages/contracts/src/team-protocol/current.ts
++++ b/packages/contracts/src/team-protocol/current.ts
+@@ -1,3 +1,5 @@
++import { HOST_ACCOUNT_CAPABILITY } from "./host-account-v1";
++import { LOCAL_CATALOG_CAPABILITY } from "./local-skill-catalog-v1";
+ import { SLED_IMPORT_CAPABILITY } from "./durable-agent-import-v1";
+ import { SLED_CHANNEL_CODING_CAPABILITY } from "./sled-channel-coding-v1";
+ import { AGENT_ADOPTION_CAPABILITY } from "./agent-adoption-v1";
+@@ -185,6 +187,8 @@
+   AGENT_PLAN_CARD_CAPABILITY,
+   AGENT_PUBLISH_CAPABILITY,
+   AGENT_REVIEW_CAPABILITY,
++  LOCAL_CATALOG_CAPABILITY,
++  HOST_ACCOUNT_CAPABILITY,
+   AGENT_ADOPTION_CAPABILITY,
+   AGENT_SESSION_SETTINGS_CAPABILITY,
+   AGENT_TASK_LIMIT_CAPABILITY,
+@@ -349,6 +353,8 @@
+   INSTANCE_TRANSFER_CAPABILITY,
+   AGENT_PUBLISH_CAPABILITY,
+   AGENT_REVIEW_CAPABILITY,
++  LOCAL_CATALOG_CAPABILITY,
++  HOST_ACCOUNT_CAPABILITY,
+   AGENT_ADOPTION_CAPABILITY,
+   LIVE_ACTIVITY_PUSH_CAPABILITY,
+   HOSTED_SITES_CAPABILITY,
+@@ -608,6 +614,8 @@
+   "sled-privileged-responses-v1",
+   SLED_CHANNEL_CODING_CAPABILITY,
+   AGENT_REVIEW_CAPABILITY,
++  LOCAL_CATALOG_CAPABILITY,
++  HOST_ACCOUNT_CAPABILITY,
+   AGENT_ADOPTION_CAPABILITY,
+   TEAM_LONG_CAPABILITY_LISTS_CAPABILITY,
+   AGENT_NOTIFICATION_LEVELS_CAPABILITY,
+--- /dev/null
++++ b/packages/contracts/src/team-protocol/host-account-v1.ts
+@@ -0,0 +1,130 @@
++// Closed host-account-v1 bridge: host owners/admins manage the account of this exact host.
++// Account credentials, PKCE verifiers and development codes never cross this boundary.
++import {
++  adminRoute,
++  fields,
++  string,
++  identifier,
++  count,
++  nullable,
++  oneOf,
++  empty,
++  type AdminDecoder,
++  type OptionalRouteCodec,
++} from "./admin-wire";
++export const HOST_ACCOUNT_CAPABILITY = "host-account-v1";
++export const HOST_ACCOUNT_ROUTES = {
++  status: "/v1/admin/account/status",
++  emailStart: "/v1/admin/account/email/start",
++  emailVerify: "/v1/admin/account/email/verify",
++  retry: "/v1/admin/account/retry",
++  logout: "/v1/admin/account/logout",
++  companyOpen: "/v1/admin/account/company/open",
++  companyComplete: "/v1/admin/account/company/complete",
++  cancel: "/v1/admin/account/cancel",
++} as const;
++const issue = fields(
++  { code: string(128), message: string(4096) },
++  { retryAfterSeconds: count, reference: string(256) },
++);
++const user = fields({
++  id: identifier,
++  email: string(320),
++  name: nullable(string(256)),
++  avatarUrl: nullable(string(2048)),
++});
++const states: Record<string, AdminDecoder> = {
++  loading: fields({ status: oneOf("loading") }),
++  signed_out: fields({ status: oneOf("signed_out") }),
++  signing_in: fields({ status: oneOf("signing_in") }),
++  code_sent: fields(
++    {
++      status: oneOf("code_sent"),
++      challengeId: identifier,
++      email: string(320),
++      expiresAt: count,
++      resendAvailableAt: count,
++    },
++    { issue },
++  ),
++  company_sign_in: fields(
++    { status: oneOf("company_sign_in"), email: string(320) },
++    { issue },
++  ),
++  signed_in: fields({ status: oneOf("signed_in"), user }),
++  error: fields({ status: oneOf("error"), issue }),
++};
++const state: AdminDecoder = (value) => {
++  if (
++    value === null ||
++    typeof value !== "object" ||
++    Array.isArray(value) ||
++    !("status" in value) ||
++    typeof value.status !== "string" ||
++    !Object.hasOwn(states, value.status)
++  )
++    throw new Error("Invalid account state.");
++  return states[value.status]!(value);
++};
++const port: AdminDecoder = (value) => {
++  const n = count(value);
++  if (typeof n !== "number" || n < 1 || n > 65535)
++    throw new Error("Invalid callback port.");
++  return n;
++};
++const authorizeUrl: AdminDecoder = (value) => {
++  const raw = string(8192)(value);
++  if (typeof raw !== "string") throw new Error("Invalid authorization URL.");
++  const url = new URL(raw);
++  if (url.protocol !== "https:" || url.username || url.password)
++    throw new Error("Invalid authorization URL.");
++  return raw;
++};
++const callback = fields({
++  port,
++  path: oneOf("/company-sign-in"),
++  state: string(256),
++});
++const flow = fields({
++  id: identifier,
++  expiresAt: count,
++  authorizeUrl: nullable(authorizeUrl),
++  callback: nullable(callback),
++});
++const view = fields({ state, flow: nullable(flow) });
++export const HOST_ACCOUNT_CODECS: ReadonlyMap<string, OptionalRouteCodec> =
++  new Map([
++    [HOST_ACCOUNT_ROUTES.status, adminRoute(empty, view)],
++    [
++      HOST_ACCOUNT_ROUTES.emailStart,
++      adminRoute(fields({ email: string(320) }), view),
++    ],
++    [
++      HOST_ACCOUNT_ROUTES.emailVerify,
++      adminRoute(
++        fields({
++          flowId: identifier,
++          challengeId: identifier,
++          code: string(32),
++        }),
++        view,
++      ),
++    ],
++    [HOST_ACCOUNT_ROUTES.retry, adminRoute(empty, view)],
++    [HOST_ACCOUNT_ROUTES.logout, adminRoute(empty, view)],
++    [
++      HOST_ACCOUNT_ROUTES.companyOpen,
++      adminRoute(fields({ flowId: identifier }), view),
++    ],
++    [
++      HOST_ACCOUNT_ROUTES.companyComplete,
++      adminRoute(
++        fields({ flowId: identifier, callbackQuery: string(16384) }),
++        view,
++      ),
++    ],
++    [
++      HOST_ACCOUNT_ROUTES.cancel,
++      adminRoute(fields({ flowId: identifier }), view),
++    ],
++  ]);
+--- /dev/null
++++ b/packages/contracts/src/team-protocol/local-skill-catalog-v1.test.ts
+@@ -0,0 +1,18 @@
++import { describe, expect, it } from "vitest";
++import { LOCAL_CATALOG_CODECS, LOCAL_CATALOG_ROUTES } from "./local-skill-catalog-v1";
++
++describe("local catalog closed wire", () => {
++  const skill = { id: "skill", slug: "skill", name: "Review", description: "Review code", category: "coding", creatorName: "Author", version: 2, installs: 3, featured: true, updatedAt: "2026-11-09", verified: true, iconUrl: "https://openbot.run/skill.png", creatorAvatarUrl: null };
++  it("keeps upstream trust and artwork metadata while dropping unrelated producer fields", () => {
++    const codec = LOCAL_CATALOG_CODECS.get(LOCAL_CATALOG_ROUTES.searchSkills)!;
++    expect(codec.response(200, { skills: [{ ...skill, credential: "not part of the wire" }], nextCursor: null })).toEqual({ skills: [skill], nextCursor: null });
++    expect(() => codec.response(200, { skills: [{ ...skill, iconUrl: "https://openbot.run/" + "x".repeat(2048) }], nextCursor: null })).toThrow();
++  });
++  it("pins local installation identity and revision, bounds searches and rejects malformed replies", () => {
++    const install = LOCAL_CATALOG_CODECS.get(LOCAL_CATALOG_ROUTES.localInstall)!;
++    expect(install.request({ agentId: "agent", skillId: "skill", revision: 2 })).toEqual({ agentId: "agent", skillId: "skill", revision: 2 });
++    expect(() => install.request({ agentId: "agent", skillId: "skill", revision: -1 })).toThrow();
++    expect(() => LOCAL_CATALOG_CODECS.get(LOCAL_CATALOG_ROUTES.searchSkills)!.request({ query: "x".repeat(257) })).toThrow();
++    expect(() => LOCAL_CATALOG_CODECS.get(LOCAL_CATALOG_ROUTES.searchSkills)!.response(200, { skills: [{ ...skill, version: "2" }], nextCursor: null })).toThrow();
++  });
++});
+--- /dev/null
++++ b/packages/contracts/src/team-protocol/local-skill-catalog-v1.ts
+@@ -0,0 +1,200 @@
++// Sled's closed local-skill-catalog-v1 extension for pinned Openbot 0.60.0 services.
++import {
++  adminRoute,
++  fields,
++  string,
++  identifier,
++  count,
++  boolean,
++  nullable,
++  list,
++  oneOf,
++  empty,
++  type OptionalRouteCodec,
++  type AdminDecoder,
++} from "./admin-wire";
++export const LOCAL_CATALOG_CAPABILITY = "local-skill-catalog-v1";
++export const LOCAL_CATALOG_ROUTES = {
++  searchSkills: "/v1/admin/catalog/skills/search",
++  skill: "/v1/admin/catalog/skills/detail",
++  skillBySlug: "/v1/admin/catalog/skills/slug",
++  mySkills: "/v1/admin/catalog/skills/mine",
++  localList: "/v1/admin/catalog/local/list",
++  localGet: "/v1/admin/catalog/local/detail",
++  localCreate: "/v1/admin/catalog/local/create",
++  localRevise: "/v1/admin/catalog/local/revise",
++  localInstall: "/v1/admin/catalog/local/install",
++  searchAgents: "/v1/admin/catalog/agents/search",
++  myAgents: "/v1/admin/catalog/agents/mine",
++} as const;
++export const LOCAL_CATALOG_BUNDLE_PATH = "/v1/admin/catalog/local/bundle";
++const category = oneOf(
++  "coding",
++  "design",
++  "data-analytics",
++  "documents",
++  "productivity",
++  "research",
++  "automation",
++  "other",
++);
++const query = fields(
++  {},
++  {
++    query: string(256),
++    category,
++    featured: boolean,
++    verified: boolean,
++    sort: oneOf("installs", "updated", "name"),
++    cursor: string(2048),
++    limit: count,
++  },
++);
++const skillFields = {
++  id: identifier,
++  slug: string(128),
++  name: string(256),
++  description: string(4096),
++  category,
++  creatorName: string(256),
++  version: count,
++  installs: count,
++  featured: boolean,
++  updatedAt: string(64),
++};
++const hue: AdminDecoder = (value) => {
++  if (typeof value !== "number" || ![0, 30, 55, 100, 150, 185, 215, 245, 280, 320].includes(value))
++    throw new Error("Invalid avatar hue.");
++  return value;
++};
++const publicImage = nullable(string(2048));
++const skillPresentation = {
++  creatorAvatarUrl: publicImage,
++  verified: boolean,
++  iconUrl: publicImage,
++};
++const agentPresentation = {
++  category,
++  creatorAvatarUrl: publicImage,
++  verified: boolean,
++  avatarSeed: string(256),
++  avatarHue: nullable(hue),
++  avatarUrl: publicImage,
++  cardUrl: publicImage,
++};
++const skill = fields(skillFields, skillPresentation);
++const detail = fields(
++  {
++    ...skillFields,
++    versionId: identifier,
++    bundleSha256: string(64),
++    files: list(string(4096), 4096),
++    instructions: string(500000),
++  },
++  { ...skillPresentation, examplePrompt: string(100000) },
++);
++const agent = fields(
++  {
++    id: identifier,
++    name: string(256),
++    title: string(256),
++    description: string(100000),
++    creatorName: string(256),
++    version: count,
++    installs: count,
++    featured: boolean,
++    skillCount: count,
++    routineCount: count,
++    activeRoutineCount: count,
++    updatedAt: string(64),
++  },
++  agentPresentation,
++);
++const skillSubmission = fields({
++  id: identifier,
++  skillId: identifier,
++  slug: string(128),
++  name: string(256),
++  description: string(4096),
++  category,
++  version: count,
++  status: oneOf("pending", "approved", "rejected"),
++  rejectionNote: nullable(string(4096)),
++  createdAt: string(64),
++});
++const agentSubmission = fields({
++  id: identifier,
++  listingId: identifier,
++  name: string(256),
++  title: string(256),
++  description: string(100000),
++  version: count,
++  status: oneOf("pending", "approved", "rejected"),
++  rejectionNote: nullable(string(4096)),
++  createdAt: string(64),
++});
++export const LOCAL_CATALOG_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
++  [
++    LOCAL_CATALOG_ROUTES.searchSkills,
++    adminRoute(query, fields({ skills: list(skill, 100), nextCursor: nullable(string(2048)) })),
++  ],
++  [LOCAL_CATALOG_ROUTES.skill, adminRoute(fields({ skillId: identifier }), detail)],
++  [LOCAL_CATALOG_ROUTES.skillBySlug, adminRoute(fields({ slug: string(128) }), detail)],
++  [LOCAL_CATALOG_ROUTES.mySkills, adminRoute(empty, list(skillSubmission, 4096))],
++  [
++    LOCAL_CATALOG_ROUTES.localList,
++    adminRoute(
++      fields({}, { after: identifier, limit: count }),
++      fields({ skills: list(skill, 50), nextCursor: nullable(identifier) }),
++    ),
++  ],
++  [
++    LOCAL_CATALOG_ROUTES.localGet,
++    adminRoute(fields({ skillId: identifier }, { revision: count }), detail),
++  ],
++  [
++    LOCAL_CATALOG_ROUTES.localCreate,
++    adminRoute(fields({ agentId: identifier, sourcePath: string(4096) }), detail),
++  ],
++  [
++    LOCAL_CATALOG_ROUTES.localRevise,
++    adminRoute(
++      fields({
++        agentId: identifier,
++        skillId: identifier,
++        expectedRevision: count,
++        sourcePath: string(4096),
++      }),
++      detail,
++    ),
++  ],
++  [
++    LOCAL_CATALOG_ROUTES.localInstall,
++    adminRoute(fields({ agentId: identifier, skillId: identifier, revision: count }), empty),
++  ],
++  [
++    LOCAL_CATALOG_ROUTES.searchAgents,
++    adminRoute(query, fields({ agents: list(agent, 100), nextCursor: nullable(string(2048)) })),
++  ],
++  [LOCAL_CATALOG_ROUTES.myAgents, adminRoute(empty, list(agentSubmission, 4096))],
++]);
++export const LOCAL_CATALOG_OPERATIONS = [
++  { operation: "settings.local-catalog.searchSkills", action: "searchSkills", kind: "read" },
++  { operation: "settings.local-catalog.skill", action: "skill", kind: "read" },
++  { operation: "settings.local-catalog.skillBySlug", action: "skillBySlug", kind: "read" },
++  { operation: "settings.local-catalog.mySkills", action: "mySkills", kind: "read" },
++  { operation: "settings.local-catalog.localList", action: "localList", kind: "read" },
++  { operation: "settings.local-catalog.localGet", action: "localGet", kind: "read" },
++  { operation: "settings.local-catalog.localCreate", action: "localCreate", kind: "admin" },
++  { operation: "settings.local-catalog.localRevise", action: "localRevise", kind: "admin" },
++  { operation: "settings.local-catalog.localInstall", action: "localInstall", kind: "admin" },
++  { operation: "settings.local-catalog.searchAgents", action: "searchAgents", kind: "read" },
++  { operation: "settings.local-catalog.myAgents", action: "myAgents", kind: "read" },
++] as const;
++export const LOCAL_CATALOG_SETTINGS = LOCAL_CATALOG_OPERATIONS.map((entry) => ({
++  ...entry,
++  label: entry.action,
++  path: LOCAL_CATALOG_ROUTES[entry.action],
++  capability: LOCAL_CATALOG_CAPABILITY,
++  codec: LOCAL_CATALOG_CODECS.get(LOCAL_CATALOG_ROUTES[entry.action])!,
++}));
+--- a/packages/contracts/src/team-protocol/optional-routes.ts
++++ b/packages/contracts/src/team-protocol/optional-routes.ts
+@@ -1,3 +1,5 @@
++import { LOCAL_CATALOG_CODECS } from "./local-skill-catalog-v1";
++import { HOST_ACCOUNT_CODECS } from "./host-account-v1";
+ import {PRIVILEGED_RESPONSE_CODECS} from "./privileged-response-codecs";
+ import {SLED_QUEUE_ATTACHMENTS_CODECS} from "./sled-queue-attachments-v1";
+ import { SLED_FILES_UPLOAD_CODECS } from "./sled-files-upload-v1";
+@@ -106,6 +108,8 @@
+ export type { OptionalRouteCodec } from "./admin-wire";
+ 
+ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
++  ...HOST_ACCOUNT_CODECS,
++  ...LOCAL_CATALOG_CODECS,
+   ...AGENT_ADMIN_CODECS,
+   ...AGENT_MEMORIES_CODECS,
+   ...SKILLS_ADMIN_CODECS,
+--- a/src/main/application-services.ts
++++ b/src/main/application-services.ts
+@@ -1,3 +1,4 @@
++import { HostAccountService } from "./host-account-service";
+ import {PrivilegedCommitClient} from "./team-api/privileged-commit-client";
+ import {createPrivilegedHosts} from "./team-api/privileged-host-bootstrap";
+ import { ChannelCodingRuntime } from "../backend/channel-coding-runtime";
+@@ -1024,6 +1025,8 @@
+   // Registered before `initialize()`, which publishes `{ status: "loading" }` synchronously: the
+   // listener therefore runs on the next line with most of this function's services still unbuilt.
+   teardown.push(TEARDOWN_ORDER.centralAuth, "the account runtime", () => Effect.runPromise(centralAuth.dispose()));
++  const hostAccount = new HostAccountService(centralAuth, () => language);
++  teardown.push(TEARDOWN_ORDER.centralAuth - 1, "host account sign-in", () => hostAccount.dispose());
+   centralAuth.on("changed", forwardCentralAuth);
+   const centralAuthInitialization = Effect.runSync(Effect.cached(centralAuth.initialize().pipe(toRemoteWorkflowError)));
+   void Effect.runPromise(centralAuthInitialization).catch((error) =>
+@@ -2624,6 +2627,7 @@
+     focusUse: hostedServer !== null,
+     // Each member present advertises its admin capability. Every admin route requires an owner or admin.
+     admin: {
++      account: hostAccount,
+       agents: agentAdminSettings,
+       agentHost: agentHostSettings,
+       folders: agentFolders,
+--- a/src/main/central-auth-manager.ts
++++ b/src/main/central-auth-manager.ts
+@@ -125,6 +125,7 @@
+ }
+ 
+ interface EmailCodeRequest {
++  companyBrowser?: CompanySignInBrowser | undefined;
+   email: string;
+   idempotencyKey: string;
+   pending: Deferred.Deferred<CentralAuthState, CentralAuthOperationError> | null;
+@@ -1469,15 +1470,15 @@
+   });
+ 
+   readonly requestEmailCode = Effect.fn("CentralAuth.requestEmailCode")(
+-    function* (this: CentralAuthManager, email: string) {
++    function* (this: CentralAuthManager, email: string, companyBrowser?: CompanySignInBrowser) {
+       const normalizedEmail = email.trim().toLowerCase();
+       const existingRequest = this.#emailCodeRequest;
+-      if (existingRequest?.email === normalizedEmail && existingRequest.pending)
++      if (existingRequest?.email === normalizedEmail && existingRequest.companyBrowser === companyBrowser && existingRequest.pending)
+         return yield* Deferred.await(existingRequest.pending);
+       const request: EmailCodeRequest =
+-        existingRequest?.email === normalizedEmail
++        existingRequest?.email === normalizedEmail && existingRequest.companyBrowser === companyBrowser
+           ? existingRequest
+-          : { email: normalizedEmail, idempotencyKey: randomUUID(), pending: null };
++          : { email: normalizedEmail, idempotencyKey: randomUUID(), pending: null, companyBrowser };
+       this.#emailCodeRequest = request;
+       const pending = Deferred.makeUnsafe<CentralAuthState, CentralAuthOperationError>();
+       request.pending = pending;
+@@ -1531,7 +1532,7 @@
+           Effect.sync(() => {
+             if (error instanceof AuthApiError && error.code === "company_sign_in_required") {
+               if (this.#emailCodeRequest === request) this.#emailCodeRequest = null;
+-              return this.#startCompanySignIn(request.email);
++              return this.#startCompanySignIn(request.email, request.companyBrowser);
+             }
+             if (isDefinitiveEmailCodeRequestFailure(error) && this.#emailCodeRequest === request) {
+               this.#emailCodeRequest = null;
+@@ -1616,9 +1617,9 @@
+   ).bind(this);
+ 
+   /** Opens the provider page again for the email that signs in with its company. */
+-  openCompanySignIn(): Effect.Effect<CentralAuthState> {
++  openCompanySignIn(companyBrowser?: CompanySignInBrowser): Effect.Effect<CentralAuthState> {
+     return Effect.sync(() =>
+-      this.#state.status === "company_sign_in" ? this.#startCompanySignIn(this.#state.email) : this.getState(),
++      this.#state.status === "company_sign_in" ? this.#startCompanySignIn(this.#state.email, companyBrowser) : this.getState(),
+     );
+   }
+ 
+@@ -1642,9 +1643,9 @@
+   }
+ 
+   /** Sets the state at once, and waits for the browser apart from the request that asked for it. */
+-  #startCompanySignIn(email: string): CentralAuthState {
++  #startCompanySignIn(email: string, companyBrowser?: CompanySignInBrowser): CentralAuthState {
+     this.#endCompanySignIn();
+-    const browser = this.#options.companySignInBrowser;
++    const browser = companyBrowser ?? this.#options.companySignInBrowser;
+     if (!browser) {
+       return this.#setState({
+         status: "company_sign_in",
+--- a/src/main/company-sign-in-browser.ts
++++ b/src/main/company-sign-in-browser.ts
+@@ -15,6 +15,8 @@
+ 
+ export interface CompanySignInBrowser {
+   open: (url: string) => Promise<void>;
++  /** A private host relay captures only the listener this source flow owns. */
++  listening?: (returnTo: string, clientState: string) => void;
+   /** Read on each request, so the page uses the language that is set at that time. */
+   language: () => Pick<LanguageService, "locale" | "translate">;
+ }
+@@ -68,7 +70,9 @@
+     }),
+     (listener) => Effect.promise(() => listener.close()),
+   );
+-  const pageUrl = yield* start(`http://127.0.0.1:${server.port}${COMPANY_SIGN_IN_PATH}`, clientState);
++  const returnTo = `http://127.0.0.1:${server.port}${COMPANY_SIGN_IN_PATH}`;
++  browser.listening?.(returnTo, clientState);
++  const pageUrl = yield* start(returnTo, clientState);
+   // Ended while the account service answered: no page opens.
+   if (yield* Deferred.isDone(cancel)) return yield* new CompanySignInBrowserError({ code: "cancelled" });
+   yield* Effect.tryPromise({
+--- /dev/null
++++ b/src/main/host-account-service.ts
+@@ -0,0 +1,292 @@
++import { randomUUID } from "node:crypto";
++import { registerSecretValue } from "@openbot/logging";
++import {
++  normalizeEmailAddress,
++  normalizeOneTimeCode,
++} from "@openbot/contracts/validation";
++import { runCauseEffect } from "../backend/effect-boundary";
++import type { CentralAuthManager } from "./central-auth-manager";
++import type { CompanySignInBrowser } from "./company-sign-in-browser";
++import { HttpError } from "./team-api/http-error";
++type Account = Pick<
++  CentralAuthManager,
++  | "getState"
++  | "requestEmailCode"
++  | "verifyEmailCode"
++  | "retry"
++  | "logout"
++  | "openCompanySignIn"
++  | "cancelCompanySignIn"
++>;
++interface Flow {
++  id: string;
++  memberId: string;
++  email: string;
++  expiresAt: number;
++  authorizeUrl: string | null;
++  callback: { port: number; path: string; state: string } | null;
++  completed: boolean;
++  browser: CompanySignInBrowser;
++  timer: ReturnType<typeof setTimeout>;
++}
++const TTL = 10 * 60_000;
++export class HostAccountService {
++  #flow: Flow | null = null;
++  #busy = false;
++  constructor(
++    private readonly account: Account,
++    private readonly language: CompanySignInBrowser["language"],
++    private readonly fetcher: typeof fetch = fetch,
++    private readonly now: () => number = Date.now,
++  ) {}
++  status(memberId: string) {
++    const state = this.account.getState();
++    const flow = this.#flow;
++    const mine =
++      flow && flow.memberId === memberId && flow.expiresAt > this.now();
++    // A different administrator can see that a sign-in is pending, but cannot claim its challenge.
++    const visible =
++      !mine &&
++      (state.status === "code_sent" || state.status === "company_sign_in")
++        ? { status: "signing_in" as const }
++        : state;
++    return {
++      state: visible,
++      flow:
++        mine && state.status !== "signed_in"
++          ? {
++              id: flow.id,
++              expiresAt: flow.expiresAt,
++              authorizeUrl: flow.authorizeUrl,
++              callback: flow.callback,
++            }
++          : null,
++    };
++  }
++  async start(memberId: string, email: string) {
++    return this.#change(async () => {
++      const normalized = normalizeEmailAddress(email);
++      if (!normalized) throw new HttpError(400, "Enter a valid email address.");
++      if (this.account.getState().status === "signed_in")
++        throw new HttpError(
++          409,
++          "Sign out before changing this host’s OpenBot account.",
++        );
++      if (
++        this.#flow &&
++        this.#flow.expiresAt > this.now() &&
++        this.#flow.memberId !== memberId
++      )
++        throw new HttpError(
++          409,
++          "Another administrator is signing this host in.",
++        );
++      let flow = this.#flow;
++      if (
++        !flow ||
++        flow.expiresAt <= this.now() ||
++        flow.email !== normalized ||
++        flow.memberId !== memberId
++      ) {
++        await this.#clear();
++        flow = this.#create(memberId, normalized);
++      }
++      await runCauseEffect(
++        this.account.requestEmailCode(normalized, flow.browser),
++      );
++      return this.status(memberId);
++    });
++  }
++  async verify(
++    memberId: string,
++    id: string,
++    challengeId: string,
++    code: string,
++  ) {
++    return this.#change(async () => {
++      this.#require(memberId, id);
++      const state = this.account.getState();
++      const normalized = normalizeOneTimeCode(code);
++      if (
++        !normalized ||
++        state.status !== "code_sent" ||
++        state.challengeId !== challengeId
++      )
++        throw new HttpError(400, "Use the current sign-in code for this host.");
++      registerSecretValue(normalized);
++      registerSecretValue(code);
++      await runCauseEffect(
++        this.account.verifyEmailCode(challengeId, normalized),
++      );
++      return this.status(memberId);
++    });
++  }
++  async open(memberId: string, id: string) {
++    return this.#change(async () => {
++      const flow = this.#require(memberId, id);
++      flow.authorizeUrl = null;
++      flow.callback = null;
++      flow.completed = false;
++      await runCauseEffect(this.account.openCompanySignIn(flow.browser));
++      return this.status(memberId);
++    });
++  }
++  async complete(memberId: string, id: string, callbackQuery: string) {
++    return this.#change(async () => {
++      const flow = this.#require(memberId, id);
++      const callback = flow.callback;
++      if (flow.completed || !callback)
++        throw new HttpError(
++          409,
++          "This sign-in callback is no longer available.",
++        );
++      const query = new URLSearchParams(callbackQuery.replace(/^\?/, ""));
++      const allowed = new Set(["state", "code", "error", "error_description"]);
++      if (
++        [...query.keys()].some(
++          (key) => !allowed.has(key) || query.getAll(key).length !== 1,
++        ) ||
++        query.get("state") !== callback.state ||
++        Boolean(query.get("code")) === Boolean(query.get("error"))
++      )
++        throw new HttpError(400, "The callback does not match this sign-in.");
++      const code = query.get("code");
++      if (code) registerSecretValue(code);
++      flow.completed = true;
++      const url = new URL(`http://127.0.0.1:${callback.port}${callback.path}`);
++      url.search = query.toString();
++      const response = await this.fetcher(url, {
++        method: "GET",
++        redirect: "manual",
++        signal: AbortSignal.timeout(10_000),
++      });
++      if (!response.ok && !query.has("error"))
++        throw new HttpError(
++          409,
++          "The host could not confirm the sign-in callback. Check the account status before retrying.",
++        );
++      await response.body?.cancel();
++      return this.status(memberId);
++    });
++  }
++  async cancel(memberId: string, id: string) {
++    return this.#change(async () => {
++      this.#require(memberId, id);
++      await this.#clear();
++      if (this.account.getState().status !== "signed_in")
++        await runCauseEffect(this.account.logout());
++      return this.status(memberId);
++    });
++  }
++  async retry(memberId: string) {
++    return this.#change(async () => {
++      if (
++        this.#flow &&
++        this.#flow.memberId !== memberId &&
++        this.#flow.expiresAt > this.now()
++      )
++        throw new HttpError(
++          409,
++          "Another administrator is signing this host in.",
++        );
++      await runCauseEffect(this.account.retry());
++      return this.status(memberId);
++    });
++  }
++  async logout(memberId: string) {
++    return this.#change(async () => {
++      await this.#clear();
++      await runCauseEffect(this.account.logout());
++      return this.status(memberId);
++    });
++  }
++  async dispose() {
++    await this.#clear();
++  }
++  async #change<T>(action: () => Promise<T>): Promise<T> {
++    if (this.#busy)
++      throw new HttpError(409, "An account operation is already in progress.");
++    this.#busy = true;
++    try {
++      return await action();
++    } finally {
++      this.#busy = false;
++    }
++  }
++  #require(memberId: string, id: string) {
++    const flow = this.#flow;
++    if (
++      !flow ||
++      flow.id !== id ||
++      flow.memberId !== memberId ||
++      flow.expiresAt <= this.now()
++    )
++      throw new HttpError(404, "This sign-in is no longer available.");
++    return flow;
++  }
++  async #clear() {
++    const flow = this.#flow;
++    this.#flow = null;
++    if (flow) clearTimeout(flow.timer);
++    await runCauseEffect(this.account.cancelCompanySignIn());
++  }
++  #create(memberId: string, email: string): Flow {
++    const id = randomUUID();
++    const live = () =>
++      this.#flow?.id === id && this.#flow.expiresAt > this.now();
++    const browser: CompanySignInBrowser = {
++      language: this.language,
++      listening: (returnTo, state) => {
++        if (!live()) throw new Error("The sign-in ended.");
++        const url = new URL(returnTo);
++        if (
++          url.protocol !== "http:" ||
++          url.hostname !== "127.0.0.1" ||
++          url.pathname !== "/company-sign-in" ||
++          url.search ||
++          url.hash ||
++          !Number.isInteger(Number(url.port)) ||
++          Number(url.port) < 1 ||
++          Number(url.port) > 65535
++        )
++          throw new Error("Invalid private sign-in callback.");
++        this.#flow!.callback = {
++          port: Number(url.port),
++          path: url.pathname,
++          state,
++        };
++      },
++      open: async (page) => {
++        if (!live()) throw new Error("The sign-in ended.");
++        const url = new URL(page);
++        if (
++          url.protocol !== "https:" ||
++          url.username ||
++          url.password ||
++          page.length > 8192
++        )
++          throw new Error(
++            "The account service returned an unsupported sign-in address.",
++          );
++        this.#flow!.authorizeUrl = url.href;
++      },
++    };
++    const timer = setTimeout(() => {
++      if (this.#flow?.id === id) void this.#clear().catch(() => {});
++    }, TTL);
++    timer.unref?.();
++    const flow: Flow = {
++      id,
++      memberId,
++      email,
++      expiresAt: this.now() + TTL,
++      authorizeUrl: null,
++      callback: null,
++      completed: false,
++      browser,
++      timer,
++    };
++    this.#flow = flow;
++    return flow;
++  }
++}
+--- a/src/main/local-skill-tools.ts
++++ b/src/main/local-skill-tools.ts
+@@ -4,7 +4,7 @@
+ import { ToolOperationFailed, toToolOperationFailed } from "../backend/agent/tool-operation";
+ import type { SkillMarketplaceService } from "./skill-marketplace-service";
+ 
+-export function localSkillTools(skills: SkillMarketplaceService): LocalSkillTools {
++export function localSkillTools(skills: Pick<SkillMarketplaceService, "requireLocalLibrary" | "installLocal" | "listInstalled" | "setEnabled" | "uninstall">): LocalSkillTools {
+   const library = skills.requireLocalLibrary();
+   return {
+     list: () => library.list().pipe(toToolOperationFailed),
+--- a/src/main/team-api-server.ts
++++ b/src/main/team-api-server.ts
+@@ -1,3 +1,7 @@
++import { HOST_ACCOUNT_CAPABILITY } from "@openbot/contracts/team-protocol/host-account-v1";
++import { routeHostAccount } from "./team-api/route-host-account";
++import { LOCAL_CATALOG_CAPABILITY } from "@openbot/contracts/team-protocol/local-skill-catalog-v1";
++import { routeLocalCatalog } from "./team-api/route-local-catalog";
+ import {routeBoundPrivilegedResponses} from "./team-api/privileged-response-host";
+ import {requireAdmin,requireAgentLevel} from "./team-api/request-helpers";
+ import {routeSledQueueAttachments} from "./team-api/route-sled-queue-attachments";
+@@ -1070,6 +1074,8 @@
+       if ((await routeSharedTables(context, this.#options.admin)) === "handled") return;
+       if ((await routeAgentInstall(context, this.#options.admin, hidden, newAgentHidden)) === "handled") return;
+       if ((await routeAgentPublish(context, this.#options.admin, hidden)) === "handled") return;
++      if ((await routeHostAccount(context, this.#options.admin)) === "handled") return;
++      if ((await routeLocalCatalog(context, this.#options.admin, hidden)) === "handled") return;
+       if ((await routeAgentReview(context, this.#options.admin, hidden)) === "handled") return;
+       if ((await routeAgentAdoption(context, this.#options.admin, newAgentHidden, hidden)) === "handled") return;
+       if ((await routeAcpRegistry(context, this.#options.admin)) === "handled") return;
+@@ -2239,6 +2245,8 @@
+             );
+           if (capability === AGENT_UPDATE_CAPABILITY) return this.#options.admin?.marketplaceAgents !== undefined;
+           if (capability === AGENT_ADOPTION_CAPABILITY) return this.#options.admin?.adoption !== undefined;
++          if (capability === HOST_ACCOUNT_CAPABILITY) return this.#options.admin?.account !== undefined;
++          if (capability === LOCAL_CATALOG_CAPABILITY) return this.#options.admin?.skills?.requireLocalLibrary !== undefined && this.#options.admin?.marketplaceAgents?.list !== undefined && this.#options.admin?.marketplaceAgents?.listMine !== undefined;
+           if (capability === AGENT_REVIEW_CAPABILITY) return this.#options.admin?.agentTemplates?.get !== undefined && this.#options.admin?.agentTemplates?.publicationStatus !== undefined && this.#options.admin?.marketplaceAgents?.getListing !== undefined;
+           if (capability === AGENT_PUBLISH_CAPABILITY) return this.#options.admin?.agentTemplates !== undefined;
+           if (
+--- a/src/main/team-api/dependencies.ts
++++ b/src/main/team-api/dependencies.ts
+@@ -1,3 +1,4 @@
++import type { HostAccountService } from "../host-account-service";
+ import type {PrivilegedResponseHost} from "./privileged-response-host";
+ import type {QueueAttachmentHost} from "./queue-attachments-host";
+ import type { ChannelCodingRuntime } from "../../backend/channel-coding-runtime";
+@@ -399,6 +400,7 @@
+  * `#protocolSupport` advertises its capability on; every route behind it requires an owner or admin.
+  */
+ export interface TeamApiAdmin {
++  account?: Pick<HostAccountService, "status" | "start" | "verify" | "open" | "complete" | "cancel" | "retry" | "logout">;
+   adoption?: Pick<AgentAdoptionService, "install" | "status" | "list">;
+   acpRegistry?: {
+     [Method in "search" | "listInstalled" | "status" | "install" | "cancel" | "uninstall"]: OmitThisParameter<
+@@ -428,7 +430,7 @@
+     "readAgentSessionSettings" | "setAgentSessionSetting" | "resetAgentSessionSetting"
+   >;
+   /** `skills-admin-v1`: list, install, remove and enable the skills of one agent. */
+-  skills?: Pick<SkillMarketplaceService, "listInstalled" | "install" | "uninstall" | "setEnabled">;
++  skills?: Pick<SkillMarketplaceService, "listInstalled" | "install" | "uninstall" | "setEnabled" | "list" | "get" | "getBySlug" | "listMine" | "requireLocalLibrary" | "installLocal">;
+   /** `shared-tables-v1`: list and delete the tables the agents share. */
+   sharedTables?: Pick<AgentService, "listTables" | "deleteTable">;
+   /**
+@@ -436,7 +438,7 @@
+    * `agent-update-v1`: update an agent from a listing; needs only `marketplaceAgents`.
+    * `agent-publish-v1`: publish, update and unpublish an agent's share link; needs only `agentTemplates`.
+    */
+-  marketplaceAgents?: Pick<AgentMarketplaceService, "install" | "getListing">;
++  marketplaceAgents?: Pick<AgentMarketplaceService, "install" | "getListing" | "list" | "listMine">;
+   agentTemplates?: Pick<AgentTemplateService, "install" | "preview" | "publish" | "unpublish" | "get" | "publicationStatus">;
+   /** `providers-v1`: code sign-in, provider API keys, managed CLI runtimes and custom endpoints. */
+   providers?: TeamApiProviders;
+--- /dev/null
++++ b/src/main/team-api/route-host-account.ts
+@@ -0,0 +1,81 @@
++import {
++  HOST_ACCOUNT_CAPABILITY,
++  HOST_ACCOUNT_ROUTES,
++  HOST_ACCOUNT_CODECS,
++} from "@openbot/contracts/team-protocol/host-account-v1";
++import { isDynamicRecord } from "@openbot/contracts/runtime-values";
++import type { TeamApiAdmin } from "./dependencies";
++import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
++import { readJson, requireAdmin } from "./request-helpers";
++import { HttpError } from "./http-error";
++export async function routeHostAccount(
++  context: TeamApiRequestContext,
++  admin: TeamApiAdmin | undefined,
++): Promise<RouteOutcome> {
++  const { method, url, member, request, json, capabilities } = context;
++  const codec = HOST_ACCOUNT_CODECS.get(url.pathname);
++  if (method !== "POST" || !codec) return "unmatched";
++  requireAdmin(member);
++  const account = admin?.account;
++  if (!account || !capabilities.has(HOST_ACCOUNT_CAPABILITY))
++    throw new HttpError(400, "This host does not expose account settings.");
++  let body: unknown;
++  try {
++    body = codec.request(await readJson(request));
++  } catch {
++    throw new HttpError(400, "Invalid account request.");
++  }
++  if (!isDynamicRecord(body))
++    throw new HttpError(400, "Invalid account request.");
++  const id = typeof body.flowId === "string" ? body.flowId : "";
++  let result: unknown;
++  try {
++    switch (url.pathname) {
++      case HOST_ACCOUNT_ROUTES.status:
++        result = account.status(member.id);
++        break;
++      case HOST_ACCOUNT_ROUTES.emailStart:
++        result = await account.start(member.id, String(body.email));
++        break;
++      case HOST_ACCOUNT_ROUTES.emailVerify:
++        result = await account.verify(
++          member.id,
++          id,
++          String(body.challengeId),
++          String(body.code),
++        );
++        break;
++      case HOST_ACCOUNT_ROUTES.retry:
++        result = await account.retry(member.id);
++        break;
++      case HOST_ACCOUNT_ROUTES.logout:
++        result = await account.logout(member.id);
++        break;
++      case HOST_ACCOUNT_ROUTES.companyOpen:
++        result = await account.open(member.id, id);
++        break;
++      case HOST_ACCOUNT_ROUTES.companyComplete:
++        result = await account.complete(
++          member.id,
++          id,
++          String(body.callbackQuery),
++        );
++        break;
++      case HOST_ACCOUNT_ROUTES.cancel:
++        result = await account.cancel(member.id, id);
++        break;
++      default:
++        return "unmatched";
++    }
++    const projected = codec.response(200, result);
++    if (projected === null || typeof projected !== "object")
++      throw new Error("Invalid account reply.");
++    return json(200, projected);
++  } catch (error) {
++    if (error instanceof HttpError) throw error;
++    throw new HttpError(
++      409,
++      "The host account request could not complete. Check its status before retrying.",
++    );
++  }
++}
+--- /dev/null
++++ b/src/main/team-api/route-local-catalog.ts
+@@ -0,0 +1,52 @@
++import { isDynamicRecord } from "@openbot/contracts/runtime-values";
++import { LOCAL_CATALOG_CAPABILITY, LOCAL_CATALOG_ROUTES, LOCAL_CATALOG_CODECS, LOCAL_CATALOG_BUNDLE_PATH } from "@openbot/contracts/team-protocol/local-skill-catalog-v1";
++import { runCauseEffect } from "../../backend/effect-boundary";
++import { localSkillTools } from "../local-skill-tools";
++import { parseCreateLocalSkill, parseReadLocalSkill, parseReviseLocalSkill, parseInstallLocalSkill } from "../ipc/local-skill-inputs";
++import { parseMarketplaceSkillQuery } from "../ipc/app-inputs";
++import { requireString } from "../ipc/validation";
++import { HttpError } from "./http-error";
++import { readJson, requireAdmin, requireVisibleBodyAgent } from "./request-helpers";
++import type { TeamApiAdmin } from "./dependencies";
++import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
++export async function routeLocalCatalog(context: TeamApiRequestContext, admin: TeamApiAdmin | undefined, hidden: ReadonlySet<string>): Promise<RouteOutcome> {
++  const { method, url, capabilities, member, request, response, json } = context;
++  const bundle = method === "GET" && url.pathname === LOCAL_CATALOG_BUNDLE_PATH;
++  if (!bundle && (method !== "POST" || !Object.values(LOCAL_CATALOG_ROUTES).some(path => path === url.pathname))) return "unmatched";
++  requireAdmin(member);
++  if (!capabilities.has(LOCAL_CATALOG_CAPABILITY) || !admin?.skills?.requireLocalLibrary || !admin.marketplaceAgents?.list || !admin.marketplaceAgents.listMine) throw new HttpError(400, "Local catalog unsupported.");
++  const skills = admin.skills;
++  try {
++    if (bundle) {
++      const skillId = requireString(url.searchParams.get("skillId"), "skillId"); const revision = Number(url.searchParams.get("revision"));
++      if (!/^local-skill-[0-9a-f-]{36}$/u.test(skillId) || !Number.isSafeInteger(revision) || revision < 1) throw new HttpError(400, "Invalid local bundle identity.");
++      const bytes = await runCauseEffect(skills.requireLocalLibrary().bundle(skillId, revision));
++      response.writeHead(200, { "content-type": "application/zip", "content-length": bytes.byteLength, "cache-control": "no-store", "content-disposition": `attachment; filename="${skillId}-${revision}.zip"` }); response.end(bytes); return "handled";
++    }
++    const codec = LOCAL_CATALOG_CODECS.get(url.pathname); if (!codec) throw new HttpError(400, "Local catalog unsupported.");
++    const body = codec.request(await readJson(request)); if (!isDynamicRecord(body)) throw new HttpError(400, "Invalid catalog request.");
++    const tools = localSkillTools(skills);
++    let result: unknown;
++    switch (url.pathname) {
++      case LOCAL_CATALOG_ROUTES.searchSkills: result = await runCauseEffect(skills.list(parseMarketplaceSkillQuery(body))); break;
++      case LOCAL_CATALOG_ROUTES.skill: result = await runCauseEffect(skills.get(requireString(body.skillId, "skillId"))); break;
++      case LOCAL_CATALOG_ROUTES.skillBySlug: result = await runCauseEffect(skills.getBySlug(requireString(body.slug, "slug"))); break;
++      case LOCAL_CATALOG_ROUTES.mySkills: result = await runCauseEffect(skills.listMine()); break;
++      case LOCAL_CATALOG_ROUTES.localList: { const all = (await runCauseEffect(tools.list())).sort((a, b) => a.id.localeCompare(b.id)); const after = typeof body.after === "string" ? body.after : null; const eligible = after === null ? all : all.filter(item => item.id > after); const limit = typeof body.limit === "number" ? Math.max(1, Math.min(50, body.limit)) : 50; const page = eligible.slice(0, limit); result = { skills: page, nextCursor: eligible.length > page.length ? page.at(-1)?.id ?? null : null }; break; }
++      case LOCAL_CATALOG_ROUTES.localGet: result = await runCauseEffect(tools.get(parseReadLocalSkill(body))); break;
++      case LOCAL_CATALOG_ROUTES.localCreate: requireVisibleBodyAgent(body, hidden); result = await runCauseEffect(tools.create(parseCreateLocalSkill(body))); break;
++      case LOCAL_CATALOG_ROUTES.localRevise: requireVisibleBodyAgent(body, hidden); result = await runCauseEffect(tools.revise(parseReviseLocalSkill(body))); break;
++      case LOCAL_CATALOG_ROUTES.localInstall: requireVisibleBodyAgent(body, hidden); await runCauseEffect(tools.install(parseInstallLocalSkill(body))); result = {}; break;
++      case LOCAL_CATALOG_ROUTES.searchAgents: { const query = parseMarketplaceSkillQuery(body); result = await runCauseEffect(admin.marketplaceAgents.list({ ...query, sort: query.sort === "installs" ? "installs" : undefined })); break; }
++      case LOCAL_CATALOG_ROUTES.myAgents: result = await runCauseEffect(admin.marketplaceAgents.listMine()); break;
++      default: return "unmatched";
++    }
++    const projected = codec.response(200, result);
++    if (projected !== null && typeof projected !== "object") throw new Error("Invalid catalog result.");
++    return json(200, projected);
++  } catch (error) {
++    if (error instanceof HttpError) throw error;
++    if (isDynamicRecord(error) && error._tag === "AuthApiError" && error.status === 401 && error.code === "unauthorized") return json(409, { error: "Sign in to OpenBot on this host to browse the Marketplace.", code: "host_account_required" });
++    throw new HttpError(409, "The catalog operation could not be confirmed. Refresh the library or host account before retrying a change.");
++  }
++}

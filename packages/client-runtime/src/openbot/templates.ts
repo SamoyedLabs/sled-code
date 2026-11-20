@@ -6,6 +6,7 @@ import {
   TemplateReview,
   TemplatePublication,
   TemplateInstalled,
+  TemplateAdoption,
   templateIsRead,
   type TemplateRequest,
 } from "@t3tools/contracts/openbot-templates";
@@ -13,11 +14,24 @@ const decodeAdmin = Schema.decodeUnknownResult(OpenbotTemplateAdminRequest);
 const decodeReview = Schema.decodeUnknownResult(TemplateReview);
 const decodePreview = Schema.decodeUnknownResult(TemplatePreview);
 const decodeInstalled = Schema.decodeUnknownResult(TemplateInstalled);
+const decodePublication = Schema.decodeUnknownResult(
+  Schema.Struct({ publication: Schema.NullOr(TemplatePublication) }),
+);
+const decodeAdoption = Schema.decodeUnknownResult(TemplateAdoption);
+const decodeAdoptions = Schema.decodeUnknownResult(
+  Schema.Array(TemplateAdoption).check(Schema.isMaxLength(100)),
+);
+const decodeCapabilities = Schema.decodeUnknownResult(
+  Schema.Struct({ capabilities: Schema.Array(Schema.String).check(Schema.isMaxLength(512)) }),
+);
 export type TemplateActions = {
   readonly can: (request: TemplateRequest) => boolean;
   readonly execute: (request: TemplateRequest) => Promise<unknown>;
 };
 export type TemplateState = {
+  readonly adoptions: readonly TemplateAdoption[];
+  readonly acknowledged: readonly string[];
+  readonly publication: { readonly agentId: string; readonly value: typeof TemplatePublication.Type | null } | null;
   readonly review: {
     readonly kind: "template" | "marketplace";
     readonly detail: TemplateReview;
@@ -28,6 +42,9 @@ export type TemplateState = {
   readonly uncertain: boolean;
 };
 export const EMPTY_TEMPLATES: TemplateState = {
+  adoptions: [],
+  acknowledged: [],
+  publication: null,
   review: null,
   preview: null,
   pending: null,
@@ -39,6 +56,7 @@ export function templateInstall(
   timezone: string,
   receiptId: string,
   target?: { readonly agentId: string; readonly listingId: string },
+  durable = false,
 ) {
   const review = state.review;
   if (
@@ -50,7 +68,11 @@ export function templateInstall(
   )
     return null;
   const request =
-    review.kind === "template"
+    durable
+      ? (review.kind === "marketplace" && !review.detail.versionId) || (target && target.listingId !== review.detail.id)
+        ? null
+        : { operation: "templates.adopt", operationId: receiptId, kind: review.kind, sourceId: review.detail.id, timezone, expectedRevision: review.kind === "template" ? review.detail.updatedAt : review.detail.versionId, ...(target ? { agentId: target.agentId } : {}) }
+      : review.kind === "template"
       ? {
           operation: "templates.install",
           templateId: review.detail.id,
@@ -88,6 +110,28 @@ export function templateResult(
   request: TemplateRequest,
   value: unknown,
 ): TemplateState | null {
+  if (request.operation === "templates.publication") {
+    const result = decodePublication(value);
+    return Result.isFailure(result) ? null : { ...state, publication: { agentId: request.agentId, value: result.success.publication }, notice: result.success.publication ? "Published. This status was checked with the host account." : "Not published. This status was checked with the host account." };
+  }
+  if (request.operation === "templates.adoptions") {
+    const result = decodeAdoptions(value);
+    if (Result.isFailure(result)) return null;
+    const pending = state.pending;
+    const matching = pending?.operation === "templates.adopt" ? result.success.find(item => item.operationId === pending.operationId) : undefined;
+    if (matching && pending?.operation === "templates.adopt" && !matchesAdoption(pending, matching)) return null;
+    const updated = { ...state, adoptions: result.success };
+    return matching ? adoptionResult(updated, matching) : adoptionRecovery(updated);
+  }
+  if (request.operation === "templates.adopt" || request.operation === "templates.adoptionStatus") {
+    if (request.operation === "templates.adoptionStatus" && value === null)
+      return { ...state, notice: "Operation not found on this host for the connected member. The unknown result remains unresolved." };
+    const result = decodeAdoption(value);
+    if (Result.isFailure(result) || result.success.operationId !== request.operationId) return null;
+    if (request.operation === "templates.adopt" && !matchesAdoption(request, result.success)) return null;
+    if (state.pending?.operation === "templates.adopt" && state.pending.operationId === request.operationId && !matchesAdoption(state.pending, result.success)) return null;
+    return adoptionResult(state, result.success);
+  }
   if (request.operation === "templates.detail" || request.operation === "templates.listing") {
     const decoded = decodeReview(value);
     const id = request.operation === "templates.detail" ? request.templateId : request.listingId;
@@ -137,6 +181,35 @@ export function templateResult(
           : "Host confirmed the agent change. Refresh the destination agent list. Coding and approval settings remain host-owned.",
   };
 }
+function matchesAdoption(request: Extract<TemplateRequest, { operation: "templates.adopt" }>, result: TemplateAdoption) {
+  return result.kind === request.kind && result.sourceId === request.sourceId &&
+    (request.agentId === undefined || result.agentId === request.agentId);
+}
+function adoptionNeedsInspection(result: TemplateAdoption) {
+  return result.state === "pending" || ((result.state === "failed" || result.state === "interrupted") && result.agentId !== null);
+}
+function adoptionRecovery(state: TemplateState): TemplateState {
+  const unknown = state.pending !== null;
+  return { ...state, uncertain: unknown || state.adoptions.some(item => adoptionNeedsInspection(item) && !state.acknowledged.includes(item.operationId)) };
+}
+export function templateAcknowledge(state: TemplateState, operationId: string): TemplateState {
+  const result = state.adoptions.find(item => item.operationId === operationId);
+  if (!result || result.state === "pending" || result.state === "complete" || !result.agentId) return state;
+  return adoptionRecovery({ ...state, acknowledged: [...new Set([...state.acknowledged, operationId])],
+    pending: state.pending?.operation === "templates.adopt" && state.pending.operationId === operationId ? null : state.pending,
+    review: null, notice: "The retained agent stays on the host. Review a source again before starting a new request." });
+}
+export function templateHistoryRequest(state: TemplateState): TemplateRequest {
+  return state.pending?.operation === "templates.adopt" ? { operation: "templates.adoptionStatus", operationId: state.pending.operationId } : { operation: "templates.adoptions" };
+}
+function adoptionResult(state: TemplateState, result: TemplateAdoption): TemplateState {
+  const complete = result.state === "complete";
+  const settled = complete || ((result.state === "failed" || result.state === "interrupted") && result.agentId === null);
+  const ownsPending = state.pending?.operation === "templates.adopt" && state.pending.operationId === result.operationId;
+  return adoptionRecovery({ ...state, adoptions: [result, ...state.adoptions.filter(item => item.operationId !== result.operationId)],
+    pending: settled && ownsPending ? null : state.pending, review: settled && ownsPending ? null : state.review,
+    notice: complete ? `Saved ${result.name ?? "agent"}. The host saved its identity and outcome.` : result.state === "interrupted" ? `Installation was interrupted. ${result.agentId ? `The host retained ${result.name ?? result.agentId} and its work. Inspect this agent before deciding how to continue.` : "The host created no agent."} This request will not run again.` : result.state === "failed" ? result.agentId ? "The change did not finish. The host retained its agent; inspect it before starting another request." : "The change did not finish and no agent remains. Check the host and source, then review again to start a new request." : "The change is still running. Refresh installation history to check its outcome." });
+}
 export function templateStarted(state: TemplateState, request: TemplateRequest): TemplateState {
   return templateIsRead(request)
     ? state
@@ -151,27 +224,40 @@ export function templateFailed(state: TemplateState, request: TemplateRequest): 
         uncertain: true,
         preview: null,
         notice:
-          "Host outcome unknown. Do not retry creation: marketplace receipt IDs only deduplicate install counts. Reconcile with the destination agent list or host owner. Publication previews cannot establish an unpublished state while offline.",
+          request.operation === "templates.adopt"
+            ? "Connection interrupted. Refresh installation history to recover the original host outcome. Starting the same request again will not create another agent."
+            : "Host outcome unknown. Check the destination host before another change. A publication preview alone cannot establish an unpublished state while offline.",
       };
 }
 const AgentSchema = Schema.Array(
   Schema.Struct({
     id: Schema.String,
     name: Schema.String,
-    marketplaceSource: Schema.optional(Schema.NullOr(Schema.Struct({ listingId: Schema.String }))),
+    marketplaceSource: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          agentId: Schema.optional(Schema.String),
+          listingId: Schema.optional(Schema.String),
+        }),
+      ),
+    ),
   }),
 );
 
 const decodeAgents = Schema.decodeUnknownResult(AgentSchema);
+export function templateFeatures(value: unknown) {
+  const result = decodeCapabilities(value);
+  const capabilities = Result.isSuccess(result) ? result.success.capabilities : [];
+  return { reviewAvailable: capabilities.includes("agent-review-v1"), adoptionAvailable: capabilities.includes("agent-adoption-v1") };
+}
 export function decodeTemplateAgents(value: unknown) {
   const decoded = decodeAgents(value);
-  return Result.isSuccess(decoded)
-    ? decoded.success.map((agent) => ({
-        id: agent.id,
-        name: agent.name,
-        ...(agent.marketplaceSource ? { listingId: agent.marketplaceSource.listingId } : {}),
-      }))
-    : [];
+  if (Result.isFailure(decoded)) return [];
+  return decoded.success.map(({ id, name, marketplaceSource }) => {
+    // Team protocol calls the catalog listing ID agentId inside marketplaceSource.
+    const listingId = marketplaceSource?.agentId ?? marketplaceSource?.listingId;
+    return { id, name, ...(listingId ? { listingId } : {}) };
+  });
 }
 export function templateSchedule(schedule: TemplateReview["routines"][number]["schedule"]): string {
   switch (schedule.kind) {

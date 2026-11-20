@@ -24,7 +24,7 @@ export function WorkspaceFileDropOverlay() {
  * what waits at the end of the timeline, which is out of view while it shows.
  */
 export function ScrollToEndButton(props: {
-  readonly bottom: number;
+  readonly bottom: number | string;
   readonly summary: string | null;
   readonly onScrollToEnd: () => void;
 }) {

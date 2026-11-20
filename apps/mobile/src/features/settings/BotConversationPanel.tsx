@@ -1,4 +1,11 @@
-import { BotUiBlock } from "./BotUiBlock";
+import { botSemanticMarkdown } from "../bots/botSemanticMarkdown";
+import { SelectableMarkdownText } from "../../native/SelectableMarkdownText";
+import { useMarkdownPreviewStyles } from "../files/FileMarkdownPreview";
+import { botQuoteReference } from "@t3tools/client-runtime/openbot/presentation";
+import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
+import { BotIncomingShareEnvironment } from "../sharing/BotIncomingShareEnvironment";
+import { BotDictation, useBotDictation } from "./BotDictation";
+import { BotResponseBlock } from "./BotResponseBlock";
 import { useState } from "react";
 import { View } from "react-native";
 import * as Crypto from "expo-crypto";
@@ -25,10 +32,26 @@ export function BotConversationPanel(props: Props) {
 }
 function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Props) {
   const c = useBotConversationPanel(environmentId, hostId, agentId, taskId, Crypto.randomUUID);
+  const markdown = useMarkdownPreviewStyles();
   const [title, setTitle] = useState("");
+  const voice = useBotDictation(
+    JSON.stringify(["bot", environmentId, hostId, agentId, taskId]),
+    c.text,
+    c.setText,
+    c.busy || Boolean(c.fileAttempt) || !c.permission,
+  );
   const disabled = c.busy || !c.permission;
   return (
     <View className="gap-3">
+      {c.snapshot?.threadId && (
+        <BotIncomingShareEnvironment
+          environmentId={environmentId}
+          hostId={hostId}
+          agentId={agentId}
+          threadId={c.snapshot.threadId}
+          taskId={taskId}
+        />
+      )}
       <Button label="Refresh conversation" onPress={c.refresh} />
       {c.loading && <Text>Loading conversation…</Text>}
       {c.error && <Text accessibilityRole="alert">{c.error}</Text>}
@@ -79,11 +102,25 @@ function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Pro
               )?.text.slice(0, 200) ?? message.replyToMessageId}
             </Text>
           )}
-          <Text selectable>{message.text}</Text>
+          <SelectableMarkdownText
+            markdown={botSemanticMarkdown(message.text)}
+            textStyle={markdown.nativeTextStyle}
+            linkCustomization={(url) => {
+              const quote = botQuoteReference(url);
+              return quote
+                ? { label: quote.text.replace(/\s+/gu, " "), chip: { tintsIcon: true } }
+                : undefined;
+            }}
+            onLinkPress={(url) => {
+              const quote = botQuoteReference(url);
+              if (quote) Dialog.alert("Quoted passage", quote.text);
+              else void tryOpenExternalUrl(url, "markdown-link");
+            }}
+          />
           {botMessageSections(message).map((section) => (
             <RichSection key={section.kind} {...section} />
           ))}
-          <BotUiBlock
+          <BotResponseBlock
             key={JSON.stringify([message.id, message.uiBlock])}
             environmentId={environmentId}
             hostId={hostId}
@@ -176,8 +213,8 @@ function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Pro
       )}
       {c.reply && <Button label={`Cancel reply to ${c.reply}`} onPress={() => c.setReply(null)} />}
       <Text>
-        File draft from Files (one file per journaled message). Selection is not sending. Cancel a
-        reply to send a file.
+        Select up to 10 drafts from Files for one message, including replies. Selection is not
+        sending.
       </Text>
       <Button
         label="No file"
@@ -187,26 +224,30 @@ function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Pro
       {c.fileDrafts.map((d) => (
         <Button
           key={d.attachment.id}
-          label={`${c.selectedDraftId === d.attachment.id ? "Selected: " : ""}${d.attachment.name} · ${d.state}`}
-          disabled={c.busy || Boolean(c.fileAttempt) || Boolean(c.reply)}
-          onPress={() => c.setSelectedDraftId(d.attachment.id)}
+          label={`${c.selectedDraftIds.includes(d.attachment.id) ? "Selected: " : ""}${d.attachment.name} · ${d.state}`}
+          disabled={
+            c.busy ||
+            Boolean(c.fileAttempt) ||
+            (c.selectedDraftIds.length >= 10 && !c.selectedDraftIds.includes(d.attachment.id))
+          }
+          onPress={() => c.toggleDraft(d.attachment.id)}
         />
       ))}
       <AppTextInput
-        editable={!c.fileAttempt}
+        editable={!c.fileAttempt && !voice.freezesEditor}
         accessibilityLabel="Message to bot"
         multiline
         maxLength={100000}
         value={c.text}
         onChangeText={c.setText}
       />
+      <BotDictation voice={voice} disabled={c.busy || Boolean(c.fileAttempt) || !c.permission} />
       <Button
         label="Send"
         disabled={
           c.busy ||
-          (c.selectedDraftId
-            ? !c.filePermission || Boolean(c.reply)
-            : !c.permission || !c.text.trim())
+          voice.blocksSubmission ||
+          (c.selectedDraftId ? !c.filePermission : !c.permission || !c.text.trim())
         }
         onPress={() => void c.send()}
       />
@@ -223,7 +264,7 @@ function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Pro
           }
         />
       )}
-      {!taskId && <BotConversationQueue controller={c} agentId={agentId} />}
+      {<BotConversationQueue controller={c} agentId={agentId} />}
     </View>
   );
 }

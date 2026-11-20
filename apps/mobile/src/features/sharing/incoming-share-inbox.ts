@@ -1,3 +1,4 @@
+import type { BotShareTransfer } from "@t3tools/client-runtime/openbot/incoming-share";
 import type { SharePayload } from "expo-sharing";
 
 import { SerializedAsyncQueue } from "../../lib/serialized-async-queue";
@@ -124,7 +125,47 @@ export class IncomingShareInbox {
 
   consume(shareId: string): Promise<ReadonlyArray<IncomingShareDraft>> {
     return this.runExclusive(async () => {
+      const target = (await this.dependencies.loadDrafts()).find((d) => d.id === shareId);
+      if (target?.botTransfer) throw new Error("This share is reserved for a bot.");
       // Identical content can be shared intentionally; only stable payload-derived ids identify retries.
+      await this.dependencies.removeDraft(shareId);
+      return sortAndDedupeIncomingShares(await this.dependencies.loadDrafts());
+    });
+  }
+
+  /** Uses the existing inbox journal and serialization, never a second queue. */
+  updateBotTransfer(
+    shareId: string,
+    expected: BotShareTransfer | null,
+    next: BotShareTransfer | null,
+  ) {
+    return this.runExclusive(async () => {
+      const drafts = await this.dependencies.loadDrafts();
+      const draft = drafts.find((d) => d.id === shareId);
+      if (
+        !draft ||
+        draft.destination ||
+        JSON.stringify(draft.botTransfer ?? null) !== JSON.stringify(expected)
+      )
+        throw new Error("Share reservation changed.");
+      const { botTransfer: _previous, ...rest } = draft;
+      const updated = next ? { ...rest, botTransfer: next } : rest;
+      await this.dependencies.writeDraft(updated);
+      return sortAndDedupeIncomingShares(drafts.map((d) => (d.id === shareId ? updated : d)));
+    });
+  }
+
+  consumeBotTransfer(shareId: string, expected: BotShareTransfer) {
+    return this.runExclusive(async () => {
+      const drafts = await this.dependencies.loadDrafts();
+      const draft = drafts.find((d) => d.id === shareId);
+      if (
+        !draft ||
+        draft.destination ||
+        expected.phase !== "sent" ||
+        JSON.stringify(draft.botTransfer) !== JSON.stringify(expected)
+      )
+        throw new Error("Share receipt changed.");
       await this.dependencies.removeDraft(shareId);
       return sortAndDedupeIncomingShares(await this.dependencies.loadDrafts());
     });
@@ -140,6 +181,7 @@ export class IncomingShareInbox {
       if (!target) {
         throw new Error("The shared content is no longer available.");
       }
+      if (target.botTransfer) throw new Error("This share is reserved for a bot.");
       if (target.destination) {
         if (
           target.destination.environmentId !== destination.environmentId ||

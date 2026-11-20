@@ -1,5 +1,29 @@
+import { OpenbotTransferCommand, OpenbotNewTaskStartInput } from "./openbotInstanceTransfer.ts";
+import {
+  OpenbotPrivilegedScopeInput,
+  OpenbotPrivilegedScope,
+  OpenbotPrivilegedExecuteInput,
+  OpenbotPrivilegedResponseError,
+} from "./openbotPrivilegedBridge.ts";
+import { PrivilegedResponseResult } from "./openbotPrivilegedResponse.ts";
+import {
+  QueueAttachmentContext,
+  QueueAttachmentTarget,
+  QueueAttachmentEdit,
+  QueueAttachmentReceipt,
+} from "./openbotQueueAttachments.ts";
+import { ImportReceipt } from "./openbotAgentImport.ts";
+import {
+  OpenbotBoundImportRequest,
+  OpenbotImportContextInput,
+  OpenbotImportContext,
+  OpenbotArchiveUploadInput,
+  OpenbotArchiveUpload,
+} from "./openbotImportBridge.ts";
 import { OpenbotComputerViewCommand, OpenbotComputerViewerGrant } from "./openbotComputer.ts";
+import { OpenbotLiveVoiceCommand, OpenbotLiveVoiceResult } from "./openbotLiveVoice.ts";
 import { OpenbotMaintenanceState, OpenbotMaintenanceCommand } from "./openbotMaintenance.ts";
+import { OpenbotContinuityCommand, OpenbotContinuityStatus } from "./openbotContinuity.ts";
 import { OpenbotBrowserViewCommand, OpenbotBrowserViewerGrant } from "./openbotBrowser.ts";
 import { OpenbotSledToolsStatus, OpenbotSledToolsConnectInput } from "./openbotSledTools.ts";
 import {
@@ -16,6 +40,8 @@ import {
   OpenbotFileMaterializeInput,
   OpenbotMaterializedFile,
   OpenbotFileUploadInput,
+  OpenbotOriginalUploadInput,
+  OpenbotOriginalUploadIdentity,
   OpenbotDraftFile,
   OpenbotFileScope,
   OpenbotFileSendInput,
@@ -169,7 +195,7 @@ import {
   AssetAccessError,
   AssetCreateUrlInput,
   AssetCreateUrlResult,
-  AttachmentCreateUploadUrlInput,
+  AttachmentUploadRequest,
   AttachmentCreateUploadUrlResult,
   AttachmentDeleteInput,
   AttachmentUploadSigningKeyError,
@@ -612,9 +638,12 @@ export const WS_METHODS = {
 
   openbotRead: "openbot.read",
   openbotComputerViewCommand: "openbot.computerViewCommand",
+  openbotLiveVoiceCommand: "openbot.liveVoice.command",
   openbotBrowserViewCommand: "openbot.browserViewCommand",
   openbotAttention: "openbot.attention",
   openbotAttentionRespond: "openbot.attention.respond",
+  openbotContinuityStatus: "openbot.continuity.status",
+  openbotContinuityCommand: "openbot.continuity.command",
   openbotSubscribeChanges: "openbot.subscribeChanges",
   openbotMaintenanceStatus: "openbot.maintenance.status",
   openbotMaintenanceCommand: "openbot.maintenance.command",
@@ -624,9 +653,23 @@ export const WS_METHODS = {
   openbotUpstreamInstall: "openbot.upstream.install",
   openbotRuntimeActivate: "openbot.runtime.activate",
   openbotRuntimeRollback: "openbot.runtime.rollback",
+  openbotNewTaskStart: "openbot.newTaskStart",
+  openbotInstanceTransfer: "openbot.instanceTransfer",
+  openbotImportContext: "openbot.import.context",
+  openbotImportExecute: "openbot.import.execute",
+  openbotArchiveUpload: "openbot.files.archiveUpload",
   openbotFilesListWorkspace: "openbot.files.listWorkspace",
   openbotFilesSearch: "openbot.files.search",
   openbotFilesMaterialize: "openbot.files.materialize",
+  openbotQueueAttachmentContext: "openbot.files.queueAttachmentContext",
+  openbotQueueAttachmentSave: "openbot.files.queueAttachmentSave",
+  openbotQueueAttachmentResult: "openbot.files.queueAttachmentResult",
+  openbotPrivilegedScope: "openbot.privileged.scope",
+  openbotPrivilegedExecute: "openbot.privileged.execute",
+  openbotFilesContext: "openbot.files.context",
+  openbotFilesOriginalUpload: "openbot.files.originalUpload",
+  openbotFilesRecoverUpload: "openbot.files.recoverUpload",
+  openbotFilesCancelUpload: "openbot.files.cancelUpload",
   openbotFilesUploadDraft: "openbot.files.uploadDraft",
   openbotFilesListDrafts: "openbot.files.listDrafts",
   openbotFilesSendDraft: "openbot.files.sendDraft",
@@ -1516,7 +1559,7 @@ const WsAssetsPersistChatAttachmentsRpc = Rpc.make(WS_METHODS.assetsPersistChatA
 });
 
 const WsAttachmentsCreateUploadUrlRpc = Rpc.make(WS_METHODS.attachmentsCreateUploadUrl, {
-  payload: AttachmentCreateUploadUrlInput,
+  payload: AttachmentUploadRequest,
   success: AttachmentCreateUploadUrlResult,
   error: Schema.Union([AttachmentUploadSigningKeyError, EnvironmentAuthorizationError]),
 });
@@ -2058,6 +2101,21 @@ const WsOpenbotMaintenanceStatusRpc = Rpc.make(WS_METHODS.openbotMaintenanceStat
   success: OpenbotMaintenanceState,
   error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
 });
+const WsOpenbotContinuityStatusRpc = Rpc.make(WS_METHODS.openbotContinuityStatus, {
+  payload: Schema.Struct({}),
+  success: OpenbotContinuityStatus,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotContinuityCommandRpc = Rpc.make(WS_METHODS.openbotContinuityCommand, {
+  payload: OpenbotContinuityCommand,
+  success: OpenbotContinuityStatus,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotLiveVoiceCommandRpc = Rpc.make(WS_METHODS.openbotLiveVoiceCommand, {
+  payload: OpenbotLiveVoiceCommand,
+  success: OpenbotLiveVoiceResult,
+  error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
+});
 const WsOpenbotComputerViewCommandRpc = Rpc.make(WS_METHODS.openbotComputerViewCommand, {
   payload: OpenbotComputerViewCommand,
   success: Schema.NullOr(OpenbotComputerViewerGrant),
@@ -2119,6 +2177,31 @@ const WsOpenbotCodingPolicyDisableRpc = Rpc.make(WS_METHODS.openbotCodingPolicyD
   success: OpenbotCodingPolicyState,
   error: Schema.Union([OpenbotError, EnvironmentAuthorizationError]),
 });
+const WsOpenbotNewTaskStartRpc = Rpc.make(WS_METHODS.openbotNewTaskStart, {
+  payload: OpenbotNewTaskStartInput,
+  success: Schema.Json,
+  error: Schema.Union([OpenbotFilesError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotInstanceTransferRpc = Rpc.make(WS_METHODS.openbotInstanceTransfer, {
+  payload: OpenbotTransferCommand,
+  success: Schema.Json,
+  error: Schema.Union([OpenbotFilesError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotImportContextRpc = Rpc.make(WS_METHODS.openbotImportContext, {
+  payload: OpenbotImportContextInput,
+  success: OpenbotImportContext,
+  error: Schema.Union([OpenbotFilesError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotImportExecuteRpc = Rpc.make(WS_METHODS.openbotImportExecute, {
+  payload: OpenbotBoundImportRequest,
+  success: Schema.NullOr(ImportReceipt),
+  error: Schema.Union([OpenbotFilesError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotArchiveUploadRpc = Rpc.make(WS_METHODS.openbotArchiveUpload, {
+  payload: OpenbotArchiveUploadInput,
+  success: OpenbotArchiveUpload,
+  error: Schema.Union([OpenbotFilesError, EnvironmentAuthorizationError]),
+});
 const WsOpenbotFilesListWorkspaceRpc = Rpc.make(WS_METHODS.openbotFilesListWorkspace, {
   payload: OpenbotWorkspaceListInput,
   success: OpenbotWorkspaceDirectory,
@@ -2132,6 +2215,55 @@ const WsOpenbotFilesSearchRpc = Rpc.make(WS_METHODS.openbotFilesSearch, {
 const WsOpenbotFilesMaterializeRpc = Rpc.make(WS_METHODS.openbotFilesMaterialize, {
   payload: OpenbotFileMaterializeInput,
   success: OpenbotMaterializedFile,
+  error: Schema.Union([OpenbotFilesError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotQueueAttachmentContextRpc = Rpc.make(WS_METHODS.openbotQueueAttachmentContext, {
+  payload: Schema.Struct({ ...QueueAttachmentTarget.fields, principalId: Schema.String }),
+  success: QueueAttachmentContext,
+  error: Schema.Union([OpenbotFilesError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotQueueAttachmentSaveRpc = Rpc.make(WS_METHODS.openbotQueueAttachmentSave, {
+  payload: Schema.Struct({ ...QueueAttachmentEdit.fields, principalId: Schema.String }),
+  success: Schema.NullOr(QueueAttachmentReceipt),
+  error: Schema.Union([OpenbotFilesError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotQueueAttachmentResultRpc = Rpc.make(WS_METHODS.openbotQueueAttachmentResult, {
+  payload: Schema.Struct({ ...QueueAttachmentEdit.fields, principalId: Schema.String }),
+  success: Schema.NullOr(QueueAttachmentReceipt),
+  error: Schema.Union([OpenbotFilesError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotPrivilegedScopeRpc = Rpc.make(WS_METHODS.openbotPrivilegedScope, {
+  payload: OpenbotPrivilegedScopeInput,
+  success: OpenbotPrivilegedScope,
+  error: Schema.Union([OpenbotPrivilegedResponseError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotPrivilegedExecuteRpc = Rpc.make(WS_METHODS.openbotPrivilegedExecute, {
+  payload: OpenbotPrivilegedExecuteInput,
+  success: PrivilegedResponseResult,
+  error: Schema.Union([OpenbotPrivilegedResponseError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotFilesContextRpc = Rpc.make(WS_METHODS.openbotFilesContext, {
+  payload: OpenbotImportContextInput,
+  success: Schema.Struct({ hostId: Schema.String, principalId: Schema.String }),
+  error: Schema.Union([OpenbotFilesError, EnvironmentAuthorizationError]),
+});
+const OpenbotOriginalUploadResult = Schema.Struct({
+  state: Schema.Literals(["absent", "released", "ready"]),
+  draft: Schema.NullOr(OpenbotDraftFile),
+});
+const WsOpenbotFilesOriginalUploadRpc = Rpc.make(WS_METHODS.openbotFilesOriginalUpload, {
+  payload: Schema.Struct({ ...OpenbotOriginalUploadInput.fields, principalId: Schema.String }),
+  success: OpenbotOriginalUploadResult,
+  error: Schema.Union([OpenbotFilesError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotFilesRecoverUploadRpc = Rpc.make(WS_METHODS.openbotFilesRecoverUpload, {
+  payload: Schema.Struct({ ...OpenbotOriginalUploadIdentity.fields, principalId: Schema.String }),
+  success: OpenbotOriginalUploadResult,
+  error: Schema.Union([OpenbotFilesError, EnvironmentAuthorizationError]),
+});
+const WsOpenbotFilesCancelUploadRpc = Rpc.make(WS_METHODS.openbotFilesCancelUpload, {
+  payload: Schema.Struct({ ...OpenbotOriginalUploadIdentity.fields, principalId: Schema.String }),
+  success: OpenbotOriginalUploadResult,
   error: Schema.Union([OpenbotFilesError, EnvironmentAuthorizationError]),
 });
 const WsOpenbotFilesUploadDraftRpc = Rpc.make(WS_METHODS.openbotFilesUploadDraft, {
@@ -2395,10 +2527,13 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerSignalProcessRpc,
   WsOpenbotReadRpc,
   WsOpenbotAttentionRpc,
+  WsOpenbotContinuityStatusRpc,
+  WsOpenbotContinuityCommandRpc,
   WsOpenbotAttentionRespondRpc,
   WsOpenbotSubscribeChangesRpc,
   WsOpenbotMaintenanceStatusRpc,
   WsOpenbotComputerViewCommandRpc,
+  WsOpenbotLiveVoiceCommandRpc,
   WsOpenbotBrowserViewCommandRpc,
   WsOpenbotMaintenanceCommandRpc,
   WsOpenbotUpstreamStatusRpc,
@@ -2407,9 +2542,23 @@ export const WsRpcGroup = RpcGroup.make(
   WsOpenbotUpstreamInstallRpc,
   WsOpenbotRuntimeActivateRpc,
   WsOpenbotRuntimeRollbackRpc,
+  WsOpenbotNewTaskStartRpc,
+  WsOpenbotInstanceTransferRpc,
+  WsOpenbotImportContextRpc,
+  WsOpenbotImportExecuteRpc,
+  WsOpenbotArchiveUploadRpc,
   WsOpenbotFilesListWorkspaceRpc,
   WsOpenbotFilesSearchRpc,
   WsOpenbotFilesMaterializeRpc,
+  WsOpenbotQueueAttachmentContextRpc,
+  WsOpenbotQueueAttachmentSaveRpc,
+  WsOpenbotQueueAttachmentResultRpc,
+  WsOpenbotPrivilegedScopeRpc,
+  WsOpenbotPrivilegedExecuteRpc,
+  WsOpenbotFilesContextRpc,
+  WsOpenbotFilesOriginalUploadRpc,
+  WsOpenbotFilesRecoverUploadRpc,
+  WsOpenbotFilesCancelUploadRpc,
   WsOpenbotFilesUploadDraftRpc,
   WsOpenbotFilesListDraftsRpc,
   WsOpenbotFilesSendDraftRpc,

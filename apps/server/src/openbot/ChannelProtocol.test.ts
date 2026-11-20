@@ -1,10 +1,92 @@
 import { describe, expect, it } from "@effect/vitest";
+import {
+  AuthOrchestrationOperateScope,
+  AuthSettingsWriteScope,
+  WS_METHODS,
+  clientRpcRequiredScopes,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as ChannelProtocol from "./ChannelProtocol.ts";
 
 describe("released channel settings", () => {
+  it.effect("retains public tool trace spans when projecting a channel conversation", () =>
+    Effect.gen(function* () {
+      const trace = {
+        startedAt: "2026-11-13T21:21:17.229Z",
+        endedAt: "2026-11-13T21:21:23.300Z",
+        steps: [
+          {
+            id: "exec-proof",
+            kind: "tool",
+            command: "date -u",
+            endedAt: "2026-11-13T21:21:20.793Z",
+          },
+        ],
+      };
+      const page = {
+        channel: {
+          id: "channel",
+          name: "Tools",
+          title: "",
+          instructions: "",
+          members: [],
+          leadAgentId: null,
+          archived: false,
+          revision: 1,
+          createdAt: "now",
+        },
+        messages: [
+          {
+            id: "answer",
+            channelId: "channel",
+            sequence: 1,
+            author: { kind: "agent", id: "agent", name: "Writer" },
+            taskId: null,
+            superseded: false,
+            message: {
+              id: "answer",
+              author: "assistant",
+              text: "Finished",
+              status: "completed",
+              createdAt: "now",
+              trace,
+            },
+          },
+        ],
+        tasks: [],
+        throughSequence: 1,
+        olderCursor: null,
+      };
+      expect(yield* ChannelProtocol.project("channel.read", page)).toMatchObject({
+        messages: [{ message: { trace } }],
+      });
+    }),
+  );
   it.effect("uses the frozen memory routes and projects bounded public records", () =>
     Effect.gen(function* () {
+      expect(
+        ChannelProtocol.route({
+          operation: "channel.message.delete",
+          channelId: "channel",
+          messageId: "msg-42",
+        }),
+      ).toEqual({
+        method: "POST",
+        path: "/v1/channels/messages/delete",
+        body: { channelId: "channel", messageId: "msg-42" },
+        channelProjection: "channel.message.delete",
+      });
+      expect(yield* ChannelProtocol.project("channel.message.delete", {})).toBeNull();
+      expect(
+        clientRpcRequiredScopes(WS_METHODS.openbotAdminToHost, {
+          hostId: "host-1",
+          request: {
+            operation: "channel.message.delete",
+            channelId: "channel",
+            messageId: "msg-42",
+          },
+        }),
+      ).toEqual([AuthSettingsWriteScope, AuthOrchestrationOperateScope]);
       expect(
         ChannelProtocol.route({
           operation: "channel.memory.create",

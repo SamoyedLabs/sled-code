@@ -127,6 +127,14 @@ it("keeps selection separate from acceptance and rejects cross-host/task or phan
   expect(acceptedDraft(scope, { kind: "main" }, "draft", sent)).toBe(false);
   expect(acceptedDraft(scope, target, "other-draft", sent)).toBe(false);
   expect(acceptedDraft(scope, target, "draft", { ...sent, messageId: null })).toBe(false);
+  // The channel command confirms the target without a queued conversation message identifier.
+  const channel = { kind: "channel" as const, channelId: "group" };
+  const channelSent = { ...draft, target: channel, state: "sent" as const };
+  expect(acceptedDraft(scope, channel, "draft", channelSent)).toBe(true);
+  expect(acceptedDraft(scope, { ...channel, channelId: "other" }, "draft", channelSent)).toBe(
+    false,
+  );
+  expect(acceptedDraft(scope, channel, "draft", { ...channelSent, state: "sending" })).toBe(false);
 });
 
 it("preserves ordinary failed form values but discards secret buffers after every attempt", () => {
@@ -151,4 +159,56 @@ it("preserves ordinary failed form values but discards secret buffers after ever
   expect(blockValuesAfterAttempt(message.uiBlock, { selected: ["two"] }, false)).toEqual({
     selected: ["two"],
   });
+});
+it("uses the released reply fallback for quick reply text, without unlocking privileged blocks", () => {
+  const quick = {
+    ...message.uiBlock,
+    spec: { type: "quick_replies", allowText: true, options: [{ id: "yes", label: "Yes" }] },
+  };
+  const textCommand = { ...command, response: { actionId: "_text", text: "A different answer" } };
+  expect(
+    blockAnswers({ ...snapshot, messages: [{ ...message, uiBlock: quick }] }, textCommand),
+  ).toEqual({ reply: ["A different answer"] });
+  expect(blockAnswers(snapshot, textCommand)).toBeNull();
+  expect(
+    blockAnswers(
+      { ...snapshot, activeTurnId: "other", messages: [{ ...message, uiBlock: quick }] },
+      textCommand,
+    ),
+  ).toBeNull();
+  expect(
+    blockAnswers(
+      {
+        ...snapshot,
+        messages: [{ ...message, uiBlock: { ...quick, state: { status: "closed" } } }],
+      },
+      textCommand,
+    ),
+  ).toBeNull();
+});
+
+it("never converts a secret form response to an ordinary prompt answer", () => {
+  const secretMessage = {
+    ...message,
+    uiBlock: {
+      version: 1,
+      blockId: "block",
+      state: { status: "pending" },
+      spec: {
+        type: "form",
+        title: "Credentials",
+        fields: [{ id: "password", kind: "text", label: "Password", secret: true }],
+        actions: [{ id: "submit", label: "Submit" }],
+      },
+    },
+  };
+  expect(
+    blockAnswers(
+      { ...snapshot, messages: [secretMessage] },
+      {
+        ...command,
+        response: { actionId: "submit", values: { password: "never-log-this" } },
+      },
+    ),
+  ).toBeNull();
 });

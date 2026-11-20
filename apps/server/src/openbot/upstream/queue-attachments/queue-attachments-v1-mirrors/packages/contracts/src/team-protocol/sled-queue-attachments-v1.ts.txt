@@ -1,0 +1,116 @@
+import { fields, identifier, nullable, string, count, oneOf, list, type OptionalRouteCodec } from "./admin-wire";
+import { isDynamicRecord } from "../runtime-values";
+import { decodeOriginalUpload } from "./sled-files-upload-v1";
+const target = {
+  environmentId: identifier,
+  hostId: identifier,
+  agentId: identifier,
+  threadId: identifier,
+  taskId: nullable(identifier),
+  deliveryId: identifier,
+  editId: identifier,
+};
+const hash = (value: unknown) => {
+  if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value)) throw new Error("Invalid revision");
+  return value;
+};
+const id = (value: unknown): string => {
+  identifier(value);
+  if (typeof value !== "string") throw new Error("Invalid identifier");
+  return value;
+};
+const upload = (value: unknown) => {
+  if (
+    !isDynamicRecord(value) ||
+    Object.keys(value).some((k) => k !== "identity" && k !== "draftId") ||
+    !isDynamicRecord(value.identity) ||
+    "environmentId" in value.identity
+  )
+    throw new Error("Invalid draft");
+  const { environmentId: _bound, ...identity } = decodeOriginalUpload(
+    { ...value.identity, environmentId: "bound-by-route" },
+    false,
+  );
+  return { identity: { ...identity }, draftId: id(value.draftId) };
+};
+const editKeys = {
+  ...target,
+  expectedRevision: hash,
+  text: string(100000),
+  keepAttachmentIds: list(identifier, 10),
+  uploads: list((v) => ({ ...upload(v), identity: { ...upload(v).identity } }), 10),
+};
+export function decodeQueueAttachmentContext(value: unknown) {
+  if (!isDynamicRecord(value) || Object.keys(value).some((k) => !Object.hasOwn(target, k)))
+    throw new Error("Invalid queue context");
+  return targetValue(value);
+}
+function targetValue(value: unknown) {
+  if (!isDynamicRecord(value)) throw new Error("Invalid queue target");
+  return {
+    environmentId: id(value.environmentId),
+    hostId: id(value.hostId),
+    agentId: id(value.agentId),
+    threadId: id(value.threadId),
+    taskId: value.taskId === null ? null : id(value.taskId),
+    deliveryId: id(value.deliveryId),
+    editId: id(value.editId),
+  };
+}
+export function decodeQueueAttachmentEdit(value: unknown) {
+  if (
+    !isDynamicRecord(value) ||
+    Object.keys(value).some((k) => !Object.hasOwn(editKeys, k)) ||
+    typeof value.text !== "string" ||
+    value.text.length > 100000 ||
+    !Array.isArray(value.keepAttachmentIds) ||
+    !Array.isArray(value.uploads)
+  )
+    throw new Error("Invalid queue edit");
+  if (!value.uploads.length || value.uploads.length + value.keepAttachmentIds.length > 10)
+    throw new Error("Invalid attachment count");
+  return {
+    ...targetValue(value),
+    expectedRevision: hash(value.expectedRevision),
+    text: value.text,
+    keepAttachmentIds: value.keepAttachmentIds.map(id),
+    uploads: value.uploads.map(upload),
+  };
+}
+const attachment = fields({
+  id: identifier,
+  name: string(255),
+  size: count,
+  kind: oneOf("image", "file"),
+  mimeType: string(255),
+  previewKind: oneOf("image", "pdf", "text", "none"),
+});
+const receipt = fields({
+  requestHash: hash,
+  deliveryId: identifier,
+  editId: identifier,
+  expectedRevision: hash,
+  messageId: identifier,
+  attachments: list(attachment, 10),
+});
+export const SLED_QUEUE_ATTACHMENTS_CAPABILITY = "sled-queue-attachments-v1";
+export const SLED_QUEUE_ATTACHMENTS_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map<
+  string,
+  OptionalRouteCodec
+>([
+  [
+    "/v1/sled/queue-attachments/context",
+    {
+      request: decodeQueueAttachmentContext,
+      response: (_status, value) =>
+        fields({ expectedRevision: hash, text: string(100000), keepAttachmentIds: list(identifier, 10) })(value),
+    },
+  ],
+  ...["save", "result"].map(
+    (action) =>
+      [
+        `/v1/sled/queue-attachments/${action}`,
+        { request: decodeQueueAttachmentEdit, response: (_status: number, value: unknown) => nullable(receipt)(value) },
+      ] as const,
+  ),
+]);

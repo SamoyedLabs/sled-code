@@ -199,3 +199,10 @@ export const relayDpopProofs = pgTable(
     index("idx_relay_dpop_proofs_expires_at").on(table.expiresAt),
   ],
 );
+
+export const relayBotAttentionReceipts = pgTable("relay_bot_attention_receipts", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  payloadJson: text("payload_json").notNull(),
+  claimedAt: varchar("claimed_at", { length: 64 }).notNull(),
+  deliveredAt: varchar("delivered_at", { length: 64 }),
+});

@@ -31,6 +31,8 @@ import { OtlpTracer, OtlpSerialization } from "effect/observability";
 
 import * as ServerConfig from "./config.ts";
 import { ASSET_ROUTE_PREFIX, readMcpAppHtml, resolveAsset } from "./assets/AssetAccess.ts";
+import { botLibraryImageResponse } from "./assets/BotLibraryImage.ts";
+import { Integration as OpenbotIntegration } from "./openbot/Integration.ts";
 import { sourceControlMediaResponse } from "./assets/sourceControlMediaResponse.ts";
 import { statMediaFile, streamMediaFile, type OpenMediaFile } from "./assets/MediaFile.ts";
 import {
@@ -403,7 +405,7 @@ const layerUntracedRequests = Layer.succeed(HttpMiddleware.TracerDisabledWhen)((
 
 export const withUntracedRequests = Layer.provide(layerUntracedRequests);
 
-export const layerAssetRoute = HttpRouter.add(
+const assetRoute = (openbot: OpenbotIntegration["Service"]) => HttpRouter.add(
   "GET",
   `${ASSET_ROUTE_PREFIX}/*`,
   Effect.gen(function* () {
@@ -432,6 +434,8 @@ export const layerAssetRoute = HttpRouter.add(
         headers: { "cache-control": "private, max-age=3600", "x-content-type-options": "nosniff" },
       });
     }
+    if (asset.kind === "bot-library-image")
+      return yield* botLibraryImageResponse(asset).pipe(Effect.provideService(OpenbotIntegration, openbot));
     if (asset.kind === "source-control-media") {
       return yield* sourceControlMediaResponse(asset, request.headers).pipe(
         Effect.tapError((cause) =>
@@ -460,6 +464,8 @@ export const layerAssetRoute = HttpRouter.add(
     );
   }),
 );
+
+export const layerAssetRoute = Layer.unwrap(OpenbotIntegration.pipe(Effect.map(assetRoute)));
 
 export const layerAttachmentUploadRoute = HttpRouter.add(
   "POST",

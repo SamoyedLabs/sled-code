@@ -67,7 +67,7 @@ export const routeLayer = HttpRouter.use((router) =>
             status: 204,
             headers: {
               ...headers,
-              "set-cookie": `sled_computer=${cookie}; HttpOnly; ${url.value.protocol === "https:" ? "SameSite=None; Secure" : "SameSite=Strict"}; Path=${publicBase}/; Max-Age=900`,
+              "set-cookie": `sled_computer=${cookie}; HttpOnly; ${url.value.protocol === "https:" || frameOrigin === "t3code://app" || frameOrigin === "t3code-dev://app" ? "SameSite=None; Secure; Partitioned" : "SameSite=Strict"}; Path=${publicBase}/; Max-Age=900`,
             },
           });
         }

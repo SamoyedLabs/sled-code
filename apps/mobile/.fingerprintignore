@@ -8,6 +8,9 @@ ios/
 dist/
 web-build/
 
+# Pinned native download. The podspec and its SHA-256 remain fingerprint inputs.
+modules/openbot-speech/ios/vendor/**
+
 # Test files
 **/*.test.ts
 **/*.test.tsx

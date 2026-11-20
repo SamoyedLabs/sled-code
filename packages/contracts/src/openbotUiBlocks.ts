@@ -850,7 +850,9 @@ export function uiBlockAnswersFromResponse(
   response: UiBlockResponse,
 ): Record<string, string[]> {
   if (response.actionId === UI_BLOCK_TEXT_ACTION_ID) {
-    throw new Error("Free-text fallback is unavailable in this integration.");
+    if (spec.type !== "quick_replies")
+      throw new Error("Free-text fallback is unavailable for this block.");
+    return { [UI_QUICK_REPLIES_QUESTION_ID]: [response.text ?? ""] };
   }
   const values = response.values ?? {};
   switch (spec.type) {

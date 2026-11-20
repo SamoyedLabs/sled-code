@@ -1,0 +1,52 @@
+{
+  "capability": "sled-files-upload-recovery-v1",
+  "base": "files-identity-v2 applied; incremental delta, preserve v2",
+  "patchSha256": "91bf75d4cb85e6b2c86307d0e754c6771ff2a15925989961eb6c7a0423cae6fd",
+  "files": [
+    {
+      "path": "src/backend/mailbox-store.ts",
+      "baseSha256": "bfd883c1d84708f67e3d45160d4dd3bc6951df05a7555249af3c4dc478551382",
+      "sha256": "60a85e9a35dc239702d828d3b393b1f13c3ee3b7d62732eed68f476f179e2ec3"
+    },
+    {
+      "path": "src/backend/agent-service.ts",
+      "baseSha256": "dd6fa03cdf5ce4705740c0e57222adaa6d820d15a7ac6657418231999e9a1cd7",
+      "sha256": "8d3a5919450300c405a0245c7e100a713c4e81a3a8fc469d74cc12eeb788356e"
+    },
+    {
+      "path": "packages/contracts/src/ipc-conversations.ts",
+      "baseSha256": "8f53ec5129fa025ec175f20b559ce59850eb8068b077571d6fd2e612ccd6c1c8",
+      "sha256": "85f54cd1b4675505c22efaa333f676dd918112d23315585d8c5b5f5087269248"
+    },
+    {
+      "path": "src/main/team-api/route-sled-files-identity.ts",
+      "baseSha256": "174e63d8ffba0be5f0fec44972c3f67e0a3a2eafc0cb9ef52cd7f0f28a7d6c2d",
+      "sha256": "28530fb6c55d55255ab36ca7f873df5628aaba806f2712319b44c9e850a43243"
+    },
+    {
+      "path": "packages/contracts/src/team-protocol/sled-files-identity-v1.ts",
+      "baseSha256": "5e4f0b01e265dd1338f03f15ae8cb474207c421cfb466c9eb82770e84330914d",
+      "sha256": "3e2eaf21881eee977152b6b60bc6cc3cacca9c0e00f62aef0b22c86bd44d162b"
+    },
+    {
+      "path": "src/main/team-api/files-principal-binding.ts",
+      "baseSha256": null,
+      "sha256": "ee0b2ea35a43206754246ed2edd9ca82e655a0855924e0a106330e571635a1d9"
+    },
+    {
+      "path": "src/main/team-api/route-sled-files-upload.ts",
+      "baseSha256": null,
+      "sha256": "99133cbe4f7aeb367ccddd340669187b2900404c384101a5dfb41c54c5bbfdff"
+    },
+    {
+      "path": "packages/contracts/src/team-protocol/sled-files-upload-v1.ts",
+      "baseSha256": null,
+      "sha256": "66ca3b0638024018a70919dbf95ac294283b34a22a490cfa4adc75b7b3f77b81"
+    },
+    {
+      "path": "src/backend/original-upload.test.ts",
+      "baseSha256": null,
+      "sha256": "22e7397b4fd85c8187298e8dec2ee4f19ecbe468a110ae17b25ceaf41783e6ab"
+    }
+  ]
+}

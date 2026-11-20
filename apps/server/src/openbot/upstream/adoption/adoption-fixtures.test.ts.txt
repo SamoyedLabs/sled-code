@@ -1,0 +1,169 @@
+import { IncomingMessage, ServerResponse } from "node:http";
+import { Socket } from "node:net";
+import { routeAgentAdoption } from "./team-api/route-agent-adoption";
+import { randomUUID } from "node:crypto";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Effect } from "effect";
+import { afterEach, expect, it, vi } from "vitest";
+import { AgentStore } from "../backend/agent-store";
+import { OpenBotDatabase } from "../backend/openbot-database";
+import { AgentAdoptionService } from "./agent-adoption-service";
+import { AgentTemplateService } from "./agent-template-service";
+import { AgentMarketplaceService } from "./agent-marketplace-service";
+import { CentralAuthOperationError } from "./central-auth-effects";
+import { LocalSkillLibrary } from "./local-skill-library";
+const roots: string[] = [];
+afterEach(async () => { vi.restoreAllMocks(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
+const sourceId = "abcdefghijklmnopqrstuv";
+const detail = { id: sourceId, name: "Homework", title: "School", description: "Review assignments", avatarSeed: "school", avatarHue: null, skills: [], routines: [], avatarUrl: null, creatorName: "Student", updatedAt: "2026-11-04T18:00:00Z" };
+async function setup(existingRoot?: string) {
+  const root = existingRoot ?? await mkdtemp(join(tmpdir(), "sled-adoption-"));
+  if (!existingRoot) roots.push(root);
+  const database = new OpenBotDatabase(join(root, "data"));
+  const store = new AgentStore(join(root, "data"), join(root, "home"), database);
+  await Effect.runPromise(store.initialize());
+  let signedIn = true;
+  let marketVersion = "version-1";
+  const auth = {
+    requestAuthorized<T>(path: string, _init: RequestInit, decoder: (input: unknown) => T) {
+      if (!signedIn) return Effect.fail(new CentralAuthOperationError({ cause: new Error("private account credential") }));
+      return Effect.sync(() => decoder(path.endsWith("/install") ? { installed: true } : path.endsWith("/mine") ? [] : path.includes("/marketplace/") ? { ...detail, versionId: marketVersion, version: marketVersion === "version-1" ? 1 : 2, installs: 0, featured: false, skillCount: 0, routineCount: 0, activeRoutineCount: 0 } : detail));
+    },
+    downloadAuthorized: () => Effect.succeed(new Uint8Array()), resolveApiUrl: (path: string) => `https://openbot.run${path}`,
+  };
+  const library = new LocalSkillLibrary(join(root, "library"), () => store.list());
+  const create = vi.fn((input: Parameters<typeof store.createAgent>[0], operationId?: string) => store.createAgent(input, operationId).pipe(Effect.orDie));
+  const templates = new AgentTemplateService(auth, {
+    listAgents: () => store.list(), listRoutines: () => [], resolveAvatar: () => null,
+    createAgentProfile: create, setAvatar: () => Effect.die("Unexpected avatar"),
+    createRoutine: () => { throw new Error("Unexpected routine"); },
+    deleteAgent: (id: string) => store.deleteAgent(id).pipe(Effect.asVoid, Effect.orDie),
+  }, { listTemplateSkills: () => Effect.succeed([]), installVersion: () => Effect.succeed({}), library: () => library, installLocal: () => Effect.succeed({}) });
+  const marketplace = new AgentMarketplaceService(auth, {
+    listAgents: () => store.list(), listRoutines: () => [], resolveAvatar: () => null, createAgentProfile: create,
+    updateAgent: input => store.updateAgent(input).pipe(Effect.orDie), setAvatar: (id, image) => store.setAvatar(id, image).pipe(Effect.orDie),
+    setMarketplaceSource: (id, source) => store.setMarketplaceSource(id, source),
+    createRoutine: () => { throw new Error("Unexpected routine"); }, deleteRoutine: () => Effect.void,
+    deleteAgent: id => store.deleteAgent(id).pipe(Effect.asVoid, Effect.orDie),
+  }, { listPublishable: () => Effect.succeed([]), installVersion: () => Effect.succeed({}), uninstall: () => Effect.void });
+  const adoption = new AgentAdoptionService(database, templates, marketplace);
+  const input = { operationId: randomUUID(), kind: "template" as const, sourceId, timezone: "America/Chicago", expectedRevision: detail.updatedAt };
+  return { root, database, store, templates, create, adoption, marketplace, input, setMarketVersion: (version: string) => { marketVersion = version; }, signOut: () => { signedIn = false; } };
+}
+it("binds the actual template producer to a durable exact-result receipt; duplicate requests and restart create one agent", async () => {
+  const s = await setup();
+  const result = await Effect.runPromise(s.adoption.install("owner", s.input));
+  expect(result.state).toBe("complete"); expect(s.store.list()).toHaveLength(1);
+  expect(s.create.mock.calls[0]?.[1]).toMatch(/^[\da-f-]{36}$/u);
+  expect(await Effect.runPromise(s.adoption.install("owner", s.input))).toEqual(result);
+  expect(s.create).toHaveBeenCalledTimes(1);
+  s.database.close();
+  const restarted = await setup(s.root);
+  expect(restarted.store.list().map(a => a.id)).toEqual([result.agentId]);
+  expect(await Effect.runPromise(restarted.adoption.install("owner", s.input))).toEqual(result);
+  expect(restarted.create).not.toHaveBeenCalled();
+  expect(await Effect.runPromise(restarted.adoption.status("different-member", s.input.operationId))).toBeNull();
+  expect(await Effect.runPromise(restarted.adoption.list("owner"))).toEqual([result]);
+  restarted.database.close();
+});
+it("recovers the producer-to-receipt crash gap and refuses to replay the interrupted identity", async () => {
+  const s = await setup(); const dispatch = s.database.dispatch.bind(s.database);
+  vi.spyOn(s.database, "dispatch").mockImplementation((id, events, project) => { if (id.startsWith("agent-adoption:")) { const agent = s.store.list()[0]!; writeFileSync(join(agent.workspacePath, "homework.md"), "Useful work after creation"); throw new Error("simulated disk interruption before receipt"); } return dispatch(id, events, project); });
+  await expect(Effect.runPromise(s.adoption.install("owner", s.input))).rejects.toThrow();
+  expect(s.store.list()).toHaveLength(1); s.database.close();
+  const restarted = await setup(s.root);
+  expect(restarted.store.list()).toHaveLength(1);
+  const retained = restarted.store.list()[0]!;
+  expect(await readFile(join(retained.workspacePath, "homework.md"), "utf8")).toBe("Useful work after creation");
+  const result = await Effect.runPromise(restarted.adoption.install("owner", s.input));
+  expect(result.state).toBe("interrupted"); expect(result.agentId).toBe(retained.id); expect(restarted.create).not.toHaveBeenCalled();
+  restarted.database.close();
+});
+it("rejects stale source reviews and timezone conflicts before creating; a reused operation cannot change payload", async () => {
+  const s = await setup();
+  expect((await Effect.runPromise(s.adoption.install("owner", { ...s.input, expectedRevision: "stale" }))).state).toBe("failed");
+  expect(s.create).not.toHaveBeenCalled();
+  await expect(Effect.runPromise(s.adoption.install("owner", s.input))).rejects.toThrow();
+  await expect(Effect.runPromise(s.adoption.install("owner", { ...s.input, operationId: randomUUID(), timezone: "invalid" }))).rejects.toThrow();
+  expect(s.store.list()).toHaveLength(0); s.database.close();
+});
+it("distinguishes authoritative unpublished from unavailable host account without exposing account values", async () => {
+  const s = await setup(); expect(await Effect.runPromise(s.templates.publicationStatus("unused"))).toBeNull();
+  s.signOut(); await expect(Effect.runPromise(s.templates.publicationStatus("unused"))).rejects.toThrow();
+  const result = await Effect.runPromise(s.adoption.install("owner", s.input)); expect(result.state).toBe("failed");
+  expect(JSON.stringify(result)).not.toContain("credential"); expect(s.create).not.toHaveBeenCalled(); s.database.close();
+});
+
+it("updates the actual marketplace producer once at the reviewed version and recovers the same target after restart", async () => {
+  const s = await setup();
+  const first = await Effect.runPromise(s.adoption.install("owner", { ...s.input, kind: "marketplace", expectedRevision: "version-1" }));
+  expect(first.state).toBe("complete"); expect(s.store.list()).toHaveLength(1);
+  const agentId = first.agentId!;
+  const workspace = s.store.list()[0]!.workspacePath;
+  writeFileSync(join(workspace, "homework.md"), "Keep my work during update");
+  s.setMarketVersion("version-2");
+  const update = { ...s.input, operationId: randomUUID(), kind: "marketplace" as const, expectedRevision: "version-2", agentId };
+  const outcome = await Effect.runPromise(s.adoption.install("owner", update));
+  expect(outcome).toMatchObject({ state: "complete", agentId });
+  expect(s.store.list()[0]?.marketplaceSource?.versionId).toBe("version-2");
+  expect(s.create).toHaveBeenCalledTimes(1);
+  expect(await Effect.runPromise(s.adoption.install("owner", update))).toEqual(outcome);
+  await expect(Effect.runPromise(s.adoption.install("owner", { ...update, agentId: "another-agent" }))).rejects.toThrow();
+  s.database.close();
+  const restarted = await setup(s.root);
+  expect(await Effect.runPromise(restarted.adoption.install("owner", update))).toEqual(outcome);
+  expect(restarted.store.list()).toHaveLength(1); expect(restarted.create).not.toHaveBeenCalled();
+  expect(await readFile(join(workspace, "homework.md"), "utf8")).toBe("Keep my work during update");
+  // A stale review cannot change the existing agent, and its retained identity is explicit.
+  const stale = await Effect.runPromise(restarted.adoption.install("owner", { ...update, operationId: randomUUID(), expectedRevision: "version-2" }));
+  expect(stale).toMatchObject({ state: "failed", agentId });
+  expect(restarted.store.list()[0]?.marketplaceSource?.versionId).toBe("version-2");
+  restarted.database.close();
+});
+
+it("retains the updated destination when the process loses its receipt commit and never repeats the update", async () => {
+  const s = await setup();
+  const installed = await Effect.runPromise(s.adoption.install("owner", { ...s.input, kind: "marketplace", expectedRevision: "version-1" }));
+  const agentId = installed.agentId!;
+  s.setMarketVersion("version-2");
+  const update = { ...s.input, operationId: randomUUID(), kind: "marketplace" as const, expectedRevision: "version-2", agentId };
+  const dispatch = s.database.dispatch.bind(s.database);
+  vi.spyOn(s.database, "dispatch").mockImplementation((id, events, project) => {
+    if (id.startsWith("agent-adoption:")) throw new Error("lost update receipt commit");
+    return dispatch(id, events, project);
+  });
+  await expect(Effect.runPromise(s.adoption.install("owner", update))).rejects.toThrow();
+  expect(s.store.list()[0]?.marketplaceSource?.versionId).toBe("version-2");
+  s.database.close();
+  const restarted = await setup(s.root);
+  // The account fixture advertises version-1 after restart. Repeating the producer would downgrade.
+  const outcome = await Effect.runPromise(restarted.adoption.install("owner", update));
+  expect(outcome).toMatchObject({ state: "interrupted", agentId });
+  expect(restarted.store.list()).toHaveLength(1);
+  expect(restarted.store.list()[0]?.marketplaceSource?.versionId).toBe("version-2");
+  expect(restarted.create).not.toHaveBeenCalled();
+  restarted.database.close();
+});
+
+it("does not reveal a now-hidden agent by replaying its original creation request", async () => {
+  const s = await setup();
+  const installed = await Effect.runPromise(s.adoption.install("owner", s.input));
+  const request = new IncomingMessage(new Socket());
+  request.method = "POST";
+  request.url = "/v1/admin/agents/adoption/install";
+  request.push(Buffer.from(JSON.stringify(s.input))); request.push(null);
+  const json = vi.fn(() => "handled" as const);
+  await expect(routeAgentAdoption({ request, response: new ServerResponse(request), method: "POST",
+    url: new URL(request.url, "http://fixture.invalid"), protocol: 3,
+    capabilities: new Set(["agent-adoption-v1"]),
+    member: { id: "owner", username: "owner", email: null, name: null, role: "owner", createdAt: "2026-11-04T00:00:00Z", disabled: false },
+    token: "fixture", sessionId: "fixture", sessionExpiresAt: "2026-11-05T00:00:00Z", agentLevel: () => "manage",
+    json, empty: () => "handled",
+  }, { adoption: s.adoption }, () => false, new Set([installed.agentId!]))).rejects.toMatchObject({ status: 404 });
+  expect(json).not.toHaveBeenCalled();
+  expect(s.create).toHaveBeenCalledTimes(1);
+  s.database.close(); request.destroy();
+});

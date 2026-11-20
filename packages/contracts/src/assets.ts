@@ -8,6 +8,7 @@ import {
 } from "./chatAttachment.ts";
 import { ProjectFaviconPath } from "./project.ts";
 import { ToolActivityNativeAppReference } from "./providerRuntime.ts";
+import { OPENBOT_MAX_FILE_BYTES } from "./openbotFiles.ts";
 
 const ASSET_PATH_MAX_LENGTH = 1024;
 
@@ -38,6 +39,11 @@ export const AssetResource = Schema.Union([
     /** Defaults to download; viewers may request inline after checking the type is safe. */
     disposition: Schema.optionalKey(Schema.Literals(["inline", "attachment"])),
     renderIntent: Schema.optionalKey(Schema.Literal("mcp-app")),
+  }),
+  Schema.TaggedStruct("bot-library-image", {
+    hostId: TrimmedNonEmptyString.check(Schema.isMaxLength(256)),
+    fileId: TrimmedNonEmptyString.check(Schema.isMaxLength(256)),
+    conversationId: Schema.optionalKey(TrimmedNonEmptyString.check(Schema.isMaxLength(256))),
   }),
   Schema.TaggedStruct("tool-output-image", {
     threadId: ThreadId,
@@ -112,6 +118,21 @@ export const AttachmentCreateUploadUrlInput = Schema.Union([
   FileAttachmentCreateUploadUrlInput,
 ]);
 export type AttachmentCreateUploadUrlInput = typeof AttachmentCreateUploadUrlInput.Type;
+
+const OpenbotLargeFileUploadInput = Schema.Struct({
+  ...FileAttachmentCreateUploadUrlInput.fields,
+  purpose: Schema.Literal("openbot"),
+  sizeBytes: NonNegativeInt.check(
+    Schema.isGreaterThan(PROVIDER_SEND_TURN_MAX_FILE_BYTES),
+    Schema.isLessThanOrEqualTo(OPENBOT_MAX_FILE_BYTES),
+  ),
+});
+
+export const AttachmentUploadRequest = Schema.Union([
+  OpenbotLargeFileUploadInput,
+  AttachmentCreateUploadUrlInput,
+]);
+export type AttachmentUploadRequest = typeof AttachmentUploadRequest.Type;
 
 export const AttachmentCreateUploadUrlResult = Schema.Struct({
   attachmentId: TrimmedNonEmptyString.check(Schema.isMaxLength(256)),

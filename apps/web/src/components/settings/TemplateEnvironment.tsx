@@ -1,4 +1,5 @@
-import { decodeTemplateAgents } from "@t3tools/client-runtime/openbot/templates";
+import { templateIsRead } from "@t3tools/contracts/openbot-templates";
+import { decodeTemplateAgents, templateFeatures } from "@t3tools/client-runtime/openbot/templates";
 import { useEnvironmentQuery } from "../../state/query";
 import { useContext } from "react";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
@@ -32,6 +33,8 @@ export function TemplateEnvironment({
       input: { hostId, request: { operation: "agent.list" } },
     }),
   );
+  const compatibilityQuery = useEnvironmentQuery(openbot.readFromHost({ environmentId, input: { hostId, request: { operation: "compatibility.read" } } }));
+  const features = templateFeatures(compatibilityQuery.data);
   const agents = decodeTemplateAgents(agentsQuery.data);
   const read = useAtomCommand(openbot.templateRead, { reportFailure: false });
   const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
@@ -40,20 +43,18 @@ export function TemplateEnvironment({
       scopeKey={JSON.stringify([environmentId, hostId])}
       hostLabel={hostId}
       agents={agents}
+      reviewAvailable={features.reviewAvailable}
+      adoptionAvailable={features.adoptionAvailable}
       actions={{
         can: (request) =>
-          request.operation !== "templates.preview" &&
-          request.operation !== "templates.detail" &&
-          request.operation !== "templates.listing"
+          !templateIsRead(request)
             ? canAdmin &&
               registry.get(openbot.adminToHost.permissionAtom(environmentId, { hostId, request }))
             : canRead &&
               registry.get(openbot.templateRead.permissionAtom(environmentId, { hostId, request })),
         execute: async (request) => {
           const result =
-            request.operation !== "templates.preview" &&
-            request.operation !== "templates.detail" &&
-            request.operation !== "templates.listing"
+            !templateIsRead(request)
               ? await admin({ environmentId, input: { hostId, request } })
               : await read({ environmentId, input: { hostId, request } });
           if (result._tag === "Failure") throw new Error("Host template request failed");

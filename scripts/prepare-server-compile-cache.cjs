@@ -3,6 +3,7 @@ const { spawnSync } = require("node:child_process");
 const path = require("node:path");
 const fs = require("node:fs");
 const os = require("node:os");
+const restoreBundledRuntime = require("./restore-bundled-runtime.cjs");
 
 // afterPack runs before signing and installer creation, against the final ASAR layout.
 module.exports = async ({ appOutDir, electronPlatformName, arch, packager }) => {
@@ -10,6 +11,23 @@ module.exports = async ({ appOutDir, electronPlatformName, arch, packager }) => 
   if (electronPlatformName !== "darwin" && electronPlatformName !== "win32") {
     console.log(`[server-compile-cache] Skipping unsupported target ${electronPlatformName}`);
     return;
+  }
+  if (electronPlatformName === "darwin" && packager?.appInfo) {
+    const bundled = path.join(
+      appOutDir,
+      `${packager.appInfo.productFilename}.app`,
+      "Contents",
+      "Resources",
+      "openbot",
+      "OpenBot.app",
+    );
+    if (fs.existsSync(bundled)) {
+      restoreBundledRuntime(
+        path.join(packager.projectDir, "apps/desktop/prod-resources/openbot/OpenBot.app"),
+        bundled,
+      );
+      console.log("[openbot-runtime] Restored relative framework links before signing");
+    }
   }
   const targetArch = ["ia32", "x64", "armv7l", "arm64", "universal"][arch];
   const runsWithRosetta =

@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { UsagePage } from "../components/usage/UsagePage";
+import { UnifiedUsagePage, validateUsageSearch } from "../components/usage/UnifiedUsagePage";
 
 export const Route = createFileRoute("/_chat/usage")({
-  component: UsagePage,
+  validateSearch: validateUsageSearch,
+  component: UnifiedUsagePage,
 });

@@ -7,6 +7,7 @@ import {
   ProjectId,
   ProviderInstanceId,
   RunId,
+  RuntimeRequestId,
   OpenbotWriteRequest,
   ThreadId,
   type OpenbotCodingTask,
@@ -266,11 +267,13 @@ it.effect.each(["conversation", "main", "queued", "unconfirmed", "legacy"] as co
 );
 
 it.effect.each([false, true])(
-  "delivers only settled results for the bound host and durable receipt (remote: %s)",
+  "returns progress and blockers without settling the assignment, then delivers its final result (remote: %s)",
   (remote) => {
     let hostId = "other-host";
     let completed = false;
+    let blocked = false;
     let sends = 0;
+    const payloads: string[] = [];
     const dependencies = Layer.mergeAll(
       SqlitePersistence.layerMemory,
       NodeCrypto.layer,
@@ -279,6 +282,7 @@ it.effect.each([false, true])(
           Effect.sync(() => ({
             ...task,
             state: completed ? "completed" : "running",
+            pendingRequestIds: blocked ? [RuntimeRequestId.make("approval")] : [],
             ...(remote
               ? {
                   environmentId: EnvironmentId.make("destination"),
@@ -308,8 +312,9 @@ it.effect.each([false, true])(
       Layer.mock(Integration.Integration)({
         readyHostId: Effect.sync(() => hostId),
         readyChanges: Stream.empty,
-        apiWriteToHost: () =>
+        apiWriteToHost: (_hostId, input) =>
           Effect.sync(() => {
+            if (input.operation === "task.send") payloads.push(input.text);
             sends++;
             return { messageId: "ack", deliveries: [{ recipientAgentId: "bot" }] };
           }),
@@ -322,15 +327,24 @@ it.effect.each([false, true])(
       expect(sends).toBe(0);
       hostId = "host";
       yield* delivery.reconcile(threadId);
-      expect(sends).toBe(0);
-      completed = true;
       yield* delivery.reconcile(threadId);
       expect(sends).toBe(1);
+      expect(payloads[0]).toContain("Sled coding update");
+      blocked = true;
+      yield* delivery.reconcile(threadId);
+      yield* delivery.reconcile(threadId);
+      expect(sends).toBe(2);
+      expect(payloads[1]).toContain("needs approval or input in Sled");
+      completed = true;
+      blocked = false;
+      yield* delivery.reconcile(threadId);
+      expect(sends).toBe(3);
+      expect(payloads[2]).toContain("Sled coding result");
       const sql = yield* SqlClient.SqlClient;
       const receipts = yield* sql<{
         readonly thread_id: string;
       }>`SELECT thread_id FROM openbot_coding_deliveries`;
-      expect(receipts.map((receipt) => receipt.thread_id)).toEqual([threadId]);
+      expect(receipts.map((receipt) => receipt.thread_id)).toEqual([threadId, threadId, threadId]);
     }).pipe(Effect.provide(CodingDelivery.layer.pipe(Layer.provideMerge(dependencies))));
   },
 );

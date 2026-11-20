@@ -343,9 +343,12 @@ it("bounds each acknowledged viewer to a drawing frame and the newest pending fr
   expect(delivery.offer(2, new Uint8Array([2]))).toBeUndefined();
   expect(delivery.offer(3, latest)).toBeUndefined();
   expect(delivery.acknowledge(99)).toBeUndefined();
+  expect(delivery.drawnSequence).toBeUndefined();
   expect(delivery.acknowledge(1)).toBe(latest);
+  expect(delivery.drawnSequence).toBe(1);
   expect(delivery.acknowledge(1)).toBeUndefined();
   expect(delivery.acknowledge(3)).toBeUndefined();
+  expect(delivery.drawnSequence).toBe(3);
   expect(delivery.offer(4, first)).toBe(first);
   const other = new BrowserFrameDelivery(true);
   expect(other.offer(1, latest)).toBe(latest);
@@ -357,7 +360,9 @@ it("bounds each acknowledged viewer to a drawing frame and the newest pending fr
 it("releases only this viewer's held controls at the last drag position without replaying text", () => {
   const held = new BrowserHeldInput();
   held.record(
-    decodeBrowserViewInput('{"type":"pointer","action":"down","x":0.1,"y":0.2,"button":"right"}'),
+    decodeBrowserViewInput(
+      '{"type":"pointer","action":"down","x":0.1,"y":0.2,"sequence":4,"button":"right"}',
+    ),
   );
   held.record(
     decodeBrowserViewInput('{"type":"pointer","action":"move","x":0.8,"y":0.9,"button":"right"}'),
@@ -387,4 +392,203 @@ it("releases only this viewer's held controls at the last drag position without 
     { type: "key", action: "up", key: "Shift", code: "ShiftLeft", text: "", modifiers: 0 },
   ]);
   expect(held.release()).toEqual([]);
+});
+
+it("routes page copy and context menus only to their requesting viewer, including a closed pending owner", async () => {
+  const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+  await NodeEvents.EventEmitter.once(server, "listening");
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Missing fixture port");
+  const physical = Promise.withResolvers<import("@effect/platform-node/NodeWS").WebSocket>();
+  let query = "";
+  server.on("connection", (socket, request) => {
+    query = request.url ?? "";
+    socket.send(Buffer.from([79, 66, 86, 49, 0, 0, 0, 1, 2, 128, 1, 224, 255, 216, 255, 217]));
+    physical.resolve(socket);
+  });
+  const session = createBrowserSession({
+    origin: `http://127.0.0.1:${address.port}`,
+    token: "owner",
+    peers: new Set(),
+    isClosed: () => false,
+    request: async (_path, method) =>
+      method === "DELETE"
+        ? null
+        : {
+            id: "physical-private",
+            tabId: "tab",
+            streamPath: "/v1/browser/view/sessions/physical-private/stream",
+          },
+  });
+  const features = { clipboard: true, cursor: true, contextMenu: true };
+  const a = await session.create("tab", features);
+  const b = await session.create("tab", features);
+  const first = session.dial(a.streamPath);
+  await NodeEvents.EventEmitter.once(first, "message");
+  const second = session.dial(b.streamPath);
+  await NodeEvents.EventEmitter.once(second, "message");
+  const socket = await physical.promise;
+  const seenA: unknown[] = [],
+    seenB: unknown[] = [];
+  first.on("message", (raw, binary) => {
+    if (!binary) seenA.push(JSON.parse(raw.toString()));
+  });
+  second.on("message", (raw, binary) => {
+    if (!binary) seenB.push(JSON.parse(raw.toString()));
+  });
+  const barrier = () => {
+    const aa = NodeEvents.EventEmitter.once(first, "message");
+    const bb = NodeEvents.EventEmitter.once(second, "message");
+    socket.send('{"type":"cursor","cursor":"pointer"}');
+    return Promise.all([aa, bb]);
+  };
+  try {
+    expect(query).toContain("cursor=1");
+    expect(query).toContain("menu=1");
+    expect(a.features).toEqual(features);
+    let input = NodeEvents.EventEmitter.once(socket, "message");
+    first.send('{"type":"copy"}');
+    await input;
+    expect(() => second.send('{"type":"copy"}')).toThrow("pending");
+    socket.send('{"type":"copied","text":"first-view-owned-content"}');
+    await barrier();
+    expect(seenA).toContainEqual({ type: "copied", text: "first-view-owned-content" });
+    expect(seenB).not.toContainEqual({ type: "copied", text: "first-view-owned-content" });
+    input = NodeEvents.EventEmitter.once(socket, "message");
+    first.send(
+      JSON.stringify({
+        type: "pointer",
+        action: "down",
+        button: "right",
+        x: 0.5,
+        y: 0.5,
+        clickCount: 1,
+        deltaX: 0,
+        deltaY: 0,
+        modifiers: 0,
+      }),
+    );
+    await input;
+    socket.send(
+      JSON.stringify({
+        type: "context-menu",
+        items: ["copy-link"],
+        link: "https://owned-fixture.invalid/private-link",
+      }),
+    );
+    await barrier();
+    expect(seenA).toContainEqual({
+      type: "context-menu",
+      items: ["copy-link"],
+      link: "https://owned-fixture.invalid/private-link",
+    });
+    expect(seenB).not.toContainEqual({
+      type: "context-menu",
+      items: ["copy-link"],
+      link: "https://owned-fixture.invalid/private-link",
+    });
+    input = NodeEvents.EventEmitter.once(socket, "message");
+    first.send('{"type":"copy"}');
+    await input;
+    await session.close(a.id);
+    expect(() => second.send('{"type":"copy"}')).toThrow("pending");
+    const bb = NodeEvents.EventEmitter.once(second, "message");
+    socket.send('{"type":"copied","text":"closed-view-private-content"}');
+    socket.send('{"type":"cursor","cursor":"text"}');
+    await bb;
+    expect(seenB).not.toContainEqual({ type: "copied", text: "closed-view-private-content" });
+    input = NodeEvents.EventEmitter.once(socket, "message");
+    second.send('{"type":"copy"}');
+    await input;
+    const copied = NodeEvents.EventEmitter.once(second, "message");
+    socket.send('{"type":"copied","text":"second-view-owned-content"}');
+    await copied;
+    expect(seenB).toContainEqual({ type: "copied", text: "second-view-owned-content" });
+  } finally {
+    await session.close(a.id);
+    await session.close(b.id);
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+it("forwards frame-point negotiation and refuses a pooled viewer pointing behind the upstream retention floor", async () => {
+  const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+  await NodeEvents.EventEmitter.once(server, "listening");
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("address");
+  const physical = Promise.withResolvers<import("@effect/platform-node/NodeWS").WebSocket>();
+  server.on("connection", (peer, request) => {
+    expect(new URL(request.url!, "http://test").searchParams.get("frameAck")).toBe("1");
+    physical.resolve(peer);
+    peer.send(Buffer.from([79, 66, 86, 49, 0, 0, 0, 7, 2, 128, 1, 224, 255, 216, 255, 217]));
+  });
+  const session = createBrowserSession({
+    origin: `http://127.0.0.1:${address.port}`,
+    token: "owner",
+    peers: new Set(),
+    isClosed: () => false,
+    request: async (_path, method) =>
+      method === "POST"
+        ? { id: "physical", tabId: "tab", streamPath: "/v1/browser/view/sessions/physical/stream" }
+        : null,
+  });
+  const features = {
+    framePoint: true,
+    clipboard: false,
+    cursor: false,
+    contextMenu: false,
+    viewport: { width: 1280, height: 800 },
+  };
+  const a = await session.create("tab", features),
+    b = await session.create("tab", features);
+  try {
+    await expect(
+      session.create("tab", { ...features, viewport: { width: 800, height: 600 } }),
+    ).rejects.toThrow("viewport");
+    const first = session.dial(a.streamPath);
+    await NodeEvents.EventEmitter.once(first, "message");
+    const second = session.dial(b.streamPath);
+    await NodeEvents.EventEmitter.once(second, "message");
+    const host = await physical.promise;
+    const ack = NodeEvents.EventEmitter.once(host, "message");
+    first.send(JSON.stringify({ type: "ack", sequence: 7 }));
+    second.send(JSON.stringify({ type: "ack", sequence: 7 }));
+    expect(JSON.parse((await ack)[0].toString())).toEqual({ type: "ack", sequence: 7 });
+    const pointer = {
+      type: "pointer",
+      action: "move",
+      sequence: 8,
+      x: 0.5,
+      y: 0.5,
+      button: "left",
+      clickCount: 1,
+      deltaX: 0,
+      deltaY: 0,
+      modifiers: 0,
+    };
+    const next = NodeEvents.EventEmitter.once(first, "message");
+    host.send(Buffer.from([79, 66, 86, 49, 0, 0, 0, 8, 5, 0, 3, 32, 255, 216, 255, 217]));
+    await next;
+    const input = NodeEvents.EventEmitter.once(host, "message");
+    first.send(JSON.stringify(pointer));
+    expect(JSON.parse((await input)[0].toString())).toEqual(pointer);
+    expect(() => second.send(JSON.stringify({ ...pointer, sequence: 7 }))).toThrow(
+      "no longer retained",
+    );
+    for (let sequence = 9; sequence <= 109; sequence++) {
+      const received = NodeEvents.EventEmitter.once(first, "message");
+      const bytes = Buffer.from([79, 66, 86, 49, 0, 0, 0, 0, 5, 0, 3, 32, 255, 216, 255, 217]);
+      bytes.writeUInt32BE(sequence, 4);
+      host.send(bytes);
+      await received;
+      first.send(JSON.stringify({ type: "ack", sequence }));
+    }
+    expect(first.readyState).toBe(1);
+    expect(second.readyState).toBe(3);
+  } finally {
+    await session.close(a.id);
+    await session.close(b.id);
+    for (const client of server.clients) client.terminate();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 });

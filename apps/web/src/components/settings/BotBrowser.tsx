@@ -1,10 +1,12 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId } from "@t3tools/contracts";
 import {
   browserActionLabel,
   browserTabActions,
 } from "@t3tools/client-runtime/openbot/presentation";
+import { useStableCallback } from "../../hooks/useStableCallback";
+import { GlobeIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { requestConfirmDialog } from "../../confirmDialog";
@@ -13,23 +15,31 @@ import { useBotBrowserViewer } from "./useBotBrowserViewer";
 import { BotBrowserView } from "./BotBrowserView";
 import { openbot } from "../../state/openbot";
 
-type Props = { environmentId: EnvironmentId; hostId: string; agentId?: string };
+type Props = {
+  environmentId: EnvironmentId;
+  hostId: string;
+  agentId?: string;
+  initiallyExpanded?: boolean;
+  workspace?: boolean;
+};
 export function BotBrowser(props: Props) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(props.initiallyExpanded ?? false);
   const id = useId();
   return (
     <section aria-label="Bot browser" className="space-y-3">
-      <Button
-        variant="outline"
-        size="sm"
-        aria-expanded={expanded}
-        aria-controls={id}
-        onClick={() => setExpanded(!expanded)}
-      >
-        {expanded ? "Close browser" : "Browser"}
-      </Button>
+      {!props.workspace && (
+        <Button
+          variant="outline"
+          size="sm"
+          aria-expanded={expanded}
+          aria-controls={id}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? "Close browser" : "Browser"}
+        </Button>
+      )}
       <div id={id}>
-        {expanded && (
+        {(expanded || props.workspace) && (
           <BrowserPanel
             key={`${props.environmentId}:${props.hostId}:${props.agentId ?? "host"}`}
             {...props}
@@ -57,21 +67,36 @@ function BrowserPanel({
   environmentId,
   hostId,
   agentId,
+  workspace = false,
 }: {
   environmentId: EnvironmentId;
   hostId: string;
   agentId?: string;
+  workspace?: boolean;
 }) {
   const browser = useBotBrowser(environmentId, hostId);
   const canView = useAtomValue(openbot.browserViewCommand.permissionAtom(environmentId));
   const [viewTab, setViewTab] = useState<string | null>(null);
   const [url, setUrl] = useState("");
   const [profileName, setProfileName] = useState("");
+  const refresh = useStableCallback(browser.refresh);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Read the selected host browser when its workspace opens or permission becomes available.
+  useEffect(() => {
+    if (workspace && browser.canControl) refresh();
+  }, [workspace, browser.canControl, refresh]);
   return (
-    <section aria-label="Bot browser" aria-busy={browser.busy} className="space-y-3">
+    <section aria-label="Browser workspace" aria-busy={browser.busy} className="space-y-4">
+      {workspace && (
+        <div>
+          <h2 className="text-lg font-semibold">Browser</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Open a page or join a bot’s browser tab.
+          </p>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" onClick={browser.refresh}>
-          Refresh browser
+          <RefreshCwIcon className="size-4" /> Refresh browser
         </Button>
         <Button
           variant="outline"
@@ -99,14 +124,43 @@ function BrowserPanel({
           maxLength={2048}
           placeholder="https://example.com"
         />
-        <Button disabled={browser.busy || !browser.canControl || !url.trim()}>Open tab</Button>
+        <Button type="submit" disabled={browser.busy || !browser.canControl || !url.trim()}>
+          <PlusIcon className="size-4" />
+          Open tab
+        </Button>
       </form>
       {!browser.display && (
         <p role="status">Browser state unavailable. Start the bot host and refresh.</p>
       )}
+      {workspace && (
+        <nav aria-label="Browser tabs" className="flex gap-1 overflow-x-auto border-b pb-2">
+          {browser.display?.tabs.map((tab) => (
+            <Button
+              key={tab.id}
+              size="sm"
+              variant={viewTab === tab.id ? "secondary" : "ghost"}
+              aria-pressed={viewTab === tab.id}
+              disabled={!canView}
+              onClick={() => setViewTab(tab.id)}
+            >
+              <GlobeIcon className="size-4" />
+              <span className="max-w-44 truncate">{tab.title || "Untitled tab"}</span>
+            </Button>
+          ))}
+        </nav>
+      )}
+      {workspace && browser.display?.tabs.length === 0 && (
+        <p className="py-12 text-center text-sm text-muted-foreground">
+          No open tabs. Enter an address above to begin.
+        </p>
+      )}
       <ul className="space-y-3">
         {browser.display?.tabs.map((tab) => (
-          <li key={tab.id} className="rounded border p-3 space-y-2">
+          <li
+            key={tab.id}
+            hidden={workspace && viewTab !== tab.id}
+            className="rounded-xl border p-4 space-y-2"
+          >
             <p className="break-words font-medium">
               {tab.title || "Untitled tab"}
               {browser.display?.activeTabId === tab.id ? " · Active" : ""}
@@ -114,7 +168,7 @@ function BrowserPanel({
             <p className="break-all text-sm">{tab.url}</p>
             <p className="text-sm">
               {tab.userControl ? "Human control" : "Bot control"}
-              {tab.ownerAgentId ? ` · Bot ${tab.ownerAgentId}` : ""}
+              {tab.ownerAgentId === agentId ? " · This bot" : ""}
             </p>
             <div className="flex flex-wrap gap-2">
               <Button

@@ -1,0 +1,865 @@
+/* OpenBot source DirectConversation layout, message/bubble primitives, People avatars and timeline controls. Selectors scoped with PostCSS; media and keyframes preserved. */
+.openbot-react .direct-conversation {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  grid-column: 3;
+  grid-row: 1;
+  flex-direction: column;
+  background: var(--openbot-bg-canvas);
+  color: var(--openbot-text-primary);
+}
+
+.openbot-react .direct-conversation-header {
+  display: flex;
+  height: 46px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--openbot-hover);
+  padding: 0 14px;
+}
+
+.openbot-react .direct-conversation-person {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.openbot-react .direct-conversation-person .person-avatar {
+  --agent-avatar-optical-offset: calc(30px * -0.14);
+
+  width: 30px;
+  height: 30px;
+  border-radius: var(--openbot-radius-md);
+}
+
+.openbot-react .direct-conversation-person h1 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-md);
+  font-weight: 560;
+  line-height: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.openbot-react .direct-conversation-person div > span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  line-height: 11px;
+}
+
+.openbot-react .direct-conversation-person div > span i {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-bg-control-hover);
+}
+
+.openbot-react .direct-conversation-person div > span.online {
+  color: var(--openbot-success);
+}
+
+.openbot-react .direct-conversation-person div > span.online i {
+  background: var(--openbot-success);
+}
+
+.openbot-react .direct-private-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--openbot-text-readable);
+  font-size: var(--openbot-text-sm);
+}
+
+.openbot-react .direct-private-label svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: var(--openbot-icon-stroke);
+}
+
+.openbot-react .direct-message-list {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 22px max(18px, calc((100% - 760px) / 2)) 28px;
+}
+
+.openbot-react .direct-conversation-state,
+.openbot-react .direct-conversation-empty {
+  display: grid;
+  min-height: 100%;
+  place-content: center;
+  justify-items: center;
+  color: var(--openbot-text-muted);
+  text-align: center;
+}
+
+.openbot-react .direct-conversation-empty h2 {
+  margin: 14px 0 4px;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-xl);
+  font-weight: 560;
+}
+
+.openbot-react .direct-conversation-empty p {
+  max-width: 290px;
+  margin: 0;
+  font-size: var(--openbot-text-sm);
+  line-height: 17px;
+}
+
+.openbot-react .direct-message-list .ui-message-group {
+  gap: 0;
+}
+
+.openbot-react .direct-message > .ui-message-content {
+  max-width: min(560px, 78%);
+}
+
+.openbot-react .direct-message .ui-bubble {
+  max-width: 100%;
+}
+
+.openbot-react .direct-message .ui-bubble-content {
+  font-size: var(--openbot-text-md);
+  line-height: 19px;
+  white-space: pre-wrap;
+}
+
+.openbot-react .direct-message time {
+  color: var(--openbot-text-readable);
+  font-size: var(--openbot-text-sm);
+}
+
+.openbot-react .direct-message .ui-message-footer {
+  padding: 0 2px;
+}
+
+.openbot-react .direct-composer-wrap {
+  flex: 0 0 auto;
+  padding: 0 max(18px, calc((100% - 760px) / 2)) 16px;
+}
+
+.openbot-react .direct-typing-indicator {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px 4px;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.openbot-react .direct-message-error {
+  margin: 0 8px 6px;
+  color: var(--openbot-danger);
+  font-size: var(--openbot-text-sm);
+}
+
+.openbot-react .direct-composer {
+  display: flex;
+  min-height: 46px;
+  align-items: flex-end;
+  gap: 8px;
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-control);
+  padding-block: 6px;
+  padding-inline: 13px 7px;
+  box-shadow: 0 8px 25px var(--openbot-shadow-popover-ambient);
+}
+
+.openbot-react .direct-composer:focus-within {
+  border-color: var(--openbot-border-strong);
+}
+
+.openbot-react .direct-composer textarea {
+  min-width: 0;
+  min-height: 32px;
+  max-height: 130px;
+  flex: 1;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  padding: 6px 0;
+  color: var(--openbot-text-primary);
+  font: inherit;
+  font-size: var(--openbot-text-md);
+  line-height: 20px;
+}
+
+.openbot-react .direct-composer textarea::placeholder {
+  color: var(--openbot-text-muted);
+}
+
+.openbot-react .direct-composer > button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-success);
+  color: var(--openbot-success);
+  font-size: var(--openbot-text-xl);
+  font-weight: 650;
+}
+
+.openbot-react .direct-composer > button:disabled {
+  background: var(--openbot-border);
+  color: var(--openbot-text-dim);
+}
+.openbot-react .ui-bubble-group {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+}
+
+.openbot-react .ui-bubble {
+  position: relative;
+  display: flex;
+  width: fit-content;
+  min-width: 0;
+  max-width: min(80%, 720px);
+  flex-direction: column;
+  align-self: flex-start;
+  gap: var(--openbot-space-1);
+  color: var(--openbot-text-primary);
+}
+
+.openbot-react .ui-bubble[data-align="end"] {
+  align-self: flex-end;
+}
+
+.openbot-react .ui-bubble-content {
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: var(--openbot-radius-bubble);
+  padding: 8px 12px;
+  font-size: var(--openbot-text-lg);
+  line-height: 1.625;
+  overflow-wrap: anywhere;
+  transition:
+    border-color var(--openbot-duration-hover) ease,
+    background var(--openbot-duration-hover) ease,
+    color var(--openbot-duration-hover) ease;
+}
+.openbot-react .ui-bubble-variant-secondary > .ui-bubble-content {
+  background: var(--openbot-bg-surface-raised);
+}
+
+.openbot-react .ui-bubble-variant-muted > .ui-bubble-content {
+  background: var(--openbot-bg-surface);
+}
+.openbot-react .ui-message-group {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+}
+
+.openbot-react .ui-message {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: flex-end;
+  gap: var(--openbot-space-2);
+}
+
+.openbot-react .ui-message[data-align="end"] {
+  flex-direction: row-reverse;
+}
+
+.openbot-react .ui-message-avatar {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  align-self: flex-end;
+  overflow: hidden;
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-bg-surface-raised);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.openbot-react .ui-message-content {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  max-width: 720px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--openbot-space-1);
+  overflow-wrap: anywhere;
+}
+
+.openbot-react .ui-message[data-align="end"] > .ui-message-content {
+  align-items: flex-end;
+}
+
+.openbot-react .ui-message-header,
+.openbot-react .ui-message-footer {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  padding: 0 var(--openbot-space-1);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  line-height: 16px;
+}
+
+.openbot-react .ui-message[data-align="end"] .ui-message-footer {
+  justify-content: flex-end;
+}
+.openbot-react .person-avatar {
+  position: relative;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: var(--openbot-radius-md);
+  color: var(--openbot-success);
+  font-size: var(--openbot-text-sm);
+  font-weight: 680;
+  letter-spacing: 0.02em;
+}
+
+.openbot-react .person-avatar > img,
+.openbot-react .person-avatar > .person-avatar-generated {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.openbot-react .person-avatar > img {
+  object-fit: cover;
+}
+
+.openbot-react .person-avatar.large {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--openbot-radius-lg);
+  font-size: var(--openbot-text-md);
+}
+
+.openbot-react .person-row .person-avatar {
+  width: 34px;
+  height: 34px;
+}
+
+.openbot-react .person-unread-badge {
+  position: absolute;
+  z-index: 2;
+  inset-inline-end: -4px;
+  bottom: -3px;
+  display: grid;
+  min-width: 17px;
+  height: 17px;
+  place-items: center;
+  border: 2px solid var(--openbot-bg-sidebar);
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-text-primary);
+  padding: 0 3px;
+  color: var(--openbot-bg-sidebar);
+  font-size: var(--openbot-text-sm);
+  font-weight: 680;
+}
+.openbot-react .conversation-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-anchor: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 8px 12px var(--openbot-space-6);
+}
+
+.openbot-react .virtual-chat-list {
+  position: relative;
+  width: 100%;
+}
+
+.openbot-react .virtual-chat-row {
+  position: absolute;
+  inset: 0 0 auto;
+  width: 100%;
+  padding-top: var(--openbot-chat-entry-gap);
+}
+
+/* Rows the timeline marks as grouped (marker runs, same-sender messages) sit tighter. */
+.openbot-react .virtual-chat-row[data-grouped] {
+  padding-top: var(--openbot-chat-marker-gap);
+}
+
+.openbot-react .virtual-chat-row > .chat-action-marker + .message-entry {
+  margin-top: var(--openbot-chat-marker-gap);
+}
+
+.openbot-react .virtual-chat-list-static .virtual-chat-row {
+  position: relative;
+  inset: auto;
+}
+
+/*
+ * The mark on a message that a quote opened. The band reaches 12px past the chat column, which is
+ * the edge of the scroll area below the column width, and leaves out the gap above the row; it
+ * holds, then fades out.
+ */
+.openbot-react .virtual-chat-row[data-reply-flash] {
+  isolation: isolate;
+}
+
+.openbot-react .virtual-chat-row[data-reply-flash]::before {
+  position: absolute;
+  z-index: -1;
+  inset: var(--openbot-chat-entry-gap) -12px 0;
+  background: var(--openbot-accent-soft);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  animation: reply-flash 1.6s var(--openbot-ease-out);
+}
+
+.openbot-react .virtual-chat-row[data-grouped][data-reply-flash]::before {
+  top: var(--openbot-chat-marker-gap);
+}
+
+@keyframes reply-flash {
+  0%,
+  45% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+.openbot-react .conversation-history-status {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+/*
+ * The way back to the newest message. The wrapper carries the pill, because the count turns one
+ * round button into two buttons the reader reads as one control, and only the wrapper knows how
+ * wide that is. The circle becomes a pill in one step: `44px` to `auto` cannot be animated, and a
+ * scale would fight the centring transform.
+ */
+.openbot-react .scroll-to-latest {
+  position: sticky;
+  z-index: 3;
+  top: calc(100% - 58px);
+  left: 50%;
+  display: flex;
+  width: max-content;
+  height: 44px;
+  align-items: center;
+  margin-bottom: -44px;
+  border: 1px solid var(--openbot-border-strong);
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-bg-surface-raised);
+  box-shadow:
+    0 8px 24px var(--openbot-shadow-popover-ambient),
+    inset 0 0 0 1px var(--openbot-shadow-ring);
+  color: var(--openbot-text-primary);
+  transform: translateX(-50%);
+  transition: background-color var(--openbot-duration-hover) ease;
+}
+
+/*
+ * With a count the pill wears the colours of the unread banner: it is the same news. It is also
+ * lower than the round arrow, and the label makes it wider, so the bottom edge is held where the
+ * circle had it: `100% - 58px` plus `44px` is the same line as `100% - 50px` plus `36px`.
+ */
+.openbot-react .scroll-to-latest:is([data-new-messages], [data-reply-return]) {
+  top: calc(100% - 50px);
+  height: 36px;
+  margin-bottom: -36px;
+}
+
+.openbot-react .scroll-to-latest[data-new-messages] {
+  border-color: transparent;
+  background: var(--openbot-unread-surface);
+  color: var(--openbot-unread-text);
+}
+
+.openbot-react .scroll-to-latest-button {
+  display: grid;
+  width: 44px;
+  height: 100%;
+  place-items: center;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  color: inherit;
+  transition:
+    background-color var(--openbot-duration-hover) ease,
+    transform var(--openbot-duration-fast) cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/*
+ * One padding on all four sides: `space-1-5` from the pill edge to the arrow, to the round dismiss
+ * mark, and above and below both, because each is `22px` tall inside a `36px` pill with a `1px`
+ * border. `space-2` divides arrow from label and label from mark.
+ */
+.openbot-react
+  .scroll-to-latest:is([data-new-messages], [data-reply-return])
+  .scroll-to-latest-button {
+  width: auto;
+  grid-auto-flow: column;
+  gap: var(--openbot-space-2);
+  padding-inline: var(--openbot-space-1-5) var(--openbot-space-2);
+}
+
+.openbot-react .scroll-to-latest-count {
+  font-size: var(--openbot-text-sm);
+  font-weight: 620;
+  white-space: nowrap;
+}
+
+/*
+ * The whole height stays clickable, but nothing here is painted: a highlight on this button would
+ * fill the end of the pill. The hover and focus marks sit on the icon below, which is round, and
+ * that round mark is what separates the two halves. No rule divides them.
+ */
+.openbot-react .scroll-to-latest-dismiss {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  border: 0;
+  background: none;
+  padding-inline: 0 var(--openbot-space-1-5);
+  color: inherit;
+  transition: transform var(--openbot-duration-fast) cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.openbot-react .scroll-to-latest-button svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: var(--openbot-icon-stroke);
+}
+
+/* The mark is as tall as the arrow, so one padding can hold both away from every edge. */
+.openbot-react .scroll-to-latest-dismiss svg {
+  box-sizing: content-box;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--openbot-radius-pill);
+  padding: var(--openbot-space-1);
+  transition: background-color var(--openbot-duration-hover) ease;
+}
+
+/* The ring follows the pill: an offset ring would draw a circle around one half of it. */
+.openbot-react .scroll-to-latest-button:focus-visible {
+  outline: 2px solid var(--openbot-border-focus);
+  outline-offset: -2px;
+}
+
+/* The dismiss ring follows its round icon mark, for the same reason its hover does. */
+.openbot-react .scroll-to-latest-dismiss:focus-visible {
+  outline: none;
+}
+
+.openbot-react .scroll-to-latest-dismiss:focus-visible svg {
+  outline: 2px solid var(--openbot-border-focus);
+}
+
+.openbot-react .scroll-to-latest[data-new-messages] .scroll-to-latest-button:focus-visible {
+  outline-color: var(--openbot-unread-text);
+}
+
+.openbot-react .scroll-to-latest[data-new-messages] .scroll-to-latest-dismiss:focus-visible svg {
+  outline-color: var(--openbot-unread-text);
+}
+
+/* The way back to a reply has a smaller arrow, so the label reads first. */
+.openbot-react .scroll-to-latest-button .scroll-to-latest-reply-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.openbot-react .scroll-to-latest-button:active,
+.openbot-react .scroll-to-latest-dismiss:active {
+  transform: scale(0.96);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  /* These are shared ghost buttons, whose own hover is written with two `:not()`s and so outweighs
+     a plain class. Each rule that has to replace it is matched at the same strength, or its own
+     hover paints over the pill and repaints the text for a light background. */
+  .openbot-react .scroll-to-latest-button:hover:not(:disabled):not([data-disabled]) {
+    background: var(--openbot-bg-control-active);
+    color: inherit;
+  }
+
+  /* The dismiss box itself stays unpainted: its mark is the round one on the icon. */
+  .openbot-react .scroll-to-latest-dismiss:hover:not(:disabled):not([data-disabled]) {
+    background: none;
+    color: inherit;
+  }
+
+  .openbot-react .scroll-to-latest-dismiss:hover svg {
+    background: var(--openbot-bg-control-active);
+  }
+
+  /* The pill has one hover, on the dismiss icon. Its body is a wide target and needs no mark. */
+  .openbot-react
+    .scroll-to-latest:is([data-new-messages], [data-reply-return])
+    .scroll-to-latest-button:hover:not(:disabled):not([data-disabled]) {
+    background: none;
+  }
+
+  .openbot-react .scroll-to-latest[data-new-messages] .scroll-to-latest-dismiss:hover svg {
+    background: color-mix(in srgb, var(--openbot-unread-text) 18%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .openbot-react .scroll-to-latest,
+  .openbot-react .scroll-to-latest-button,
+  .openbot-react .scroll-to-latest-dismiss,
+  .openbot-react .scroll-to-latest-dismiss svg {
+    transition: none;
+  }
+
+  .openbot-react .scroll-to-latest-button:active,
+  .openbot-react .scroll-to-latest-dismiss:active {
+    transform: none;
+  }
+}
+
+.openbot-react .unread-messages-banner {
+  position: relative;
+  display: flex;
+  min-height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 0 0 var(--openbot-radius-md) var(--openbot-radius-md);
+  background: var(--openbot-unread-surface);
+  padding: 0 12px;
+  color: var(--openbot-unread-text);
+  font-size: var(--openbot-text-sm);
+  font-weight: 620;
+  line-height: 16px;
+  transition: background-color var(--openbot-duration-hover) var(--openbot-ease-out);
+}
+
+.openbot-react .unread-messages-banner button {
+  border: 0;
+  border-radius: var(--openbot-radius-sm);
+  background: transparent;
+  color: inherit;
+}
+
+.openbot-react .unread-messages-jump {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  padding: 0 12px;
+  font-size: var(--openbot-text-sm);
+  font-weight: 620;
+  line-height: 16px;
+  text-align: start;
+}
+
+.openbot-react .unread-messages-mark-read {
+  position: relative;
+  z-index: 1;
+  margin-inline-start: auto;
+  padding: 0;
+  font-size: var(--openbot-text-sm);
+  font-weight: 680;
+  line-height: 14px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: transform var(--openbot-duration-fast) cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.openbot-react .unread-messages-mark-read-label {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--openbot-radius-sm);
+  padding: 3px 5px;
+  transition: background-color var(--openbot-duration-hover) var(--openbot-ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .openbot-react .unread-messages-banner:hover {
+    background-color: color-mix(
+      in srgb,
+      var(--openbot-unread-surface) 88%,
+      var(--openbot-unread-text)
+    );
+  }
+
+  .openbot-react .unread-messages-banner .ui-button:hover:not(:disabled):not([data-disabled]) {
+    background: transparent;
+    color: var(--openbot-unread-text);
+  }
+
+  .openbot-react
+    .unread-messages-banner
+    .unread-messages-mark-read:hover:not(:disabled):not([data-disabled])
+    .unread-messages-mark-read-label {
+    background: color-mix(in srgb, var(--openbot-unread-text) 12%, transparent);
+  }
+}
+
+.openbot-react .unread-messages-banner button:focus-visible {
+  outline: 2px solid var(--openbot-unread-text);
+  outline-offset: 1px;
+}
+
+.openbot-react .unread-messages-mark-read:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.openbot-react .unread-messages-banner button:disabled {
+  opacity: 0.55;
+}
+
+.openbot-react .unread-messages-divider {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  margin: var(--openbot-space-1) 0 var(--openbot-space-2);
+  color: var(--openbot-unread-surface);
+  font-size: var(--openbot-text-sm);
+  font-weight: 720;
+  letter-spacing: 0.08em;
+  line-height: 12px;
+}
+
+.openbot-react .unread-messages-divider hr {
+  width: 100%;
+  height: 1px;
+  flex: 1;
+  border: 0;
+  background: var(--openbot-unread-surface);
+}
+
+.openbot-react .unread-messages-divider span {
+  flex: 0 0 auto;
+}
+
+/* A new NEW line: the badge comes in first, then each line grows out from it. */
+.openbot-react .unread-messages-divider[data-arrive] span {
+  animation: unread-divider-badge-in var(--openbot-duration-slow) var(--openbot-ease-out) both;
+}
+
+.openbot-react .unread-messages-divider[data-arrive] hr {
+  animation: unread-divider-line-in var(--openbot-duration-toast-enter) var(--openbot-ease-out) 60ms
+    both;
+}
+
+.openbot-react .unread-messages-divider[data-arrive] hr:first-child {
+  transform-origin: right center;
+}
+
+.openbot-react .unread-messages-divider[data-arrive] hr:last-child {
+  transform-origin: left center;
+}
+
+@keyframes unread-divider-badge-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+    filter: blur(2px);
+  }
+}
+
+@keyframes unread-divider-line-in {
+  from {
+    opacity: 0;
+    transform: scaleX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .openbot-react .unread-messages-divider[data-arrive] :is(hr, span) {
+    animation: none;
+  }
+}
+
+.openbot-react .time-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 656px;
+  height: 24px;
+  margin: 0 auto;
+  padding: 4px 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  line-height: 16px;
+  text-align: center;
+}
+
+/* The two lines grow out from the badge. In RTL the first line is on the right. */
+.openbot-react :dir(rtl) .unread-messages-divider[data-arrive] hr:first-child {
+  transform-origin: left center;
+}
+
+.openbot-react :dir(rtl) .unread-messages-divider[data-arrive] hr:last-child {
+  transform-origin: right center;
+}
+
+.openbot-react .direct-conversation {
+  height: 100%;
+  flex: 1;
+}
+.openbot-react .person-avatar > svg {
+  width: 100%;
+  height: 100%;
+}
+.openbot-react .direct-message-list {
+  position: relative;
+  overscroll-behavior: contain;
+}
+.openbot-react .direct-message-row {
+  padding-top: var(--openbot-chat-entry-gap);
+}
+.openbot-react .direct-message-row[data-grouped] {
+  padding-top: var(--openbot-chat-marker-gap);
+}
+.openbot-react .direct-composer textarea {
+  field-sizing: content;
+}

@@ -11,7 +11,77 @@ import {
   type OpenbotChannelDraft,
   type OpenbotChannelMessage,
   type OpenbotChannelTask,
+  type OpenbotAttentionSnapshot,
+  OpenbotConversationSnapshot,
+  OpenbotConversationMessage,
 } from "@t3tools/contracts";
+
+const decodeConversationMessage = Schema.decodeUnknownResult(OpenbotConversationMessage);
+export function channelConversationMessage(entry: OpenbotChannelMessage) {
+  const decoded = decodeConversationMessage(entry.message);
+  return Result.isSuccess(decoded) ? decoded.success : null;
+}
+
+export function channelAttentionRequests(
+  hostId: string,
+  channel: OpenbotChannelSummary,
+  attention: OpenbotAttentionSnapshot | null | undefined,
+) {
+  if (channel.archived || attention?.state !== "ready" || attention.hostId !== hostId) return [];
+  return attention.requests.filter(
+    (request) =>
+      channel.members.some((member) => member.agentId === request.agentId) &&
+      channel.threads?.some(
+        (thread) => thread.agentId === request.agentId && thread.threadId === request.threadId,
+      ),
+  );
+}
+
+export function channelPromptSnapshot(
+  hostId: string,
+  channel: OpenbotChannelSummary,
+  entry: OpenbotChannelMessage,
+  attention: OpenbotAttentionSnapshot | null | undefined,
+): typeof OpenbotConversationSnapshot.Type | null {
+  const prompt = entry.message.questionPrompt;
+  const threadId = channel.threads?.find((thread) => thread.agentId === entry.author.id)?.threadId;
+  if (
+    channel.archived ||
+    entry.superseded ||
+    entry.channelId !== channel.id ||
+    entry.author.kind !== "agent" ||
+    !channel.members.some((member) => member.agentId === entry.author.id) ||
+    !threadId ||
+    !entry.message.turnId ||
+    !prompt ||
+    typeof prompt !== "object" ||
+    Array.isArray(prompt) ||
+    !("resolution" in prompt) ||
+    !("requestId" in prompt) ||
+    prompt.resolution !== null ||
+    attention?.state !== "ready" ||
+    attention.hostId !== hostId
+  )
+    return null;
+  const request = channelAttentionRequests(hostId, channel, attention).find(
+    (candidate) =>
+      candidate.kind === "prompt" &&
+      candidate.requestId === prompt.requestId &&
+      candidate.agentId === entry.author.id &&
+      candidate.threadId === threadId &&
+      candidate.turnId === entry.message.turnId,
+  );
+  if (!request) return null;
+  const message = channelConversationMessage(entry);
+  if (!message) return null;
+  return {
+    agentId: entry.author.id,
+    threadId,
+    activeTurnId: entry.message.turnId,
+    revision: channel.revision,
+    messages: [message],
+  };
+}
 
 const decodeList = Schema.decodeUnknownResult(Schema.Array(OpenbotChannelSummary));
 const decodePage = Schema.decodeUnknownResult(OpenbotChannelPage);

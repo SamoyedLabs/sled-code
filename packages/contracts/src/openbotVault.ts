@@ -16,7 +16,10 @@ const contact = {
   phone: text,
   email: text,
 };
-const origin = { addedBy: Schema.optional(text) };
+const agents = Schema.Array(
+  Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
+).check(Schema.isMaxLength(1000));
+const origin = { addedBy: Schema.optional(text), agents: Schema.optional(agents) };
 const login = { website: text, username: text, notes };
 const card = {
   label: text,
@@ -55,12 +58,24 @@ const KeySave = Schema.Struct({
 });
 export const OpenbotVaultSave = Schema.Union([LoginSave, CardSave, ContactSave, KeySave]);
 export type OpenbotVaultSave = typeof OpenbotVaultSave.Type;
+const twoStepKey = Schema.optional(Schema.String.check(Schema.isMaxLength(1024)));
+const LoginSaveV3 = Schema.Struct({ ...LoginSave.fields, twoStepKey });
+const VaultSaveV3 = Schema.Union([LoginSaveV3, CardSave, ContactSave, KeySave]);
+const agentScope = { agents: Schema.optional(Schema.NullOr(agents)) };
+const VaultSaveV4 = Schema.Union([
+  Schema.Struct({ ...LoginSaveV3.fields, ...agentScope }),
+  Schema.Struct({ ...CardSave.fields, ...agentScope }),
+  Schema.Struct({ ...ContactSave.fields, ...agentScope }),
+  Schema.Struct({ ...KeySave.fields, ...agentScope }),
+]);
+
 export const OpenbotVaultItem = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("login"),
     id,
     ...login,
     hasPassword: Schema.Boolean,
+    hasTwoStep: Schema.optional(Schema.Boolean),
     ...origin,
   }),
   Schema.Struct({
@@ -105,7 +120,18 @@ export const OpenbotVaultBitwardenStatus = Schema.Struct({
   serverUrl: Schema.NullOr(Schema.String.check(Schema.isMaxLength(2048))),
   error: Schema.NullOr(Schema.String.check(Schema.isMaxLength(2000))),
 });
-const version = Schema.Literals(["v1", "v2"]);
+export const OpenbotVaultCodes = Schema.Struct({
+  codes: Schema.Array(
+    Schema.Struct({
+      id,
+      code: Schema.String.check(Schema.isPattern(/^\d{6,8}$/u)),
+      period: Schema.Int.check(Schema.isBetween({ minimum: 10, maximum: 300 })),
+      remainingMs: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 300_000 })),
+    }).check(Schema.makeFilter(({ period, remainingMs }) => remainingMs <= period * 1000)),
+  ).check(Schema.isMaxLength(5000)),
+});
+const version = Schema.Literals(["v1", "v2", "v3", "v4"]);
+export type OpenbotVaultVersion = typeof version.Type;
 export const OpenbotVaultRequest = Schema.Union([
   Schema.Struct({ operation: Schema.Literals(["vault.list", "vault.reset"]), version }),
   Schema.Struct({ operation: Schema.Literal("vault.delete"), version, id }),
@@ -120,6 +146,20 @@ export const OpenbotVaultRequest = Schema.Union([
     input: OpenbotVaultSave,
   }),
   Schema.Struct({
+    operation: Schema.Literal("vault.save"),
+    version: Schema.Literal("v3"),
+    input: VaultSaveV3,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("vault.save"),
+    version: Schema.Literal("v4"),
+    input: VaultSaveV4,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("vault.codes"),
+    version: Schema.Literals(["v3", "v4"]),
+  }),
+  Schema.Struct({
     operation: Schema.Literal("vault.reveal"),
     version: Schema.Literal("v1"),
     id,
@@ -127,7 +167,7 @@ export const OpenbotVaultRequest = Schema.Union([
   }),
   Schema.Struct({
     operation: Schema.Literal("vault.reveal"),
-    version: Schema.Literal("v2"),
+    version: Schema.Literals(["v2", "v3", "v4"]),
     id,
     field: Schema.Literals(["password", "number", "securityCode", "key"]),
   }),

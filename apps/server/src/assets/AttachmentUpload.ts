@@ -3,7 +3,7 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import {
   ATTACHMENT_UPLOAD_URL_TTL_MS,
-  type AttachmentCreateUploadUrlInput,
+  type AttachmentUploadRequest,
   AttachmentUploadSigningKeyError,
 } from "@t3tools/contracts";
 import { isSvgAttachment } from "@t3tools/shared/image";
@@ -76,7 +76,7 @@ const loadSigningSecret = Effect.gen(function* () {
 });
 
 export const issueAttachmentUploadUrl = Effect.fn("AttachmentUpload.issueUrl")(function* (
-  input: AttachmentCreateUploadUrlInput,
+  input: AttachmentUploadRequest,
 ) {
   const secret = yield* loadSigningSecret.pipe(
     Effect.mapError((cause) => new AttachmentUploadSigningKeyError({ cause })),

@@ -593,6 +593,7 @@ const make = Effect.gen(function* () {
       state: terminal.has(read.thread.status) ? "waiting" : read.thread.status,
       runId: read.thread.activeRunId ?? read.thread.latestRunId,
       pendingRequestCount: read.thread.pendingRequestCount,
+      pendingRequestIds: read.thread.pendingRequestIds ?? [],
       result: null,
       remoteState: "following",
       ...(read.thread.link === undefined ? {} : { link: read.thread.link }),

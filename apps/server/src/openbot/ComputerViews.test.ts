@@ -111,3 +111,26 @@ it("closes a late created session when shutdown wins the creation race", async (
   await expect(opening).rejects.toThrow();
   expect(closed).toBe(true);
 });
+
+it("accepts only the exact packaged desktop origins without broadening frame ancestors", async () => {
+  const f = fixture();
+  try {
+    for (const origin of ["t3code://app", "t3code-dev://app"]) {
+      const grant = await f.views.open("alice", "host", origin);
+      expect(await f.views.frameOrigin(grant.id)).toBe(origin);
+      await f.views.close("alice", "host", grant.id);
+    }
+    for (const origin of [
+      "t3code://evil",
+      "t3code://app.example",
+      "t3code://app:8080",
+      "t3code://app/",
+      "null",
+      "file://app",
+    ]) {
+      await expect(f.views.open("alice", "host", origin)).rejects.toThrow();
+    }
+  } finally {
+    await f.views.stop();
+  }
+});

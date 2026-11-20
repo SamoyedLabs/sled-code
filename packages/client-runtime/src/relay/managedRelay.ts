@@ -44,6 +44,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 import * as HttpClientError from "effect/http/HttpClientError";
+import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpMethod from "effect/http/HttpMethod";
 import * as HttpApiClient from "effect/http-api/HttpApiClient";
 import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
@@ -256,6 +257,7 @@ export interface ManagedRelayClientLayerOptions {
   readonly relayUrl: string;
   readonly clientId: RelayPublicClientId;
   readonly accessTokenStore?: ManagedRelayAccessTokenStore;
+  readonly propagateTraceContext?: boolean;
 }
 
 export class ManagedRelayClient extends Context.Service<
@@ -467,7 +469,15 @@ export const make = Effect.fn("ManagedRelayClient.make")(function* (
     return disabledManagedRelayClient(options.relayUrl);
   }
   const signer = yield* ManagedRelayDpopSigner;
-  const client = yield* HttpApiClient.make(RelayApi, { baseUrl: relayUrl });
+  const client = yield* HttpApiClient.make(RelayApi, {
+    baseUrl: relayUrl,
+    transformClient: (http) =>
+      options.propagateTraceContext === false
+        ? HttpClient.transform(http, (request) =>
+            request.pipe(Effect.provideService(HttpClient.TracerPropagationEnabled, false)),
+          )
+        : http,
+  });
   const initialTokens = options.accessTokenStore ? yield* options.accessTokenStore.load : [];
   const cachedTokens = yield* SynchronizedRef.make<
     ReadonlyArray<ManagedRelayAccessTokenCacheEntry>

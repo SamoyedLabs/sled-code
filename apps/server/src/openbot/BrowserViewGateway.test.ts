@@ -335,6 +335,30 @@ it.effect(
         text: "a",
         modifiers: 0,
       });
+      const ordered = Promise.withResolvers<string>();
+      let typed = "";
+      const onCharacter = (bytes: import("@effect/platform-node/NodeWS").RawData) => {
+        const value = JSON.parse(bytes.toString());
+        if (value.type === "key" && value.action === "char") {
+          typed += value.text;
+          if (typed.length === 36) ordered.resolve(typed);
+        }
+      };
+      upstream.on("message", onCharacter);
+      const expectedText = "abcdefghijklmnopqrstuvwxyz0123456789";
+      for (const key of expectedText)
+        peer.send(
+          JSON.stringify({
+            type: "key",
+            action: "char",
+            key,
+            code: `Key${key.toUpperCase()}`,
+            text: key,
+            modifiers: 0,
+          }),
+        );
+      expect(yield* Effect.promise(() => ordered.promise)).toBe(expectedText);
+      upstream.off("message", onCharacter);
       for (const action of ["move", "wheel"] as const) {
         const forwarded = Promise.withResolvers<string>();
         upstream.once("message", (bytes) => forwarded.resolve(bytes.toString()));

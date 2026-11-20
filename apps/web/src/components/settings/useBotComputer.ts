@@ -5,6 +5,7 @@ import type { ComputerActions } from "@t3tools/client-runtime/openbot/presentati
 
 export function useBotComputer(actions: ComputerActions) {
   const generation = useRef(0);
+  const active = useRef(true);
   const owned = useRef<{
     id: string;
     url: string;
@@ -27,6 +28,26 @@ export function useBotComputer(actions: ComputerActions) {
   const [error, setError] = useState<string | null>(null);
   const [capabilities, setCapabilities] = useState<ReturnType<typeof computerCapabilities>>(null);
   const [setup, setSetup] = useState<ReturnType<typeof computerSetup>>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Suspend the owned remote-input lease when this client becomes hidden.
+  useEffect(() => {
+    const suspend = (visible: boolean) => {
+      active.current = visible;
+      if (visible) return;
+      generation.current++;
+      const current = owned.current;
+      owned.current = null;
+      setViewer(null);
+      lock.current = false;
+      setBusy(false);
+      void current
+        ?.close()
+        .catch(() => setError("The viewer could not stop. Its server lease will expire."));
+    };
+    const changed = () => suspend(!document.hidden);
+    changed();
+    document.addEventListener("visibilitychange", changed);
+    return () => document.removeEventListener("visibilitychange", changed);
+  }, []);
   const run = async (operation: "capabilities" | "setup" | "display", displayId?: string) => {
     if (
       lock.current ||
@@ -64,7 +85,7 @@ export function useBotComputer(actions: ComputerActions) {
     setBusy(false);
   };
   const openViewer = async () => {
-    if (lock.current || !actions.viewer?.canOpen || owned.current) return;
+    if (!active.current || lock.current || !actions.viewer?.canOpen || owned.current) return;
     lock.current = true;
     setBusy(true);
     setError(null);

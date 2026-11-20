@@ -1,3 +1,4 @@
+import { BotsEdgeGestureContext } from "../bots/BotsEdgeGesture";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { Menu } from "../../components/ui/Menu";
 import type { MenuAction } from "@react-native-menu/menu";
@@ -237,6 +238,7 @@ interface ThreadSwipeableProps {
 }
 
 export function ThreadSwipeable(props: ThreadSwipeableProps) {
+  const botsEdgeGesture = use(BotsEdgeGestureContext);
   const swipeableRef = useRef<SwipeableMethods | null>(null);
   const hasSecondaryAction = props.secondaryAction !== null;
   const actionsWidth = swipeActionsWidth(hasSecondaryAction);
@@ -510,6 +512,7 @@ export function ThreadSwipeable(props: ThreadSwipeableProps) {
           renderRightActions={renderRightActions}
           rightThreshold={actionsWidth * 0.42}
           simultaneousWith={props.simultaneousWith}
+          requireToFail={botsEdgeGesture}
         >
           {
             /* oxlint-disable react/refs -- The render callback receives a close/open handler; only invoking that handler accesses the ref. */

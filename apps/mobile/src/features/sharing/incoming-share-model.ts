@@ -1,3 +1,4 @@
+import { BotShareTransfer } from "@t3tools/client-runtime/openbot/incoming-share";
 import {
   clampFileAttachmentUploadBytes,
   fileAttachmentTooLargeMessage,
@@ -21,6 +22,7 @@ export interface IncomingShareDraft {
   readonly id: string;
   readonly createdAt: string;
   readonly destination?: IncomingShareDestination;
+  readonly botTransfer?: typeof BotShareTransfer.Type;
   readonly text: string;
   readonly attachments: ReadonlyArray<DraftComposerAttachment>;
   readonly warnings: ReadonlyArray<string>;
@@ -41,6 +43,7 @@ export const IncomingShareDraftSchema = Schema.Struct({
   id: Schema.String,
   createdAt: Schema.String,
   destination: Schema.optional(IncomingShareDestinationSchema),
+  botTransfer: Schema.optional(BotShareTransfer),
   text: Schema.String,
   attachments: Schema.Array(DraftComposerAttachmentSchema),
   warnings: Schema.Array(Schema.String),

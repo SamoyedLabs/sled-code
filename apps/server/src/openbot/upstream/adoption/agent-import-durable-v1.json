@@ -1,0 +1,25 @@
+{
+  "upstreamCommit": "0c7753fa622c38419939cd230657f40e5883d098",
+  "capability": "sled-agent-import-v1",
+  "patchSha256": "28ed82b8c093b06a435c4495f5c3c6430a2dab5e006a29e6271137b74cc8224f",
+  "files": [
+    {
+      "source": "apps/server/src/openbot/upstream/adoption/durable-agent-import.ts.txt",
+      "target": "src/main/durable-agent-import.ts",
+      "sha256": "fbefb8430f6b61e2dbd8a13dabe4bafe4a56e3d11c422c4453bc85e4454c3139"
+    },
+    {
+      "source": "apps/server/src/openbot/upstream/adoption/route-durable-agent-import.ts.txt",
+      "target": "src/main/team-api/route-durable-agent-import.ts",
+      "sha256": "efee998acf41f4a5e70aec4827fe0bd9e285a719599afe2fbbffa841e6dfbbed"
+    },
+    {
+      "source": "apps/server/src/openbot/upstream/adoption/durable-agent-import-v1.ts.txt",
+      "target": "packages/contracts/src/team-protocol/durable-agent-import-v1.ts",
+      "sha256": "f3b36d21d5f2c41011c7a0a833bfb8d7308f7571df3abf062c88d66ac29939e3"
+    }
+  ],
+  "commonRegistration": "C-owned; see assets/cos-adoption-import-wiring.md",
+  "fixture": "import-fixtures.test.ts.txt",
+  "runtimeAcceptance": "not run by B"
+}

@@ -27,6 +27,49 @@ export const OpenbotMaintenanceReport = Schema.Struct({
   ).check(Schema.isMaxLength(30)),
   decisionRequest: Text,
 });
+export const OpenbotCompatibilityIdentity = Schema.Struct({
+  releaseCommit: Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/)),
+  patchSetSha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+  artifactSha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+  profileSchemaVersion: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
+  fixtureVersion: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
+});
+export type OpenbotCompatibilityIdentity = typeof OpenbotCompatibilityIdentity.Type;
+export const OpenbotCompatibilityCheck = Schema.Struct({
+  kind: Schema.Literals([
+    "source",
+    "patches",
+    "build",
+    "transport",
+    "desktop",
+    "native",
+    "profile-migration",
+    "rollback",
+  ]),
+  outcome: Schema.Literals(["passed", "failed", "not-run"]),
+  detail: Schema.String.check(Schema.isMaxLength(4096)),
+});
+export type OpenbotCompatibilityCheck = typeof OpenbotCompatibilityCheck.Type;
+export const OpenbotCompatibilityEvidence = Schema.Struct({
+  runId: Text,
+  threadId: ThreadId,
+  identity: OpenbotCompatibilityIdentity,
+  state: Schema.Literals(["running", "eligible", "failed", "requires-validation"]),
+  checks: Schema.Array(OpenbotCompatibilityCheck),
+  createdAt: IsoDateTime,
+  completedAt: Schema.NullOr(IsoDateTime),
+  artifactPath: Schema.optional(Schema.String),
+});
+export type OpenbotCompatibilityEvidence = typeof OpenbotCompatibilityEvidence.Type;
+export const OpenbotCompatibilityRunInput = Schema.Struct({
+  runId: Text,
+  threadId: ThreadId,
+  identity: OpenbotCompatibilityIdentity,
+  artifactRelativePath: Text,
+  patchRelativePaths: Schema.Array(Text).check(Schema.isMaxLength(100)),
+});
+export type OpenbotCompatibilityRunInput = typeof OpenbotCompatibilityRunInput.Type;
+
 export const OpenbotMaintenanceProposal = Schema.Struct({
   id: Text,
   release: OpenbotUpstreamRelease,
@@ -46,8 +89,11 @@ export const OpenbotMaintenanceProposal = Schema.Struct({
   report: Schema.NullOr(OpenbotMaintenanceReport),
   decision: Schema.NullOr(Schema.Struct({ at: IsoDateTime, note: Text, accept: Schema.Boolean })),
   stagedAt: Schema.NullOr(IsoDateTime),
-  // Evidence records never promote runtime compatibility or authorize profile migration.
-  compatibility: Schema.Literal("requires-validation"),
+  preparationThreadId: Schema.optional(ThreadId),
+  validationRunId: Schema.optional(Text),
+  validation: Schema.optional(OpenbotCompatibilityEvidence),
+  validationInput: Schema.optional(OpenbotCompatibilityRunInput),
+  compatibility: Schema.Literals(["requires-validation", "validated"]),
 });
 export type OpenbotMaintenanceProposal = typeof OpenbotMaintenanceProposal.Type;
 export const OpenbotMaintenanceState = Schema.Struct({
@@ -58,6 +104,7 @@ export const OpenbotMaintenanceState = Schema.Struct({
   proposals: Schema.Array(OpenbotMaintenanceProposal).check(Schema.isMaxLength(100)),
 });
 export type OpenbotMaintenanceState = typeof OpenbotMaintenanceState.Type;
+
 export const OpenbotMaintenanceCommand = Schema.Union([
   Schema.Struct({
     action: Schema.Literal("configure"),
@@ -80,5 +127,14 @@ export const OpenbotMaintenanceCommand = Schema.Union([
     note: Text,
   }),
   Schema.Struct({ action: Schema.Literal("stage"), proposalId: Text }),
+  Schema.Struct({ action: Schema.Literal("prepare"), proposalId: Text }),
+  Schema.Struct({ action: Schema.Literal("validate-prepared"), proposalId: Text }),
+  Schema.Struct({ action: Schema.Literal("cancel-validation"), proposalId: Text }),
+  Schema.Struct({
+    action: Schema.Literal("validate"),
+    proposalId: Text,
+    input: OpenbotCompatibilityRunInput,
+  }),
+  Schema.Struct({ action: Schema.Literal("promote"), proposalId: Text, runId: Text }),
 ]);
 export type OpenbotMaintenanceCommand = typeof OpenbotMaintenanceCommand.Type;

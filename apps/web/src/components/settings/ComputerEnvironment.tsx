@@ -8,9 +8,11 @@ import { BotComputer } from "./BotComputer";
 export function ComputerEnvironment({
   environmentId,
   hostId,
+  workspace = false,
 }: {
   environmentId: EnvironmentId;
   hostId: string;
+  workspace?: boolean;
 }) {
   const viewer = useComputerViewActions(environmentId, hostId);
   const registry = useContext(RegistryContext);
@@ -24,6 +26,7 @@ export function ComputerEnvironment({
   const execute = useAtomCommand(openbot.adminToHost, { reportFailure: false });
   return (
     <BotComputer
+      workspace={workspace}
       actions={{
         viewer,
         canCheckSetup,

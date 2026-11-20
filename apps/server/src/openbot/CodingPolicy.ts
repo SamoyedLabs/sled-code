@@ -47,6 +47,9 @@ export class CodingPolicyError extends Schema.TaggedError<CodingPolicyError>()(
 export class CodingPolicy extends Context.Service<
   CodingPolicy,
   {
+    readonly executionDefaults: (
+      scope: OpenbotCodingPolicyScope,
+    ) => Effect.Effect<OpenbotCodingPolicyDefaults | null, CodingPolicyError>;
     readonly get: (
       scope: OpenbotCodingPolicyScope,
     ) => Effect.Effect<OpenbotCodingPolicyState, CodingPolicyError>;
@@ -280,7 +283,7 @@ const make = Effect.gen(function* () {
       agentId: scope.agentId,
       taskId: null,
     });
-    return `\n\n${MARKER}${ownerId}:BEGIN -->\nSled coding delegation is enabled for this bot. Keep general tasks, browsing, reminders and scheduling in Openbot. Delegate repository changes, coding, pull requests, GitHub issue fixes and merge conflicts to Sled through the MCP tool named openbot_coding.\nCall openbot_coding with action describe to learn its current request schema. For launch, combine these defaults with a concise title, the user's complete coding assignment as prompt, and a stable operationId for this assignment:\n${config}\nUse this origin for the main Openbot conversation: ${origin}. Channel tasks have a separate identity and cannot delegate coding through the released interface yet. In a channel assignment, report this limitation to the user; do not reuse its channel task ID as a side-task ID or post results as a new channel message. Inside an Openbot side task, replace taskId:null with that actual Openbot side-task ID from your execution context. Never substitute a Sled thread ID or invent an Openbot task ID; if context is unavailable, ask for clarification.\nPersist the exact origin and operationId. Retry an uncertain launch with the same request and IDs; never start duplicate coding work. Use get/list to inspect actual progress, send for follow-up changes on the same task, and cancel to stop it. Accepted launch is not completion; report the returned coding result and route approvals/questions to the user.\nUse the selected destination, provider/model and permission defaults. If the user explicitly needs a different target or greater permission, ask them to update this policy or approve the change. This guidance grants no authority: existing Sled connection, destination and launch checks still apply. If tools or access are unavailable, explain the problem instead of silently performing coding work through another engine. Preserve all other user instructions and respect higher-priority instructions.\n${MARKER}${ownerId}:END -->`;
+    return `\n\n${MARKER}${ownerId}:BEGIN -->\nSled coding delegation is enabled for this bot. Keep general tasks, browsing, reminders and scheduling in Openbot. Delegate repository changes, coding, pull requests, GitHub issue fixes and merge conflicts to Sled through the MCP tool named openbot_coding.\nCall openbot_coding with action describe to learn its current request schema. For launch, combine these defaults with a concise title, the user's complete coding assignment as prompt, and a stable operationId for this assignment:\n${config}\nUse this origin for the main Openbot conversation: ${origin}. In a channel assignment, use the built-in openbot.channel_sled_coding tool instead, discovered through tool_search/tool_describe and called through tool_call. Pass the configured defaults plus title and prompt only; the engine privately binds the actual active assignment, origin and turn. Do not pass authoritative IDs or use the side-task launch tool for channel work. After the Sled launch is accepted, finish your provider turn and wait for the exact channel result; Sled retains the assignment until the coding result or lease expiry. Routine and bot-origin channel work requires a real background coding permission approved for that exact source; ask through the app when missing. Inside an Openbot side task, replace taskId:null with that actual Openbot side-task ID from your execution context. Never substitute a Sled thread ID or invent an Openbot task ID; if context is unavailable, ask for clarification.\nPersist the exact origin and operationId. Retry an uncertain launch with the same request and IDs; never start duplicate coding work. Use get/list to inspect actual progress, send for follow-up changes on the same task, and cancel to stop it. Accepted launch is not completion; report the returned coding result and route approvals/questions to the user.\nUse the selected destination, provider/model and permission defaults. If the user explicitly needs a different target or greater permission, ask them to update this policy or approve the change. This guidance grants no authority: existing Sled connection, destination and launch checks still apply. If tools or access are unavailable, explain the problem instead of silently performing coding work through another engine. Preserve all other user instructions and respect higher-priority instructions.\n${MARKER}${ownerId}:END -->`;
   }, Effect.mapError(storageError));
   const mutate = Effect.fn("CodingPolicy.mutate")(function* (
     scope: OpenbotCodingPolicyScope,
@@ -385,6 +388,15 @@ const make = Effect.gen(function* () {
     return yield* mutate(decoded, decoded.expectedRevision, null);
   }, Effect.mapError(storageError));
   return {
+    executionDefaults: Effect.fn("CodingPolicy.executionDefaults")(function* (
+      scope: OpenbotCodingPolicyScope,
+    ) {
+      const row = yield* load(scope);
+      if (row?.pending_json) return yield* new CodingPolicyError({ reason: "pending-operation" });
+      return row?.config_json
+        ? yield* decodeConfig(row.config_json).pipe(Effect.mapError(storageError))
+        : null;
+    }),
     get: (input: OpenbotCodingPolicyScope) => gate.withPermit(get(input)),
     enable: (input: OpenbotCodingPolicyEnableInput) => gate.withPermit(enable(input)),
     disable: (input: OpenbotCodingPolicyDisableInput) => gate.withPermit(disable(input)),

@@ -247,6 +247,8 @@ vi.mock("../uiStateStore", () => ({
 }));
 vi.mock("./useSettings", () => ({ getClientSettings: () => ({}) }));
 
+vi.mock("../lib/workspaceFocus", () => ({ requestWorkspaceContentFocus: vi.fn() }));
+import { requestWorkspaceContentFocus } from "../lib/workspaceFocus";
 import { useNewThreadHandler } from "./useHandleNewThread";
 
 describe.each([
@@ -339,6 +341,7 @@ describe("useNewThreadHandler", () => {
   it("seeds the prompt into the empty draft that is already open", async () => {
     testState.reset(null);
     testState.openEmptyDraft("draft-open");
+    vi.mocked(requestWorkspaceContentFocus).mockClear();
 
     const opened = await useNewThreadHandler()(
       { environmentId: "environment-ssh", projectId: "project-remote" } as never,
@@ -346,6 +349,7 @@ describe("useNewThreadHandler", () => {
     );
 
     expect(opened?.draftId).toBe("draft-open");
+    expect(requestWorkspaceContentFocus).toHaveBeenCalledOnce();
     expect(testState.draftStore.setPrompt).toHaveBeenCalledWith(
       "draft-open",
       "Read the playbook. ",

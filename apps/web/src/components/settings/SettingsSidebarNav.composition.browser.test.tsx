@@ -42,3 +42,30 @@ it("ignores composing keys in the search", async () => {
     expect(screen.router?.state.location.pathname).toBe("/settings/appearance"),
   );
 });
+
+it("keeps bot sections together and follows the selected settings route", async () => {
+  await using screen = await render(
+    <SidebarProvider defaultOpen>
+      <SettingsSidebarNav pathname="/settings/bots" />
+    </SidebarProvider>,
+    { router: "/settings/bots#bot-host-providers" },
+  );
+  const botNav = screen.getByRole("navigation", { name: "Bot host settings" });
+  await expect
+    .element(botNav.getByRole("button", { name: "Bot models & accounts", exact: true }))
+    .toHaveAttribute("aria-current", "page");
+  await botNav.getByRole("button", { name: "Bot storage", exact: true }).click();
+  await vi.waitFor(() => expect(screen.router?.state.location.hash).toBe("bot-host-storage"));
+  await expect
+    .element(botNav.getByRole("button", { name: "Bot storage", exact: true }))
+    .toHaveAttribute("aria-current", "page");
+  await expect
+    .element(botNav.getByRole("button", { name: "Bot models & accounts", exact: true }))
+    .not.toHaveAttribute("aria-current");
+
+  await page.getByRole("combobox", { name: "Search settings" }).fill("theme");
+  await expect
+    .element(screen.getByRole("navigation", { name: "Bot host settings" }))
+    .not.toBeInTheDocument();
+  await expect.element(page.getByRole("option", { name: /Theme/ })).toBeVisible();
+});

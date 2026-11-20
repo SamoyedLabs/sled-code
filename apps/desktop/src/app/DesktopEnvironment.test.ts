@@ -38,6 +38,22 @@ const makeEnvironment = (
 ) => DesktopEnvironment.DesktopEnvironment.pipe(Effect.provide(layerEnvironment(overrides, env)));
 
 describe("DesktopEnvironment", () => {
+  it.effect("keeps packaged private Dev branding without enabling development URLs", () =>
+    Effect.gen(function* () {
+      const environment = yield* makeEnvironment(
+        { isPackaged: true, appVersion: "0.1.6-preview.bots.20261112.3" },
+        { T3CODE_DESKTOP_APP_NAME: "Sled Code (Dev)", T3CODE_DESKTOP_STAGE_LABEL: "Dev" },
+      );
+      assert.equal(environment.displayName, "Sled Code (Dev)");
+      assert.equal(environment.branding.displayName, "Sled Code (Dev)");
+      assert.equal(environment.branding.stageLabel, "Dev");
+      assert.equal(environment.isDevelopment, false);
+      assert.equal(
+        environment.clientAssetsDir,
+        "/Applications/T3 Code.app/Contents/Resources/app.asar/apps/server/dist/client",
+      );
+    }),
+  );
   it.effect("uses the packaged Windows server sidecar as the backend root", () =>
     Effect.gen(function* () {
       const environment = yield* makeEnvironment({

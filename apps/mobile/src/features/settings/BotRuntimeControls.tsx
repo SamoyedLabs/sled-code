@@ -86,7 +86,7 @@ function RuntimePanel({ environmentId }: { environmentId: EnvironmentId }) {
   return (
     <View className="gap-3">
       <Text className="text-foreground-muted">
-        Download and install a release, then activate it on this machine. Activation restarts the
+        Download and install a release on the selected remote computer. Activation restarts its
         bot engine; running work may be interrupted.
       </Text>
       <Text accessibilityLiveRegion="polite">

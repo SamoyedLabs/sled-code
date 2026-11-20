@@ -18,6 +18,7 @@ const licenseGeneratorSource = path.join(
 const escapedWorkspaceRoot = workspaceRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const generatedDeviceStreamRoot = path.join(__dirname, ".generated", "device-stream");
 const generatedPreviewStreamRoot = path.join(__dirname, ".generated", "preview-stream");
+const generatedMermaidPageRoot = path.join(__dirname, ".generated", "mermaid-page");
 
 config.watchFolders = [...new Set([...(config.watchFolders ?? []), workspaceRoot])];
 config.resolver = {
@@ -35,6 +36,7 @@ config.resolver = {
     "@t3tools/mobile-third-party-licenses": generatedLicenseModuleRoot,
     "@t3tools/mobile-device-stream": generatedDeviceStreamRoot,
     "@t3tools/mobile-preview-stream": generatedPreviewStreamRoot,
+    "@t3tools/mobile-mermaid-page": generatedMermaidPageRoot,
   },
 };
 
@@ -71,12 +73,11 @@ async function generateMobileThirdPartyLicenses() {
 }
 
 async function prepareStreamScripts() {
-  const { generateDeviceStreamScript, generatePreviewStreamScript } = await import(
-    pathToFileURL(path.join(__dirname, "scripts", "generate-device-stream.mts")).href
-  );
+  const { generateDeviceStreamScript, generatePreviewStreamScript, generateMermaidPage } =
+    await import(pathToFileURL(path.join(__dirname, "scripts", "generate-device-stream.mts")).href);
   const generateAll = () =>
     Promise.all([generateDeviceStreamScript(), generatePreviewStreamScript()]);
-  await generateAll();
+  await Promise.all([generateAll(), generateMermaidPage()]);
   if (process.env.NODE_ENV !== "production") {
     let rebuild = Promise.resolve();
     for (const [directory, files, generate] of [
@@ -89,6 +90,11 @@ async function prepareStreamScripts() {
         "apps/mobile/src/features/browser",
         ["preview-stream.browser.ts"],
         generatePreviewStreamScript,
+      ],
+      [
+        "apps/mobile/src/features/bots/upstream/openbot-mobile/chat-preview",
+        ["mermaid-renderer.browser.ts", "chat-preview.ts"],
+        generateMermaidPage,
       ],
       ["packages/client-runtime/src/device", ["stream.ts", "hubAccess.ts"], generateAll],
       [

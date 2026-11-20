@@ -29,7 +29,11 @@ export class ComputerViews {
     return this.options.now?.() ?? Date.now();
   }
   async open(principal: string, hostId: string, frameOrigin: string) {
-    if (frameOrigin !== "self") {
+    if (
+      frameOrigin !== "self" &&
+      frameOrigin !== "t3code://app" &&
+      frameOrigin !== "t3code-dev://app"
+    ) {
       const origin = new URL(frameOrigin);
       if (!["http:", "https:"].includes(origin.protocol) || origin.origin !== frameOrigin)
         throw new Error("Invalid viewer origin");

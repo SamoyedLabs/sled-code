@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   templateInstall,
   templateSchedule,
+  templateHistoryRequest,
   type TemplateActions,
 } from "@t3tools/client-runtime/openbot/templates";
 import type { TemplateRequest } from "@t3tools/contracts/openbot-templates";
@@ -17,14 +18,16 @@ export function BotTemplates({
   hostLabel,
   agents,
   reviewAvailable = false,
+  adoptionAvailable = false,
 }: {
   actions: TemplateActions;
   scopeKey: string;
   hostLabel: string;
   agents: readonly { readonly id: string; readonly name: string; readonly listingId?: string }[];
   reviewAvailable?: boolean;
+  adoptionAvailable?: boolean;
 }) {
-  const c = useBotTemplates(scopeKey, actions);
+  const c = useBotTemplates(scopeKey, actions, adoptionAvailable);
   const [source, setSource] = useState("template");
   const [sourceId, setSourceId] = useState("");
   const [agentId, setAgentId] = useState("");
@@ -33,12 +36,12 @@ export function BotTemplates({
   const selected = agents.find((agent) => agent.id === agentId);
   const detail = c.state.review?.detail;
   const preview = c.state.preview?.agentId === agentId ? c.state.preview : null;
-  const install = templateInstall(c.state, timezone, receipt);
-  const update = selected?.listingId
+  const install = adoptionAvailable ? templateInstall(c.state, timezone, receipt, undefined, true) : null;
+  const update = adoptionAvailable && selected?.listingId
     ? templateInstall(c.state, timezone, receipt, {
         agentId: selected.id,
         listingId: selected.listingId,
-      })
+      }, adoptionAvailable)
     : null;
   const disabled = (request: TemplateRequest) =>
     c.busy || c.state.uncertain || !actions.can(request);
@@ -52,7 +55,7 @@ export function BotTemplates({
           text: "Confirm",
           onPress: () => {
             void c.run(request).then((accepted) => {
-              if (accepted && request.operation === "templates.installMarketplace")
+              if (accepted && request.operation === "templates.adopt")
                 setReceipt(randomUUID());
             });
           },
@@ -102,8 +105,7 @@ export function BotTemplates({
       />
       {!reviewAvailable && (
         <Text>
-          This released host has no template/listing detail API. Reviewed installation and updates
-          require the proposed host review extension. Publication preview is available separately.
+          Source review is unavailable on this host. Update its bot engine to review shared agents.
         </Text>
       )}
       <Button
@@ -140,9 +142,8 @@ export function BotTemplates({
             </Text>
           ))}
           <Text>
-            Name on destination: {detail.name}. Routine timezone: {timezone}. Marketplace Add uses
-            the current version when the host executes it; the released API cannot pin that version.
-            Template Add refuses a changed revision.
+            Name on destination: {detail.name}. Routine timezone: {timezone}. Adding refuses a
+            changed source version and saves the original result for recovery.
           </Text>
           <Button
             label="Add agent"
@@ -168,7 +169,7 @@ export function BotTemplates({
         onChange={setAgentId}
       />
       <Button
-        label="Preview publication / refresh status"
+        label="Preview publication"
         disabled={c.busy || !selected || !actions.can({ operation: "templates.preview", agentId })}
         onPress={() => {
           void c.run({ operation: "templates.preview", agentId });
@@ -221,13 +222,16 @@ export function BotTemplates({
           />
         </View>
       )}
+      {reviewAvailable && <Button label="Check publication status" disabled={c.busy || !selected || !actions.can({ operation: "templates.publication", agentId })} onPress={() => { void c.run({ operation: "templates.publication", agentId }); }} />}
+      {c.state.publication?.agentId === agentId && <Text>{c.state.publication.value ? `Published: ${c.state.publication.value.shareUrl}` : "Not published"}</Text>}
+      {adoptionAvailable && <Button label="Refresh installation history" disabled={c.busy || !actions.can(templateHistoryRequest(c.state))} onPress={() => { void c.run(templateHistoryRequest(c.state)); }} />}
+      {c.state.adoptions.map(item => <View key={item.operationId} className="gap-2"><Text>{item.name ?? item.sourceId} · {item.state}{item.agentId ? ` · ${item.agentId}` : ""}</Text>{(item.state === "interrupted" || item.state === "failed") && item.agentId && !c.state.acknowledged.includes(item.operationId) && <Button label="I inspected this retained agent" disabled={c.busy} onPress={() => Alert.alert("Retained agent", `Have you inspected ${item.agentId} on ${hostLabel}? It and its work will remain. This does not retry the original change.`, [{ text: "Cancel", style: "cancel" }, { text: "I inspected it", onPress: () => c.acknowledge(item.operationId) }])} />}</View>)}
       {c.error && <Text accessibilityRole="alert">{c.error}</Text>}
       {c.state.notice && <Text accessibilityLiveRegion="polite">{c.state.notice}</Text>}
       {c.state.uncertain && (
         <Text>
-          Changes are blocked pending reconciliation. Keep this session open; creation receipts do
-          not prevent duplicate agents. Check the destination agent list and ask its owner to
-          resolve the outcome.
+          Refresh installation history to recover the original outcome. An interrupted agent and
+          its work remain on the destination host for inspection.
         </Text>
       )}
     </View>

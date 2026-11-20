@@ -1,3 +1,4 @@
+import { AppState } from "react-native";
 import { useEffect, useRef, useState } from "react";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { computerCapabilities, computerSetup } from "@t3tools/client-runtime/openbot/presentation";
@@ -5,6 +6,7 @@ import type { ComputerActions } from "@t3tools/client-runtime/openbot/presentati
 
 export function useBotComputer(actions: ComputerActions) {
   const generation = useRef(0);
+  const active = useRef(true);
   const owned = useRef<{
     id: string;
     url: string;
@@ -27,6 +29,27 @@ export function useBotComputer(actions: ComputerActions) {
   const [error, setError] = useState<string | null>(null);
   const [capabilities, setCapabilities] = useState<ReturnType<typeof computerCapabilities>>(null);
   const [setup, setSetup] = useState<ReturnType<typeof computerSetup>>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Suspend the owned remote-input lease when this client becomes hidden.
+  useEffect(() => {
+    const suspend = (visible: boolean) => {
+      active.current = visible;
+      if (visible) return;
+      generation.current++;
+      const current = owned.current;
+      owned.current = null;
+      setViewer(null);
+      lock.current = false;
+      setBusy(false);
+      void current
+        ?.close()
+        .catch(() => setError("The viewer could not stop. Its server lease will expire."));
+    };
+    suspend(AppState.currentState === "active");
+    const subscription = AppState.addEventListener("change", (state) =>
+      suspend(state === "active"),
+    );
+    return () => subscription.remove();
+  }, []);
   const run = async (operation: "capabilities" | "setup" | "display", displayId?: string) => {
     if (
       lock.current ||
@@ -64,7 +87,7 @@ export function useBotComputer(actions: ComputerActions) {
     setBusy(false);
   };
   const openViewer = async () => {
-    if (lock.current || !actions.viewer?.canOpen || owned.current) return;
+    if (!active.current || lock.current || !actions.viewer?.canOpen || owned.current) return;
     lock.current = true;
     setBusy(true);
     setError(null);

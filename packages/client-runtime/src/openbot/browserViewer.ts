@@ -5,6 +5,9 @@ type DrawFrame = { readonly uri: string; readonly sequence: number };
 export class BrowserFrameDraw {
   #drawn: DrawFrame | undefined;
   #pending: DrawFrame | undefined;
+  get sequence() {
+    return this.#pending ? undefined : this.#drawn?.sequence;
+  }
   offer(frame: DrawFrame): boolean {
     if (this.#drawn?.uri === frame.uri) {
       this.#drawn = frame;

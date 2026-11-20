@@ -1,0 +1,12 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+:root {
+  --openbot-font-sans: Inter, system-ui, sans-serif;
+}
+.web-app {
+  height: 100dvh;
+}

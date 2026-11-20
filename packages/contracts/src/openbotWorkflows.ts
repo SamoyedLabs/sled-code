@@ -156,6 +156,11 @@ export const OpenbotWorkflowReadRequest = Schema.Union([
 export type OpenbotWorkflowReadRequest = typeof OpenbotWorkflowReadRequest.Type;
 export const OpenbotWorkflowAdminRequest = Schema.Union([
   Schema.Struct({
+    operation: Schema.Literals(["workflow.rotateWebhookSecret", "workflow.webhookConfiguration"]),
+    workflowId: Id,
+    nodeId: Id,
+  }),
+  Schema.Struct({
     operation: Schema.Literal("workflow.create"),
     title: Title,
     graph: Schema.optional(OpenbotWorkflowGraph),

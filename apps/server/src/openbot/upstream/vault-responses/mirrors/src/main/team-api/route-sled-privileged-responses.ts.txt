@@ -1,0 +1,90 @@
+import { createHash } from "node:crypto";
+import { Schema } from "effect";
+import type { AgentService } from "../../backend/agent-service";
+import { runCauseEffect } from "../../backend/effect-boundary";
+import {
+  PrivilegedResponseRequest,
+  PRIVILEGED_RESPONSE_CAPABILITY,
+} from "../../../packages/contracts/src/team-protocol/sled-privileged-responses-v1";
+import type { PrivilegedTarget } from "../../backend/agent/attention-registry";
+import { verifyPrivilegedResponseBinding } from "./privileged-response-binding";
+import { HttpError } from "./http-error";
+import type { TeamApiRequestContext, RouteOutcome } from "./request-context";
+import { readBinary, requireAgentLevel, requireAdmin, memberSender } from "./request-helpers";
+
+export interface PrivilegedResponseAuthority {
+  secret: string;
+  hostId: string;
+  environmentId: string;
+  assertUpstream(principal: string, target: PrivilegedTarget): void;
+  acquireCommit(principal: string, target: PrivilegedTarget, nonce: string): Promise<{ release(): Promise<void> }>;
+}
+const paths = {
+  "privilegedResponse.context": "/v1/sled/privileged-responses/context",
+  "privilegedResponse.respond": "/v1/sled/privileged-responses/respond",
+  "privilegedResponse.result": "/v1/sled/privileged-responses/result",
+};
+export async function routeSledPrivilegedResponses(
+  context: TeamApiRequestContext,
+  agents: AgentService,
+  authority: PrivilegedResponseAuthority,
+): Promise<RouteOutcome> {
+  if (context.method !== "POST" || !Object.values(paths).includes(context.url.pathname)) return "unmatched";
+  try {
+    if (context.url.search || !context.capabilities.has(PRIVILEGED_RESPONSE_CAPABILITY)) throw new Error();
+    requireAdmin(context.member);
+    const raw = await readBinary(context.request, 1_100_000);
+    const token = context.request.headers["x-sled-privileged-response-binding"];
+    if (typeof token !== "string") throw new Error();
+    const expected = {
+      hostId: authority.hostId,
+      environmentId: authority.environmentId,
+      method: "POST",
+      path: context.url.pathname,
+      bodySha256: createHash("sha256").update(raw).digest("hex"),
+    };
+    const principal = verifyPrivilegedResponseBinding(authority.secret, token, expected, Date.now());
+    const input = Schema.decodeUnknownSync(Schema.fromJsonString(PrivilegedResponseRequest))(
+      Buffer.from(raw).toString("utf8"),
+      { onExcessProperty: "error" },
+    );
+    if (paths[input.operation] !== context.url.pathname) throw new Error();
+    const authorize = () => {
+      verifyPrivilegedResponseBinding(authority.secret, token, expected, Date.now());
+      requireAgentLevel(context, input.target.agentId, "manage");
+      authority.assertUpstream(principal, input.target);
+    };
+    authorize();
+    if (input.operation === "privilegedResponse.context") {
+      const result = agents.privilegedResponseContext(input.target, principal, authorize);
+      return context.json(200, { nonce: result.nonce, status: result.status });
+    }
+    if (input.operation === "privilegedResponse.result")
+      return context.json(200, agents.privilegedResponseResult(input.target, input.nonce, principal, authorize));
+    return context.json(
+      200,
+      await runCauseEffect(
+        agents.respondPrivileged(
+          {
+            ...input,
+            response: {
+              actionId: input.response.actionId,
+              values: Object.fromEntries(
+                Object.entries(input.response.values ?? {}).map(([key, value]) => [
+                  key,
+                  typeof value === "string" ? value : [...value],
+                ]),
+              ),
+            },
+          },
+          principal,
+          { privileged: true, sender: memberSender(context.member) },
+          authorize,
+          () => authority.acquireCommit(principal, input.target, input.nonce),
+        ),
+      ),
+    );
+  } catch {
+    throw new HttpError(403, "Privileged response unavailable");
+  }
+}

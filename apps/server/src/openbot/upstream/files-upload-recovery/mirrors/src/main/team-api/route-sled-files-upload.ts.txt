@@ -1,0 +1,30 @@
+import { createHash } from "node:crypto";
+import { runCauseEffect } from "../../backend/effect-boundary";
+import type { MailboxStore, OriginalUploadIdentity } from "../../backend/mailbox-store";
+import { verifyFilesPrincipalBinding } from "./files-principal-binding";
+import { HttpError } from "./http-error";
+import type { TeamApiRequestContext, RouteOutcome } from "./request-context";
+import { readBinary, requireAgentLevel } from "./request-helpers";
+import { decodeOriginalUpload } from "../../../packages/contracts/src/team-protocol/sled-files-upload-v1";
+
+export async function routeSledFilesUpload(context: TeamApiRequestContext, mailbox: MailboxStore, trusted: {
+  secret: string; hostId: string; environmentId: string;
+  validate: (identity: OriginalUploadIdentity) => void;
+}): Promise<RouteOutcome> {
+  const path = context.url.pathname;
+  if (context.method !== "POST" || !["/v1/sled/files/upload", "/v1/sled/files/upload-status", "/v1/sled/files/upload-cancel"].includes(path)) return "unmatched";
+  if (context.url.search || !context.capabilities.has("sled-files-upload-recovery-v1")) throw new HttpError(400, "Original upload unavailable");
+  const raw = await readBinary(context.request, path.endsWith("/upload") ? 139820000 : 8192);
+  const header = context.request.headers["x-sled-files-principal"];
+  if (typeof header !== "string") throw new HttpError(403, "Original upload unavailable");
+  const principal = verifyFilesPrincipalBinding(trusted.secret, header, { hostId: trusted.hostId, method: "POST", path, bodySha256: createHash("sha256").update(raw).digest("hex") }, Date.now());
+  const body = decodeOriginalUpload(JSON.parse(Buffer.from(raw).toString("utf8")), path.endsWith("/upload"));
+  if (body.hostId !== trusted.hostId || body.environmentId !== trusted.environmentId) throw new HttpError(403, "Original upload unavailable");
+  const identity: OriginalUploadIdentity = { operationId: body.operationId, principal, environmentId: body.environmentId, hostId: body.hostId, agentId: body.agentId, threadId: body.threadId, taskId: body.taskId, name: body.name, mimeType: body.mimeType, size: body.size, sha256: body.sha256 };
+  const validate = () => { requireAgentLevel(context, identity.agentId, "chat"); trusted.validate(identity); };
+  validate();
+  if (path.endsWith("/upload-status")) return context.json(200, mailbox.originalUploadStatus(identity, validate));
+  if (path.endsWith("/upload-cancel")) return context.json(200, await runCauseEffect(mailbox.cancelOriginalUpload(identity, validate)));
+  const bytes = Buffer.from(body.dataBase64!, "base64");
+  return context.json(200, await runCauseEffect(mailbox.prepareOriginalUpload(identity, bytes, validate)));
+}

@@ -1,0 +1,106 @@
+{
+  "upstreamCommit": "0c7753fa622c38419939cd230657f40e5883d098",
+  "patchSha256": "b74bc3a708dbc1de5df9babfcf57af8ae6ed2836a3f0cd4b759548e4b549bdd7",
+  "files": {
+    "packages/i18n/src/messages/en/composer.ts": {
+      "baseSha256": "92073c45e7a0920c7983ccb7036752b75187d8b7ff373e31fad703540111730a",
+      "sha256": "ff43ff5f7ecfcab6285eae2d6fdcef10f1d3097296f499c689b19219d954b79e"
+    },
+    "packages/ui/src/features/conversation/ComposerAddMenu.tsx": {
+      "baseSha256": "34542f58fb0b23f43e788368ab3cb73ef636a4e9be24389be13469335cef3252",
+      "sha256": "a0f2b40124645d20068c1c6dc295e9f61eeaa432b4b7fe58dbb6c73c3144d05c"
+    },
+    "packages/ui/src/features/conversation/threads/AgentThreadView.tsx": {
+      "baseSha256": "aa42820f41ca8af7d774bdce2fd2f4499f560e5702b0ba599dfee988c844c226",
+      "sha256": "607b58da66a202e3dfa6b67d56a77b4587e74a2c5453b6131735ef5383746d33"
+    },
+    "src/renderer/src/features/conversation/AgentSettingsPanel.tsx": {
+      "baseSha256": "658e1670f6a780fffbfb526fe3a95e2b257fb7d4fce2c7a604ec319bf88d3746",
+      "sha256": "a26bfe0ace7bc610752dae600cbb510b9eb7581b7b51426da82b97fc3d136a5d"
+    },
+    "src/renderer/src/features/conversation/ConversationComposer.tsx": {
+      "baseSha256": "987b71a657f6baae7a0974851aff7f59b0554e30749175efe0f07600837a66df",
+      "sha256": "a6c2193c6c87f5ec63cfd5a098b434637ba11af4d06054bf843b998aae225750"
+    },
+    "src/renderer/src/features/conversation/ConversationPanels.tsx": {
+      "baseSha256": "8c11ae28752456708211e3acd3b0344ba5696e48daa80666025723e6a4365b3c",
+      "sha256": "5876da1604700fd8b236576b592fc1f46a5caa9693306b2add1d573ad85a846d"
+    },
+    "src/renderer/src/features/conversation/ConversationQuestionPrompt.tsx": {
+      "baseSha256": "247f6fd5753f277c12e5922b25c0649c525d6ed2f6dc3a14ef7c642b3bb1f9c7",
+      "sha256": "a18e27c6f33914cfcecda38112d0a7d271114f8c3b71ae017ee98edfd4d788eb"
+    },
+    "src/renderer/src/features/conversation/ConversationSideThread.tsx": {
+      "baseSha256": "d60f0592e8ba545d836dda8953d6bb2796ad1742e4167ec6a7bb70a3f372ca43",
+      "sha256": "a517ba8401f5d182c87dd4a36178d432e4730911b91c06c6e0fa0bcf7c8579e2"
+    },
+    "src/renderer/src/features/conversation/ConversationThread.tsx": {
+      "baseSha256": "b4c856d7ac92a000713a0b53f716cf83592453d573a0fd80bd8f0ccf511046f1",
+      "sha256": "ee573e9567c7ae2d1a94e05af223be87ffa8e35bd5ba2dcb23ff5bd0feb6701f"
+    },
+    "src/renderer/src/features/conversation/ConversationTimeline.tsx": {
+      "baseSha256": "8279c14c66f80f84586a84f45910bf8f6be6d4985eadcd6ba817a82663cf4c40",
+      "sha256": "114a8bc0b5f31aa707775b73b0abcbde50ff47212f45c1af943ef4f521a5e122"
+    },
+    "src/renderer/src/features/conversation/ConversationView.tsx": {
+      "baseSha256": "f0bd212d28aacad3e41c18721099bbf65d65b78366b54f79d8edeac15759834d",
+      "sha256": "91ecd31539cebc6a2b8668237ae596a6feaefe53f637e1ca935229e27e8feba1"
+    },
+    "src/renderer/src/features/conversation/RoutineWebhookChatCard.tsx": {
+      "baseSha256": "2f3910f3eb6d4efa3076ab2c42085ac5bb22ac9df92e1a642ef5436ddb388f58",
+      "sha256": "fa6a75520ed18ad4e98b182411f89f70ef45e1ba227cd8e87fb519d21a1ba6d8"
+    },
+    "src/renderer/src/features/conversation/UiBlockPrompt.tsx": {
+      "baseSha256": "c284597a46ec05bbecc87c8035b2c6b7903e3bc45cc8279a210ad19b6f904f92",
+      "sha256": "028971c579bc44f87c392c697d2b862df0aba188e2f69204d0c660f92230c8c4"
+    },
+    "src/renderer/src/features/conversation/conversation-runtime.ts": {
+      "baseSha256": "98cc281cda0776273b9bf022cdd7ad68b65a3c9ac69f9f6ce48c64bf4503b707",
+      "sha256": "d7812afa41c4ae9b8988be1df961e77b4739a2bdc85f4cdcfd146b8268cefdbb"
+    },
+    "src/renderer/src/features/conversation/routine-webhooks-api.ts": {
+      "baseSha256": "7d8025e69d953fecf664dfba61476b22c51ba0e1cc2163fd70b01725212a9793",
+      "sha256": "b350448313d5eebf52c260e037b80365936882173c3d4270952d18e5436bb737"
+    },
+    "src/renderer/src/features/conversation/stores/composer-actions.ts": {
+      "baseSha256": "1300c373904dc0f59b447a78e754da15c196557b83c0df508a40eb78d45363bd",
+      "sha256": "3da022222f6cb0861ba7dce054b91a4d63550c6abddd7f6e0a03327c2dbae3da"
+    },
+    "src/renderer/src/features/conversation/stores/thread-composer-actions.ts": {
+      "baseSha256": "354db20fe75ac69422a27567449ded51503fb803f527037b9637b371d7f95eab",
+      "sha256": "dfa6a82d73c857d8282d5deab65eaef241b0b1748cd647547319b21a5cff197d"
+    },
+    "src/renderer/src/features/tasks/TasksView.tsx": {
+      "baseSha256": "120e760df644393a8def1709392cbab67d045030242c0b23b9e5cc4e38492693",
+      "sha256": "ce1f70da28ddbe8847b61a1fc047872a34449efaff3694d2d54af2de12fd66e7"
+    },
+    "src/renderer/src/features/web-client/WebWorkspace.tsx": {
+      "baseSha256": "db5176f8f9c4e114a283b18ccc9bf9bab8ba073b0ecee9e183f896df42b2c149",
+      "sha256": "73694b0380b3ed8354ab1eda044fee28955380d38949d40089c3ad973658551b"
+    },
+    "src/renderer/src/features/web-client/web-agent-threads.ts": {
+      "baseSha256": "f4a73309ebe550b8a475544d27970f3f7079158a9397db01d3933bcce85ee982",
+      "sha256": "cdcb97b3092431220571d808088f7fdc3a839645863cb1408157fc644df75454"
+    },
+    "src/renderer/src/features/web-client/web-attachments.ts": {
+      "baseSha256": "090c52bcc643ba4698afbbbef0c09d2f44db2fefced6bdbb97d7875a0dc24bda",
+      "sha256": "69b5c511128993b643a1adbbd3d5ec1ab07459196d5df0e56d1104f1e6ab194d"
+    },
+    "src/renderer/src/features/web-client/web-conversation-runtime.ts": {
+      "baseSha256": "038864e572c8fa0e78846274081c9574ecf1aec61ea5c995590e035f3eaebf37",
+      "sha256": "87ab2c7870b5f535697e4c618ac05679c6093bf6fc4b7516a4dfe3029bc2199f"
+    },
+    "src/renderer/src/features/web-client/web-runtime.ts": {
+      "baseSha256": "83637887b712d89d08580d488e3f1b1ff9ad29ef317bb8635912ad218fdfdf5f",
+      "sha256": "69eeb5579caf7d98603f37aa2336a4d760b9362510659e91a769748bf551d8df"
+    },
+    "src/renderer/src/features/web-client/web-tasks.ts": {
+      "baseSha256": "3a7d0643c4e83a6e1582ec138b2666016cf56ba651f637e5e800b70d697497c3",
+      "sha256": "629c2631e3dd2c12ef2140e4b5cbcff21ee56bc3acc647d0669f34e3934a53e6"
+    },
+    "src/renderer/src/features/conversation/RoutineWebhookChatCard.dom.test.ts": {
+      "baseSha256": null,
+      "sha256": "5bb940d66f7a7ca73cd25607277dc83bbd0f28c9a495c964a6abab26a3772a24"
+    }
+  }
+}

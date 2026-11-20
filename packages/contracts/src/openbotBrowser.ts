@@ -33,12 +33,26 @@ export const OpenbotBrowserAdminRequest = Schema.Union([
   }),
   Schema.Struct({ operation: Schema.Literal("browser.stop"), tabId: Id }),
 ]);
+const Viewport = Schema.Struct({
+  width: Schema.Number.check(Schema.isInt(), Schema.isBetween({ minimum: 320, maximum: 2560 })),
+  height: Schema.Number.check(Schema.isInt(), Schema.isBetween({ minimum: 240, maximum: 2560 })),
+});
+export const OpenbotBrowserViewFeatures = Schema.Struct({
+  viewport: Schema.optional(Viewport),
+  framePoint: Schema.optional(Schema.Boolean),
+  clipboard: Schema.Boolean,
+  cursor: Schema.Boolean,
+  contextMenu: Schema.Boolean,
+  selectAllModifiers: Schema.optional(Schema.Literals([2, 4])),
+});
+export type OpenbotBrowserViewFeatures = typeof OpenbotBrowserViewFeatures.Type;
 export const OpenbotBrowserViewerGrant = Schema.Struct({
   id: Id,
   token: Schema.String,
   hostId: Id,
   tabId: Id,
   expiresAt: Schema.Number,
+  features: Schema.optional(OpenbotBrowserViewFeatures),
 });
 export type OpenbotBrowserViewerGrant = typeof OpenbotBrowserViewerGrant.Type;
 export const OpenbotBrowserTab = Schema.Struct({
@@ -46,6 +60,17 @@ export const OpenbotBrowserTab = Schema.Struct({
   title: Schema.String,
   url: Schema.String,
   loading: Schema.Boolean,
+  recording: Schema.optional(Schema.Boolean),
+  diagnosticErrorCount: Schema.optional(
+    Schema.Number.check(
+      Schema.isInt(),
+      Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+    ),
+  ),
+  openerTabId: Schema.optional(Id),
+  popupFailure: Schema.optional(
+    Schema.Struct({ id: Id, message: Schema.String.check(Schema.isMaxLength(4096)) }),
+  ),
   ownerThreadId: Schema.NullOr(Schema.String),
   ownerAgentId: Schema.NullOr(Schema.String),
   userControl: Schema.optional(Schema.Boolean),
@@ -62,6 +87,8 @@ export const OpenbotBrowserViewCommand = Schema.Union([
     hostId: Id,
     tabId: Id,
     ackFrames: Schema.optional(Schema.Boolean),
+    advanced: Schema.optional(Schema.Boolean),
+    viewport: Schema.optional(Viewport),
   }),
   Schema.Struct({ operation: Schema.Literal("close"), hostId: Id, id: Id }),
 ]);

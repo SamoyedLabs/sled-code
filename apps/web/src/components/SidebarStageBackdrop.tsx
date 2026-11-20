@@ -49,19 +49,31 @@ export function useSidebarStageBackdropVariant(
   return resolveSidebarStageBackdropVariant(useEnvironmentStageLabel(), mode);
 }
 
-export function SidebarStageBackdrop({ variant }: { variant: SidebarStageBackdropVariant }) {
+export function SidebarStageBackdrop({
+  variant,
+  gridOffset = 0,
+}: {
+  variant: SidebarStageBackdropVariant;
+  gridOffset?: number;
+}) {
   return (
     <div
       aria-hidden
       className="sidebar-stage-backdrop pointer-events-none absolute inset-x-0 top-0 z-0 h-20 select-none overflow-hidden"
     >
-      <StageBackdropArt variant={variant} />
+      <StageBackdropArt variant={variant} gridOffset={gridOffset} />
     </div>
   );
 }
 
-function StageBackdropArt({ variant }: { variant: SidebarStageBackdropVariant }) {
-  return variant === "nightly" ? <NightlySkyArt /> : <DevBlueprintArt />;
+function StageBackdropArt({
+  variant,
+  gridOffset,
+}: {
+  variant: SidebarStageBackdropVariant;
+  gridOffset: number;
+}) {
+  return variant === "nightly" ? <NightlySkyArt /> : <DevBlueprintArt gridOffset={gridOffset} />;
 }
 
 export function StageBackdropButtonArt({ variant }: { variant: SidebarStageBackdropVariant }) {
@@ -211,7 +223,13 @@ function NightlySkyArt({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function DevBlueprintArt({ compact = false }: { compact?: boolean }) {
+function DevBlueprintArt({
+  compact = false,
+  gridOffset = 0,
+}: {
+  compact?: boolean;
+  gridOffset?: number;
+}) {
   const idPrefix = useId().replaceAll(":", "");
   const paperId = `${idPrefix}-stage-bp-paper`;
   const glowId = `${idPrefix}-stage-bp-glow`;
@@ -294,7 +312,13 @@ function DevBlueprintArt({ compact = false }: { compact?: boolean }) {
           />
           <stop offset="1" style={{ stopColor: "var(--stage-art-bottom)" }} stopOpacity="0" />
         </radialGradient>
-        <pattern id={minorGridId} width="8" height="8" patternUnits="userSpaceOnUse">
+        <pattern
+          id={minorGridId}
+          width="8"
+          height="8"
+          patternUnits="userSpaceOnUse"
+          patternTransform={`translate(${gridOffset} 0)`}
+        >
           <path
             d="M8 0H0V8"
             style={{ stroke: "var(--stage-art-grid-line)" }}
@@ -302,7 +326,13 @@ function DevBlueprintArt({ compact = false }: { compact?: boolean }) {
             strokeWidth="0.5"
           />
         </pattern>
-        <pattern id={majorGridId} width="32" height="32" patternUnits="userSpaceOnUse">
+        <pattern
+          id={majorGridId}
+          width="32"
+          height="32"
+          patternUnits="userSpaceOnUse"
+          patternTransform={`translate(${gridOffset} 0)`}
+        >
           <path
             d="M32 0H0V32"
             style={{ stroke: "var(--stage-art-grid-line)" }}
@@ -310,7 +340,13 @@ function DevBlueprintArt({ compact = false }: { compact?: boolean }) {
             strokeWidth="0.6"
           />
         </pattern>
-        <pattern id={rulerId} width="32" height="6" patternUnits="userSpaceOnUse">
+        <pattern
+          id={rulerId}
+          width="32"
+          height="6"
+          patternUnits="userSpaceOnUse"
+          patternTransform={`translate(${gridOffset} 0)`}
+        >
           <path
             d="M4 0V2.5M12 0V2.5M20 0V4M28 0V2.5"
             style={{ stroke: "var(--stage-art-line)" }}

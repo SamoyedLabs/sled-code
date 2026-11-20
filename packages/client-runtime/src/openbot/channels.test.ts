@@ -1,4 +1,5 @@
 import { expect, it } from "@effect/vitest";
+import type { OpenbotChannelMessage } from "@t3tools/contracts";
 import {
   channelScheduleDraft,
   channelScheduleValue,
@@ -7,7 +8,87 @@ import {
   channelSaveRequest,
   channelMessages,
   channelTaskActions,
+  channelPromptSnapshot,
 } from "./channels.ts";
+
+it("binds group forms to the original member, thread, turn and live request", () => {
+  const channel = {
+    id: "group",
+    name: "Team",
+    title: "",
+    instructions: "",
+    members: [{ agentId: "bot" }],
+    leadAgentId: "bot",
+    revision: 3,
+    archived: false,
+    createdAt: "now",
+    unreadCount: 0,
+    activeTasks: 1,
+    lastMessage: null,
+    threads: [{ agentId: "bot", threadId: "group-thread" }],
+  };
+  const entry: OpenbotChannelMessage = {
+    id: "row",
+    channelId: "group",
+    sequence: 3,
+    author: { kind: "agent" as const, id: "bot", name: "Bot" },
+    taskId: null,
+    superseded: false,
+    message: {
+      id: "original-message",
+      author: "assistant" as const,
+      text: "Choose",
+      createdAt: "now",
+      status: "completed" as const,
+      turnId: "turn",
+      questionPrompt: { requestId: "prompt", resolution: null },
+    },
+  };
+  const request = {
+    kind: "prompt" as const,
+    requestId: "prompt",
+    agentId: "bot",
+    threadId: "group-thread",
+    turnId: "turn",
+  };
+  const attention = {
+    hostId: "host",
+    state: "ready" as const,
+    complete: true,
+    requests: [request],
+  };
+  const read = (e = entry, c = channel, a = attention) => channelPromptSnapshot("host", c, e, a);
+  expect(read()).toMatchObject({
+    agentId: "bot",
+    threadId: "group-thread",
+    activeTurnId: "turn",
+    messages: [{ id: "original-message" }],
+  });
+  expect(read({ ...entry, superseded: true })).toBeNull();
+  expect(read({ ...entry, channelId: "other" })).toBeNull();
+  expect(read(entry, { ...channel, archived: true })).toBeNull();
+  expect(read(entry, { ...channel, members: [] })).toBeNull();
+  expect(read(entry, channel, { ...attention, hostId: "other" })).toBeNull();
+  for (const altered of [
+    { threadId: "main-thread" },
+    { turnId: "old-turn" },
+    { requestId: "other" },
+    { agentId: "other" },
+  ]) {
+    expect(
+      read(entry, channel, { ...attention, requests: [{ ...request, ...altered }] }),
+    ).toBeNull();
+  }
+  expect(
+    read({
+      ...entry,
+      message: {
+        ...entry.message,
+        questionPrompt: { requestId: "prompt", resolution: "answered" },
+      },
+    }),
+  ).toBeNull();
+});
 
 it("preserves unlisted channel members and lead while editing and rejects a stale settings save", () => {
   const channel = {

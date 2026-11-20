@@ -1,3 +1,7 @@
+import {
+  isSecretFormField,
+  uiBlockHasPrivilegedAction,
+} from "@t3tools/contracts/openbot-ui-blocks";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
@@ -36,20 +40,39 @@ export function BotUiBlock({
   const [values, setValues] = useState<Record<string, string | string[]>>(() =>
     blockInitialValues(message.uiBlock),
   );
+  const [replyText, setReplyText] = useState("");
   const [submitted, setSubmitted] = useState(false);
   if (!block)
     return message.uiBlock == null ? null : (
       <p>Unsupported UI block. Readonly data is available in the uiBlock details.</p>
     );
-  if (!snapshot) return null;
   const { spec } = block;
+  const protectedBlock =
+    Boolean(block.vault) ||
+    (spec.type === "form" && spec.fields.some(isSecretFormField)) ||
+    uiBlockHasPrivilegedAction(spec);
+  if (protectedBlock && block.state.status !== "pending") {
+    const status =
+      block.state.status === "answered"
+        ? "Secure response submitted."
+        : block.state.status === "expired"
+          ? "Secure request expired."
+          : "Secure request closed.";
+    return <p>{status}</p>;
+  }
+  if (spec.type === "form" && spec.fields.some(isSecretFormField))
+    return (
+      <p>
+        This secret form requires a dedicated secure response path, which is not available here yet.
+      </p>
+    );
   const prompt = message.questionPrompt;
   const requestId =
     prompt && typeof prompt === "object" && !Array.isArray(prompt) && "requestId" in prompt
       ? prompt.requestId
       : null;
   const command = (actionId: string): BlockCommand | null =>
-    typeof requestId === "string" || typeof requestId === "number"
+    snapshot && (typeof requestId === "string" || typeof requestId === "number")
       ? {
           operation: "conversation.blockRespond",
           agentId: snapshot.agentId,
@@ -59,12 +82,19 @@ export function BotUiBlock({
           messageId: message.id,
           blockId: block.blockId,
           requestId,
-          response: { actionId, ...(spec.type === "quick_replies" ? {} : { values }) },
+          response: {
+            actionId,
+            ...(actionId === "_text"
+              ? { text: replyText }
+              : spec.type === "quick_replies"
+                ? {}
+                : { values }),
+          },
         }
       : null;
   const send = async (action: string) => {
     const c = command(action);
-    if (c && blockAnswers(snapshot, c)) {
+    if (snapshot && c && blockAnswers(snapshot, c)) {
       setSubmitted(true);
       const result = await settlePromise(() => respond(c));
       setValues((current) =>
@@ -74,10 +104,12 @@ export function BotUiBlock({
           result._tag === "Success" && result.value,
         ),
       );
+      setReplyText("");
       setSubmitted(false);
     }
   };
-  const frozen = disabled || submitted || block.state.status !== "pending" || Boolean(block.vault);
+  const frozen =
+    !snapshot || disabled || submitted || block.state.status !== "pending" || Boolean(block.vault);
   const update = (id: string, value: string | string[]) => setValues({ ...values, [id]: value });
   return (
     <fieldset disabled={frozen} className="space-y-2 rounded border p-3">
@@ -159,6 +191,25 @@ export function BotUiBlock({
             )}
           </label>
         ))}
+      {spec.type === "quick_replies" && spec.allowText && (
+        <label>
+          Reply in your own words
+          <Input
+            aria-label="Reply in your own words"
+            value={replyText}
+            maxLength={8000}
+            onChange={(event) => setReplyText(event.target.value)}
+          />
+          <BlockAction
+            environmentId={environmentId}
+            hostId={hostId}
+            command={command("_text")}
+            disabled={frozen || !replyText.trim()}
+            label="Send reply"
+            onPress={() => void send("_text")}
+          />
+        </label>
+      )}
       {(spec.type === "confirm"
         ? spec.actions
         : spec.type === "quick_replies"
@@ -173,7 +224,11 @@ export function BotUiBlock({
             hostId={hostId}
             command={c}
             disabled={
-              frozen || uiBlockActionIsPrivileged(spec, a.id) || !c || !blockAnswers(snapshot, c)
+              frozen ||
+              uiBlockActionIsPrivileged(spec, a.id) ||
+              !snapshot ||
+              !c ||
+              !blockAnswers(snapshot, c)
             }
             onPress={() => void send(a.id)}
             label={a.label}

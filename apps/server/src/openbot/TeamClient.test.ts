@@ -1,3 +1,4 @@
+import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 // @effect-diagnostics nodeBuiltinImport:off - Local HTTP fixtures exercise the upstream transport contract.
@@ -33,6 +34,104 @@ const fixture = Effect.fnUntraced(function* (handle: NodeHttp.RequestListener) {
     return yield* Effect.die("Missing fixture address");
   return `http://127.0.0.1:${address.port}`;
 });
+
+it.live("projects only the catalog's account-required refusal without leaking its raw error", () =>
+  Effect.gen(function* () {
+    let status = 409;
+    const origin = yield* fixture((request, response) => {
+      response.setHeader("content-type", "application/json");
+      if (request.url === "/v1/auth/login") {
+        response.end(JSON.stringify({ sessionToken: "private", sessionExpiresAt: "2099-01-01" }));
+        return;
+      }
+      if (request.url === "/v1/auth/logout") {
+        response.writeHead(204).end();
+        return;
+      }
+      response
+        .writeHead(status)
+        .end(JSON.stringify({ code: "host_account_required", error: "PRIVATE_SERVER_DETAIL" }));
+    });
+    const session = yield* (yield* TeamClient.TeamClient).connect({
+      apiUrl: origin,
+      ownerSecret: "fixture",
+    });
+    const request = { operation: "settings.local-catalog.searchSkills" as const, parameters: {} };
+    const account = yield* Effect.flip(session.apiRead(request));
+    expect(account).toMatchObject({
+      reason: "http",
+      status: 409,
+      publicCode: "host_account_required",
+    });
+    expect(JSON.stringify(account)).not.toContain("PRIVATE_SERVER_DETAIL");
+    const other = yield* Effect.flip(session.apiRead({ operation: "registry.installed" }));
+    expect(other.publicCode).toBeUndefined();
+    status = 401;
+    const refused = yield* Effect.flip(session.apiRead(request));
+    expect(refused).toMatchObject({ reason: "http", status: 401 });
+    expect(refused.publicCode).toBeUndefined();
+    yield* session.close;
+  }).pipe(
+    Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+    Effect.scoped,
+  ),
+);
+
+it.live("preserves explicit browser conversation ownership and legacy ownerless opens", () =>
+  Effect.gen(function* () {
+    const bodies: unknown[] = [];
+    const origin = yield* fixture(async (request, response) => {
+      response.setHeader("content-type", "application/json");
+      if (request.url === "/v1/auth/login") {
+        response.end(
+          JSON.stringify({ sessionToken: "owner", sessionExpiresAt: "2099-01-01T00:00:00Z" }),
+        );
+        return;
+      }
+      if (request.url === "/v1/auth/logout") {
+        response.writeHead(204).end();
+        return;
+      }
+      if (request.url === "/v1/browser/open") {
+        let text = "";
+        for await (const chunk of request) text += chunk;
+        bodies.push(JSON.parse(text));
+        response.end(
+          JSON.stringify({
+            id: "tab",
+            title: "Owned",
+            url: "about:blank",
+            loading: false,
+            ownerThreadId: "task",
+            ownerBotId: "agent",
+          }),
+        );
+        return;
+      }
+      response.writeHead(404).end("{}");
+    });
+    const session = yield* (yield* TeamClient.TeamClient).connect({
+      apiUrl: origin,
+      ownerSecret: "fixture",
+    });
+    yield* session.apiAdmin({
+      operation: "browser.open",
+      url: "about:blank",
+      focus: false,
+      ownerAgentId: "agent",
+      ownerThreadId: "task",
+    });
+    yield* session.apiAdmin({ operation: "browser.open", url: "about:blank", focus: false });
+    expect(bodies).toEqual([
+      { url: "about:blank", focus: false, ownerBotId: "agent", ownerThreadId: "task" },
+      { url: "about:blank", focus: false, ownerBotId: null, ownerThreadId: null },
+    ]);
+    yield* session.close;
+  }).pipe(
+    Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+    Effect.scoped,
+  ),
+);
 
 it.live(
   "negotiates and projects the catalog while preserving install outcomes and HTTP refusal",
@@ -432,7 +531,7 @@ it.live(
         expect(negotiated).toEqual(
           expect.arrayContaining(["agent-install-v1", "agent-update-v1", "agent-publish-v1"]),
         );
-        expect(negotiated).not.toContain("agent-review-v1");
+        expect(negotiated).toContain("agent-review-v1");
       }
       yield* session.close;
     }).pipe(
@@ -1044,7 +1143,17 @@ it.live("authenticates the local owner, lists a projected roster, and revokes th
       } else if (request.url === "/v1/agents") {
         response.end(
           JSON.stringify([
-            { id: "bot-1", name: "School", provider: "codex", workspacePath: "/private/workspace" },
+            {
+              id: "bot-1",
+              name: "School",
+              provider: "codex",
+              workspacePath: "/private/workspace",
+              title: "Homework",
+              preview: "Assignment ready",
+              updatedAt: "2026-11-05T19:00:00.000Z",
+              avatarSeed: "sled",
+              avatarHue: 55,
+            },
           ]),
         );
       } else {
@@ -1053,7 +1162,18 @@ it.live("authenticates the local owner, lists a projected roster, and revokes th
     });
     const client = yield* TeamClient.TeamClient;
     const session = yield* client.connect({ apiUrl, ownerSecret: "private-password" });
-    expect(yield* session.listAgents).toEqual([{ id: "bot-1", name: "School", provider: "codex" }]);
+    expect(yield* session.listAgents).toEqual([
+      {
+        id: "bot-1",
+        name: "School",
+        provider: "codex",
+        title: "Homework",
+        preview: "Assignment ready",
+        updatedAt: "2026-11-05T19:00:00.000Z",
+        avatarSeed: "sled",
+        avatarHue: 55,
+      },
+    ]);
     yield* session.close;
     expect(requests).toEqual([
       {
@@ -1449,6 +1569,12 @@ it.live(
             transport: "http",
             enabled: true,
             url: "https://example.com",
+            command: "private-command",
+            argsCount: 1,
+            envNames: ["API_KEY"],
+            headerNames: ["Authorization"],
+            envPassthrough: [],
+            workingDirectory: "/private/folder",
           },
         ]);
       }
@@ -1472,7 +1598,19 @@ it.live(
           patch: { name: "Renamed" },
         }),
       ).toEqual([
-        { id: "sled", name: "Sled", transport: "http", enabled: true, url: "https://example.com" },
+        {
+          id: "sled",
+          name: "Sled",
+          transport: "http",
+          enabled: true,
+          url: "https://example.com",
+          command: "private-command",
+          argsCount: 1,
+          envNames: ["API_KEY"],
+          headerNames: ["Authorization"],
+          envPassthrough: [],
+          workingDirectory: "/private/folder",
+        },
       ]);
       expect(privateTargets.at(-1)).toMatchObject({
         name: "Renamed",
@@ -2175,4 +2313,796 @@ it.effect(
         expect(expired.failure).toMatchObject({ reason: "http", status: 401 });
     }).pipe(Effect.provide(TeamClient.layer), Effect.provideService(HttpClient.HttpClient, http));
   },
+);
+
+it.live("reads only the fixed workspace metadata routes and preserves HTTP refusal", () =>
+  Effect.gen(function* () {
+    const expected = [
+      "/v1/identity",
+      "/v1/me",
+      "/v1/agents/conversation-reads",
+      "/v1/sidebar-layout",
+      "/v1/team/presence",
+    ];
+    const seen: string[] = [];
+    let refused = false;
+    const apiUrl = yield* fixture((request, response) => {
+      response.setHeader("content-type", "application/json");
+      if (request.url === "/v1/auth/login") {
+        response.end(JSON.stringify({ sessionToken: "private", sessionExpiresAt: "2027-01-01" }));
+        return;
+      }
+      if (request.url === "/v1/auth/logout") {
+        response.writeHead(204).end();
+        return;
+      }
+      expect(request.method).toBe("GET");
+      expect(request.headers.authorization).toBe("Bearer private");
+      seen.push(request.url!);
+      response.writeHead(refused ? 403 : 200).end(JSON.stringify({ route: request.url }));
+    });
+    const session = yield* (yield* TeamClient.TeamClient).connect({
+      apiUrl,
+      ownerSecret: "fixture",
+    });
+    for (const operation of [
+      "workspace.identity",
+      "workspace.member",
+      "workspace.reads",
+      "workspace.sidebar",
+      "workspace.presence",
+    ] as const)
+      yield* session.apiRead({ operation });
+    expect(seen).toEqual(expected);
+    refused = true;
+    expect(yield* Effect.flip(session.apiRead({ operation: "workspace.member" }))).toMatchObject({
+      reason: "http",
+      status: 403,
+    });
+    yield* session.close;
+  }).pipe(
+    Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+    Effect.scoped,
+  ),
+);
+
+it.live("bounds analytics to authenticated GET paths and preserves refusal", () =>
+  Effect.gen(function* () {
+    const seen: string[] = [];
+    let refused = false;
+    const apiUrl = yield* fixture((request, response) => {
+      response.setHeader("content-type", "application/json");
+      if (request.url === "/v1/auth/login") {
+        response.end(JSON.stringify({ sessionToken: "private", sessionExpiresAt: "2027-01-01" }));
+        return;
+      }
+      if (request.url === "/v1/auth/logout") {
+        response.writeHead(204).end();
+        return;
+      }
+      expect(request.method).toBe("GET");
+      expect(request.headers.authorization).toBe("Bearer private");
+      expect(request.headers["openbot-capabilities"]).toContain("host-analytics");
+      seen.push(request.url!);
+      response.writeHead(refused ? 403 : 200).end(JSON.stringify({ route: request.url }));
+    });
+    const session = yield* (yield* TeamClient.TeamClient).connect({
+      apiUrl,
+      ownerSecret: "fixture",
+    });
+    const range = { startDate: "2026-11-01", endDate: "2026-11-04", timeZone: "America/Chicago" };
+    yield* session.apiRead({ operation: "workspace.analytics", ...range, agentId: "agent" });
+    yield* session.apiRead({ operation: "agent.analytics", ...range, agentId: "agent" });
+    yield* session.apiRead({ operation: "workspace.usage" });
+    expect(seen).toEqual([
+      "/v1/analytics?startDate=2026-11-01&endDate=2026-11-04&timeZone=America%2FChicago&agentId=agent",
+      "/v1/agents/agent/analytics?startDate=2026-11-01&endDate=2026-11-04&timeZone=America%2FChicago",
+      "/v1/agents/usage",
+    ]);
+    refused = true;
+    expect(
+      yield* Effect.flip(session.apiRead({ operation: "workspace.analytics", ...range })),
+    ).toMatchObject({ reason: "http", status: 403 });
+    yield* session.close;
+  }).pipe(
+    Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+    Effect.scoped,
+  ),
+);
+
+it.live("keeps avatar transport authenticated, version-bound and byte bounded", () =>
+  Effect.gen(function* () {
+    const version = "1b7bc050-fdce-47f7-98a2-98860cebf941";
+    let oversized = false;
+    let uploaded: Buffer | null = null;
+    let deletes = 0;
+    const origin = yield* fixture(async (request, response) => {
+      if (request.url === "/v1/auth/login") {
+        response.setHeader("content-type", "application/json");
+        response.end(JSON.stringify({ sessionToken: "private", sessionExpiresAt: "2027-01-01" }));
+        return;
+      }
+      if (request.url === "/v1/auth/logout") {
+        response.writeHead(204).end();
+        return;
+      }
+      expect(request.headers.authorization).toBe("Bearer private");
+      if (request.url === "/v1/agents") {
+        response.setHeader("content-type", "application/json");
+        response.end(
+          JSON.stringify([
+            {
+              id: "agent",
+              name: "Image bot",
+              provider: "codex",
+              avatarUrl: `openbot-avatar://agent/agent?v=${version}&type=image%2Fwebp`,
+            },
+          ]),
+        );
+        return;
+      }
+      if (request.url === `/v1/agents/agent/avatar?v=${version}` && request.method === "GET") {
+        response.setHeader("content-type", "image/webp");
+        response.end(oversized ? Buffer.alloc(524289) : Buffer.from("avatar-image"));
+        return;
+      }
+      if (request.url === "/v1/agents/agent/avatar" && request.method === "PUT") {
+        expect(request.headers["content-type"]).toBe("image/webp");
+        const parts: Buffer[] = [];
+        for await (const chunk of request) parts.push(Buffer.from(chunk));
+        uploaded = Buffer.concat(parts);
+        response.setHeader("content-type", "application/json");
+        response.end("{}");
+        return;
+      }
+      if (request.url === "/v1/agents/agent/avatar" && request.method === "DELETE") {
+        deletes++;
+        response.setHeader("content-type", "application/json");
+        response.end("{}");
+        return;
+      }
+      response.writeHead(404).end("{}");
+    });
+    const session = yield* (yield* TeamClient.TeamClient).connect({
+      apiUrl: origin,
+      ownerSecret: "fixture",
+    });
+    expect(yield* session.listAgents).toEqual([
+      { id: "agent", name: "Image bot", provider: "codex", avatarVersion: version },
+    ]);
+    expect(
+      yield* session.apiRead({ operation: "agent.avatar.read", agentId: "agent", version }),
+    ).toEqual({
+      mimeType: "image/webp",
+      dataBase64: Buffer.from("avatar-image").toString("base64"),
+    });
+    oversized = true;
+    expect(
+      yield* Effect.flip(
+        session.apiRead({ operation: "agent.avatar.read", agentId: "agent", version }),
+      ),
+    ).toMatchObject({ reason: "decode" });
+    yield* session.apiAdmin({
+      operation: "agent.avatar.set",
+      agentId: "agent",
+      image: { mimeType: "image/webp", dataBase64: Buffer.from("new-image").toString("base64") },
+    });
+    expect(uploaded).toEqual(Buffer.from("new-image"));
+    yield* session.apiAdmin({ operation: "agent.avatar.set", agentId: "agent", image: null });
+    expect(deletes).toBe(1);
+    expect(
+      yield* Effect.flip(
+        session.apiAdmin({
+          operation: "agent.avatar.set",
+          agentId: "agent",
+          image: { mimeType: "image/webp", dataBase64: Buffer.alloc(524289).toString("base64") },
+        }),
+      ),
+    ).toMatchObject({ reason: "decode" });
+    yield* session.close;
+  }).pipe(
+    Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+    Effect.scoped,
+  ),
+);
+
+it.live(
+  "matches catalog identities privately and preserves unrelated credentials on reconnect",
+  () =>
+    Effect.gen(function* () {
+      const held = {
+        id: "held",
+        name: "catalog",
+        transport: "http",
+        enabled: true,
+        command: "",
+        args: [],
+        env: [{ key: "KEPT", value: "PRIVATE_ENV" }],
+        envPassthrough: [],
+        workingDirectory: "",
+        url: "https://mcp.example.test/user?q=PRIVATE_URL#account-added",
+        headers: [
+          { key: "Kept", value: "PRIVATE_HEADER" },
+          { key: "Authorization", value: "OLD_SECRET" },
+        ],
+      };
+      const submitted: unknown[] = [];
+      const origin = yield* fixture(async (request, response) => {
+        response.setHeader("content-type", "application/json");
+        if (request.url === "/v1/auth/login") {
+          response.end(JSON.stringify({ sessionToken: "private", sessionExpiresAt: "2027-01-01" }));
+          return;
+        }
+        if (request.url === "/v1/auth/logout") {
+          response.writeHead(204).end();
+          return;
+        }
+        expect(request.headers.authorization).toBe("Bearer private");
+        if (request.url === "/v1/mcp-servers" && request.method === "GET") {
+          response.end(JSON.stringify([held]));
+          return;
+        }
+        let body = "";
+        for await (const chunk of request) body += chunk;
+        submitted.push(JSON.parse(body));
+        if (request.url === "/v1/mcp-servers/test") {
+          response.end(JSON.stringify({ toolCount: 1, error: null }));
+          return;
+        }
+        if (request.url === "/v1/mcp-servers/save") {
+          response.end(JSON.stringify([held]));
+          return;
+        }
+        if (request.url === "/v1/admin/sign-in-relay/mcp/start") {
+          response.end(JSON.stringify({ flowId: "flow", expiresAt: 1900000000 }));
+          return;
+        }
+        response.writeHead(404).end("{}");
+      });
+      const session = yield* (yield* TeamClient.TeamClient).connect({
+        apiUrl: origin,
+        ownerSecret: "fixture",
+      });
+      const matches = yield* session.apiAdmin({
+        operation: "mcp.catalogMatches",
+        apps: [
+          {
+            id: "app",
+            name: "catalog",
+            transport: "http",
+            url: "https://example.test/mcp",
+            userLink: true,
+          },
+          {
+            id: "other",
+            name: "catalog",
+            transport: "http",
+            url: "https://evil-example.test/mcp",
+            userLink: true,
+          },
+        ],
+      });
+      expect(matches).toEqual({
+        matches: [
+          { appId: "app", mcpServerIds: ["held"], accountMcpServerIds: ["held"] },
+          { appId: "other", mcpServerIds: [], accountMcpServerIds: [] },
+        ],
+      });
+      expect(JSON.stringify(matches)).not.toContain("PRIVATE");
+      yield* session.apiAdmin({
+        operation: "mcp.testCredentialsById",
+        mcpServerId: "held",
+        headers: [{ key: "Authorization", value: "NEW_SECRET " }],
+      });
+      const saved = yield* session.apiAdmin({
+        operation: "mcp.saveCredentialsById",
+        mcpServerId: "held",
+        headers: [{ key: "Authorization", value: "NEW_SECRET " }],
+      });
+      expect(submitted.slice(0, 2)).toEqual(
+        [1, 2].map(() => ({
+          config: {
+            ...held,
+            headers: [
+              { key: "Kept", value: "PRIVATE_HEADER" },
+              { key: "Authorization", value: "NEW_SECRET " },
+            ],
+          },
+        })),
+      );
+      expect(JSON.stringify(saved)).not.toContain("PRIVATE");
+      yield* session.apiAdmin({ operation: "mcp.signInRelay.startById", mcpServerId: "held" });
+      expect(submitted[2]).toEqual({ config: held });
+      const before = submitted.length;
+      expect(
+        yield* Effect.flip(
+          session.apiAdmin({
+            operation: "mcp.saveCredentialsById",
+            mcpServerId: "missing",
+            headers: [],
+          }),
+        ),
+      ).toMatchObject({ reason: "invalid-configuration" });
+      expect(submitted).toHaveLength(before);
+      yield* session.close;
+    }).pipe(
+      Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+      Effect.scoped,
+    ),
+);
+
+it.live(
+  "negotiates source semantic tags so message and file quote identities survive round trips",
+  () =>
+    Effect.gen(function* () {
+      const quoted =
+        "@[selected passage](quote:original-message)\n\n@[file passage](quote:shared-file:notes.md#L2)";
+      const capabilities: string[] = [];
+      let stored = quoted;
+      const apiUrl = yield* fixture(async (request, response) => {
+        response.setHeader("content-type", "application/json");
+        if (request.url === "/v1/auth/login") {
+          response.end(JSON.stringify({ sessionToken: "private", sessionExpiresAt: "2099-01-01" }));
+          return;
+        }
+        if (request.url === "/v1/auth/logout") {
+          response.writeHead(204).end();
+          return;
+        }
+        const negotiated = String(request.headers["openbot-capabilities"] ?? "");
+        capabilities.push(negotiated);
+        if (request.url === "/v1/agents/a/messages") {
+          let body = "";
+          for await (const chunk of request) body += chunk.toString();
+          const input = JSON.parse(body);
+          stored = negotiated.split(",").includes("installed-skills")
+            ? input.text
+            : "> selected passage\n\n> file passage";
+          response.writeHead(202).end(
+            JSON.stringify({
+              messageId: "accepted",
+              deliveries: [{ recipientBotId: "a", status: "queued" }],
+            }),
+          );
+          return;
+        }
+        response.end(
+          JSON.stringify({
+            botId: "a",
+            threadId: "original-thread",
+            activeTurnId: null,
+            revision: 1,
+            messages: [
+              {
+                id: "delivery",
+                author: "user",
+                text: negotiated.split(",").includes("installed-skills")
+                  ? stored
+                  : "> selected passage\n\n> file passage",
+                status: "completed",
+                createdAt: "now",
+              },
+            ],
+            references: {},
+            pageInfo: { hasOlder: false, olderCursor: null },
+          }),
+        );
+      });
+      const session = yield* (yield* TeamClient.TeamClient).connect({
+        apiUrl,
+        ownerSecret: "private",
+      });
+      yield* session.apiWrite({
+        operation: "conversation.send",
+        agentId: "a",
+        text: quoted,
+        clientMessageId: "one-attempt",
+      });
+      expect(
+        yield* session.apiRead({
+          operation: "conversation.page",
+          agentId: "a",
+          anchor: { type: "latest" },
+          limit: 50,
+        }),
+      ).toMatchObject({ messages: [{ text: quoted }] });
+      expect(stored).toBe(quoted);
+      for (const value of capabilities) expect(value.split(",")).toContain("installed-skills");
+      yield* session.close;
+    }).pipe(
+      Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+      Effect.scoped,
+    ),
+);
+
+it.live(
+  "routes People messages through the authenticated facade and preserves membership refusals",
+  () =>
+    Effect.gen(function* () {
+      const sent: unknown[] = [];
+      const message = {
+        id: "m",
+        threadId: "dm",
+        senderMemberId: "self",
+        recipientMemberId: "other",
+        text: "Hello",
+        createdAt: "now",
+        sequence: 1,
+      };
+      const apiUrl = yield* fixture(async (request, response) => {
+        response.setHeader("content-type", "application/json");
+        if (request.url === "/v1/auth/login") {
+          response.end(JSON.stringify({ sessionToken: "owner", sessionExpiresAt: "2099-01-01" }));
+          return;
+        }
+        if (request.url === "/v1/auth/logout") {
+          response.writeHead(204).end();
+          return;
+        }
+        if (request.url === "/v1/me") {
+          response.end(JSON.stringify({ id: "self", privateSecret: "hidden" }));
+          return;
+        }
+        if (request.url === "/v1/team/presence") {
+          response.end(
+            JSON.stringify({
+              serverId: "host",
+              updatedAt: "now",
+              members: [
+                {
+                  id: "other",
+                  username: "person",
+                  email: null,
+                  name: "Person",
+                  online: true,
+                  disabled: false,
+                  avatarUrl: "http://private/avatar",
+                  privateSecret: "hidden",
+                },
+              ],
+            }),
+          );
+          return;
+        }
+        if (request.url === "/v1/direct/messages") {
+          let body = "";
+          for await (const chunk of request) body += chunk.toString();
+          const input = JSON.parse(body);
+          sent.push(input);
+          if (input.memberId !== "other") {
+            response.writeHead(404).end(JSON.stringify({ error: "private membership detail" }));
+            return;
+          }
+          response.writeHead(201).end(JSON.stringify({ ...message, privateSecret: "hidden" }));
+          return;
+        }
+        if (request.url === "/v1/direct/conversations/other/page?limit=50&around=m") {
+          response.end(
+            JSON.stringify({
+              threadId: "dm",
+              otherMemberId: "other",
+              revision: 1,
+              messages: [message],
+              pageInfo: { hasOlder: false, olderCursor: null },
+            }),
+          );
+          return;
+        }
+        response.writeHead(404).end(JSON.stringify({ error: "private missing route" }));
+      });
+      const session = yield* (yield* TeamClient.TeamClient).connect({
+        apiUrl,
+        ownerSecret: "fixture",
+      });
+      expect(yield* session.apiRead({ operation: "direct.self" })).toEqual({ id: "self" });
+      const people = yield* session.apiRead({ operation: "direct.people" });
+      expect(JSON.stringify(people)).not.toContain("private");
+      expect(JSON.stringify(people)).not.toContain("hidden");
+      expect(
+        yield* session.apiWrite({
+          operation: "direct.send",
+          memberId: "other",
+          text: "Hello",
+          clientMessageId: "one-attempt",
+        }),
+      ).toEqual(message);
+      expect(sent).toEqual([{ memberId: "other", text: "Hello", clientMessageId: "one-attempt" }]);
+      expect(
+        yield* session.apiRead({
+          operation: "direct.page",
+          memberId: "other",
+          anchor: { type: "around", messageId: "m" },
+          limit: 50,
+        }),
+      ).toMatchObject({ messages: [message] });
+      const refused = yield* Effect.flip(
+        session.apiWrite({
+          operation: "direct.send",
+          memberId: "disabled",
+          text: "Hello",
+          clientMessageId: "refused-attempt",
+        }),
+      );
+      expect(refused).toMatchObject({ reason: "http", status: 404 });
+      expect(JSON.stringify(refused)).not.toContain("private membership detail");
+      yield* session.close;
+    }).pipe(
+      Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+      Effect.scoped,
+    ),
+);
+
+it.live(
+  "moves transfer ZIP bytes outside JSON while preserving reviewed JSON and refusal status",
+  () =>
+    Effect.gen(function* () {
+      const calls: { path: string; body: string; capability: string }[] = [];
+      let refuse = false;
+      const origin = yield* fixture(async (request, response) => {
+        response.setHeader("content-type", "application/json");
+        if (request.url === "/v1/auth/login") {
+          response.end(
+            JSON.stringify({ sessionToken: "transfer-owner", sessionExpiresAt: "2099-01-01" }),
+          );
+          return;
+        }
+        if (request.url === "/v1/auth/logout") {
+          response.writeHead(204).end();
+          return;
+        }
+        let body = "";
+        for await (const chunk of request) body += chunk;
+        calls.push({
+          path: request.url ?? "",
+          body,
+          capability: String(request.headers["openbot-capabilities"]),
+        });
+        if (refuse) {
+          response.writeHead(403).end(JSON.stringify({ error: "PRIVATE_REFUSAL_DETAIL" }));
+          return;
+        }
+        if (request.url === "/v1/instance-transfer/export") {
+          response
+            .writeHead(200, { "content-type": "application/zip", "content-length": "3" })
+            .end("ZIP");
+          return;
+        }
+        if (request.url === "/v1/instance-transfer/summary") {
+          response.end(JSON.stringify({ agents: [] }));
+          return;
+        }
+        if (request.url === "/v1/instance-transfer/stage") {
+          response.end(
+            JSON.stringify({
+              token: "upstream-token",
+              appVersion: "0.60.0",
+              exportedAt: null,
+              agents: [],
+              hasSettings: true,
+              warnings: [],
+            }),
+          );
+          return;
+        }
+        if (request.url === "/v1/instance-transfer/apply") {
+          response.end(JSON.stringify({ agents: [], skipped: [], signIn: [], warnings: [] }));
+          return;
+        }
+        response.end("{}");
+      });
+      const session = yield* (yield* TeamClient.TeamClient).connect({
+        apiUrl: origin,
+        ownerSecret: "fixture",
+      });
+      if (!session.instanceTransfer) return yield* Effect.die("Missing transfer adapter");
+      expect(yield* session.instanceTransfer.summary).toEqual({ agents: [] });
+      const download = yield* session.instanceTransfer.exportZip({
+        agentIds: ["original-agent"],
+        includeFiles: true,
+        includeSettings: true,
+      });
+      const parts = yield* Stream.runCollect(download.body);
+      expect(Buffer.concat(parts).toString()).toBe("ZIP");
+      expect(download.size).toBe(3);
+      yield* session.instanceTransfer.stage(Buffer.from("ZIP"));
+      yield* session.instanceTransfer.apply({
+        token: "upstream-token",
+        keys: [],
+        includeSettings: true,
+        timezone: "UTC",
+      });
+      expect(
+        calls.every((call) => call.capability.split(",").includes("instance-transfer-v1")),
+      ).toBe(true);
+      expect(calls.find((call) => call.path.endsWith("/stage"))?.body).toBe("ZIP");
+      expect(
+        JSON.parse(calls.find((call) => call.path.endsWith("/export"))?.body ?? "null"),
+      ).toEqual({ agentIds: ["original-agent"], includeFiles: true, includeSettings: true });
+      refuse = true;
+      const refused = yield* Effect.flip(session.instanceTransfer.summary);
+      expect(refused).toMatchObject({ reason: "http", status: 403 });
+      expect(JSON.stringify(refused)).not.toContain("PRIVATE_REFUSAL_DETAIL");
+      yield* session.close;
+    }).pipe(
+      Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+      Effect.scoped,
+    ),
+);
+
+it.live(
+  "negotiates the Sled-owned webhook adapter and preserves exact signed payload bytes and native refusals",
+  () =>
+    Effect.gen(function* () {
+      const calls: unknown[] = [];
+      const origin = yield* fixture(async (request, response) => {
+        response.setHeader("content-type", "application/json");
+        if (request.url === "/v1/auth/login") {
+          response.end(
+            JSON.stringify({ sessionToken: "fixture-owner", sessionExpiresAt: "2099-01-01" }),
+          );
+          return;
+        }
+        if (request.url === "/v1/auth/logout") {
+          response.writeHead(204).end();
+          return;
+        }
+        expect(request.headers["openbot-capabilities"]).toContain("sled-connect-webhooks-v1");
+        expect(request.headers.authorization).toBe("Bearer fixture-owner");
+        let text = "";
+        for await (const chunk of request) text += chunk;
+        calls.push(JSON.parse(text));
+        response.end(
+          JSON.stringify(request.url === "/v1/sled/channels/trace" ? {messageId:"message",field:"trace",offset:0,nextOffset:null,totalLength:2,version:"a".repeat(64),value:"{}"} : request.url?.endsWith("configuration") ? { routeId: "route" } : { status: 401 }),
+        );
+      });
+      const session = yield* (yield* TeamClient.TeamClient).connect({
+        apiUrl: origin,
+        ownerSecret: "fixture",
+      });
+      expect(
+        yield* session.connectWebhooks!.configuration({
+          owner: { kind: "agent", id: "a" },
+          id: "r",
+        }),
+      ).toEqual({ routeId: "route" });
+      expect(
+        yield* session.connectWebhooks!.receive({
+          routeId: "route",
+          timestamp: "1",
+          deliveryId: "delivery",
+          signature: "signature",
+          body: new Uint8Array([0, 255, 7]),
+        }),
+      ).toEqual({ status: 401 });
+      expect(yield* session.apiAdmin({operation:"workflow.webhookConfiguration",workflowId:"workflow",nodeId:"trigger"})).toEqual({routeId:"route"});
+      expect(yield* session.apiRead({operation:"channel.trace",channelId:"group",messageId:"message",offset:0,version:null})).toMatchObject({messageId:"message",field:"trace",value:"{}"});
+      expect(calls).toEqual([
+        { owner: { kind: "agent", id: "a" }, id: "r" },
+        {
+          routeId: "route",
+          timestamp: "1",
+          deliveryId: "delivery",
+          signature: "signature",
+          bodyBase64: "AP8H",
+        },
+        {workflowId:"workflow",nodeId:"trigger"},
+        {channelId:"group",messageId:"message",offset:0,version:null},
+      ]);
+      expect(
+        yield* session.connectWebhooks!.receive({
+          routeId: "route",
+          timestamp: "1",
+          deliveryId: "delivery",
+          signature: "signature",
+          body: new Uint8Array(65537),
+        }),
+      ).toEqual({ status: 413 });
+      expect(calls).toHaveLength(4);
+      yield* session.close;
+    }).pipe(
+      Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+      Effect.scoped,
+    ),
+);
+
+it.live("projects installed catalog listing identity without exposing native source metadata", () =>
+  Effect.gen(function* () {
+    const origin = yield* fixture(async (request, response) => {
+      response.setHeader("content-type", "application/json");
+      if (request.url === "/v1/auth/login")
+        return void response.end(
+          JSON.stringify({ sessionToken: "private", sessionExpiresAt: "2027-01-01" }),
+        );
+      if (request.url === "/v1/auth/logout") return void response.writeHead(204).end();
+      expect(request.headers.authorization).toBe("Bearer private");
+      if (request.url === "/v1/agents")
+        return void response.end(
+          JSON.stringify([
+            {
+              id: "installed",
+              name: "Reviewer",
+              provider: "codex",
+              marketplaceSource: {
+                agentId: "public-reviewer",
+                skillIds: ["private-skill"],
+                routineIds: ["private-routine"],
+              },
+              workspacePath: "/private/workspace",
+            },
+            { id: "local", name: "Local", provider: "codex", marketplaceSource: null },
+          ]),
+        );
+      response.writeHead(404).end("{}");
+    });
+    const session = yield* (yield* TeamClient.TeamClient).connect({
+      apiUrl: origin,
+      ownerSecret: "fixture",
+    });
+    expect(yield* session.listAgents).toEqual([
+      { id: "installed", name: "Reviewer", provider: "codex", listingId: "public-reviewer" },
+      { id: "local", name: "Local", provider: "codex" },
+    ]);
+    yield* session.close;
+  }).pipe(
+    Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+    Effect.scoped,
+  ),
+);
+
+it.live("advertises exact pins support alongside the existing capabilities", () =>
+  Effect.gen(function* () {
+    const seen: Array<{ path: string; capabilities: string[]; body: unknown }> = [];
+    const agentId = "fixture-agent";
+    const origin = yield* fixture(async (request, response) => {
+      response.setHeader("content-type", "application/json");
+      const path = request.url ?? "";
+      if (path === "/v1/auth/login") {
+        response.end(JSON.stringify({ sessionToken: "fixture-owner", sessionExpiresAt: "2099-01-01" }));
+        return;
+      }
+      if (path === "/v1/auth/logout") {
+        response.writeHead(204).end();
+        return;
+      }
+      let body = "";
+      for await (const chunk of request) body += chunk;
+      seen.push({
+        path,
+        capabilities: String(request.headers["openbot-capabilities"] ?? "").split(","),
+        body: body ? JSON.parse(body) : null,
+      });
+      if (path === "/v1/compatibility")
+        response.end(JSON.stringify({ capabilities: ["message-pins-v1"] }));
+      else if (path === "/v1/message-pins/list" || path === "/v1/message-pins/set")
+        response.end(JSON.stringify({ agentId, pins: [] }));
+      else response.writeHead(404).end("{}");
+    });
+    const session = yield* (yield* TeamClient.TeamClient).connect({
+      apiUrl: origin,
+      ownerSecret: "fixture",
+    });
+    yield* session.apiRead({ operation: "compatibility.read" });
+    expect(yield* session.apiRead({ operation: "conversation.pins.list", agentId })).toEqual({
+      agentId,
+      pins: [],
+    });
+    yield* session.apiWrite({
+      operation: "conversation.pins.set",
+      agentId,
+      taskId: "thread",
+      messageId: "fixture-message",
+      pinned: false,
+    });
+    expect(seen.map(({ path, body }) => ({ path, body }))).toEqual([
+      { path: "/v1/compatibility", body: null },
+      { path: "/v1/message-pins/list", body: { agentId } },
+      {
+        path: "/v1/message-pins/set",
+        body: { agentId, taskId: "thread", messageId: "fixture-message", pinned: false },
+      },
+    ]);
+    for (const item of seen)
+      expect(item.capabilities).toEqual(expect.arrayContaining(["message-pins-v1", "agent-tasks-v1"]));
+    yield* session.close;
+  }).pipe(Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))), Effect.scoped),
 );

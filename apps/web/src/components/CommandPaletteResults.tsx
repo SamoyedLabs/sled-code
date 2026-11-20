@@ -1,7 +1,7 @@
 import { type ResolvedKeybindingsConfig } from "@t3tools/contracts";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
 import { ChevronRightIcon } from "lucide-react";
-import { type ReactNode, type RefObject, useState } from "react";
+import { type ReactNode, type RefObject, useLayoutEffect, useState } from "react";
 import { cn } from "~/lib/utils";
 import { textDirection } from "~/textDirection";
 import { shortcutLabelForCommand } from "../keybindings";
@@ -24,6 +24,7 @@ import {
 import { getVirtualizedScrollFadeClassName } from "./ui/scroll-area";
 import { ProjectPinButton } from "./ProjectPinButton";
 import { SearchMatchHintLine, ThreadSearchMatchExcerpt } from "./ThreadSearchMatch";
+import { trackCommandPaletteResults } from "./commandPaletteMotion";
 
 interface CommandPaletteResultsProps {
   emptyStateMessage?: string;
@@ -87,6 +88,7 @@ export function scrollCommandPaletteRowIntoView(list: LegendListRef | null, rowI
 
 interface CommandPaletteVirtualizedResultsProps extends Omit<CommandPaletteResultsProps, "groups"> {
   rows: ReadonlyArray<CommandPaletteRow>;
+  motionKey?: string;
   listRef: RefObject<LegendListRef | null>;
 }
 
@@ -94,6 +96,11 @@ interface CommandPaletteVirtualizedResultsProps extends Omit<CommandPaletteResul
  * unmounted rows. */
 export function CommandPaletteVirtualizedResults(props: CommandPaletteVirtualizedResultsProps) {
   const { listRef } = props;
+  const empty = props.rows.length === 0;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Owns the source search highlight and measured result height for the mounted virtualized list.
+  useLayoutEffect(() => {
+    if (!empty && listRef.current) return trackCommandPaletteResults(listRef.current);
+  }, [empty, listRef]);
   const [scrollFade, setScrollFade] = useState({ top: false, bottom: false });
   const updateScrollFade = () => {
     const scrollElement = listRef.current?.getScrollableNode?.();
@@ -111,7 +118,7 @@ export function CommandPaletteVirtualizedResults(props: CommandPaletteVirtualize
   }
 
   return (
-    <CommandListVirtualized>
+    <CommandListVirtualized data-command-list-key={props.motionKey}>
       <LegendList<CommandPaletteRow>
         ref={listRef}
         data={props.rows}

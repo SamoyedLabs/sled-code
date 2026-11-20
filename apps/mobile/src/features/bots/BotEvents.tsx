@@ -1,7 +1,7 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { routineRows } from "@t3tools/client-runtime/openbot/presentation";
-import { useBotEvents } from "./useBotRoutines";
+import { useBotEvents, type BotRoutineEditTarget } from "./useBotRoutines";
 import { View, Switch } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import * as Dialog from "../../components/ui/Dialog";
@@ -137,8 +137,19 @@ export function BotEvents(props: Props) {
     </RoutineDisclosure>
   );
 }
-function EventPanel({ environmentId, hostId }: Props) {
-  const c = useBotEvents(environmentId, hostId);
+export function EventPanel({
+  environmentId,
+  hostId,
+  initial,
+}: Props & { initial?: BotRoutineEditTarget }) {
+  const c = useBotEvents(environmentId, hostId, initial);
+  const loadInitial = useEffectEvent(() => {
+    if (initial) void c.act({ operation: "events.list", owner: initial.owner }, initial.routineId);
+  });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Read the selected routine through the host admin operation after its permissions resolve.
+  useEffect(() => {
+    if (c.canAdmin && initial) loadInitial();
+  }, [c.canAdmin, initial]);
   const [notice, setNotice] = useState<string | null>(null);
   const request = c.request;
   const form = c.form;
@@ -238,7 +249,9 @@ function EventPanel({ environmentId, hostId }: Props) {
       <RoutineAction
         label="Load routines"
         disabled={disabled || !c.ownerAvailable}
-        onClick={() => void c.act({ operation: "events.list", owner: c.owner })}
+        onClick={() =>
+          void c.act({ operation: "events.list", owner: c.owner }, c.routineId || undefined)
+        }
       />
       <RoutineChoice
         label="Routine"

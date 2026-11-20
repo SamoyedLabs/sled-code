@@ -1,0 +1,20 @@
+# Avatar source provenance
+
+The React adapter ports the maintained OpenBot desktop avatar behavior. It does not load Solid, an iframe, a remote asset origin, or an absolute source checkout path at runtime.
+
+Source snapshot: OpenBot `0c7753fa622c38419939cd230657f40e5883d098`, from the maintained `cos-maintenance/.openbot-build/source` checkout. Local snapshot contents are identified by the hashes below because that checkout can contain maintenance changes.
+
+- `vendor/bloub-engine.js`: the exact pure sections of `@norbert_bodziony/bloub` 0.6.3 `dist/package/chunks/BloubBot-Bpb4WbeJ.js`, from `src/bot/math.ts` up to (excluding) `src/solid-compat.ts`. The Solid imports, wrappers and unrelated exports were removed; the remaining engine was formatted and its selected public exports named. Its declarations are copied from `dist/package/types/bot` (only the dependency closure of used types). Original artifact SHA-256: `9d66d0ddaa235122daf713cda0b38c3b4fde1de60de8768fcdf40ed432218c2d`.
+- `vendor/plush-felt.ts`: OpenBot `apps/mobile/src/features/agents/model/plush/plush-felt.ts`, the existing typed extraction of Bloub 0.6.3 plush eye slicing, blink masks, gaze, mood faces, felt decor and tint math. Only import paths, formatting and a vendor lint directive change. Original SHA-256: `d9f5447c97f9cd1a57b7bad6202779271a5d50dd1ecd1967aa010a6b725a9b48`.
+- `plush-transition.ts`: the `pop` branch of Bloub `src/plush/transition.ts`, including the notify spring and its measured settling duration. Original bundled `plush.js` SHA-256: `7385f94d9000a61ddb1dc00aa3cb5c04d70d1f01c13e2b0956af49f360ef7848`.
+- `avatar-profile.ts`: the FNV-1a seed mapping, unsupported-drop replacement and hue palette from OpenBot `packages/brand/src/bloub-avatar.ts`. SHA-256: `47b4bb66099d722cad03084a5026ab776e98140011341840f2397d4885f214ba`.
+- `BotAvatar.tsx`, `plush-controller.ts`, `plush-svg.ts`: React lifecycle and SVG adapters for OpenBot `packages/ui/src/features/agents/AgentAvatar.tsx` and Bloub `BloubBot.tsx` / `plush/layer.tsx`. OpenBot wrapper SHA-256: `fc149d2cb9e83c446adaaebcd3da66ba4219d84023d89ed7fd9d63b9fdc16789`.
+- `assets`: the existing 80 pre-tinted body PNGs and two eye-pad PNGs remain unchanged. `boule.webp` is the Bloub 0.6.3 felt ball; SVG component-transfer tables apply the original tint ramp. Vite bundles all asset URLs.
+
+The adapter preserves the same seed-selected silhouette, palette and expression, 316-unit viewBox, 1.15 body scale, stationary plush body, engine eye morphs and blinks, random nonrepeating hover expressions, control-group hover and keyboard-only focus, 30 fps sampling cap, mood faces/decor, working-face cadence (700–3200 ms), body pop curve, and pause/resume from the current pose. A resting avatar does not start a frame loop on mount or visibility changes. A change can finish its morph before stopping; working/connecting avatars animate only while visible. Frame requests, timers and event subscriptions are stopped on hide, offscreen, reduced motion and disposal as applicable.
+
+Scope: the existing React `seed` / `hue` / `size` API plus `mood` and `workingFaces`. The wider Solid wrapper's photo URLs, pointer-follow previews, explicit shape/expression overrides, alternate transition modes and eye-scale picker previews are not exposed by this adapter.
+
+Validation: exact deep equality for 15,840 sampled frames and quiet-state values against the upstream BotEngine, including interrupted state/expression transitions across all 11 silhouettes and 16 expressions. Four focused lifecycle tests cover clock-free idle, hover settling and sampling cap, visibility/reduced-motion/cleanup, keyboard focus and body changes. Scoped TypeScript, formatting and lint pass. No application, browser or device was launched; visual rendering parity has not been verified.
+
+Bloub engine/artwork copyright (c) 2026 Jérémy Perret, MIT: see `BLOUB-LICENSE`. OpenBot wrapper/typed extraction copyright 2026 Synthetify Labs spółka z ograniczoną odpowiedzialnością, PolyForm Noncommercial 1.0.0: see `OPENBOT-LICENSE`.

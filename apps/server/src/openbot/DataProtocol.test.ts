@@ -73,3 +73,63 @@ it.effect("service rejects malformed host responses with a safe typed failure", 
     ),
   ),
 );
+
+it.effect("keeps Library requests on the released host routes and strips private file fields", () =>
+  Effect.gen(function* () {
+    const folder = { id: "folder", agentId: "agent", name: "Evidence" };
+    const action = { type: "create" as const, ...folder, fileIds: ["image"] };
+    expect(Data.route({ operation: "library.folders.change", action })).toEqual({
+      method: "POST",
+      path: "/v1/library-folders/actions",
+      body: action,
+      dataProjection: "library.folders.change",
+    });
+    expect(Data.route({ operation: "library.files.list", force: true })).toMatchObject({
+      path: "/v1/storage/usage",
+      body: { scope: "host", force: true },
+    });
+    expect(Data.route({ operation: "library.files.delete", fileId: "image" })).toEqual({
+      method: "POST",
+      path: "/v1/storage/delete-file",
+      body: { fileId: "image" },
+      dataProjection: "library.files.delete",
+    });
+    expect(Data.isRequest({ operation: "library.files.preview" })).toBe(false);
+    expect(Data.isRequest({ operation: "storage.clear" })).toBe(false);
+    expect(
+      yield* Data.project("library.folders.read", {
+        revision: 3,
+        folders: [{ ...folder, secret: "private" }],
+        placement: { image: folder.id },
+      }),
+    ).toEqual({ revision: 3, folders: [folder], placement: { image: folder.id } });
+    const file = {
+      id: "image",
+      name: "proof.png",
+      size: 188,
+      kind: "image",
+      mimeType: "image/png",
+      previewKind: "image",
+      source: "attachment",
+      agentId: "agent",
+      conversation: null,
+      messageId: "message",
+      createdAt: "2026-11-20",
+      status: "available",
+      deletable: true,
+    };
+    const inventory = { scannedAt: "2026-11-20", truncated: false };
+    expect(
+      yield* Data.project("library.files.list", {
+        ...inventory,
+        files: [{ ...file, path: "/private/path", previewUrl: "https://evil.invalid" }],
+      }),
+    ).toEqual({ ...inventory, files: [file] });
+    expect(
+      (yield* Data.project("library.files.list", {
+        ...inventory,
+        files: [{ ...file, size: -1 }],
+      }).pipe(Effect.result))._tag,
+    ).toBe("Failure");
+  }),
+);

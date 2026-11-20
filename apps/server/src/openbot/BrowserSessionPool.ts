@@ -2,7 +2,13 @@
 import * as NodeEvents from "node:events";
 import * as NodeCrypto from "node:crypto";
 import { WebSocket, type RawData } from "@effect/platform-node/NodeWS";
-import { decodeBrowserViewInput, type BrowserViewInput } from "@t3tools/contracts";
+import {
+  decodeBrowserViewFrame,
+  decodeBrowserViewInput,
+  decodeBrowserViewHostMessage,
+  type OpenbotBrowserViewFeatures,
+  type BrowserViewInput,
+} from "@t3tools/contracts";
 import type { BrowserSession } from "./BrowserProtocol.ts";
 
 export interface BrowserPeer extends NodeJS.EventEmitter {
@@ -15,6 +21,10 @@ type Lease = { id: string; pool: Pool; peer?: LeasePeer };
 type PoolRecord = { creating: Promise<Pool> };
 type Pool = {
   tabId: string;
+  features?: OpenbotBrowserViewFeatures;
+  cursor?: string;
+  copyOwner?: LeasePeer;
+  menuOwner?: LeasePeer;
   physicalId: string;
   streamPath: string;
   record: PoolRecord;
@@ -22,13 +32,29 @@ type Pool = {
   socket?: WebSocket;
   frame?: { bytes: Buffer; version: number };
   inputOwner?: LeasePeer;
+  frameFloor: number;
+  retained: number[];
   closing: boolean;
   closingPromise?: Promise<void>;
 };
 
+function advanceFrames(pool: Pool) {
+  if (!pool.features?.framePoint || pool.socket?.readyState !== WebSocket.OPEN) return;
+  const active = [...pool.leases].flatMap((lease) => (lease.peer ? [lease.peer.acknowledged] : []));
+  if (active.length === 0) return;
+  const minimum = Math.min(...active);
+  if (minimum > pool.frameFloor) {
+    pool.socket.send(JSON.stringify({ type: "ack", sequence: minimum }));
+    pool.frameFloor = minimum;
+    pool.retained = pool.retained.filter((sequence) => sequence >= minimum);
+  }
+}
+
 class LeasePeer extends NodeEvents.EventEmitter implements BrowserPeer {
   #closed = false;
   #seen = 0;
+  acknowledged = 0;
+  #cursorSeen: string | undefined;
   readonly #keys = new Map<string, Extract<BrowserViewInput, { type: "key" }>>();
   #button: Extract<BrowserViewInput, { type: "pointer" }> | undefined;
   readonly pool: Pool;
@@ -52,8 +78,20 @@ class LeasePeer extends NodeEvents.EventEmitter implements BrowserPeer {
   send(data: string) {
     if (this.readyState !== WebSocket.OPEN) throw new Error("Browser view closed");
     const input = decodeBrowserViewInput(data);
+    if (input.type === "ack") {
+      if (!this.pool.features?.framePoint) return;
+      this.acknowledged = Math.max(this.acknowledged, input.sequence);
+      advanceFrames(this.pool);
+      return;
+    }
+    if (
+      input.type === "pointer" &&
+      input.sequence !== undefined &&
+      input.sequence < this.pool.frameFloor
+    )
+      throw new Error("The displayed frame is no longer retained. Reconnect the viewer.");
     // The host has one held pointer button; one lease owns input until all its holds end.
-    if (input.type !== "ack" && this.pool.inputOwner && this.pool.inputOwner !== this)
+    if (this.pool.inputOwner && this.pool.inputOwner !== this)
       throw new Error("Browser input is held by another viewer");
     if (input.type === "key") {
       const id = input.code || input.key;
@@ -66,7 +104,31 @@ class LeasePeer extends NodeEvents.EventEmitter implements BrowserPeer {
         throw new Error("Release the current browser button before pressing another");
       if (input.action === "up" && this.#button?.button !== input.button) return;
     }
-    this.pool.socket!.send(data);
+    if (input.type === "copy") {
+      if (!this.pool.features?.clipboard) throw new Error("Browser clipboard unavailable");
+      if (this.pool.copyOwner) throw new Error("Browser copy already pending");
+      this.pool.copyOwner = this;
+    }
+    if ((input.type === "paste" || input.type === "cut") && !this.pool.features?.clipboard)
+      throw new Error("Browser clipboard unavailable");
+    if (
+      input.type === "pointer" &&
+      input.action === "down" &&
+      input.button === "right" &&
+      this.pool.features?.contextMenu
+    ) {
+      if (this.pool.menuOwner && this.pool.menuOwner !== this)
+        throw new Error("Browser menu already pending");
+      this.pool.menuOwner = this;
+    }
+    try {
+      this.pool.socket!.send(data);
+      if (input.type === "pointer" && input.sequence !== undefined)
+        this.pool.frameFloor = Math.max(this.pool.frameFloor, input.sequence);
+    } catch (error) {
+      if (input.type === "copy" && this.pool.copyOwner === this) delete this.pool.copyOwner;
+      throw error;
+    }
     if (input.type === "key") {
       const id = input.code || input.key;
       if (input.action === "down") this.#keys.set(id, input);
@@ -82,7 +144,9 @@ class LeasePeer extends NodeEvents.EventEmitter implements BrowserPeer {
   }
   releaseInput() {
     const inputs = [
-      ...(this.#button ? [{ ...this.#button, action: "up", modifiers: 0 }] : []),
+      ...(this.#button
+        ? [{ ...this.#button, action: "up", modifiers: 0, sequence: undefined }]
+        : []),
       ...[...this.#keys.values()].map((input) => ({
         ...input,
         action: "up",
@@ -112,16 +176,18 @@ class LeasePeer extends NodeEvents.EventEmitter implements BrowserPeer {
     }
   }
   deliver() {
+    if (this.readyState !== WebSocket.OPEN || this.listenerCount("message") === 0) return;
     const frame = this.pool.frame;
-    if (
-      this.readyState !== WebSocket.OPEN ||
-      !frame ||
-      frame.version === this.#seen ||
-      this.listenerCount("message") === 0
-    )
-      return;
-    this.#seen = frame.version;
-    this.emit("message", frame.bytes, true);
+    if (frame && frame.version !== this.#seen) {
+      this.#seen = frame.version;
+      this.emit("message", frame.bytes, true);
+    }
+    if (this.pool.cursor && this.pool.cursor !== this.#cursorSeen) this.cursor(this.pool.cursor);
+  }
+  cursor(text: string) {
+    if (this.#closed || this.listenerCount("message") === 0) return;
+    this.#cursorSeen = text;
+    this.emit("message", Buffer.from(text), false);
   }
   text(data: RawData) {
     if (!this.#closed) this.emit("message", data, false);
@@ -198,13 +264,14 @@ export function createBrowserSessionPool(options: {
       return closing;
     }
     lease.pool.leases.delete(lease);
+    if (lease.pool.leases.size > 0) advanceFrames(lease.pool);
     const promise = lease.pool.leases.size === 0 ? closePool(lease.pool) : Promise.resolve();
     releasing.set(lease.id, promise);
     lease.peer?.ended();
     void promise.finally(() => releasing.delete(lease.id)).catch(() => {});
     return promise;
   };
-  const physical = (tabId: string): PoolRecord => {
+  const physical = (tabId: string, features?: OpenbotBrowserViewFeatures): PoolRecord => {
     const existing = pools.get(tabId);
     if (existing) return existing;
     const record: PoolRecord = {
@@ -224,11 +291,14 @@ export function createBrowserSessionPool(options: {
           throw new Error("Invalid browser session");
         const pool: Pool = {
           tabId,
+          ...(features ? { features } : {}),
           physicalId: value.id,
           streamPath: String(value.streamPath),
           record,
           leases: new Set(),
           closing: false,
+          frameFloor: 0,
+          retained: [],
         };
         if (stopped || options.isClosed()) {
           await closePool(pool);
@@ -247,14 +317,33 @@ export function createBrowserSessionPool(options: {
   };
   const create = async (
     tabId: string,
-  ): Promise<{ id: string; tabId: string; streamPath: string }> => {
+    features?: OpenbotBrowserViewFeatures,
+  ): ReturnType<BrowserSession["create"]> => {
     if (stopped || options.isClosed() || !tabId || tabId.length > 128)
       throw new Error("Browser host closed");
-    const pool = await physical(tabId).creating;
+    const pool = await physical(tabId, features).creating;
     if (pool.closing) {
       await pool.closingPromise;
-      return create(tabId);
+      return create(tabId, features);
     }
+    if (
+      features?.viewport &&
+      (features.viewport.width !== pool.features?.viewport?.width ||
+        features.viewport.height !== pool.features?.viewport?.height)
+    )
+      throw new Error(
+        "Another viewer owns this tab's viewport. Close its viewers before changing size.",
+      );
+    if (pool.features?.framePoint && !features?.framePoint)
+      throw new Error("Reconnect using an acknowledged frame-point viewer");
+    if (
+      features &&
+      ((features.framePoint && !pool.features?.framePoint) ||
+        (features.clipboard && !pool.features?.clipboard) ||
+        (features.cursor && !pool.features?.cursor) ||
+        (features.contextMenu && !pool.features?.contextMenu))
+    )
+      throw new Error("Reconnect existing browser viewers to enable advanced controls");
     if (stopped || options.isClosed()) {
       await closePool(pool);
       throw new Error("Browser host closed");
@@ -263,7 +352,12 @@ export function createBrowserSessionPool(options: {
     const lease: Lease = { id, pool };
     leases.set(id, lease);
     pool.leases.add(lease);
-    return { id, tabId, streamPath: `/v1/browser/view/sessions/${id}/stream` };
+    return {
+      id,
+      tabId,
+      streamPath: `/v1/browser/view/sessions/${id}/stream`,
+      ...(pool.features ? { features: pool.features } : {}),
+    };
   };
   return {
     create,
@@ -286,7 +380,7 @@ export function createBrowserSessionPool(options: {
       lease.peer = peer;
       if (!pool.socket) {
         const socket = new WebSocket(
-          `ws://${options.origin.host}${pool.streamPath}`,
+          `ws://${options.origin.host}${pool.streamPath}${pool.features ? `?frameAck=${pool.features.framePoint ? 1 : 0}&viewport=${pool.features.viewport ? `${pool.features.viewport.width}x${pool.features.viewport.height}` : ""}&cursor=${pool.features.cursor ? 1 : 0}&menu=${pool.features.contextMenu ? 1 : 0}` : ""}`,
           [`openbot-token.${options.token}`],
           { followRedirects: false, maxPayload: 2 * 1024 * 1024 + 12, handshakeTimeout: 10_000 },
         );
@@ -305,8 +399,47 @@ export function createBrowserSessionPool(options: {
                   : Buffer.from(bytes),
               version: (pool.frame?.version ?? 0) + 1,
             };
+            if (pool.features?.framePoint) {
+              try {
+                const frame = decodeBrowserViewFrame(pool.frame.bytes);
+                pool.retained = pool.retained.filter((sequence) => sequence >= pool.frameFloor);
+                pool.retained.push(frame.sequence);
+                // Leave room below the pinned host's 120-frame retention cap.
+                const oldest = pool.retained.at(-100);
+                if (pool.retained.length > 100 && oldest !== undefined)
+                  for (const current of pool.leases)
+                    if (current.peer && current.peer.acknowledged < oldest) current.peer.close();
+              } catch {
+                void closePool(pool, new Error("Invalid browser frame")).catch(() => {});
+                return;
+              }
+            }
             for (const current of pool.leases) current.peer?.deliver();
-          } else for (const current of pool.leases) current.peer?.text(bytes);
+          } else {
+            try {
+              const text = Buffer.isBuffer(bytes)
+                ? bytes.toString("utf8")
+                : Array.isArray(bytes)
+                  ? Buffer.concat(bytes).toString("utf8")
+                  : Buffer.from(bytes).toString("utf8");
+              const message = decodeBrowserViewHostMessage(text);
+              if (!message) return;
+              if (message.type === "copied" || message.type === "copyTooLarge") {
+                const owner = pool.copyOwner;
+                delete pool.copyOwner;
+                owner?.text(Buffer.from(JSON.stringify(message)));
+              } else if (message.type === "context-menu") {
+                const owner = pool.menuOwner;
+                delete pool.menuOwner;
+                owner?.text(Buffer.from(JSON.stringify(message)));
+              } else if (message.type === "cursor") {
+                pool.cursor = JSON.stringify(message);
+                for (const current of pool.leases) current.peer?.cursor(pool.cursor);
+              }
+            } catch {
+              void closePool(pool, new Error("Invalid browser host message")).catch(() => {});
+            }
+          }
         });
         socket.once("error", (error) => {
           void closePool(pool, error).catch(() => {});

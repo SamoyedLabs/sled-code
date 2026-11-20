@@ -15,6 +15,9 @@ import {
   eventRoutineDraft,
   eventRoutineRequest,
 } from "@t3tools/client-runtime/openbot/presentation";
+import { settingsCapabilities } from "@t3tools/client-runtime/openbot/settings";
+import { readPreparedConnection } from "../../state/session";
+import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
@@ -283,37 +286,68 @@ export function useBotEvents(environmentId: EnvironmentId, hostId: string) {
   };
 }
 export function useBotRoutineFlows(environmentId: EnvironmentId, hostId: string, agentId: string) {
-  const query = useEnvironmentQuery(
-    agentId
-      ? openbot.readFromHost({
-          environmentId,
-          input: { hostId, request: { operation: "routineFlow.canvas", agentId } },
-        })
-      : null,
+  const compatibility = useEnvironmentQuery(
+    openbot.readFromHost({
+      environmentId,
+      input: { hostId, request: { operation: "compatibility.read" } },
+    }),
   );
+  const includeOneTime = settingsCapabilities(compatibility.data).includes("sled-once-routines-v1");
+  const target = {
+    environmentId,
+    input: {
+      hostId,
+      request: {
+        operation: "routineFlow.canvas" as const,
+        agentId,
+        ...(includeOneTime ? { includeOneTime: true } : {}),
+      },
+    },
+  };
+  const query = useEnvironmentQuery(agentId ? openbot.readFromHost(target) : null);
+  const reload = useAtomQueryRunner(openbot.readFromHost, { reportFailure: false, refresh: true });
   const canWrite = useAtomValue(openbot.writeToHost.permissionAtom(environmentId));
   const write = useAtomCommand(openbot.writeToHost, { reportFailure: false });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const lock = useRef(false);
-  const act = async (request: OpenbotRoutineFlowCommand) => {
-    if (lock.current) return;
-    lock.current = true;
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState<string | null>(null);
+  const tail = useRef(Promise.resolve());
+  const count = useRef(0);
+  const act = (request: OpenbotRoutineFlowCommand): Promise<boolean> => {
+    const connection = readPreparedConnection(environmentId);
+    count.current++;
     setBusy(true);
-    setError(null);
-    const settled = await settlePromise(async () => {
-      const response = await write({ environmentId, input: { hostId, request } });
-      if (response._tag === "Failure")
-        setError("The flow change was refused. Check your permissions for every bot in this flow.");
-      query.refresh();
-    });
-    if (settled._tag === "Failure")
-      setError("The flow change could not complete. Reload before retrying.");
-    lock.current = false;
-    setBusy(false);
+    const work = tail.current
+      .then(async () => {
+        setError(null);
+        const settled = await settlePromise(async () => {
+          if (!connection || readPreparedConnection(environmentId) !== connection)
+            throw new Error("The original host session changed.");
+          const response = await write({ environmentId, input: { hostId, request } });
+          if (response._tag === "Failure")
+            throw new Error(
+              "The flow change was refused. Check your permissions for every bot in this flow.",
+            );
+          const fresh = await reload(target);
+          if (fresh._tag === "Failure")
+            throw new Error("The change was sent, but the refreshed canvas could not be read.");
+        });
+        if (settled._tag === "Failure")
+          setError("The flow change could not be confirmed. Refresh the canvas before continuing.");
+        return settled._tag === "Success";
+      })
+      .finally(() => {
+        count.current--;
+        setBusy(count.current > 0);
+      });
+    tail.current = work.then(
+      () => undefined,
+      () => undefined,
+    );
+    return work;
   };
   return {
     canvas: routineFlowCanvas(query.data),
+    loading: query.isPending,
     error: error ?? query.error,
     refresh: query.refresh,
     busy,

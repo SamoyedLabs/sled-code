@@ -1,4 +1,5 @@
 import {
+  SLED_ONCE_ROUTINES_ROUTES,
   OpenbotRoutineFlowCanvas,
   OpenbotRoutineFlowLink,
   type OpenbotRoutineFlowReadRequest,
@@ -20,6 +21,13 @@ export function isRequest(input: { readonly operation: string }): input is Reque
   return Object.hasOwn(paths, input.operation);
 }
 export function route(request: Request) {
+  if (request.operation === "routineFlow.canvas" && request.includeOneTime)
+    return {
+      method: "POST" as const,
+      path: SLED_ONCE_ROUTINES_ROUTES.canvas,
+      body: { agentId: request.agentId },
+      routineFlowProjection: request.operation,
+    };
   const { operation, ...body } = request;
   return {
     method: "POST" as const,

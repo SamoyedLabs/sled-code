@@ -59,6 +59,7 @@ describe("RPC authorization scopes", () => {
   it("separates bot observation from starting and stopping its host", () => {
     for (const method of [
       WS_METHODS.openbotStatus,
+      WS_METHODS.openbotContinuityStatus,
       WS_METHODS.openbotListAgents,
       WS_METHODS.openbotRead,
       WS_METHODS.openbotReadToHost,
@@ -116,14 +117,22 @@ describe("RPC authorization scopes", () => {
   });
 
   it("requires both file access and bot authority when transferring attachments", () => {
+    expect(clientRpcRequiredScopes(WS_METHODS.attachmentsCreateUploadUrl, { purpose: "openbot" })).toEqual([
+      AuthOrchestrationOperateScope,
+      AuthFilesystemReadScope,
+    ]);
+    expect(clientRpcRequiredScopes(WS_METHODS.attachmentsCreateUploadUrl, { type: "file" })).toEqual([]);
     expect(clientRpcRequiredScopes(WS_METHODS.openbotFilesMaterialize, {})).toEqual([
       AuthFilesystemReadScope,
       AuthOrchestrationReadScope,
     ]);
-    expect(clientRpcRequiredScopes(WS_METHODS.openbotFilesUploadDraft, {})).toEqual([
-      AuthOrchestrationOperateScope,
-      AuthFilesystemReadScope,
-    ]);
+    for (const method of [WS_METHODS.openbotFilesUploadDraft, WS_METHODS.openbotFilesOriginalUpload, WS_METHODS.openbotFilesRecoverUpload, WS_METHODS.openbotFilesCancelUpload]) {
+      expect(clientRpcRequiredScopes(method, {})).toEqual([
+        AuthOrchestrationOperateScope,
+        AuthFilesystemReadScope,
+      ]);
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
+    }
     expect(requiredScopeForRpcMethod(WS_METHODS.openbotFilesSendDraft)).toBe(
       AuthOrchestrationOperateScope,
     );
@@ -131,6 +140,15 @@ describe("RPC authorization scopes", () => {
       AuthOrchestrationOperateScope,
     );
   });
+  it("requires file read for Library thumbnails and administrative write for Library deletion", () => {
+    expect(clientRpcRequiredScopes(WS_METHODS.openbotReadToHost, {
+      request: { operation: "library.files.preview", fileId: "synthetic" },
+    })).toEqual([AuthOrchestrationReadScope, AuthFilesystemReadScope]);
+    expect(clientRpcRequiredScopes(WS_METHODS.openbotAdminToHost, {
+      request: { operation: "library.files.delete", fileId: "synthetic" },
+    })).toEqual([AuthSettingsWriteScope, AuthOrchestrationOperateScope, AuthFilesystemReadScope]);
+  });
+
   it("requires settings and execution authority for bot coding policy changes", () => {
     for (const method of [
       WS_METHODS.openbotCodingPolicyEnable,
@@ -644,6 +662,7 @@ it.effect("separates host file URLs from readable attachment URLs", () =>
       { _tag: "workspace-file", threadId: ThreadId.make("thread"), path: "file.txt" },
       { _tag: "media-file", threadId: ThreadId.make("thread"), path: "/repo/image.png" },
       { _tag: "draft-workspace-file", cwd: "/repo", path: "file.txt" },
+      { _tag: "bot-library-image", hostId: "host", fileId: "private-file" },
     ] as const) {
       expect(
         yield* client[WS_METHODS.assetsCreateUrl]({ resource }).pipe(Effect.flip),
@@ -718,7 +737,7 @@ it("requires provider management for every exact released registry operation on 
   }
 });
 
-it("requires settings/provider authority for template reviews and operate authority for template mutations on local and pinned host ports", () => {
+it("uses settings authority for listing review and keeps provider authority for private template operations on local and pinned host ports", () => {
   for (const method of [
     WS_METHODS.openbotRead,
     WS_METHODS.openbotReadToHost,
@@ -750,7 +769,9 @@ it("requires settings/provider authority for template reviews and operate author
         clientRpcRequiredScopes(method, pinned ? { hostId: "host", request } : request),
       ).toEqual(
         read
-          ? [AuthSettingsWriteScope, AuthProvidersManageScope]
+          ? operation === "templates.listing"
+            ? [AuthSettingsWriteScope]
+            : [AuthSettingsWriteScope, AuthProvidersManageScope]
           : [AuthSettingsWriteScope, AuthProvidersManageScope, AuthOrchestrationOperateScope],
       );
     }

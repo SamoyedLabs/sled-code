@@ -1,8 +1,17 @@
 // Openbot 0.60.0 / 0c7753fa: route-browser.ts and browser-view-gateway.ts.
 // This adapter is server-only. Neither the upstream path nor token crosses the Sled wire.
+import type { OpenbotBrowserViewFeatures } from "@t3tools/contracts";
 import { createBrowserSessionPool, type BrowserPeer } from "./BrowserSessionPool.ts";
 export interface BrowserSession {
-  create(tabId: string): Promise<{ id: string; tabId: string; streamPath: string }>;
+  create(
+    tabId: string,
+    features?: OpenbotBrowserViewFeatures,
+  ): Promise<{
+    id: string;
+    tabId: string;
+    streamPath: string;
+    features?: OpenbotBrowserViewFeatures;
+  }>;
   close(id: string): Promise<void>;
   dial(path: string): BrowserPeer;
 }
@@ -30,6 +39,10 @@ export function createBrowserSession(options: {
 /** Sled-side draw credits. The upstream pool remains in released baseline mode. */
 export class BrowserFrameDelivery {
   #drawing: number | undefined;
+  #drawn: number | undefined;
+  get drawnSequence() {
+    return this.#drawn;
+  }
   #pending: { sequence: number; bytes: Uint8Array } | undefined;
   readonly acknowledged: boolean;
   constructor(acknowledged: boolean) {
@@ -46,6 +59,7 @@ export class BrowserFrameDelivery {
   }
   acknowledge(sequence: number): Uint8Array | undefined {
     if (sequence !== this.#drawing) return;
+    this.#drawn = sequence;
     this.#drawing = undefined;
     const pending = this.#pending;
     this.#pending = undefined;
@@ -75,11 +89,11 @@ export class BrowserHeldInput {
   }
   release(): readonly BrowserViewInput[] {
     const inputs: BrowserViewInput[] = [
-      ...[...this.#buttons.values()].map((input) => ({
-        ...input,
-        action: "up" as const,
-        modifiers: 0,
-      })),
+      ...[...this.#buttons.values()].map((input) => {
+        const released = { ...input, action: "up" as const, modifiers: 0 };
+        delete released.sequence;
+        return released;
+      }),
       ...[...this.#keys.values()].map((input) => ({
         ...input,
         action: "up" as const,

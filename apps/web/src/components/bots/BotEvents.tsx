@@ -111,7 +111,9 @@ export function RoutineChoice({
         }}
       >
         <SelectTrigger aria-label={label}>
-          <SelectValue />
+          <SelectValue>
+            {options.find((option) => option.id === value)?.name ?? `Choose ${label.toLowerCase()}`}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {!options.some((option) => option.id === "") && (

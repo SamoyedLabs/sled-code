@@ -1,0 +1,23 @@
+import { adminRoute, empty, fields, identifier, nullable, oneOf, string, type AdminDecoder, type OptionalRouteCodec } from "./admin-wire";
+import { AGENT_IMPORT_CODECS, AGENT_IMPORT_ROUTES } from "./agent-import-v1";
+export const SLED_IMPORT_CAPABILITY = "sled-agent-import-v1";
+export const SLED_IMPORT_ROUTES = {
+  stage: "/v1/sled-agent-import/stage", status: "/v1/sled-agent-import/status",
+  apply: "/v1/sled-agent-import/apply", discard: "/v1/sled-agent-import/discard",
+} as const;
+const pinned = (route: string) => {
+  const codec = AGENT_IMPORT_CODECS.get(route);
+  if (!codec) throw new Error("Missing pinned import codec");
+  return codec;
+};
+const preview: AdminDecoder = value => pinned(AGENT_IMPORT_ROUTES.stage).response(200, value);
+const result: AdminDecoder = value => pinned(AGENT_IMPORT_ROUTES.apply).response(200, value);
+const receipt = fields({ requestId: identifier, token: identifier, digest: string(64), preview,
+  state: oneOf("staged", "applying", "uncertain", "complete", "discarded"), result: nullable(result), selection: nullable(string(16000)),
+});
+export const SLED_IMPORT_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
+  [SLED_IMPORT_ROUTES.stage, adminRoute(empty, receipt)],
+  [SLED_IMPORT_ROUTES.status, adminRoute(empty, nullable(receipt))],
+  [SLED_IMPORT_ROUTES.apply, { request: pinned(AGENT_IMPORT_ROUTES.apply).request, response: adminRoute(empty, receipt).response }],
+  [SLED_IMPORT_ROUTES.discard, adminRoute(fields({ token: identifier }), nullable(receipt))],
+]);

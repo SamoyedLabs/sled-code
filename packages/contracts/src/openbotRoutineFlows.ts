@@ -57,6 +57,7 @@ export const OpenbotRoutineFlowCanvas = Schema.Struct({
 });
 export const OpenbotRoutineFlowReadRequest = Schema.Struct({
   operation: Schema.Literal("routineFlow.canvas"),
+  includeOneTime: Schema.optional(Schema.Boolean),
   agentId: Id,
 });
 export const OpenbotRoutineFlowCommand = Schema.Union([

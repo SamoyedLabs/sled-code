@@ -172,16 +172,27 @@ const make = Effect.gen(function* () {
     const task = yield* bridge
       .get({ origin, operationId: row.operation_id })
       .pipe(Effect.mapError((cause) => new CodingDeliveryError({ stage: "read", cause })));
-    if (!terminal.has(task.state)) return;
+    const settled = terminal.has(task.state);
+    const progressPhase =
+      task.remoteState === "authorization-required" ||
+      task.remoteState === "reconciliation-required"
+        ? task.remoteState
+        : task.pendingRequestIds.length > 0 || (task.pendingRequestCount ?? 0) > 0
+          ? "needs_attention"
+          : task.state;
+    if (!settled && task.state === "idle") return;
     // A result belongs to the final settled work, not merely the first provider turn to end.
-    if (task.environmentId !== undefined && task.remoteState !== "settled") return;
-    if (task.runId !== null && task.environmentId === undefined) {
+    if (settled && task.environmentId !== undefined && task.remoteState !== "settled") return;
+    if (settled && task.runId !== null && task.environmentId === undefined) {
       const projection = yield* projections
         .getThreadProjection(task.threadId)
         .pipe(Effect.mapError((cause) => new CodingDeliveryError({ stage: "read", cause })));
       if (delegatedTaskProgress(projection).state !== "result_available") return;
     }
-    const runId = task.runId ?? "cancelled-before-launch";
+    const actualRunId = task.runId ?? "cancelled-before-launch";
+    const runId = settled
+      ? actualRunId
+      : `progress:${actualRunId}:${progressPhase}:${task.pendingRequestIds.toSorted().join(",")}:${task.pendingRequestCount ?? 0}`;
     const clientMessageId = `sled-coding:${Hex.encode(
       yield* digest
         .digest(
@@ -195,11 +206,15 @@ const make = Effect.gen(function* () {
         .pipe(Effect.mapError((cause) => new CodingDeliveryError({ stage: "storage", cause }))),
     )}`;
     const result =
-      task.result ??
+      (!settled
+        ? progressPhase === "needs_attention"
+          ? "The coding assignment needs approval or input in Sled. Open the linked coding thread to review the pending request; this update does not approve or answer it."
+          : `The coding assignment is ${progressPhase}.`
+        : task.result) ??
       (task.cancelRequested
         ? "The coding assignment was cancelled before execution."
         : "The coding assignment ended without an assistant result.");
-    const text = `Sled coding result\n${task.environmentId === undefined ? "" : `Environment: ${task.environmentId}\n`}Thread: ${task.threadId}\nRun: ${runId}\nStatus: ${task.state}\n\n${result}`;
+    const text = `Sled coding ${settled ? "result" : "update"}\n${task.environmentId === undefined ? "" : `Environment: ${task.environmentId}\n`}Thread: ${task.threadId}\nRun: ${actualRunId}\nStatus: ${progressPhase}\n\n${result}`;
     const now = yield* DateTime.now;
     const inserted = yield* sql`INSERT INTO openbot_coding_deliveries
       (thread_id, run_id, client_message_id, first_attempt_at, payload_text)

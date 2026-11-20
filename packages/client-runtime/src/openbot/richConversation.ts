@@ -36,7 +36,7 @@ export function acceptedDraft(
     value.agentId === scope.agentId &&
     value.attachment.id === attachmentId &&
     value.state === "sent" &&
-    value.messageId !== null &&
+    (target.kind === "channel" || value.messageId !== null) &&
     (target.kind !== "task" || value.taskId === target.taskId) &&
     (target.kind !== "main" || value.taskId === null) &&
     sameTarget(value.target, target)
@@ -73,3 +73,5 @@ export function blockValuesAfterAttempt(
   const privateIds = new Set(block.spec.fields.filter(isSecretFormField).map((field) => field.id));
   return Object.fromEntries(Object.entries(values).filter(([id]) => !privateIds.has(id)));
 }
+
+export { decodeOpenbotTrace } from "./trace";

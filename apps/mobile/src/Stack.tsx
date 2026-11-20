@@ -1,3 +1,15 @@
+import { BotLibraryRoute } from "./features/bots/BotLibrary";
+import { BotPinnedMessagesRoute } from "./features/bots/BotPinnedMessages";
+import { BotScheduleRoute, BotWorkspaceUtilityRoute } from "./features/bots/BotWorkspaceUtility";
+import { BotGroupChatRoute, BotGroupsRoute } from "./features/bots/BotGroupChat";
+import { BotBrowserRoute } from "./features/settings/BotBrowser";
+import { SettingsBotConversationsRouteScreen } from "./features/settings/SettingsBotConversationsRouteScreen";
+import { SettingsBotQuickActionsRouteScreen } from "./features/settings/SettingsBotQuickActionsRouteScreen";
+import { SettingsAppLockRouteScreen } from "./features/settings/SettingsAppLockRouteScreen";
+import { SettingsBotMotionRouteScreen, SettingsBotHapticsRouteScreen } from "./features/settings/SettingsBotFeedbackRouteScreen";
+import { BotAgentThreadRoute, BotThreadsRoute } from "./features/bots/BotThreadsRoute";
+import { BotNotificationRouteScreen } from "./features/bots/BotNotificationRouteScreen";
+import { BotOutboxSync } from "./features/bots/BotOutboxSync";
 import {
   BotWorkspaceRouteScreen,
   SettingsBotsRouteScreen,
@@ -125,6 +137,7 @@ import {
 import { SettingsKeyboardRouteScreen } from "./features/settings/SettingsKeyboardRouteScreen";
 import { SettingsLegalRouteScreen } from "./features/settings/SettingsLegalRouteScreen";
 import { SettingsMicrophoneRouteScreen } from "./features/settings/SettingsMicrophoneRouteScreen";
+import { SettingsBotVoiceRouteScreen } from "./features/settings/SettingsBotVoiceRouteScreen";
 import {
   SettingsOpenSourceLicenseRouteScreen,
   SettingsOpenSourceLicensesRouteScreen,
@@ -391,7 +404,108 @@ const SETTINGS_SCREENS = {
   Bots: createNativeStackScreen({
     screen: BotWorkspaceRouteScreen,
     linking: "bots",
-    options: { ...DETAIL_HEADER_OPTIONS, title: "Bots" },
+    options: {
+      ...DETAIL_HEADER_OPTIONS,
+      title: "Bots",
+      ...(Platform.OS === "ios"
+        ? {
+            presentation: "transparentModal",
+            animation: "none",
+            headerShown: false,
+            contentStyle: { backgroundColor: "transparent" },
+          }
+        : {}),
+    },
+  }),
+  BotGroupChat: createNativeStackScreen({
+    screen: BotGroupChatRoute,
+    options: { ...DETAIL_HEADER_OPTIONS, headerShown: false, title: "Group chat" },
+  }),
+  BotThreads: createNativeStackScreen({
+    screen: BotThreadsRoute,
+    options: { ...SOLID_HEADER_OPTIONS, title: "Threads" },
+  }),
+  BotBrowser: createNativeStackScreen({
+    screen: BotBrowserRoute,
+    options: { ...SOLID_HEADER_OPTIONS, title: "Browser" },
+  }),
+  BotLibrary: createNativeStackScreen({
+    screen: BotLibraryRoute,
+    options: { ...DETAIL_HEADER_OPTIONS, title: "Library" },
+  }),
+  BotPinnedMessages: createNativeStackScreen({
+    screen: BotPinnedMessagesRoute,
+    options: {
+      ...SOLID_HEADER_OPTIONS,
+      title: "Pinned messages",
+      presentation: "formSheet",
+      sheetAllowedDetents: [0.6, 0.85],
+      sheetGrabberVisible: true,
+    },
+  }),
+  BotAgentThread: createNativeStackScreen({
+    screen: BotAgentThreadRoute,
+    options: { ...SOLID_HEADER_OPTIONS, title: "Thread" },
+  }),
+  BotWorkspaceUtility: createNativeStackScreen({
+    screen: BotWorkspaceUtilityRoute,
+    options: DETAIL_HEADER_OPTIONS,
+  }),
+  BotSchedule: createNativeStackScreen({
+    screen: BotScheduleRoute,
+    linking: "bot-schedule/:environmentId/:hostId",
+    options: { ...DETAIL_HEADER_OPTIONS, title: "Routines" },
+  }),
+  BotGroups: createNativeStackScreen({
+    screen: BotGroupsRoute,
+    options: { ...DETAIL_HEADER_OPTIONS, title: "Group chats" },
+  }),
+  BotNotification: createNativeStackScreen({
+    screen: BotNotificationRouteScreen,
+    linking: "bots/:environmentId/:hostId/:agentId",
+    options: {
+      ...DETAIL_HEADER_OPTIONS,
+      title: "Bot notification",
+      ...(Platform.OS === "ios"
+        ? { presentation: "transparentModal", animation: "none", headerShown: false }
+        : {}),
+    },
+  }),
+  BotTaskNotification: createNativeStackScreen({
+    screen: BotNotificationRouteScreen,
+    linking: "bots/:environmentId/:hostId/:agentId/tasks/:taskId",
+    options: { ...DETAIL_HEADER_OPTIONS, title: "Bot notification" },
+  }),
+  BotChannelNotification: createNativeStackScreen({
+    screen: BotNotificationRouteScreen,
+    linking: "bots/:environmentId/:hostId/:agentId/channels/:channelId",
+    options: { ...DETAIL_HEADER_OPTIONS, title: "Bot notification" },
+  }),
+  BotTaskChannelNotification: createNativeStackScreen({
+    screen: BotNotificationRouteScreen,
+    linking: "bots/:environmentId/:hostId/:agentId/tasks/:taskId/channels/:channelId",
+    options: { ...DETAIL_HEADER_OPTIONS, title: "Bot notification" },
+  }),
+  BotRoutineNotification: createNativeStackScreen({
+    screen: BotNotificationRouteScreen,
+    linking: "bots/:environmentId/:hostId/:agentId/routines/:routineId",
+    options: { ...DETAIL_HEADER_OPTIONS, title: "Bot notification" },
+  }),
+  BotRoutineRunNotification: createNativeStackScreen({
+    screen: BotNotificationRouteScreen,
+    linking: "bots/:environmentId/:hostId/:agentId/routines/:routineId/runs/:routineRunId",
+    options: { ...DETAIL_HEADER_OPTIONS, title: "Bot notification" },
+  }),
+  BotRoutineChannelNotification: createNativeStackScreen({
+    screen: BotNotificationRouteScreen,
+    linking: "bots/:environmentId/:hostId/:agentId/routines/:routineId/channels/:channelId",
+    options: { ...DETAIL_HEADER_OPTIONS, title: "Bot notification" },
+  }),
+  BotRoutineRunChannelNotification: createNativeStackScreen({
+    screen: BotNotificationRouteScreen,
+    linking:
+      "bots/:environmentId/:hostId/:agentId/routines/:routineId/runs/:routineRunId/channels/:channelId",
+    options: { ...DETAIL_HEADER_OPTIONS, title: "Bot notification" },
   }),
   SettingsBots: createNativeStackScreen({
     screen: SettingsBotsRouteScreen,
@@ -405,6 +519,36 @@ const SETTINGS_SCREENS = {
   SettingsBotProviders: createNativeStackScreen({
     screen: SettingsBotProvidersRouteScreen,
     options: { ...SETTINGS_PAGE_OPTIONS, title: "Bot providers" },
+  }),
+  SettingsBotVoice: createNativeStackScreen({
+    screen: SettingsBotVoiceRouteScreen,
+    linking: "settings/bot-voice",
+    options: { ...SETTINGS_PAGE_OPTIONS, title: "Bot voice" },
+  }),
+  SettingsBotConversations: createNativeStackScreen({
+    screen: SettingsBotConversationsRouteScreen,
+    linking: "settings/bot-conversations",
+    options: { ...SETTINGS_PAGE_OPTIONS, title: "Bot conversations" },
+  }),
+  SettingsBotQuickActions: createNativeStackScreen({
+    screen: SettingsBotQuickActionsRouteScreen,
+    linking: "settings/bot-quick-actions",
+    options: { ...SETTINGS_PAGE_OPTIONS, title: "Quick actions" },
+  }),
+  SettingsAppLock: createNativeStackScreen({
+    screen: SettingsAppLockRouteScreen,
+    linking: "settings/app-lock",
+    options: { ...SETTINGS_PAGE_OPTIONS, title: "App Lock" },
+  }),
+  SettingsBotMotion: createNativeStackScreen({
+    screen: SettingsBotMotionRouteScreen,
+    linking: "settings/bot-animations",
+    options: { ...SETTINGS_PAGE_OPTIONS, title: "Animations" },
+  }),
+  SettingsBotHaptics: createNativeStackScreen({
+    screen: SettingsBotHapticsRouteScreen,
+    linking: "settings/bot-haptics",
+    options: { ...SETTINGS_PAGE_OPTIONS, title: "Haptics" },
   }),
   SettingsBotDetail: createNativeStackScreen({
     screen: SettingsBotDetailRouteScreen,
@@ -567,6 +711,7 @@ function RootStackLayout(props: {
           }
         >
           <WorkspaceConnectionStatusProvider>
+            {Platform.OS === "ios" && <BotOutboxSync />}
             <AndroidWorkspaceTabsProvider state={props.state}>
               <AdaptiveWorkspaceLayout
                 pathname={workspaceLocation.pathname}
@@ -767,7 +912,7 @@ const RootStackConfig = createWorkspaceStackNavigator({
     Thread: createNativeStackScreen({
       screen: ThreadRouteScreen,
       linking: { path: "threads/:environmentId?/:threadId?", alias: ["new/draft"] },
-      options: THREAD_HEADER_OPTIONS,
+      options: { ...THREAD_HEADER_OPTIONS, ...(Platform.OS === "ios" ? { gestureEnabled: false } : {}) },
     }),
     NewTaskProject: createNativeStackScreen({
       screen: NewTaskRouteScreen,

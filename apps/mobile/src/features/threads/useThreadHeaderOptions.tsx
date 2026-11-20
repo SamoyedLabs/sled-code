@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { useWorkspaceSidebarHeaderItem } from "../layout/useWorkspaceSidebarHeaderItem";
 import { StackActions, useNavigation } from "@react-navigation/native";
 import { threadHeaderAppearance } from "./thread-header-appearance";
@@ -82,11 +83,8 @@ export function useThreadHeaderOptions(props: {
     headerTitle: props.title,
     title: props.title,
     headerBackVisible: !layout.usesSplitView,
-    unstable_headerLeftItems: layout.usesSplitView
-      ? () => splitLeftHeaderItems
-      : canGoBack
-        ? undefined
-        : () => compactHomeHeaderItems,
+    unstable_headerLeftItems: () =>
+      layout.usesSplitView ? splitLeftHeaderItems : canGoBack ? [] : compactHomeHeaderItems,
     // The workspace navigator adds compose to the Duo detail column's bar.
     unstable_headerRightItems: () =>
       usesDuoHeader || layout.usesSplitView ? threadCenterHeaderItems : compactRightHeaderItems,

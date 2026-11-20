@@ -1,3 +1,4 @@
+import { OpenbotChannelGrantCommand } from "./openbotChannelGrants.ts";
 import { OpenbotRoutineSchedule as ChannelRoutineSchedule } from "./openbotEvents.ts";
 import * as Schema from "effect/Schema";
 
@@ -6,6 +7,20 @@ const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Name = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(80));
 const Text = Schema.String.check(Schema.isMaxLength(100_000));
 const Status = Schema.Literals(["streaming", "completed", "failed", "interrupted"]);
+const Trace = Schema.Struct({
+  startedAt: Schema.optional(Schema.String),
+  endedAt: Schema.optional(Schema.NullOr(Schema.String)),
+  steps: Schema.Array(
+    Schema.Struct({
+      id: Id,
+      kind: Schema.String,
+      startedAt: Schema.optional(Schema.String),
+      endedAt: Schema.optional(Schema.NullOr(Schema.String)),
+      command: Schema.optional(Schema.String.check(Schema.isMaxLength(100_000))),
+      text: Schema.optional(Schema.String.check(Schema.isMaxLength(100_000))),
+    }),
+  ).check(Schema.isMaxLength(5000)),
+});
 const Member = Schema.Struct({ agentId: Id });
 export const OpenbotChannelDraft = Schema.Struct({
   name: Name,
@@ -110,6 +125,7 @@ export const OpenbotChannelMessage = Schema.Struct({
     status: Status,
     turnId: Schema.optional(Id),
     itemType: Schema.optional(Schema.String.check(Schema.isMaxLength(128))),
+    trace: Schema.optional(Trace),
     source: Schema.optional(Schema.Literals(["user", "assistant", "agent", "system", "routine"])),
     replyToMessageId: Schema.optional(Schema.NullOr(Id)),
     attachments: Schema.optional(Schema.Array(Attachment).check(Schema.isMaxLength(100))),
@@ -187,7 +203,39 @@ export const OpenbotChannelRoutineRun = Schema.Struct({
   updatedAt: DateText,
 });
 export type OpenbotChannelRoutineRun = typeof OpenbotChannelRoutineRun.Type;
+export const OpenbotChannelPictureIcon = Schema.Struct({
+  name: Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]{0,39}$/)),
+  hue: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 359 })),
+});
+export const OpenbotChannelPresentation = Schema.Struct({
+  channelId: Id,
+  icon: Schema.NullOr(OpenbotChannelPictureIcon),
+  imageVersion: Schema.NullOr(Id),
+  throughSequence: Count,
+  firstUnreadMessageId: Schema.NullOr(Id),
+  firstUnreadSequence: Schema.NullOr(Count),
+});
+export type OpenbotChannelPresentation = typeof OpenbotChannelPresentation.Type;
+export const OpenbotChannelPresentations = Schema.Array(OpenbotChannelPresentation).check(
+  Schema.isMaxLength(10000),
+);
+export const OpenbotChannelPictureImage = Schema.Struct({
+  mimeType: Schema.Literals(["image/png", "image/jpeg", "image/webp"]),
+  dataBase64: Schema.String.check(
+    Schema.isMaxLength(699052),
+    Schema.isPattern(/^[A-Za-z0-9+/]+={0,2}$/),
+  ),
+});
 export const OpenbotChannelReadRequest = Schema.Union([
+  Schema.Struct({
+    operation: Schema.Literal("channel.trace"),
+    channelId: Id,
+    messageId: Id,
+    offset: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 2 * 1024 * 1024 })),
+    version: Schema.NullOr(Id),
+  }),
+  Schema.Struct({ operation: Schema.Literal("channel.presentation") }),
+  Schema.Struct({ operation: Schema.Literal("channel.picture.read"), channelId: Id, version: Id }),
   Schema.Struct({
     operation: Schema.Literals(["channel.memories", "channel.routines"]),
     channelId: Id,
@@ -208,6 +256,19 @@ export const OpenbotChannelReadRequest = Schema.Union([
 export type OpenbotChannelReadRequest = typeof OpenbotChannelReadRequest.Type;
 const Command = { channelId: Id, operationId: Id };
 export const OpenbotChannelAdminRequest = Schema.Union([
+  Schema.Struct({
+    operation: Schema.Literal("channel.picture.set"),
+    channelId: Id,
+    picture: Schema.Union([
+      Schema.Struct({ kind: Schema.Literals(["reset", "remove-image"]) }),
+      Schema.Struct({ kind: Schema.Literal("icon"), icon: OpenbotChannelPictureIcon }),
+      Schema.Struct({ kind: Schema.Literal("image"), image: OpenbotChannelPictureImage }),
+    ]),
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("channel.grants"),
+    command: OpenbotChannelGrantCommand,
+  }),
   Schema.Struct({
     operation: Schema.Literal("channel.memory.create"),
     channelId: Id,
@@ -267,6 +328,7 @@ export const OpenbotChannelAdminRequest = Schema.Union([
   Schema.Struct({
     operation: Schema.Literal("channel.send"),
     ...Command,
+    includeReceipt: Schema.optionalKey(Schema.Literal(true)),
     text: Text,
     recipientAgentId: Schema.NullOr(Id),
     replyToMessageId: Schema.NullOr(Id),
@@ -288,5 +350,10 @@ export const OpenbotChannelAdminRequest = Schema.Union([
     recipientAgentId: Schema.NullOr(Id),
   }),
   Schema.Struct({ operation: Schema.Literal("channel.delete"), channelId: Id }),
+  Schema.Struct({
+    operation: Schema.Literal("channel.message.delete"),
+    channelId: Id,
+    messageId: Id,
+  }),
 ]);
 export type OpenbotChannelAdminRequest = typeof OpenbotChannelAdminRequest.Type;

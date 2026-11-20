@@ -1,3 +1,4 @@
+import { BotsEdgeGestureContext } from "../bots/BotsEdgeGesture";
 import { useActiveNewTask } from "../../state/active-new-task";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
@@ -256,7 +257,8 @@ export function HomeScreen(props: HomeScreenProps) {
   const fullSwipeWidth = primaryColumn && columnMetrics ? columnMetrics.width - 20 : undefined;
   const queuedThreadKeys = useQueuedThreadKeys();
   const openSwipeableRef = useRef<SwipeableMethods | null>(null);
-  const homeScrollGesture = useNativeGesture();
+  const botsEdgeGesture = use(BotsEdgeGestureContext);
+  const homeScrollGesture = useNativeGesture({ requireToFail: botsEdgeGesture });
   const insets = useSafeAreaInsets();
   const { fabClearance } = useAndroidControlSizing();
   const screenMetrics = useNativeLayoutMetrics();

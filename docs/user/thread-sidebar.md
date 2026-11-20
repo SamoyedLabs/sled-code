@@ -298,9 +298,9 @@ You can also choose **Side chat** from the **+** menu in the right panel. The si
 chat opens as a tab there, with its own composer. Side chats do not show in the
 sidebar. Find one again under **Side chats** in thread details.
 
-A side chat works in the same folder as the thread. Its first reply asks before it
-edits files or runs commands. After that, it uses the permission mode you choose
-in its composer.
+A side chat works in the same folder as the thread and inherits its permission
+mode, including Full Access. You can change that mode in the side chat
+composer.
 
 To use what you learned, choose **Bring back**. The thread gets the side chat with
 your next message there. Bring back is available while the thread is idle.

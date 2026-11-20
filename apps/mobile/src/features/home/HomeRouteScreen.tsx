@@ -1,14 +1,14 @@
+import { BotsEdgeGesture } from "../bots/BotsEdgeGesture";
 import { uuidv4 } from "../../lib/uuid";
 import { ThreadUndoNotice } from "./ThreadUndoNotice";
 import { Toolbar } from "../../components/ui/Toolbar";
-import { Button } from "../../components/ui/Button";
 import { use } from "react";
 import { NativePrimaryColumnContext } from "../../native/v5-workspace-context";
 import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
 import { useNavigation } from "@react-navigation/native";
 import { useMemo, useState } from "react";
-import { Platform, View, useWindowDimensions } from "react-native";
+import { Platform, useWindowDimensions } from "react-native";
 
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import {
@@ -41,6 +41,14 @@ import { useSelectWorkspaceTab } from "../workspace/useSelectWorkspaceTab";
 import { useSelectWorkspaceDetail } from "../workspace/useSelectWorkspaceDetail";
 
 export function HomeRouteScreen() {
+  return (
+    <BotsEdgeGesture routeName="Home">
+      <HomeRouteContent />
+    </BotsEdgeGesture>
+  );
+}
+
+function HomeRouteContent() {
   const { width: windowWidth } = useWindowDimensions();
   const nativePrimaryColumn = use(NativePrimaryColumnContext);
   const columnMetrics = useNativeColumnLayoutMetrics();
@@ -235,11 +243,6 @@ export function HomeRouteScreen() {
           onStartNewTask={startNewTask}
         />
 
-        {nativePrimaryColumn && (
-          <View className="px-3 py-2">
-            <Button label="Bots" tone="secondary" onPress={() => navigation.navigate("Bots")} />
-          </View>
-        )}
         <HomeScreen
           catalogState={catalogState}
           environments={environments}

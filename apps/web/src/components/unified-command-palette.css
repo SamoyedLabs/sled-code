@@ -1,0 +1,170 @@
+/* OpenBot GlobalSearch geometry/timing on Sled's existing command, focus and virtualization machinery. */
+[data-command-palette][data-palette-mode="command"] {
+  --command-palette-row: color-mix(in srgb, var(--foreground) 8%, transparent);
+  --command-palette-ease: var(--openbot-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+  position: fixed;
+  top: 112px;
+  left: 50%;
+  width: min(640px, calc(100vw - 48px));
+  max-width: none;
+  max-height: calc(100dvh - 136px);
+  border: 0;
+  border-radius: 16px;
+  background: var(--popover) !important;
+  box-shadow:
+    0 0 0 1px var(--border),
+    0 24px 80px #0006;
+  backdrop-filter: none;
+  translate: none;
+  scale: 1;
+  opacity: 1;
+  transform: translateX(-50%);
+  transform-origin: 50% 0;
+  animation: none;
+  transition:
+    transform var(--openbot-duration-normal, 160ms) var(--command-palette-ease),
+    opacity var(--openbot-duration-normal, 160ms) var(--command-palette-ease);
+  will-change: auto;
+}
+.dark [data-command-palette][data-palette-mode="command"] {
+  background: #050505 !important;
+}
+[data-command-palette][data-palette-mode="command"][data-starting-style] {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-4px) scale(0.98);
+}
+[data-command-palette][data-palette-mode="command"][data-ending-style] {
+  opacity: 0;
+  transform: translateX(-50%) scale(0.98);
+  transition-duration: var(--openbot-duration-fast, 120ms);
+}
+[data-command-palette][data-palette-mode="command"] .command-palette-control {
+  display: flex;
+  min-height: 48px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+[data-command-palette][data-palette-mode="command"] [data-slot="command-input-shell"] {
+  height: 48px;
+  padding: 0 8px;
+}
+[data-command-palette][data-palette-mode="command"] [data-slot="command-input-shell"] input {
+  height: 48px;
+  border-radius: 0;
+  font-size: 16px;
+}
+[data-command-palette][data-palette-mode="command"] .command-palette-filters {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  padding-right: 8px;
+}
+[data-command-palette][data-palette-mode="command"] .command-palette-filters button {
+  position: relative;
+  z-index: 1;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 16px;
+  transition: color var(--openbot-duration-normal, 160ms) var(--command-palette-ease);
+}
+[data-command-palette][data-palette-mode="command"]
+  .command-palette-filters
+  button[aria-pressed="true"] {
+  background: var(--command-palette-row);
+}
+[data-command-filter-ready] button[aria-pressed="true"] {
+  background: transparent !important;
+}
+.command-palette-filter-pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--command-palette-row);
+  pointer-events: none;
+  transition:
+    transform var(--openbot-duration-normal, 160ms) var(--command-palette-ease),
+    width var(--openbot-duration-normal, 160ms) var(--command-palette-ease);
+}
+.command-palette-filter-pill[data-instant] {
+  transition: none;
+}
+[data-command-palette][data-palette-mode="command"] [data-slot="command-list"] {
+  max-height: min(400px, calc(100dvh - 240px));
+  padding: 0;
+  transition: height var(--openbot-duration-normal, 160ms) var(--command-palette-ease);
+}
+[data-command-palette][data-palette-mode="command"]
+  [data-slot="command-list"][data-height-instant] {
+  transition: none;
+}
+[data-command-palette][data-palette-mode="command"] [data-slot="command-item"] {
+  position: relative;
+  z-index: 1;
+  min-height: 36px;
+  border-radius: 6px;
+}
+[data-command-highlight-ready] [data-slot="command-item"] {
+  background: transparent !important;
+}
+[data-command-highlight-ready] {
+  position: relative;
+  isolation: isolate;
+}
+[data-command-highlight-ready] > :not(.command-palette-highlight) {
+  z-index: 1;
+}
+.command-palette-highlight {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  right: 8px;
+  left: 8px;
+  border-radius: 6px;
+  background: var(--command-palette-row);
+  pointer-events: none;
+  transition:
+    transform var(--openbot-duration-fast, 120ms) var(--command-palette-ease),
+    height var(--openbot-duration-fast, 120ms) var(--command-palette-ease);
+}
+.command-palette-highlight[data-instant] {
+  transition: none;
+}
+[data-command-palette][data-palette-mode="command"] [data-slot="command-footer"] {
+  padding: 8px 14px;
+  background: transparent;
+  font-size: 12px;
+}
+@media (max-width: 640px) {
+  [data-command-palette][data-palette-mode="command"] {
+    width: calc(100vw - 24px);
+    max-height: calc(100dvh - 124px);
+  }
+  [data-command-palette][data-palette-mode="command"] .command-palette-control {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+  [data-command-palette][data-palette-mode="command"] .command-palette-filters {
+    flex-basis: 100%;
+    overflow-x: auto;
+    padding: 4px 12px 8px;
+    scrollbar-width: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-command-palette][data-palette-mode="command"],
+  [data-command-palette][data-palette-mode="command"] [data-slot="command-list"],
+  [data-command-palette][data-palette-mode="command"] .command-palette-filters button,
+  .command-palette-filter-pill,
+  .command-palette-highlight {
+    transition: none;
+  }
+}

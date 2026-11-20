@@ -245,3 +245,33 @@ it("does not hold stale identities or existing provider results, and rejects cor
     expect(() => decodeCodingReceipt({ ...receipt, lease })).toThrow("lease");
   }
 });
+
+it("renews bounded leases through durable receipts while preserving the original reservation and refusing stale work", () => {
+  const f = fixture();
+  const first = channelCoding(f.reopen(), actor, binding, "bind");
+  expect(first?.lease?.reservedAt).toBe(1000);
+  f.advance(25 * 60000 + 1000);
+  const renewed = channelCoding(f.reopen(), actor, binding, "renew");
+  expect(renewed?.lease).toEqual({
+    reservedAt: 1000,
+    renewedAt: 25 * 60000 + 1000,
+    expiresAt: 55 * 60000 + 1000,
+    providerCompleted: false,
+  });
+  expect(decodeReceipt(renewed!)).toEqual(renewed);
+  f.advance(31 * 60000 + 1000);
+  expect(
+    channelCoding(
+      f.reopen(),
+      actor,
+      binding,
+      "submit",
+      "A result after the original thirty-minute window",
+    )?.result?.text,
+  ).toBe("A result after the original thirty-minute window");
+  expect(() => channelCoding(f.reopen(), actor, binding, "renew")).toThrow("cannot renew");
+  const expired = fixture();
+  channelCoding(expired.reopen(), actor, binding, "bind");
+  expired.advance(30 * 60000 + 1000);
+  expect(() => channelCoding(expired.reopen(), actor, binding, "renew")).toThrow("expired");
+});

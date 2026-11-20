@@ -1,0 +1,289 @@
+@scope (.openbot-react) {
+  :where(.z-badge) {
+    width: fit-content;
+    height: 22px;
+    min-width: 0;
+    display: inline-flex;
+    overflow: hidden;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    gap: var(--openbot-space-1);
+    border: 1px solid transparent;
+    border-radius: var(--openbot-radius-pill);
+    padding: var(--openbot-space-0-5) var(--openbot-space-2);
+    font-size: var(--openbot-text-sm);
+    font-weight: var(--openbot-weight-medium);
+    line-height: var(--openbot-leading-sm);
+    transition:
+      border-color var(--openbot-duration-fast) var(--openbot-ease-out),
+      background-color var(--openbot-duration-fast) var(--openbot-ease-out),
+      color var(--openbot-duration-fast) var(--openbot-ease-out);
+    white-space: nowrap;
+  }
+
+  :where(.z-badge) > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  :where(.z-badge) > svg {
+    width: 12px;
+    height: 12px;
+    flex: 0 0 auto;
+    pointer-events: none;
+  }
+
+  :where(.z-badge):has(> [data-icon="inline-start"]) {
+    padding-inline-start: var(--openbot-space-1-5);
+  }
+
+  :where(.z-badge):has(> [data-icon="inline-end"]) {
+    padding-inline-end: var(--openbot-space-1-5);
+  }
+
+  :where(.z-badge-variant-default) {
+    background: var(--openbot-accent);
+    color: var(--openbot-text-primary);
+  }
+
+  :where(.z-badge-variant-secondary) {
+    background: var(--openbot-bg-control);
+    color: var(--openbot-text-secondary);
+  }
+
+  :where(.z-badge-variant-outline) {
+    border-color: var(--openbot-border-strong);
+    background: transparent;
+    color: var(--openbot-text-secondary);
+  }
+
+  :where(.z-badge-variant-ghost) {
+    background: transparent;
+    color: var(--openbot-text-secondary);
+  }
+
+  :where(.z-badge-variant-link) {
+    background: transparent;
+    color: var(--openbot-accent-text);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  :where(.z-badge-variant-primary-light) {
+    background: var(--openbot-accent-soft);
+    color: var(--openbot-accent-text);
+  }
+
+  :where(.z-badge-variant-success-light) {
+    background: var(--openbot-success-soft);
+    color: var(--openbot-success);
+  }
+
+  :where(.z-badge-variant-warning-light) {
+    background: var(--openbot-warning-soft);
+    color: var(--openbot-warning);
+  }
+
+  :where(.z-badge-variant-destructive),
+  :where(.z-badge-variant-destructive-light) {
+    background: var(--openbot-danger-soft);
+    color: var(--openbot-danger);
+  }
+
+  /* The design's "New" chip. Not a --openbot-success or --openbot-accent variant: an
+ * announcement that something is newly available is neither a report that something
+ * succeeded nor an action the user can take. The heavier weight and the open tracking
+ * are part of the look, which is why this variant sets them and the others do not. */
+  :where(.z-badge-variant-new) {
+    background: var(--openbot-badge-new-soft);
+    color: var(--openbot-badge-new);
+    font-weight: var(--openbot-weight-semibold);
+    letter-spacing: 0.01em;
+  }
+
+  :where(.z-badge-variant-info-light) {
+    background: var(--openbot-accent-soft);
+    color: var(--openbot-accent-text);
+  }
+
+  :where(.z-badge-variant-primary-outline) {
+    border-color: var(--openbot-border-strong);
+    background: transparent;
+    color: var(--openbot-accent-text);
+  }
+
+  :where(.z-badge-variant-success-outline) {
+    border-color: var(--openbot-border-strong);
+    background: transparent;
+    color: var(--openbot-success);
+  }
+
+  :where(.z-badge-variant-warning-outline) {
+    border-color: var(--openbot-border-strong);
+    background: transparent;
+    color: var(--openbot-warning);
+  }
+
+  :where(.z-badge-variant-destructive-outline) {
+    border-color: var(--openbot-border-strong);
+    background: transparent;
+    color: var(--openbot-danger);
+  }
+
+  :where(.z-badge-variant-info-outline) {
+    border-color: var(--openbot-border-strong);
+    background: transparent;
+    color: var(--openbot-accent-text);
+  }
+
+  .ui-alert {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--openbot-space-3);
+    border: 1px solid var(--openbot-border);
+    border-radius: var(--openbot-radius-lg);
+    background: var(--openbot-bg-surface);
+    padding: var(--openbot-space-3) var(--openbot-space-4);
+    color: var(--openbot-text-muted);
+  }
+
+  .ui-alert[data-tone="success"] {
+    border-color: var(--openbot-success-soft);
+    background: var(--openbot-success-wash);
+    color: var(--openbot-success);
+  }
+
+  .ui-alert[data-tone="warning"] {
+    border-color: var(--openbot-warning-soft);
+    background: var(--openbot-warning-soft);
+    color: var(--openbot-warning);
+  }
+
+  .ui-alert[data-tone="danger"] {
+    border-color: var(--openbot-danger-soft);
+    background: var(--openbot-danger-soft);
+    color: var(--openbot-danger);
+  }
+
+  .ui-alert-icon {
+    width: var(--openbot-icon-md);
+    height: var(--openbot-icon-md);
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ui-alert-icon svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .ui-alert-content {
+    min-width: 0;
+    display: grid;
+    gap: var(--openbot-space-0-5);
+  }
+
+  .ui-alert-title {
+    color: var(--openbot-text-primary);
+    font-size: var(--openbot-text-md);
+    font-weight: var(--openbot-weight-medium);
+    line-height: var(--openbot-leading-md);
+  }
+
+  .ui-alert-description {
+    color: var(--openbot-text-muted);
+    font-size: var(--openbot-text-sm);
+    line-height: var(--openbot-leading-sm);
+  }
+
+  /* A toned alert puts a wash over whatever is behind it, which lifts the background towards the
+   muted text colour and leaves this line under 4.5:1 on a panel. The tone carries the meaning;
+   the description only has to be readable. */
+  .ui-alert[data-tone] .ui-alert-description {
+    color: var(--openbot-text-secondary);
+  }
+
+  .ui-alert-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--openbot-space-2);
+  }
+
+  .ui-progress {
+    width: 100%;
+  }
+
+  .ui-progress-track {
+    width: 100%;
+    height: 3px;
+    overflow: hidden;
+    border-radius: var(--openbot-radius-pill);
+    background: var(--openbot-border-strong);
+  }
+
+  /* Kobalte reports the value as a custom property and leaves the width to us, so a fill without this
+   line is a full bar at every value. */
+  .ui-progress-fill {
+    width: var(--kb-progress-fill-width, 0%);
+    height: 100%;
+    border-radius: inherit;
+    background: var(--openbot-text-secondary);
+    transition: width var(--openbot-duration-normal) var(--openbot-ease-out);
+  }
+
+  /* An operation with no measurable end reports that it is still running, rather than sitting at a
+   number. Kobalte publishes no width for one, so the fill is a short bar that travels the track. */
+  .ui-progress-fill[data-indeterminate] {
+    width: 35%;
+    animation: ui-progress-travel 1.4s var(--openbot-ease-in-out) infinite;
+    transition: none;
+  }
+
+  .ui-progress-fill[data-indeterminate]:dir(rtl) {
+    animation-name: ui-progress-travel-rtl;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ui-progress-fill,
+    .ui-radial-progress-indicator {
+      animation: none;
+      transition: none;
+    }
+  }
+
+  .ui-confirm-dialog-error.ui-alert {
+    margin-top: var(--openbot-space-1);
+    padding: var(--openbot-space-2) var(--openbot-space-3);
+  }
+
+  .ui-confirm-dialog-error .ui-alert-icon {
+    color: var(--openbot-danger-text);
+  }
+}
+
+@keyframes ui-progress-travel {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(286%);
+  }
+}
+
+@keyframes ui-progress-travel-rtl {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(-286%);
+  }
+}

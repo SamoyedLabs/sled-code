@@ -1,3 +1,4 @@
+import { BotsEdgeGesture } from "../bots/BotsEdgeGesture";
 import * as Dialog from "../../components/ui/Dialog";
 import { useRememberThreadProject } from "./useRememberThreadProject";
 import { useOpenPullRequest } from "../../native/useOpenPullRequest";
@@ -230,6 +231,14 @@ function UnavailableThreadDraftRedirect(props: { readonly environmentId: Environ
 }
 
 export function ThreadRouteScreen(props: ThreadRouteScreenProps) {
+  return (
+    <BotsEdgeGesture routeName="Thread">
+      <ThreadRouteWithState {...props} />
+    </BotsEdgeGesture>
+  );
+}
+
+function ThreadRouteWithState(props: ThreadRouteScreenProps) {
   return (
     <ThreadScreenHost>
       {props.route.params?.draft ? (

@@ -1,3 +1,13 @@
+import * as QueueAttachmentsProtocol from "./QueueAttachmentsProtocol.ts";
+import type {
+  QueueAttachmentTarget,
+  QueueAttachmentEdit,
+  QueueAttachmentReceipt,
+} from "../../../../packages/contracts/src/openbotQueueAttachments.ts";
+import {
+  OPENBOT_CHANNEL_UPLOAD_RECOVERY_CAPABILITY,
+  OpenbotOriginalUploadIdentity,
+} from "../../../../packages/contracts/src/openbotFiles.ts";
 import {
   OpenbotChannel,
   OpenbotChannelPage,
@@ -14,9 +24,32 @@ import * as Stream from "effect/Stream";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 
+const decodeQueueCapabilities = Schema.decodeUnknownOption(
+  Schema.Struct({ capabilities: Schema.Array(Schema.String) }),
+);
 type Summary = OpenbotFileSummary;
 type Source = OpenbotFileMaterializeInput["source"];
 export interface FileSession<E> {
+  readonly queueAttachmentContext?: (
+    principal: string,
+    input: QueueAttachmentTarget,
+  ) => Effect.Effect<
+    { expectedRevision: string; text: string; keepAttachmentIds: readonly string[] },
+    E
+  >;
+  readonly queueAttachments?: (
+    principal: string,
+    input: QueueAttachmentEdit,
+    resultOnly: boolean,
+  ) => Effect.Effect<QueueAttachmentReceipt | null, E>;
+  readonly originalUpload?: (
+    principal: string,
+    environmentId: string,
+    identity: OpenbotOriginalUploadIdentity,
+    action: "upload" | "upload-status" | "upload-cancel",
+    dataBase64?: string,
+  ) => Effect.Effect<{ state: "ready" | "released"; attachment: Summary } | null, E>;
+
   readonly listWorkspace: (
     agentId: string,
     path: string,
@@ -27,8 +60,8 @@ export interface FileSession<E> {
     task?: { readonly agentId: string; readonly taskId: string },
   ) => Effect.Effect<OpenbotConversationFilePage, E>;
   readonly attachment: (
-    agentId: string,
-    source: Extract<Source, { kind: "attachment" }>,
+    agentId: string | null,
+    source: Extract<Source, { kind: "attachment" | "stored" | "library" }>,
   ) => Effect.Effect<Summary, E>;
   readonly sentAttachments: (
     agentId: string,
@@ -36,7 +69,7 @@ export interface FileSession<E> {
     taskId?: string,
   ) => Effect.Effect<readonly Summary[], E>;
   readonly download: (
-    agentId: string,
+    agentId: string | null,
     source: Source,
   ) => Effect.Effect<
     {
@@ -60,6 +93,10 @@ export interface FileSession<E> {
     clientMessageId: string,
     target: OpenbotFileTarget,
     reconcile: boolean,
+    attachmentIds?: readonly string[],
+    replyToMessageId?: string,
+    expectedThreadId?: string,
+    authority?: { principal: string; environmentId: string; hostId: string },
   ) => Effect.Effect<
     {
       readonly messageId: string | null;
@@ -95,6 +132,21 @@ const decodeChannelPage = Schema.decodeUnknownEffect(OpenbotChannelPage);
 const decodeWorkspace = Schema.decodeUnknownEffect(OpenbotWorkspaceDirectory);
 const decodeSearch = Schema.decodeUnknownEffect(OpenbotConversationFilePage);
 const decodeAttachment = Schema.decodeUnknownEffect(OpenbotFileSummary);
+const decodeOriginalUploadReceipt = Schema.decodeUnknownEffect(
+  Schema.NullOr(
+    Schema.Struct({
+      state: Schema.Literals(["ready", "released"]),
+      attachment: OpenbotFileSummary,
+    }),
+  ),
+);
+const decodeGroupFileReceipt = Schema.decodeUnknownEffect(
+  Schema.Struct({
+    channelId: OpenbotFileScope.fields.agentId,
+    messageId: OpenbotFileScope.fields.agentId,
+    receiptId: OpenbotFileScope.fields.agentId,
+  }),
+);
 const decodeConversation = Schema.decodeUnknownEffect(Conversation);
 const decodeSent = Schema.decodeUnknownEffect(Sent);
 const decodeAgentIds = Schema.decodeUnknownEffect(
@@ -124,6 +176,22 @@ const projectAttachment = (value: Summary): Summary => ({
 });
 
 export function createFileSession<E>(transport: {
+  readonly signedQueueAttachments?: (
+    principal: string,
+    path: string,
+    body: string,
+  ) => Effect.Effect<unknown, E>;
+  readonly signedFiles?: (
+    principal: string,
+    path:
+      | "/v1/sled/files/upload"
+      | "/v1/sled/files/upload-status"
+      | "/v1/sled/files/upload-cancel"
+      | "/v1/sled/files/send"
+      | "/v1/sled/files/channel-send",
+    body: Schema.Json,
+  ) => Effect.Effect<Schema.Json, E>;
+
   readonly authenticated: (
     path: string,
     method: "GET" | "POST" | "DELETE",
@@ -201,6 +269,49 @@ export function createFileSession<E>(transport: {
     if (!message) return yield* Effect.fail(transport.error("decode"));
     return message;
   });
+  const storedAttachment = Effect.fn("OpenbotFiles.protocol.storedAttachment")(function* (
+    agentId: string | null,
+    source: Extract<Source, { kind: "stored" | "library" }>,
+  ) {
+    if (source.kind === "stored" && !agentId) return yield* Effect.fail(transport.error("decode"));
+    const scope = source.kind === "library" ? "host" : "agent";
+    const scopedAgentId = scope === "agent" ? agentId : null;
+    const data = yield* post("/v1/storage/usage", {
+      scope,
+      ...(scopedAgentId === null ? {} : { agentId: scopedAgentId }),
+    }).pipe(
+      Effect.flatMap(
+        Schema.decodeUnknownEffect(
+          Schema.Struct({
+            scope: Schema.Literals(["agent", "host"]),
+            agentId: Schema.NullOr(OpenbotFileScope.fields.agentId),
+            files: Schema.Array(
+              Schema.Struct({
+                ...OpenbotFileSummary.fields,
+                agentId: Schema.NullOr(OpenbotFileScope.fields.agentId),
+                status: Schema.Literals(["available", "missing"]),
+                conversation: Schema.NullOr(Schema.Struct({ id: OpenbotFileScope.fields.agentId })),
+              }),
+            ).check(Schema.isMaxLength(2000)),
+          }),
+        ),
+      ),
+      Effect.mapError((cause) =>
+        transport.isError(cause) ? cause : transport.error("decode", cause),
+      ),
+    );
+    const file = data.files.find((file) => file.id === source.fileId);
+    if (
+      data.scope !== scope ||
+      data.agentId !== scopedAgentId ||
+      !file ||
+      (scopedAgentId !== null && file.agentId !== scopedAgentId) ||
+      file.status !== "available" ||
+      (source.conversationId !== undefined && file.conversation?.id !== source.conversationId)
+    )
+      return yield* Effect.fail(transport.error("decode"));
+    return projectAttachment(file);
+  });
   const receipt = (data: typeof Sent.Type, agentId: string, taskId: string | null) => {
     const own = data.deliveries.filter((delivery) => delivery.recipientAgentId === agentId);
     return {
@@ -272,7 +383,9 @@ export function createFileSession<E>(transport: {
       };
     }),
     attachment: Effect.fn("OpenbotFiles.protocol.attachment")(function* (agentId, source) {
-      if (source.channelId !== undefined && source.taskId !== undefined)
+      if (source.kind === "stored" || source.kind === "library")
+        return yield* storedAttachment(agentId, source);
+      if (agentId === null || (source.channelId !== undefined && source.taskId !== undefined))
         return yield* Effect.fail(transport.error("decode"));
       const message =
         source.channelId === undefined
@@ -309,10 +422,20 @@ export function createFileSession<E>(transport: {
       },
     ),
     download: Effect.fn("OpenbotFiles.protocol.download")(function* (agentId, source) {
+      if (agentId === null && source.kind !== "library")
+        return yield* Effect.fail(transport.error("decode"));
+      if (source.kind === "stored" || source.kind === "library")
+        yield* storedAttachment(agentId, source);
       const path =
-        source.kind === "attachment"
-          ? `/v1/attachments/${encodeURIComponent(source.attachmentId)}`
-          : `/v1/workspace-files?${new URLSearchParams({ botId: agentId, path: source.path })}`;
+        source.kind === "stored" || source.kind === "library"
+          ? `/v1/attachments/${encodeURIComponent(source.fileId)}`
+          : source.kind === "attachment"
+            ? `/v1/attachments/${encodeURIComponent(source.attachmentId)}`
+            : source.kind === "local-skill"
+              ? `/v1/admin/catalog/local/bundle?${new URLSearchParams({ skillId: source.skillId, revision: String(source.revision) })}`
+              : source.kind === "shared"
+                ? `/v1/shared-files?${new URLSearchParams({ path: source.path })}`
+                : `/v1/workspace-files?${new URLSearchParams({ botId: agentId!, path: source.path })}`;
       const response = yield* get(path);
       const rawLength = response.headers["content-length"];
       const size = rawLength === undefined ? NaN : Number(rawLength);
@@ -330,6 +453,70 @@ export function createFileSession<E>(transport: {
         body: response.stream.pipe(Stream.mapError((cause) => transport.error("transport", cause))),
       };
     }),
+    queueAttachmentContext: Effect.fn("Files.protocol.queueAttachmentContext")(
+      function* (principal, input) {
+        const signed = transport.signedQueueAttachments;
+        if (!signed || transport.isClosed()) return yield* Effect.fail(transport.error("closed"));
+        const compatibility = yield* get("/v1/compatibility").pipe(Effect.flatMap(transport.json));
+        const capabilities = decodeQueueCapabilities(compatibility);
+        if (capabilities._tag === "None") return yield* Effect.fail(transport.error("decode"));
+        return yield* QueueAttachmentsProtocol.context(input, {
+          capabilities: new Set(capabilities.value.capabilities),
+          authorize: () =>
+            transport.isClosed() ? Effect.fail(transport.error("closed")) : Effect.void,
+          post: (path, body) => signed(principal, path, body),
+        }).pipe(
+          Effect.mapError((cause) =>
+            transport.isError(cause) ? cause : transport.error("decode", cause),
+          ),
+        );
+      },
+    ),
+    queueAttachments: Effect.fn("Files.protocol.queueAttachments")(
+      function* (principal, input, resultOnly) {
+        const signed = transport.signedQueueAttachments;
+        if (!signed || transport.isClosed()) return yield* Effect.fail(transport.error("closed"));
+        const compatibility = yield* get("/v1/compatibility").pipe(Effect.flatMap(transport.json));
+        const capabilities = decodeQueueCapabilities(compatibility);
+        if (capabilities._tag === "None") return yield* Effect.fail(transport.error("decode"));
+        return yield* QueueAttachmentsProtocol.dispatch(input, resultOnly, {
+          principal,
+          capabilities: new Set(capabilities.value.capabilities),
+          authorize: () =>
+            transport.isClosed() ? Effect.fail(transport.error("closed")) : Effect.void,
+          post: (path, body) => signed(principal, path, body),
+        }).pipe(
+          Effect.mapError((cause) =>
+            transport.isError(cause) ? cause : transport.error("decode", cause),
+          ),
+        );
+      },
+    ),
+    originalUpload: Effect.fn("OpenbotFiles.protocol.originalUpload")(
+      function* (principal, environmentId, identity, action, dataBase64) {
+        if (transport.isClosed()) return yield* Effect.fail(transport.error("closed"));
+        if (!transport.signedFiles) return yield* Effect.fail(transport.error("decode"));
+        const compatibility = yield* get("/v1/compatibility").pipe(Effect.flatMap(transport.json));
+        if (
+          !compatibility ||
+          typeof compatibility !== "object" ||
+          !("capabilities" in compatibility) ||
+          !Array.isArray(compatibility.capabilities) ||
+          !compatibility.capabilities.includes("sled-files-upload-recovery-v1") ||
+          (identity.channelId !== undefined &&
+            !compatibility.capabilities.includes(OPENBOT_CHANNEL_UPLOAD_RECOVERY_CAPABILITY))
+        )
+          return yield* Effect.fail(transport.error("decode"));
+        const value = yield* transport.signedFiles(principal, `/v1/sled/files/${action}`, {
+          ...identity,
+          environmentId,
+          ...(dataBase64 === undefined ? {} : { dataBase64 }),
+        });
+        return yield* decodeOriginalUploadReceipt(value).pipe(
+          Effect.mapError((cause) => transport.error("decode", cause)),
+        );
+      },
+    ),
     upload: Effect.fn("OpenbotFiles.protocol.upload")(function* (input) {
       if (transport.isClosed()) return yield* Effect.fail(transport.error("closed"));
       // Drafts are host-wide upstream. Verify the intended conversation before admitting bytes.
@@ -363,7 +550,91 @@ export function createFileSession<E>(transport: {
       return projectAttachment(response);
     }),
     send: Effect.fn("OpenbotFiles.protocol.send")(
-      function* (agentId, attachmentId, text, clientMessageId, target, reconcile) {
+      function* (
+        agentId,
+        attachmentId,
+        text,
+        clientMessageId,
+        target,
+        reconcile,
+        attachmentIds,
+        replyToMessageId,
+        expectedThreadId,
+        authority,
+      ) {
+        const drafts = attachmentIds ?? [attachmentId];
+        if (expectedThreadId !== undefined) {
+          if (target.kind === "new-task") return yield* Effect.fail(transport.error("decode"));
+          const compatibility = yield* get("/v1/compatibility").pipe(
+            Effect.flatMap(transport.json),
+          );
+          if (
+            !compatibility ||
+            typeof compatibility !== "object" ||
+            !("capabilities" in compatibility) ||
+            !Array.isArray(compatibility.capabilities) ||
+            !compatibility.capabilities.includes("sled-files-identity-v1")
+          )
+            return yield* Effect.fail(transport.error("decode"));
+          if (authority && !compatibility.capabilities.includes("sled-files-upload-recovery-v1"))
+            return yield* Effect.fail(transport.error("decode"));
+          if (authority && !transport.signedFiles)
+            return yield* Effect.fail(transport.error("decode"));
+          if (target.kind === "channel") {
+            if (
+              !authority ||
+              !transport.signedFiles ||
+              expectedThreadId !== target.channelId ||
+              !compatibility.capabilities.includes(OPENBOT_CHANNEL_UPLOAD_RECOVERY_CAPABILITY)
+            )
+              return yield* Effect.fail(transport.error("decode"));
+            const accepted = yield* transport
+              .signedFiles(authority.principal, "/v1/sled/files/channel-send", {
+                environmentId: authority.environmentId,
+                hostId: authority.hostId,
+                channelId: target.channelId,
+                agentId,
+                clientMessageId,
+                text,
+                attachmentDraftIds: drafts,
+                replyToMessageId: replyToMessageId ?? null,
+              })
+              .pipe(
+                Effect.flatMap(decodeGroupFileReceipt),
+                Effect.mapError((cause) =>
+                  transport.isError(cause) ? cause : transport.error("decode", cause),
+                ),
+              );
+            if (accepted.channelId !== target.channelId)
+              return yield* Effect.fail(transport.error("decode"));
+            return { messageId: accepted.receiptId, conversationMessageId: null, taskId: null };
+          }
+          const sendBody = {
+            agentId,
+            expectedThreadId,
+            clientMessageId,
+            text,
+            attachmentDraftIds: drafts,
+            taskId: target.kind === "task" ? target.taskId : null,
+            replyToMessageId: replyToMessageId ?? null,
+            receiptOnly: reconcile,
+            ...(authority
+              ? { environmentId: authority.environmentId, hostId: authority.hostId }
+              : {}),
+          };
+          const response = yield* (
+            authority
+              ? transport.signedFiles!(authority.principal, "/v1/sled/files/send", sendBody)
+              : post("/v1/sled/files/send", sendBody)
+          ).pipe(
+            Effect.flatMap(decodeSent),
+            Effect.mapError((cause) =>
+              transport.isError(cause) ? cause : transport.error("decode", cause),
+            ),
+          );
+          return receipt(response, agentId, target.kind === "task" ? target.taskId : null);
+        }
+
         if (target.kind === "channel") {
           const page = yield* post("/v1/channels/read", { channelId: target.channelId }).pipe(
             Effect.flatMap(decodeChannelPage),
@@ -385,8 +656,8 @@ export function createFileSession<E>(transport: {
             operationId: clientMessageId,
             text,
             recipientAgentId: agentId,
-            replyToMessageId: null,
-            attachmentDraftIds: [attachmentId],
+            replyToMessageId: replyToMessageId ?? null,
+            attachmentDraftIds: drafts,
           }).pipe(
             Effect.flatMap(decodeChannel),
             Effect.mapError((cause) =>
@@ -406,7 +677,7 @@ export function createFileSession<E>(transport: {
           const task = yield* post("/v1/agent-threads/start-with-files", {
             agentId,
             text,
-            attachmentDraftIds: [attachmentId],
+            attachmentDraftIds: drafts,
             clientMessageId,
           }).pipe(
             Effect.flatMap(decodeTask),
@@ -419,13 +690,17 @@ export function createFileSession<E>(transport: {
         }
         if (target.kind === "task") {
           yield* findTask(agentId, target.taskId);
-          const response = yield* post("/v1/agent-threads/send-with-files", {
-            agentId,
-            taskId: target.taskId,
-            text,
-            clientMessageId,
-            attachmentDraftIds: [attachmentId],
-          }).pipe(
+          const response = yield* post(
+            replyToMessageId ? "/v1/agent-threads/send-reply" : "/v1/agent-threads/send-with-files",
+            {
+              agentId,
+              taskId: target.taskId,
+              text,
+              clientMessageId,
+              attachmentDraftIds: drafts,
+              ...(replyToMessageId === undefined ? {} : { replyToMessageId }),
+            },
+          ).pipe(
             Effect.flatMap(decodeSent),
             Effect.mapError((cause) =>
               transport.isError(cause) ? cause : transport.error("decode", cause),
@@ -436,8 +711,8 @@ export function createFileSession<E>(transport: {
         const response = yield* post(`/v1/agents/${encodeURIComponent(agentId)}/messages`, {
           text,
           clientMessageId,
-          attachmentDraftIds: [attachmentId],
-          replyToMessageId: null,
+          attachmentDraftIds: drafts,
+          replyToMessageId: replyToMessageId ?? null,
         }).pipe(
           Effect.flatMap(decodeSent),
           Effect.mapError((cause) =>

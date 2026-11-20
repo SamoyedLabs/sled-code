@@ -1,3 +1,4 @@
+import * as BotAttention from "../agentActivity/BotAttention.ts";
 import * as HttpServer from "effect/http/HttpServer";
 import {
   RelayClientAuth,
@@ -1416,7 +1417,12 @@ describe("relay routing fallback", () => {
                 Layer.mock(ManagedEndpointProvider.ManagedEndpointProvider, {}),
               ),
             ),
-            Layer.provide([layerPublisher, layerSignatures, Layer.mock(HeldHooks.HeldHooks, {})]),
+            Layer.provide([
+              layerPublisher,
+              layerSignatures,
+              Layer.mock(HeldHooks.HeldHooks, {}),
+              Layer.mock(BotAttention.BotAttention, {}),
+            ]),
           ),
         ),
         Layer.provide(layerAuth),

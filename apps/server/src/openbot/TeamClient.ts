@@ -1,6 +1,37 @@
+import {
+  OPENBOT_LIBRARY_FOLDERS_CAPABILITY,
+  OPENBOT_CHANNEL_UPLOAD_RECOVERY_CAPABILITY,
+  OPENBOT_LIBRARY_EVENTS_CAPABILITY,
+  OPENBOT_MESSAGE_DELETE_CAPABILITY,
+  OPENBOT_MESSAGE_PINS_CAPABILITY,
+  SLED_CONNECT_WEBHOOKS_ROUTES,
+} from "@t3tools/contracts";
+import {
+  OpenbotTransferSummary,
+  OpenbotTransferPreview,
+  OpenbotTransferResult,
+} from "@t3tools/contracts/openbot-instance-transfer";
+import * as DirectProtocol from "./DirectProtocol.ts";
+import { catalogMatches } from "./McpCatalog.ts";
+import * as BrowserDisplayProtocol from "./BrowserDisplayProtocol.ts";
+import { createTeamPrivilegedClient, type PrivilegedTransport } from "./TeamPrivilegedClient.ts";
+import { signQueueAttachmentsBinding } from "./QueueAttachmentsBinding.ts";
+// @effect-diagnostics nodeBuiltinImport:off -- authenticated import body digest.
+import { createHash } from "node:crypto";
+import * as Clock from "effect/Clock";
+import {
+  type ImportRequest,
+  type ImportReceipt,
+  IMPORT_CAPABILITY,
+} from "@t3tools/contracts/openbot-agent-import";
+import { importRoute, importStageRoute, projectImportReceipt } from "./ImportProtocol.ts";
+import { signFilesPrincipalBinding } from "./FilesPrincipalBinding.ts";
+import { signImportBinding } from "./ImportBinding.ts";
+import * as SettingsProtocol from "./SettingsProtocol.ts";
 import * as TemplateProtocol from "./TemplateProtocol.ts";
+import * as ChannelCodingTransport from "./ChannelCodingTransport.ts";
 import * as UiBlocks from "./UiBlocks.ts";
-import { OpenbotConversationSnapshot } from "@t3tools/contracts";
+import { OpenbotAgent, OpenbotConversationSnapshot } from "@t3tools/contracts";
 import * as CatalogProtocol from "./CatalogProtocol.ts";
 import * as ComputerViewSession from "./ComputerViewSession.ts";
 import * as DataProtocol from "./DataProtocol.ts";
@@ -16,6 +47,7 @@ import {
   OpenbotWriteRequest,
   OpenbotAdminRequest,
   OpenbotMcpConfig,
+  OpenbotChannelCodingReceipt,
   type OpenbotApiResponse,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -23,6 +55,11 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import {
+  OPENBOT_LIVE_VOICE_ROUTES,
+  OpenbotLiveVoiceAnswer,
+  type OpenbotLiveVoiceOffer,
+} from "@t3tools/contracts";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -33,11 +70,16 @@ import * as WorkflowProtocol from "./WorkflowProtocol.ts";
 import * as ChannelProtocol from "./ChannelProtocol.ts";
 import * as CoreWire from "./CoreWire.ts";
 
+const decodeQueueAttachmentHost = Schema.decodeEffect(
+  Schema.fromJsonString(Schema.Struct({ hostId: Schema.String })),
+);
+
 export class TeamClientError extends Schema.TaggedError<TeamClientError>()(
   "OpenbotTeamClientError",
   {
     reason: Schema.Literals(["invalid-configuration", "transport", "http", "decode", "closed"]),
     status: Schema.optional(Schema.Number),
+    publicCode: Schema.optional(Schema.Literal("host_account_required")),
     cause: Schema.optional(Schema.Defect()),
   },
 ) {
@@ -47,12 +89,49 @@ export class TeamClientError extends Schema.TaggedError<TeamClientError>()(
 }
 
 const Identifier = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512));
+const decodeConnectWebhookConfiguration = Schema.decodeUnknownEffect(
+  Schema.Struct({ routeId: Identifier }),
+);
+const decodeConnectWebhookStatus = Schema.decodeUnknownEffect(
+  Schema.Struct({ status: Schema.Literals([200, 202, 400, 401, 404, 413, 503]) }),
+);
 const Agent = Schema.Struct({
+  ...OpenbotAgent.fields,
   id: Identifier,
   name: Schema.String.check(Schema.isMaxLength(256)),
   provider: Identifier,
 });
-const Roster = Schema.Array(Agent).check(Schema.isMaxLength(10_000));
+function avatarVersion(
+  agentId: string,
+  raw: string | null | undefined,
+  origin: string,
+): { avatarVersion?: string } {
+  if (!raw) return {};
+  try {
+    const url = new URL(raw, origin);
+    const internal =
+      url.protocol === "openbot-avatar:" &&
+      url.hostname === "agent" &&
+      decodeURIComponent(url.pathname.slice(1)) === agentId;
+    const team =
+      url.origin === origin && url.pathname === `/v1/agents/${encodeURIComponent(agentId)}/avatar`;
+    const version = url.searchParams.get("v");
+    return (internal || team) &&
+      version &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(version)
+      ? { avatarVersion: version }
+      : {};
+  } catch {
+    return {};
+  }
+}
+const Roster = Schema.Array(
+  Schema.Struct({
+    ...Agent.fields,
+    marketplaceSource: Schema.optional(Schema.NullOr(Schema.Struct({ agentId: Identifier }))),
+    avatarUrl: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMaxLength(2048)))),
+  }),
+).check(Schema.isMaxLength(10_000));
 const Login = Schema.Struct({
   sessionToken: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)),
   sessionExpiresAt: Schema.String.check(Schema.isMaxLength(64)),
@@ -60,6 +139,7 @@ const Login = Schema.Struct({
 
 const isTeamClientError = Schema.is(TeamClientError);
 const isUiBlockRefused = Schema.is(UiBlocks.UiBlockRefused);
+const decodeLiveVoiceAnswer = Schema.decodeUnknownEffect(OpenbotLiveVoiceAnswer);
 const decodeLogin = Schema.decodeUnknownEffect(Login);
 const decodeRoster = Schema.decodeUnknownEffect(Roster);
 const SafeMcpRow = Schema.Struct({
@@ -68,6 +148,22 @@ const SafeMcpRow = Schema.Struct({
   transport: Schema.Literals(["stdio", "http"]),
   enabled: Schema.Boolean,
   url: Schema.String,
+  command: Schema.optional(Schema.String.check(Schema.isMaxLength(4096))),
+  envPassthrough: Schema.optional(
+    Schema.Array(Schema.String.check(Schema.isMaxLength(255))).check(Schema.isMaxLength(64)),
+  ),
+  args: Schema.optional(Schema.Array(Schema.Unknown).check(Schema.isMaxLength(64))),
+  env: Schema.optional(
+    Schema.Array(Schema.Struct({ key: Schema.String.check(Schema.isMaxLength(255)) })).check(
+      Schema.isMaxLength(64),
+    ),
+  ),
+  headers: Schema.optional(
+    Schema.Array(Schema.Struct({ key: Schema.String.check(Schema.isMaxLength(255)) })).check(
+      Schema.isMaxLength(32),
+    ),
+  ),
+  workingDirectory: Schema.optional(Schema.String.check(Schema.isMaxLength(4096))),
 });
 const decodeMcpRows = Schema.decodeUnknownEffect(Schema.Array(SafeMcpRow));
 const decodeStoredMcpRows = Schema.decodeUnknownEffect(Schema.Array(OpenbotMcpConfig));
@@ -192,6 +288,22 @@ const ModelVisibility = Schema.Struct({
   changed: Schema.Boolean,
 });
 const providerDecoders = {
+  usageResets: Schema.decodeUnknownEffect(
+    Schema.Struct({
+      accounts: Schema.Array(
+        Schema.Struct({
+          provider: ProviderId,
+          accountId: AccountId,
+          available: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+        }),
+      ).check(Schema.isMaxLength(10)),
+    }),
+  ),
+  usageResetResult: Schema.decodeUnknownEffect(
+    Schema.Struct({
+      outcome: Schema.Literals(["reset", "nothingToReset", "noCredit", "alreadyRedeemed"]),
+    }),
+  ),
   relayStarted: Schema.decodeUnknownEffect(
     Schema.Struct({ flowId: Identifier, expiresAt: Schema.Int }),
   ),
@@ -268,11 +380,18 @@ const decodeReadRequest = Schema.decodeUnknownEffect(OpenbotReadRequest);
 const decodeWriteRequest = Schema.decodeUnknownEffect(OpenbotWriteRequest);
 const decodeAdminRequest = Schema.decodeUnknownEffect(OpenbotAdminRequest);
 
-type ApiRequest = OpenbotReadRequest | OpenbotWriteRequest | OpenbotAdminRequest;
+type ApiRequest =
+  | Exclude<OpenbotReadRequest, { operation: "context.read" }>
+  | OpenbotWriteRequest
+  | OpenbotAdminRequest;
 type SavedMcpRequest = Extract<
   ApiRequest,
   {
     operation:
+      | "mcp.testCredentialsById"
+      | "mcp.saveCredentialsById"
+      | "mcp.signInRelay.startById"
+      | "mcp.testPatchById"
       | "mcp.updateById"
       | "mcp.testById"
       | "mcp.signIn.startById"
@@ -282,6 +401,10 @@ type SavedMcpRequest = Extract<
 >;
 function isSavedMcpRequest(request: ApiRequest): request is SavedMcpRequest {
   return (
+    request.operation === "mcp.testCredentialsById" ||
+    request.operation === "mcp.saveCredentialsById" ||
+    request.operation === "mcp.signInRelay.startById" ||
+    request.operation === "mcp.testPatchById" ||
     request.operation === "mcp.updateById" ||
     request.operation === "mcp.testById" ||
     request.operation === "mcp.signIn.startById" ||
@@ -290,14 +413,18 @@ function isSavedMcpRequest(request: ApiRequest): request is SavedMcpRequest {
   );
 }
 interface Route {
+  readonly directProjection?: Parameters<typeof DirectProtocol.project>[0];
+  readonly settingsProjection?: string;
   readonly templateProjection?: Parameters<typeof TemplateProtocol.project>[0];
   readonly catalogProjection?: Parameters<typeof CatalogProtocol.project>[0];
   readonly dataProjection?: Parameters<typeof DataProtocol.project>[0];
   readonly vaultProjection?: Parameters<typeof VaultProtocol.project>[0];
-  readonly vaultVersion?: "v1" | "v2";
+  readonly vaultVersion?: Parameters<typeof VaultProtocol.project>[2];
   readonly method: "GET" | "POST" | "PATCH" | "DELETE" | "PUT";
   readonly path: string;
   readonly body?: unknown;
+  readonly avatarImage?: { readonly mimeType: string; readonly dataBase64: string };
+  readonly avatarRead?: boolean;
   readonly projection?: "mcp-list" | "mcp-test" | "mcp-status" | "messaging-orchestrator";
   readonly providerProjection?: keyof typeof providerDecoders;
   readonly eventProjection?: Parameters<typeof EventProtocol.project>[0];
@@ -309,7 +436,11 @@ interface Route {
   readonly channelProjection?: Parameters<typeof ChannelProtocol.project>[0];
 }
 // Only these source-backed operations can spend the private host-owner session.
-function apiRoute(request: Exclude<ApiRequest, SavedMcpRequest>): Route {
+function apiRoute(
+  request: Exclude<ApiRequest, SavedMcpRequest | { operation: "library.files.preview" }>,
+): Route {
+  if (DirectProtocol.isRequest(request)) return DirectProtocol.route(request);
+  if (SettingsProtocol.isRequest(request)) return SettingsProtocol.route(request);
   if (TemplateProtocol.isRequest(request)) return TemplateProtocol.route(request);
   if (CatalogProtocol.isRequest(request)) return CatalogProtocol.route(request);
   if (DataProtocol.isRequest(request)) return DataProtocol.route(request);
@@ -322,8 +453,33 @@ function apiRoute(request: Exclude<ApiRequest, SavedMcpRequest>): Route {
   if (ComputerProtocol.isRequest(request)) return ComputerProtocol.route(request);
   if (ChannelProtocol.isRequest(request)) return ChannelProtocol.route(request);
   const agentPath =
-    "agentId" in request ? `/v1/agents/${encodeURIComponent(request.agentId)}` : "/v1/agents";
+    "agentId" in request && typeof request.agentId === "string"
+      ? `/v1/agents/${encodeURIComponent(request.agentId)}`
+      : "/v1/agents";
   switch (request.operation) {
+    case "mcp.catalogMatches":
+      return { method: "GET", path: "/v1/mcp-servers" };
+    case "mcp.signInRelay.start":
+      return {
+        method: "POST",
+        path: "/v1/admin/sign-in-relay/mcp/start",
+        body: { config: request.config },
+        providerProjection: "relayStarted",
+      };
+    case "provider.usageResets.list":
+      return {
+        method: "POST",
+        path: "/v1/admin/providers/usage-reset/list",
+        body: { provider: request.provider },
+        providerProjection: "usageResets",
+      };
+    case "provider.usageResets.consume":
+      return {
+        method: "POST",
+        path: "/v1/admin/providers/usage-reset/consume",
+        body: { provider: request.provider, accountId: request.accountId },
+        providerProjection: "usageResetResult",
+      };
     case "provider.signInRelay.start":
       return {
         method: "POST",
@@ -546,6 +702,35 @@ function apiRoute(request: Exclude<ApiRequest, SavedMcpRequest>): Route {
       return { method: "GET", path: "/v1/agents/models" };
     case "agent.status":
       return { method: "GET", path: "/v1/agents/status" };
+    case "workspace.usage":
+      return { method: "GET", path: "/v1/agents/usage" };
+    case "agent.usage":
+      return { method: "GET", path: `/v1/agents/${encodeURIComponent(request.agentId)}/usage` };
+    case "workspace.analytics":
+    case "agent.analytics": {
+      const query = new URLSearchParams({
+        startDate: request.startDate,
+        endDate: request.endDate,
+        timeZone: request.timeZone,
+      });
+      if (request.operation === "workspace.analytics" && request.agentId)
+        query.set("agentId", request.agentId);
+      const path =
+        request.operation === "agent.analytics"
+          ? `/v1/agents/${encodeURIComponent(request.agentId)}/analytics`
+          : "/v1/analytics";
+      return { method: "GET", path: `${path}?${query}` };
+    }
+    case "workspace.identity":
+      return { method: "GET", path: "/v1/identity" };
+    case "workspace.member":
+      return { method: "GET", path: "/v1/me" };
+    case "workspace.reads":
+      return { method: "GET", path: "/v1/agents/conversation-reads" };
+    case "workspace.sidebar":
+      return { method: "GET", path: "/v1/sidebar-layout" };
+    case "workspace.presence":
+      return { method: "GET", path: "/v1/team/presence" };
     case "compatibility.read":
       return { method: "GET", path: "/v1/compatibility" };
 
@@ -630,7 +815,12 @@ function apiRoute(request: Exclude<ApiRequest, SavedMcpRequest>): Route {
       return {
         method: "POST",
         path: "/v1/browser/open",
-        body: { url: request.url, focus: request.focus, ownerThreadId: null, ownerAgentId: null },
+        body: {
+          url: request.url,
+          focus: request.focus,
+          ownerThreadId: request.ownerThreadId ?? null,
+          ownerBotId: request.ownerAgentId ?? null,
+        },
       };
     case "browser.activate":
     case "browser.reload":
@@ -773,8 +963,18 @@ function apiRoute(request: Exclude<ApiRequest, SavedMcpRequest>): Route {
       return {
         method: "POST",
         path: "/v1/agents",
-        body: { ...request.input, avatarSeed: "sled", avatarHue: null },
+        body: { avatarSeed: "sled", avatarHue: null, ...request.input },
       };
+    case "agent.avatar.read":
+      return {
+        method: "GET",
+        path: `${agentPath}/avatar?${new URLSearchParams({ v: request.version })}`,
+        avatarRead: true,
+      };
+    case "agent.avatar.set":
+      return request.image === null
+        ? { method: "DELETE", path: `${agentPath}/avatar` }
+        : { method: "PUT", path: `${agentPath}/avatar`, avatarImage: request.image };
     case "agent.update":
       return { method: "PATCH", path: agentPath, body: request.input };
     case "agent.delete":
@@ -817,6 +1017,8 @@ function apiRoute(request: Exclude<ApiRequest, SavedMcpRequest>): Route {
     }
     case "memory.list":
       return { method: "GET", path: `${agentPath}/memories` };
+    case "memory.clear":
+      return { method: "DELETE", path: `${agentPath}/memories` };
     case "memory.create":
       return { method: "POST", path: `${agentPath}/memories`, body: { text: request.text } };
     case "memory.update":
@@ -860,9 +1062,57 @@ function apiRoute(request: Exclude<ApiRequest, SavedMcpRequest>): Route {
 }
 
 export interface Session {
+  readonly connectWebhooks?: {
+    configuration: (input: {
+      owner: { kind: "agent"; id: string };
+      id: string;
+    }) => Effect.Effect<{ routeId: string }, TeamClientError>;
+    receive: (input: {
+      routeId: string;
+      deliveryId: string;
+      timestamp: string;
+      signature: string;
+      body: Uint8Array;
+    }) => Effect.Effect<{ status: number }, TeamClientError>;
+  };
+  readonly instanceTransfer?: {
+    readonly summary: Effect.Effect<Schema.Json, TeamClientError>;
+    readonly exportZip: (input: {
+      agentIds: readonly string[];
+      includeFiles: boolean;
+      includeSettings: boolean;
+    }) => Effect.Effect<
+      { size: number; body: Stream.Stream<Uint8Array, TeamClientError> },
+      TeamClientError
+    >;
+    readonly stage: (bytes: Uint8Array) => Effect.Effect<Schema.Json, TeamClientError>;
+    readonly apply: (input: {
+      token: string;
+      keys: readonly string[];
+      includeSettings: boolean;
+      timezone: string;
+    }) => Effect.Effect<Schema.Json, TeamClientError>;
+    readonly discard: (token: string) => Effect.Effect<void, TeamClientError>;
+  };
+  readonly privileged?: PrivilegedTransport;
+  readonly agentImport?: {
+    readonly available: Effect.Effect<boolean, TeamClientError>;
+    readonly execute: (
+      principal: string,
+      request: ImportRequest,
+      bytes?: Uint8Array,
+    ) => Effect.Effect<ImportReceipt | null, TeamClientError>;
+  };
+  readonly channel?: ChannelCodingTransport.ChannelCodingTransport;
   readonly computer?: () => Promise<ComputerViewSession.ComputerSession>;
   readonly browser?: BrowserProtocol.BrowserSession;
   readonly files: FileProtocol.FileSession<TeamClientError>;
+  readonly liveVoice?: {
+    readonly start: (
+      offer: OpenbotLiveVoiceOffer,
+    ) => Effect.Effect<OpenbotLiveVoiceAnswer, TeamClientError>;
+    readonly stop: (sessionId: string) => Effect.Effect<void, TeamClientError>;
+  };
   readonly events: Stream.Stream<EventStream.Frame, TeamClientError>;
   readonly listAgents: Effect.Effect<ReadonlyArray<typeof Agent.Type>, TeamClientError>;
   readonly close: Effect.Effect<void, TeamClientError>;
@@ -903,11 +1153,31 @@ const make = Effect.gen(function* () {
             "OpenBot-Protocol-Version": "9",
             "OpenBot-App-Version": "0.60.0",
             "OpenBot-Capabilities":
-              "ui-blocks-v1,agent-task-ui-blocks-v1,subagents-v1,queue-edit-v1,queue-window-v1,conversation-unread,agent-threads-v1,agent-thread-reads-v1,agent-thread-branches-v1,agent-thread-replies-v1,agent-tasks-v1,agent-create-model,agent-admin-v1,agent-instructions-v1,skills-admin-v1,mcp-servers-v1,mcp-sign-in-v1,browser-navigation,browser-user-control,browser-page-state,browser-profiles-v1,connectors-v1,channel-chats-v1,providers-v8,provider-accounts-v1,provider-default-v1,provider-host-sign-in-v1,provider-sign-out-v1,custom-provider-harness-v1,custom-agents-v1,model-visibility-v1,claude-api-key-v1,sign-in-relay-v1,provider-account-relay-v1,provider-account-relay-v2,workspace-directory-v1,conversation-file-search-v1,agent-thread-files-v1,message-client-id-v1,workflows-v1,events-v1,routine-recovery-v1,webhook-tests-v1,routine-flows-v1,channel-delete-v1,channel-task-cancel-v1,channel-attention-v1,vault-v1,vault-v2,vault-import-v1,onepassword-connector-v1,bitwarden-connector-v1,remote-desktop-setup,shared-tables-v1,hosted-sites-v1,acp-registry-v1,agent-install-v1,agent-update-v1,agent-publish-v1",
+              "sled-public-catalog-v1,sled-connect-webhooks-v1,sled-connect-workflow-webhooks-v1,sled-once-routines-v1,sled-conversation-paging-v1,sled-channel-presentation-v1,sled-channel-trace-v1,instance-transfer-v1,installed-skills,host-account-v1,mcp-accounts-v1,provider-usage-reset-v1,host-analytics,agent-analytics,sled-privileged-responses-v1,sled-queue-attachments-v1,sled-agent-import-v1,sled-files-identity-v1,sled-files-upload-recovery-v1,storage-v1,storage-disk-v1,sidebar-folders-v1,side-question-v1,workflows-github-v1,routine-results-v1,local-skill-catalog-v1,agent-access-v1,agent-backup-models-v1,agent-fast-mode-v1,agent-folders-v1,agent-hidden-v1,agent-hidden-work,agent-host-settings-v1,agent-defaults-v1,background-processes-v1,agent-memories-v1,agent-memory-limit-v1,agent-new-chat-v1,agent-notification-levels-v1,agent-plan-card-v1,agent-session-settings-v1,agent-task-limit-v1,context-compact-v1,context-reset-v1,discord-access-v1,host-timezone-v1,memory-review-v1,prompt-cache-ttl-v1,sidebar-pins-v1,sled-channel-coding-assignment-v1,agent-review-v1,agent-adoption-v1,live-voice-v1,ui-blocks-v1,agent-task-ui-blocks-v1,subagents-v1,memory-changes-v1,queue-edit-v1,queue-window-v1,conversation-unread,agent-threads-v1,agent-thread-reads-v1,agent-thread-branches-v1,agent-thread-replies-v1,agent-tasks-v1,agent-create-model,agent-admin-v1,agent-instructions-v1,skills-admin-v1,mcp-servers-v1,mcp-sign-in-v1,browser-navigation,browser-user-control,browser-page-state,browser-profiles-v1,browser-proxies-v1,connectors-v1,channel-chats-v1,providers-v8,provider-accounts-v1,provider-default-v1,provider-host-sign-in-v1,provider-sign-out-v1,custom-provider-harness-v1,custom-agents-v1,model-visibility-v1,claude-api-key-v1,sign-in-relay-v1,provider-account-relay-v1,provider-account-relay-v2,workspace-directory-v1,conversation-file-search-v1,agent-thread-files-v1,message-client-id-v1,workflows-v1,events-v1,routine-recovery-v1,webhook-tests-v1,routine-flows-v1,channel-delete-v1,channel-task-cancel-v1,channel-attention-v1,vault-v1,vault-v2,vault-v3,vault-v4,vault-import-v1,onepassword-connector-v1,bitwarden-connector-v1,remote-desktop-setup,shared-tables-v1,hosted-sites-v1,acp-registry-v1,agent-install-v1,agent-update-v1,agent-publish-v1" +
+              "," +
+              [
+                OPENBOT_MESSAGE_DELETE_CAPABILITY,
+                OPENBOT_MESSAGE_PINS_CAPABILITY,
+                OPENBOT_LIBRARY_FOLDERS_CAPABILITY,
+                OPENBOT_LIBRARY_EVENTS_CAPABILITY,
+                OPENBOT_CHANNEL_UPLOAD_RECOVERY_CAPABILITY,
+              ].join(","),
           }),
         ),
       )
       .pipe(Effect.mapError((cause) => new TeamClientError({ reason: "transport", cause })));
+    if (response.status === 409 && new URL(request.url).pathname.startsWith("/v1/admin/catalog/")) {
+      const payload = yield* readJson(response).pipe(Effect.result);
+      if (
+        payload._tag === "Success" &&
+        Schema.is(Schema.Struct({ code: Schema.Literal("host_account_required") }))(payload.success)
+      )
+        return yield* new TeamClientError({
+          reason: "http",
+          status: 409,
+          publicCode: "host_account_required",
+        });
+    }
     if (response.status < 200 || response.status >= 300) {
       return yield* new TeamClientError({ reason: "http", status: response.status });
     }
@@ -997,6 +1267,31 @@ const make = Effect.gen(function* () {
       const response = yield* send(authenticated("/v1/agents", "GET"));
       return yield* readJson(response).pipe(
         Effect.flatMap(decodeRoster),
+        Effect.map((rows) =>
+          rows.map((row) => {
+            const { avatarUrl, marketplaceSource, ...rest } = row;
+            return {
+              ...rest,
+              ...(marketplaceSource ? { listingId: marketplaceSource.agentId } : {}),
+              ...avatarVersion(row.id, avatarUrl, origin),
+            };
+          }),
+        ),
+        Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+      );
+    });
+    const channelPost = Effect.fn("OpenbotTeamClient.channelPost")(function* <A>(
+      path: (typeof ChannelCodingTransport.CHANNEL_CODING_PATHS)[keyof typeof ChannelCodingTransport.CHANNEL_CODING_PATHS],
+      input: Schema.Json,
+      schema: Schema.Codec<A>,
+    ) {
+      if (closed) return yield* new TeamClientError({ reason: "closed" });
+      const request = yield* HttpClientRequest.bodyJson(input)(authenticated(path, "POST")).pipe(
+        Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+      );
+      const response = yield* send(request);
+      return yield* readJson(response).pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(schema)),
         Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
       );
     });
@@ -1008,6 +1303,8 @@ const make = Effect.gen(function* () {
     });
     const execute = Effect.fn("OpenbotTeamClient.execute")(function* (input: ApiRequest) {
       if (closed) return yield* new TeamClientError({ reason: "closed" });
+      if (input.operation === "library.files.preview")
+        return yield* new TeamClientError({ reason: "invalid-configuration" });
       if (input.operation === "conversation.blockRespond") {
         return yield* UiBlocks.respond(input, {
           read: Effect.fn("OpenbotTeamClient.readUiBlock")(function* (
@@ -1059,13 +1356,43 @@ const make = Effect.gen(function* () {
         );
         const config = rows.find((row) => row.id === input.mcpServerId);
         if (!config) return yield* new TeamClientError({ reason: "invalid-configuration" });
-        if (input.operation === "mcp.updateById") {
+        if (input.operation === "mcp.signInRelay.startById")
+          return apiRoute({ operation: "mcp.signInRelay.start", config });
+        if (
+          input.operation === "mcp.testCredentialsById" ||
+          input.operation === "mcp.saveCredentialsById"
+        ) {
+          const merge = (
+            kept: readonly { key: string; value: string }[],
+            written: readonly { key: string; value: string }[] | undefined,
+          ) =>
+            written
+              ? [
+                  ...kept.filter((pair) => !written.some((next) => next.key === pair.key)),
+                  ...written,
+                ]
+              : kept;
+          const updated = yield* decodeMcpConfig({
+            ...config,
+            headers: merge(config.headers, input.headers),
+            env: merge(config.env, input.env),
+            url: input.url ?? config.url,
+          }).pipe(Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })));
+          return apiRoute({
+            operation: input.operation === "mcp.testCredentialsById" ? "mcp.test" : "mcp.save",
+            config: updated,
+          });
+        }
+        if (input.operation === "mcp.updateById" || input.operation === "mcp.testPatchById") {
           const updated = yield* decodeMcpConfig({ ...config, ...input.patch, id: config.id }).pipe(
             Effect.mapError(
               (cause) => new TeamClientError({ reason: "invalid-configuration", cause }),
             ),
           );
-          return apiRoute({ operation: "mcp.save", config: updated });
+          return apiRoute({
+            operation: input.operation === "mcp.testPatchById" ? "mcp.test" : "mcp.save",
+            config: updated,
+          });
         }
         if (input.operation === "mcp.testById") return apiRoute({ operation: "mcp.test", config });
         if (input.operation === "mcp.signIn.startById")
@@ -1077,6 +1404,16 @@ const make = Effect.gen(function* () {
         });
       });
       let request = authenticated(route.path, route.method);
+      if (route.avatarImage) {
+        const bytes = Buffer.from(route.avatarImage.dataBase64, "base64");
+        if (
+          bytes.length === 0 ||
+          bytes.length > 524288 ||
+          bytes.toString("base64") !== route.avatarImage.dataBase64
+        )
+          return yield* new TeamClientError({ reason: "decode" });
+        request = HttpClientRequest.bodyUint8Array(bytes, route.avatarImage.mimeType)(request);
+      }
       if (route.body !== undefined)
         request = yield* HttpClientRequest.bodyJson(route.body)(request).pipe(
           Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
@@ -1099,7 +1436,62 @@ const make = Effect.gen(function* () {
       }
       const response = responseResult.success;
       if (response.status === 204) return null;
+      if (route.avatarRead) {
+        const mimeType = response.headers["content-type"]?.split(";", 1)[0]?.trim();
+        if (!mimeType || !["image/png", "image/jpeg", "image/webp"].includes(mimeType))
+          return yield* new TeamClientError({ reason: "decode" });
+        const chunks = yield* response.stream.pipe(
+          Stream.runFoldEffect(
+            () => ({ size: 0, parts: [] as Uint8Array[] }),
+            (state, chunk) =>
+              state.size + chunk.byteLength > 524288
+                ? Effect.fail(new TeamClientError({ reason: "decode" }))
+                : Effect.succeed({
+                    size: state.size + chunk.byteLength,
+                    parts: [...state.parts, chunk],
+                  }),
+          ),
+          Effect.mapError((cause) =>
+            isTeamClientError(cause) ? cause : new TeamClientError({ reason: "transport", cause }),
+          ),
+        );
+        if (!chunks.size) return yield* new TeamClientError({ reason: "decode" });
+        return { mimeType, dataBase64: Buffer.concat(chunks.parts).toString("base64") };
+      }
       const result = yield* readJson(response);
+      if (input.operation === "mcp.catalogMatches")
+        return yield* decodeStoredMcpRows(result).pipe(
+          Effect.map((rows) => catalogMatches(input.apps, rows)),
+          Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+        );
+      if (input.operation === "browser.display") {
+        const snapshot = Effect.fn("OpenbotTeamClient.browserState")(function* (path: string) {
+          const request = yield* HttpClientRequest.bodyJson({})(authenticated(path, "POST")).pipe(
+            Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+          );
+          return yield* send(request).pipe(Effect.flatMap(readJson));
+        });
+        const optionalSnapshot = (path: string) =>
+          snapshot(path).pipe(
+            Effect.catchIf(
+              (error) => error.reason === "http" && (error.status === 400 || error.status === 404),
+              () => Effect.succeed(null),
+            ),
+          );
+        const held = yield* optionalSnapshot("/v1/browser/user-control");
+        const pages = yield* optionalSnapshot("/v1/browser/page-state");
+        return yield* BrowserDisplayProtocol.project(result, held, pages).pipe(
+          Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+        );
+      }
+      if (route.directProjection)
+        return yield* DirectProtocol.project(route.directProjection, result).pipe(
+          Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+        );
+      if (route.settingsProjection)
+        return yield* SettingsProtocol.project(route.settingsProjection, result).pipe(
+          Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+        );
       if (route.templateProjection)
         return yield* TemplateProtocol.project(route.templateProjection, result).pipe(
           Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
@@ -1118,6 +1510,10 @@ const make = Effect.gen(function* () {
         );
       if (route.computerProjection)
         return yield* ComputerProtocol.project(route.computerProjection, result).pipe(
+          Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+        );
+      if (input.operation === "events.configuration")
+        return yield* EventProtocol.configuration(input, result).pipe(
           Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
         );
       if (route.eventProjection)
@@ -1187,7 +1583,15 @@ const make = Effect.gen(function* () {
       // MCP administration responds with stored credentials; project them out before leaving this service.
       if (route.projection === "mcp-list")
         return yield* decodeMcpRows(result).pipe(
-          Effect.map((rows) => rows.map((row) => ({ ...row, url: safeMcpUrl(row.url) }))),
+          Effect.map((rows) =>
+            rows.map(({ args, env, headers, ...row }) => ({
+              ...row,
+              url: safeMcpUrl(row.url),
+              ...(args ? { argsCount: args.length } : {}),
+              ...(env ? { envNames: env.map((pair) => pair.key) } : {}),
+              ...(headers ? { headerNames: headers.map((pair) => pair.key) } : {}),
+            })),
+          ),
           Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
         );
       if (route.projection === "mcp-test")
@@ -1212,7 +1616,169 @@ const make = Effect.gen(function* () {
           isTeamClientError(cause) ? cause : new TeamClientError({ reason: "transport", cause }),
         ),
       );
+    const importAvailable = Effect.gen(function* () {
+      if (closed) return yield* new TeamClientError({ reason: "closed" });
+      const value = yield* send(authenticated("/v1/compatibility", "GET")).pipe(
+        Effect.flatMap(readJson),
+      );
+      return (
+        typeof value === "object" &&
+        value !== null &&
+        "capabilities" in value &&
+        Array.isArray(value.capabilities) &&
+        value.capabilities.includes(IMPORT_CAPABILITY)
+      );
+    });
+    const transferJson = Effect.fn("OpenbotTeamClient.instanceTransferJson")(function* <A>(
+      operation: "summary" | "apply" | "discard",
+      body: unknown,
+      schema: Schema.Codec<A>,
+    ) {
+      if (closed) return yield* new TeamClientError({ reason: "closed" });
+      const request = yield* HttpClientRequest.bodyJson(
+        authenticated(`/v1/instance-transfer/${operation}`, "POST"),
+        body,
+      ).pipe(Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })));
+      const result = yield* send(request).pipe(Effect.flatMap(readJson));
+      return yield* Schema.decodeUnknownEffect(schema)(result).pipe(
+        Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+      );
+    });
     return {
+      instanceTransfer: {
+        summary: transferJson("summary", {}, OpenbotTransferSummary),
+        apply: (input) => transferJson("apply", input, OpenbotTransferResult),
+        discard: (token) => transferJson("discard", { token }, Schema.Unknown).pipe(Effect.asVoid),
+        stage: Effect.fn("OpenbotTeamClient.stageTransfer")(function* (bytes) {
+          if (closed || bytes.byteLength < 1 || bytes.byteLength > 104857600)
+            return yield* new TeamClientError({ reason: "decode" });
+          const result = yield* send(
+            authenticated("/v1/instance-transfer/stage", "POST").pipe(
+              HttpClientRequest.bodyUint8Array(bytes, "application/zip"),
+            ),
+          ).pipe(Effect.flatMap(readJson));
+          return yield* Schema.decodeUnknownEffect(OpenbotTransferPreview)(result).pipe(
+            Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+          );
+        }),
+        exportZip: Effect.fn("OpenbotTeamClient.exportTransfer")(function* (body) {
+          if (closed) return yield* new TeamClientError({ reason: "closed" });
+          const request = yield* HttpClientRequest.bodyJson(
+            authenticated("/v1/instance-transfer/export", "POST"),
+            {
+              agentIds: body.agentIds,
+              includeFiles: body.includeFiles,
+              includeSettings: body.includeSettings,
+            },
+          ).pipe(Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })));
+          const response = yield* send(request);
+          const size = Number(response.headers["content-length"]);
+          if (
+            response.headers["content-type"]?.split(";", 1)[0] !== "application/zip" ||
+            !Number.isSafeInteger(size) ||
+            size < 1 ||
+            size > 104857600
+          )
+            return yield* new TeamClientError({ reason: "decode" });
+          return {
+            size,
+            body: response.stream.pipe(
+              Stream.mapError((cause) => new TeamClientError({ reason: "transport", cause })),
+            ),
+          };
+        }),
+      },
+      connectWebhooks: {
+        configuration: Effect.fn("TeamClient.connectWebhookConfiguration")(function* (input) {
+          if (closed) return yield* new TeamClientError({ reason: "closed" });
+          const request = yield* HttpClientRequest.bodyJson(input)(
+            authenticated(SLED_CONNECT_WEBHOOKS_ROUTES.configuration, "POST"),
+          ).pipe(Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })));
+          return yield* send(request).pipe(
+            Effect.flatMap(readJson),
+            Effect.flatMap(decodeConnectWebhookConfiguration),
+            Effect.mapError((cause) =>
+              isTeamClientError(cause) ? cause : new TeamClientError({ reason: "decode", cause }),
+            ),
+          );
+        }),
+        receive: Effect.fn("TeamClient.receiveConnectWebhook")(function* (input) {
+          if (closed) return yield* new TeamClientError({ reason: "closed" });
+          if (input.body.length > 65536) return { status: 413 };
+          const { body, ...metadata } = input;
+          const request = yield* HttpClientRequest.bodyJson({
+            ...metadata,
+            bodyBase64: Buffer.from(body).toString("base64"),
+          })(authenticated(SLED_CONNECT_WEBHOOKS_ROUTES.receive, "POST")).pipe(
+            Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+          );
+          return yield* send(request).pipe(
+            Effect.flatMap(readJson),
+            Effect.flatMap(decodeConnectWebhookStatus),
+            Effect.mapError((cause) =>
+              isTeamClientError(cause) ? cause : new TeamClientError({ reason: "decode", cause }),
+            ),
+          );
+        }),
+      },
+      privileged: createTeamPrivilegedClient({
+        secret: input.ownerSecret,
+        isClosed: () => closed,
+        authenticated,
+        send,
+        json: readJson,
+      }),
+      agentImport: {
+        available: importAvailable,
+        execute: Effect.fn("OpenbotTeamClient.agentImport")(function* (principal, request, bytes) {
+          if (!(yield* importAvailable))
+            return yield* new TeamClientError({ reason: "invalid-configuration" });
+          const route =
+            request.operation === "import.stage"
+              ? importStageRoute(request.requestId)
+              : importRoute(request);
+          const body =
+            request.operation === "import.stage"
+              ? bytes
+              : Buffer.from(
+                  yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+                    importRoute(request).body,
+                  ).pipe(
+                    Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+                  ),
+                );
+          if (!body || body.byteLength > 104857600)
+            return yield* new TeamClientError({ reason: "decode" });
+          const now = yield* Clock.currentTimeMillis;
+          const token = yield* Effect.try({
+            try: () =>
+              signImportBinding(
+                input.ownerSecret,
+                {
+                  principal,
+                  hostId: request.hostId,
+                  method: "POST",
+                  path: route.path,
+                  bodySha256: createHash("sha256").update(body).digest("hex"),
+                },
+                now,
+              ),
+            catch: (cause) => new TeamClientError({ reason: "decode", cause }),
+          });
+          const http = authenticated(route.path, "POST").pipe(
+            HttpClientRequest.setHeader("x-sled-import-principal", token),
+            HttpClientRequest.bodyUint8Array(
+              body,
+              request.operation === "import.stage" ? "application/zip" : "application/json",
+            ),
+          );
+          const value = yield* send(http).pipe(Effect.flatMap(readJson));
+          return yield* Effect.try({
+            try: () => projectImportReceipt(value),
+            catch: (cause) => new TeamClientError({ reason: "decode", cause }),
+          });
+        }),
+      },
       computer: () =>
         ComputerViewSession.createComputerViewSession({
           origin,
@@ -1231,6 +1797,81 @@ const make = Effect.gen(function* () {
               }),
             ),
         }),
+      channel: {
+        progressAvailable: channelPost(
+          ChannelCodingTransport.CHANNEL_CODING_PATHS.available,
+          {},
+          ChannelCodingTransport.ChannelStatus,
+        ).pipe(
+          Effect.map(
+            (status) =>
+              status.available && status.progressCapability === "sled-channel-coding-progress-v1",
+          ),
+          Effect.catchIf(
+            (cause) => cause.reason === "http" && cause.status === 404,
+            () => Effect.succeed(false),
+          ),
+        ),
+        progress: (credential, event) =>
+          channelPost(
+            ChannelCodingTransport.CHANNEL_CODING_PATHS.progress,
+            { credential, event },
+            ChannelCodingTransport.CodingProgressReceipt,
+          ),
+        configure: (mcpServerId) =>
+          channelPost(
+            ChannelCodingTransport.CHANNEL_CODING_PATHS.configure,
+            { mcpServerId },
+            Schema.Struct({ configured: Schema.Literal(true) }),
+          ),
+        available: channelPost(
+          ChannelCodingTransport.CHANNEL_CODING_PATHS.available,
+          {},
+          ChannelCodingTransport.ChannelStatus,
+        ).pipe(
+          Effect.map((status) => status.available),
+          Effect.catchIf(
+            (cause) => cause.reason === "http" && cause.status === 404,
+            () => Effect.succeed(false),
+          ),
+        ),
+        send: (originRef, command) =>
+          channelPost(
+            ChannelCodingTransport.CHANNEL_CODING_PATHS.send,
+            { originRef, command },
+            ChannelCodingTransport.AttributedReceipt,
+          ),
+        recover: (originRef, channelId, operationId) =>
+          channelPost(
+            ChannelCodingTransport.CHANNEL_CODING_PATHS.recover,
+            { originRef, channelId, operationId },
+            Schema.NullOr(ChannelCodingTransport.AttributedReceipt),
+          ),
+        verify: (credential, purpose) =>
+          channelPost(
+            ChannelCodingTransport.CHANNEL_CODING_PATHS.verify,
+            { credential, purpose },
+            ChannelCodingTransport.VerifiedAssignment,
+          ),
+        receipt: (credential) =>
+          channelPost(
+            ChannelCodingTransport.CHANNEL_CODING_PATHS.receipt,
+            { credential },
+            Schema.NullOr(OpenbotChannelCodingReceipt),
+          ),
+        renew: (credential) =>
+          channelPost(
+            ChannelCodingTransport.CHANNEL_CODING_PATHS.renew,
+            { credential },
+            OpenbotChannelCodingReceipt,
+          ),
+        submit: (credential, text) =>
+          channelPost(
+            ChannelCodingTransport.CHANNEL_CODING_PATHS.submit,
+            { credential, text },
+            OpenbotChannelCodingReceipt,
+          ),
+      },
       browser: BrowserProtocol.createBrowserSession({
         origin,
         token: login.sessionToken,
@@ -1250,7 +1891,100 @@ const make = Effect.gen(function* () {
             }),
           ),
       }),
+      liveVoice: {
+        start: Effect.fn("OpenbotTeamClient.startLiveVoice")(function* (offer) {
+          if (closed) return yield* new TeamClientError({ reason: "closed" });
+          const request = yield* HttpClientRequest.bodyJson(offer)(
+            authenticated(OPENBOT_LIVE_VOICE_ROUTES.start, "POST"),
+          ).pipe(Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })));
+          return yield* send(request).pipe(
+            Effect.flatMap(readJson),
+            Effect.flatMap(decodeLiveVoiceAnswer),
+            Effect.mapError((cause) =>
+              isTeamClientError(cause) ? cause : new TeamClientError({ reason: "decode", cause }),
+            ),
+          );
+        }),
+        stop: Effect.fn("OpenbotTeamClient.stopLiveVoice")(function* (sessionId) {
+          if (closed) return;
+          const request = yield* HttpClientRequest.bodyJson({ sessionId })(
+            authenticated(OPENBOT_LIVE_VOICE_ROUTES.stop, "POST"),
+          ).pipe(Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })));
+          yield* send(request);
+        }),
+      },
       files: FileProtocol.createFileSession({
+        signedQueueAttachments: Effect.fn("TeamClient.signedQueueAttachments")(
+          function* (principal, path, body) {
+            if (closed) return yield* new TeamClientError({ reason: "closed" });
+            const decoded = yield* decodeQueueAttachmentHost(body).pipe(
+              Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+            );
+            const bytes = Buffer.from(body);
+            if (bytes.byteLength > 160000) return yield* new TeamClientError({ reason: "decode" });
+            const now = yield* Clock.currentTimeMillis;
+            const token = yield* Effect.try({
+              try: () =>
+                signQueueAttachmentsBinding(
+                  input.ownerSecret,
+                  {
+                    principal,
+                    hostId: decoded.hostId,
+                    method: "POST",
+                    path,
+                    bodySha256: createHash("sha256").update(bytes).digest("hex"),
+                  },
+                  now,
+                ),
+              catch: (cause) => new TeamClientError({ reason: "decode", cause }),
+            });
+            return yield* send(
+              authenticated(path, "POST").pipe(
+                HttpClientRequest.setHeader("x-sled-queue-attachments", token),
+                HttpClientRequest.bodyUint8Array(bytes, "application/json"),
+              ),
+            ).pipe(Effect.flatMap(readJson));
+          },
+        ),
+        signedFiles: Effect.fn("OpenbotTeamClient.signedFiles")(function* (principal, path, body) {
+          if (closed) return yield* new TeamClientError({ reason: "closed" });
+          if (
+            typeof body !== "object" ||
+            body === null ||
+            !("hostId" in body) ||
+            typeof body.hostId !== "string"
+          )
+            return yield* new TeamClientError({ reason: "decode" });
+          const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+            body,
+          ).pipe(Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })));
+          const bytes = Buffer.from(encoded);
+          if (bytes.byteLength > 139_820_000)
+            return yield* new TeamClientError({ reason: "decode" });
+          const now = yield* Clock.currentTimeMillis;
+          const hostId = body.hostId;
+          const token = yield* Effect.try({
+            try: () =>
+              signFilesPrincipalBinding(
+                input.ownerSecret,
+                {
+                  principal,
+                  hostId,
+                  method: "POST",
+                  path,
+                  bodySha256: createHash("sha256").update(bytes).digest("hex"),
+                },
+                now,
+              ),
+            catch: (cause) => new TeamClientError({ reason: "decode", cause }),
+          });
+          return yield* send(
+            authenticated(path, "POST").pipe(
+              HttpClientRequest.setHeader("x-sled-files-principal", token),
+              HttpClientRequest.bodyUint8Array(bytes, "application/json"),
+            ),
+          ).pipe(Effect.flatMap(readJson));
+        }),
         authenticated,
         send,
         json: readJson,
@@ -1278,7 +2012,9 @@ const make = Effect.gen(function* () {
           Effect.mapError(
             (cause) => new TeamClientError({ reason: "invalid-configuration", cause }),
           ),
-          Effect.flatMap(timedExecute),
+          Effect.flatMap((request) =>
+            request.operation === "context.read" ? Effect.succeed(null) : timedExecute(request),
+          ),
         ),
       apiWrite: (input) =>
         decodeWriteRequest(input).pipe(

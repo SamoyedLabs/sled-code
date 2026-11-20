@@ -1,557 +1,193 @@
-import { useEffect, useRef, useState } from "react";
-import { useAtomValue } from "@effect/atom-react";
-import type { EnvironmentId } from "@t3tools/contracts";
-import type { OpenbotVaultItem, OpenbotVaultRequest } from "@t3tools/contracts";
+import { RegistryContext, useAtomValue } from "@effect/atom-react";
+import { useContext, useEffect, useEffectEvent, useRef, useState } from "react";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import {
-  vaultFields,
-  vaultPrivateFields,
-  vaultSecretFields,
-  vaultDraft,
-  vaultSaveRequest,
-  vaultLabel,
-  type VaultKind,
-} from "@t3tools/client-runtime/openbot/presentation";
-import { useBotVault, type VaultController } from "./useBotVault";
+  OpenbotVaultImportResult,
+  type EnvironmentId,
+  type OpenbotVaultRequest,
+} from "@t3tools/contracts";
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settingsCapabilities } from "@t3tools/client-runtime/openbot/settings";
+import { useEnvironmentQuery } from "../../state/query";
+import { useBotVault } from "./useBotVault";
 import { openbot } from "../../state/openbot";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-export function BotVault({
-  environmentId,
-  hostId,
-}: {
-  environmentId: EnvironmentId;
-  hostId: string;
-}) {
-  return (
-    <VaultHost key={`${environmentId}:${hostId}`} environmentId={environmentId} hostId={hostId} />
-  );
+import { readPreparedConnection, usePreparedConnection } from "../../state/session";
+import { VaultPanel } from "../bots/upstream/vault/VaultPanel";
+const decodeImport = Schema.decodeUnknownSync(OpenbotVaultImportResult);
+export function BotVault(props: { environmentId: EnvironmentId; hostId: string }) {
+  const connection = Option.getOrNull(usePreparedConnection(props.environmentId));
+  const [session, setSession] = useState({ connection, epoch: 0 });
+  if (session.connection !== connection) setSession({ connection, epoch: session.epoch + 1 });
+  return <VaultHost key={`${props.environmentId}:${props.hostId}:${session.epoch}`} {...props} />;
 }
 function VaultHost({ environmentId, hostId }: { environmentId: EnvironmentId; hostId: string }) {
-  const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
-  const controller = useBotVault(async (request) => {
-    const result = await admin({ environmentId, input: { hostId, request } });
-    return result._tag === "Failure"
-      ? { ok: false, error: "Vault request failed." }
-      : { ok: true, value: result.value };
-  });
-  return (
-    <VaultPanel
-      key={`${environmentId}:${hostId}`}
-      controller={controller}
-      environmentId={environmentId}
-      hostId={hostId}
-    />
-  );
-}
-type Authority = { environmentId: EnvironmentId; hostId: string };
-function Action({
-  request,
-  label,
-  disabled,
-  onAction,
-  ...authority
-}: Authority & {
-  request: OpenbotVaultRequest;
-  label: string;
-  disabled: boolean;
-  onAction: () => void;
-}) {
-  const allowed = useAtomValue(
-    openbot.adminToHost.permissionAtom(authority.environmentId, {
-      hostId: authority.hostId,
-      request,
+  const compatibility = useEnvironmentQuery(
+    openbot.readFromHost({
+      environmentId,
+      input: { hostId, request: { operation: "compatibility.read" } },
     }),
   );
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      disabled={disabled || !allowed}
-      onClick={onAction}
-    >
-      {label}
-    </Button>
-  );
-}
-function VaultPanel({ controller: c, ...authority }: Authority & { controller: VaultController }) {
-  const [version, setVersion] = useState<"v1" | "v2">("v2");
-  const [selection, setSelection] = useState<OpenbotVaultItem | null>(null);
-  const [kind, setKind] = useState<VaultKind>("login");
-  const [fields, setFields] = useState<Record<string, string>>({});
-  const [epoch, setEpoch] = useState(0);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [confirmReset, setConfirmReset] = useState(false);
-  const secrets = useRef<Record<string, string>>({});
-  const clear = () => {
-    secrets.current = {};
-    setEpoch((v) => v + 1);
-  };
-  const choose = (item: OpenbotVaultItem | null) => {
-    clear();
-    setSelection(item);
-    setFields(vaultDraft(item));
-    setKind(item?.kind ?? "login");
-    setConfirmDelete(false);
-  };
-  const run = (request: OpenbotVaultRequest) => {
-    clear();
-    return c.run(request);
-  };
-  const save = () => {
-    const request = vaultSaveRequest(kind, selection?.id ?? null, fields, secrets.current, version);
-    clear();
-    if (request === null) {
-      setLocalError("Check the item fields and try again.");
-      return;
-    }
-    setLocalError(null);
-    void c.run(request).then((ok) => {
-      if (ok) choose(null);
-    });
-  };
-  const [localError, setLocalError] = useState<string | null>(null);
-  return (
-    <section className="space-y-3">
-      <p>Vault and password managers</p>
-      <p>
-        Settings authority is required. Connecting a password manager also requires operate
-        authority. Blank replacement secrets keep saved values.
-      </p>
-      <label>
-        Vault API
-        <select
-          aria-label="Vault API"
-          value={version}
-          disabled={c.busy}
-          onChange={(e) => {
-            choose(null);
-            c.clearState();
-            setVersion(e.target.value === "v1" ? "v1" : "v2");
-          }}
-        >
-          <option value="v2">v2 (includes API keys)</option>
-          <option value="v1">v1</option>
-        </select>
-      </label>
-      {
-        <Action
-          {...authority}
-          request={{ operation: "vault.list", version }}
-          label={"Refresh vault"}
-          disabled={c.busy}
-          onAction={() => {
-            choose(null);
-            void run({ operation: "vault.list", version });
-          }}
-        />
-      }
-      {c.state && <p>{c.state.status}</p>}
-      {(c.error || localError) && <p role="alert">{c.error || localError}</p>}
-      {c.notice && <p>{c.notice}</p>}
-      {c.state?.items.map((item) => (
-        <div key={item.id}>
-          <Plain label={vaultLabel(item)} onClick={() => choose(item)} disabled={c.busy} />
-        </div>
-      ))}
-      <Plain label="New entry" onClick={() => choose(null)} disabled={c.busy} />
-      <label>
-        Item kind
-        <select
-          aria-label="Item kind"
-          value={kind}
-          disabled={c.busy || selection !== null}
-          onChange={(e) => {
-            const value = e.target.value;
-            if (
-              value === "login" ||
-              value === "card" ||
-              value === "contact" ||
-              value === "apiKey"
-            ) {
-              clear();
-              setKind(value);
-              setFields({});
-            }
-          }}
-        >
-          {(version === "v2"
-            ? ["login", "card", "contact", "apiKey"]
-            : ["login", "card", "contact"]
-          ).map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div key={epoch}>
-        {vaultFields[kind].map((key) => (
-          <Field
-            key={key}
-            label={key}
-            value={fields[key] ?? ""}
-            onChange={(value) => setFields({ ...fields, [key]: value })}
-            disabled={c.busy}
-          />
-        ))}
-        {vaultPrivateFields[kind].map((key) => (
-          <Private
-            key={key}
-            label={`Replacement ${key}`}
-            onChange={(value) => {
-              secrets.current[key] = value;
-            }}
-            disabled={c.busy}
-          />
-        ))}
-      </div>
-      {
-        <Action
-          {...authority}
-          request={{
-            operation: "vault.save",
-            version: "v2",
-            input: {
-              kind: "login",
-              id: selection?.id ?? null,
-              website: "",
-              username: "",
-              notes: "",
-              password: null,
-            },
-          }}
-          label={"Save entry"}
-          disabled={c.busy || c.state?.status !== "ready"}
-          onAction={save}
-        />
-      }
-      {selection && (
-        <div className="space-y-2">
-          {vaultSecretFields(selection).map((field) => (
-            <SecretField
-              key={`${selection.id}:${field}`}
-              {...authority}
-              controller={c}
-              request={
-                field === "key"
-                  ? { operation: "vault.reveal", version: "v2", id: selection.id, field }
-                  : { operation: "vault.reveal", version, id: selection.id, field }
-              }
-            />
-          ))}
-          <Plain
-            label={confirmDelete ? "Cancel removal" : "Remove entry"}
-            onClick={() => setConfirmDelete(!confirmDelete)}
-            disabled={c.busy}
-          />
-          {confirmDelete && (
-            <Action
-              {...authority}
-              request={{ operation: "vault.delete", version, id: selection.id }}
-              label={"Confirm removal"}
-              disabled={c.busy}
-              onAction={() => {
-                void run({ operation: "vault.delete", version, id: selection.id }).then((ok) => {
-                  if (ok) choose(null);
-                });
-              }}
-            />
-          )}
-        </div>
-      )}
-      {c.state?.status === "unreadable" && (
-        <div className="space-y-2">
-          <p>Reset permanently removes unreadable vault data.</p>
-          <Plain
-            label="Prepare unreadable vault reset"
-            onClick={() => setConfirmReset(!confirmReset)}
-            disabled={c.busy}
-          />
-          {confirmReset && (
-            <Action
-              {...authority}
-              request={{ operation: "vault.reset", version }}
-              label={"Confirm vault reset"}
-              disabled={c.busy}
-              onAction={() => {
-                void run({ operation: "vault.reset", version });
-              }}
-            />
-          )}
-        </div>
-      )}
-      <div key={`import:${epoch}`}>
-        <Private
-          label="CSV password export (up to 262144 characters)"
-          onChange={(value) => {
-            secrets.current.csv = value;
-          }}
-          disabled={c.busy}
-        />
-        {
-          <Action
-            {...authority}
-            request={{ operation: "vault.import", csv: "" }}
-            label={"Import logins"}
-            disabled={c.busy || c.state?.status !== "ready"}
-            onAction={() => {
-              const csv = secrets.current.csv ?? "";
-              clear();
-              void c.run({ operation: "vault.import", csv });
-            }}
-          />
-        }
-      </div>
-      <p>
-        Import adds login rows from a password-export CSV; other item kinds are skipped. Refresh
-        after importing. Existing entries are not replaced.
-      </p>
-      <div key={`connectors:${epoch}`}>
-        <p>1Password: {c.onepassword?.state ?? "Not loaded"}</p>
-        {c.onepassword && (
-          <p>
-            {c.onepassword.vaultNames.join(", ")} · {c.onepassword.loginCount ?? 0} logins ·{" "}
-            {c.onepassword.error ?? ""}
-          </p>
-        )}
-        <Private
-          label="1Password service account token"
-          onChange={(value) => {
-            secrets.current.token = value;
-          }}
-          disabled={c.busy}
-        />
-        {
-          <Action
-            {...authority}
-            request={{ operation: "vault.onepassword.connect", token: "" }}
-            label={"Connect 1Password"}
-            disabled={c.busy}
-            onAction={() => {
-              const token = secrets.current.token ?? "";
-              clear();
-              void c.run({ operation: "vault.onepassword.connect", token });
-            }}
-          />
-        }
-        {
-          <Action
-            {...authority}
-            request={{ operation: "vault.onepassword.status" }}
-            label={"Refresh 1Password / check access"}
-            disabled={c.busy}
-            onAction={() => {
-              void run({ operation: "vault.onepassword.status" });
-            }}
-          />
-        }
-        {
-          <Action
-            {...authority}
-            request={{ operation: "vault.onepassword.disconnect" }}
-            label={"Disconnect 1Password"}
-            disabled={c.busy}
-            onAction={() => {
-              void run({ operation: "vault.onepassword.disconnect" });
-            }}
-          />
-        }
-        <p>
-          Bitwarden: {c.bitwarden?.state ?? "Not loaded"} {c.bitwarden?.serverUrl}{" "}
-          {c.bitwarden?.error}
-        </p>
-        {["serverUrl", "clientId", "clientSecret", "masterPassword"].map((key) => (
-          <Private
-            key={key}
-            label={`Bitwarden ${key}`}
-            onChange={(value) => {
-              secrets.current[key] = value;
-            }}
-            disabled={c.busy}
-          />
-        ))}
-        {
-          <Action
-            {...authority}
-            request={{
-              operation: "vault.bitwarden.connect",
-              serverUrl: "",
-              clientId: "",
-              clientSecret: "",
-              masterPassword: "",
-            }}
-            label={"Connect Bitwarden"}
-            disabled={c.busy}
-            onAction={() => {
-              const {
-                serverUrl = "",
-                clientId = "",
-                clientSecret = "",
-                masterPassword = "",
-              } = secrets.current;
-              clear();
-              void c.run({
-                operation: "vault.bitwarden.connect",
-                serverUrl,
-                clientId,
-                clientSecret,
-                masterPassword,
-              });
-            }}
-          />
-        }
-        {
-          <Action
-            {...authority}
-            request={{ operation: "vault.bitwarden.status" }}
-            label={"Refresh Bitwarden status"}
-            disabled={c.busy}
-            onAction={() => {
-              void run({ operation: "vault.bitwarden.status" });
-            }}
-          />
-        }
-        {
-          <Action
-            {...authority}
-            request={{ operation: "vault.bitwarden.disconnect" }}
-            label={"Disconnect Bitwarden"}
-            disabled={c.busy}
-            onAction={() => {
-              void run({ operation: "vault.bitwarden.disconnect" });
-            }}
-          />
-        }
-      </div>
-      <p>
-        These released connectors have no separate test endpoint. Connect validates credentials;
-        refresh checks host status. Bitwarden may remain connecting until a later refresh.
-      </p>
-    </section>
-  );
-}
-type FieldProps = {
-  label: string;
-  value?: string;
-  onChange: (value: string) => void;
-  disabled: boolean;
-};
-function Field({ label, value, onChange, disabled }: FieldProps) {
-  return (
-    <label>
-      {label}
-      <Input
-        aria-label={label}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-      />
-    </label>
-  );
-}
-function Private({ label, onChange, disabled }: FieldProps) {
-  return (
-    <label>
-      {label}
-      <Input
-        aria-label={label}
-        type="password"
-        autoComplete="off"
-        spellCheck={false}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-      />
-    </label>
-  );
-}
-function Plain({
-  label,
-  onClick,
-  disabled,
-}: {
-  label: string;
-  onClick: () => void;
-  disabled: boolean;
-}) {
-  return (
-    <Button type="button" variant="outline" size="sm" onClick={onClick} disabled={disabled}>
-      {label}
-    </Button>
-  );
-}
-function SecretField({
-  controller: c,
-  request,
-  ...authority
-}: Authority & {
-  controller: VaultController;
-  request: Extract<OpenbotVaultRequest, { operation: "vault.reveal" }>;
-}) {
-  const [value, setValue] = useState<string | null>(null);
-  const [copyError, setCopyError] = useState<string | null>(null);
-  const active = useRef(true);
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- A reveal response may arrive after its selected item has unmounted.
+  const capabilities = settingsCapabilities(compatibility.data);
+  const version = capabilities.includes("vault-v2") ? "v2" : "v1";
+  const supported = capabilities.includes("vault-v2") || capabilities.includes("vault-v1");
+  const registry = useContext(RegistryContext);
+  const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
+  const current = readPreparedConnection(environmentId);
+  const active = useRef(true),
+    importPicker = useRef<HTMLInputElement>(null),
+    pendingImport = useRef<((file: File | null) => void) | null>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Fence private values and settle a cancelled import when the host session closes.
   useEffect(() => {
     active.current = true;
+
     return () => {
       active.current = false;
+
+      pendingImport.current?.(null);
     };
   }, []);
-  const reveal = () => {
-    setValue(null);
-    void c.run(request, (secret) => {
-      if (active.current) setValue(secret);
-    });
+  const execute = async (request: OpenbotVaultRequest) => {
+    if (!active.current || !current || readPreparedConnection(environmentId) !== current)
+      throw new Error("Reconnect the original vault session.");
+    if (!registry.get(openbot.adminToHost.permissionAtom(environmentId, { hostId, request })))
+      throw new Error("You don’t have permission to change this vault.");
+    const result = await admin({ environmentId, input: { hostId, request } });
+    if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+    if (!active.current || readPreparedConnection(environmentId) !== current)
+      throw new Error("The original vault session changed.");
+    return result.value;
   };
-  const copy = () => {
-    setValue(null);
-    setCopyError(null);
-    const content = new Promise<Blob>((resolve, reject) => {
-      void c
-        .run(request, (secret) => {
-          if (active.current) resolve(new Blob([secret], { type: "text/plain" }));
-          else reject(new Error("Selection changed"));
-        })
-        .then((ok) => {
-          if (!ok) reject(new Error("Reveal failed"));
-        });
-    });
-    void navigator.clipboard
-      .write([new ClipboardItem({ "text/plain": content })])
-      .catch(() => setCopyError("Could not copy the secret. Reveal it and copy manually."));
+  const c = useBotVault(async (request) => {
+    try {
+      return { ok: true, value: await execute(request) };
+    } catch (cause) {
+      return { ok: false, error: cause instanceof Error ? cause.message : "Vault request failed." };
+    }
+  });
+  const canList = useAtomValue(
+    openbot.adminToHost.permissionAtom(environmentId, {
+      hostId,
+      request: { operation: "vault.list", version },
+    }),
+  );
+  const canImport = useAtomValue(
+    openbot.adminToHost.permissionAtom(environmentId, {
+      hostId,
+      request: { operation: "vault.import", csv: "" },
+    }),
+  );
+  const load = useEffectEvent(async (version: "v1" | "v2") => {
+    await c.run({ operation: "vault.list", version });
+  });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Read the host vault after the exact list permission becomes available.
+  useEffect(() => {
+    if (canList && supported) void load(version);
+  }, [canList, supported, version]);
+  const run = async (request: OpenbotVaultRequest) => {
+    if (!(await c.run(request))) throw new Error("The vault change could not be confirmed.");
   };
+  const reveal = async (request: {
+    id: string;
+    field: "password" | "number" | "securityCode" | "key";
+  }) => {
+    if (version === "v1" && request.field === "key")
+      throw new Error("This host does not support saved API keys.");
+    const revealRequest: OpenbotVaultRequest =
+      version === "v2"
+        ? { operation: "vault.reveal", version, ...request }
+        : {
+            operation: "vault.reveal",
+            version,
+            id: request.id,
+            field: request.field === "key" ? "password" : request.field,
+          };
+    let value = "";
+    if (
+      !(await c.run(revealRequest, (secret) => {
+        value = secret;
+      }))
+    )
+      throw new Error("Could not reveal the saved value.");
+    if (!active.current || readPreparedConnection(environmentId) !== current)
+      throw new Error("The original vault session changed.");
+    return value;
+  };
+  const importCsv = async () => {
+    const file = await new Promise<File | null>((resolve) => {
+      pendingImport.current = resolve;
+      importPicker.current?.click();
+    });
+    pendingImport.current = null;
+    if (!file) return null;
+    if (file.size > 1_048_576)
+      throw new Error("Choose a CSV export with no more than 262,144 characters.");
+    const csv = await file.text();
+    if (!active.current || readPreparedConnection(environmentId) !== current)
+      throw new Error("The original vault session changed.");
+    if (csv.length > 262_144)
+      throw new Error("Choose a CSV export with no more than 262,144 characters.");
+    const result = decodeImport(await execute({ operation: "vault.import", csv }));
+    await c.run({ operation: "vault.list", version });
+    return result;
+  };
+  if (!compatibility.data) return <p role="status">Loading vault…</p>;
+  if (!supported) return <p role="status">This host does not support a vault.</p>;
+  if (!canList) return <p role="status">You don’t have permission to view this host’s vault.</p>;
   return (
-    <div className="space-y-2">
-      <Action
-        {...authority}
-        request={request}
-        label={`Reveal ${request.field}`}
-        disabled={c.busy}
-        onAction={reveal}
+    <>
+      <input
+        ref={(element) => {
+          importPicker.current = element;
+          if (!element) return;
+          const cancel = () => pendingImport.current?.(null);
+          element.addEventListener("cancel", cancel);
+          return () => element.removeEventListener("cancel", cancel);
+        }}
+        type="file"
+        accept=".csv,text/csv"
+        hidden
+        aria-label="Choose password export CSV"
+        onChange={(event) => {
+          const file = event.target.files?.[0] ?? null;
+          event.target.value = "";
+          pendingImport.current?.(file);
+        }}
       />
-      <Action
-        {...authority}
-        request={request}
-        label={`Copy ${request.field}`}
-        disabled={c.busy}
-        onAction={copy}
-      />
-      {copyError && <p role="alert">{copyError}</p>}
-      {value !== null && (
-        <div className="space-y-2">
-          <Input
-            aria-label="Revealed secret"
-            value={value}
-            readOnly
-            autoComplete="off"
-            spellCheck={false}
-            onBlur={() => setValue(null)}
-          />
-          <Plain label="Hide secret" onClick={() => setValue(null)} disabled={false} />
-        </div>
+      {!c.state ? (
+        <p role={c.error ? "alert" : "status"}>{c.error ?? "Loading vault…"}</p>
+      ) : (
+        <VaultPanel
+          state={c.state}
+          apiKeys={version === "v2"}
+          busy={c.busy}
+          error={c.error}
+          notice={c.notice}
+          onSave={(input) => {
+            if (version === "v2") return run({ operation: "vault.save", version, input });
+            if (input.kind === "apiKey")
+              return Promise.reject(new Error("This host does not support saved API keys."));
+            return run({ operation: "vault.save", version, input });
+          }}
+          onDelete={(id) => run({ operation: "vault.delete", version, id })}
+          onReveal={reveal}
+          onCopy={(request) =>
+            navigator.clipboard.write([
+              new ClipboardItem({
+                "text/plain": reveal(request).then(
+                  (value) => new Blob([value], { type: "text/plain" }),
+                ),
+              }),
+            ])
+          }
+          onCopyText={(value) => navigator.clipboard.writeText(value)}
+          onImportCsv={
+            canImport && capabilities.includes("vault-import-v1") ? importCsv : undefined
+          }
+          onReset={() => run({ operation: "vault.reset", version })}
+        />
       )}
-    </div>
+    </>
   );
 }

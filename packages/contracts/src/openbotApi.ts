@@ -1,6 +1,13 @@
+import { OpenbotDirectReadRequest, OpenbotDirectCommand } from "./openbotDirect.ts";
+import { OpenbotSettingsReadRequest, OpenbotSettingsAdminRequest } from "./openbotSettings.ts";
 import { OpenbotTemplateReadRequest, OpenbotTemplateAdminRequest } from "./openbotTemplates.ts";
 import { OpenbotCatalogReadRequest, OpenbotCatalogAdminRequest } from "./openbotCatalog.ts";
 import { OpenbotDataReadRequest, OpenbotDataAdminRequest } from "./openbotData.ts";
+import {
+  OpenbotLibraryReadRequest,
+  OpenbotLibraryAdminRequest,
+  OpenbotLibraryPreviewRequest,
+} from "./openbotLibrary.ts";
 import { OpenbotVaultRequest } from "./openbotVault.ts";
 import { OpenbotComputerReadRequest, OpenbotComputerAdminRequest } from "./openbotComputer.ts";
 import { OpenbotRoutineSchedule, OpenbotEventAdminRequest } from "./openbotEvents.ts";
@@ -77,6 +84,7 @@ export const OpenbotMcpConfig = Schema.Struct({
   url: ShortUrl,
   headers: Schema.Array(Pair).check(Schema.isMaxLength(32)),
 });
+export type OpenbotMcpConfig = typeof OpenbotMcpConfig.Type;
 export const OpenbotMcpPatch = Schema.Struct({
   name: Schema.optional(OpenbotMcpConfig.fields.name),
   transport: Schema.optional(OpenbotMcpConfig.fields.transport),
@@ -117,15 +125,49 @@ export const OpenbotMessagingOrchestratorRequest = Schema.Union([
   }),
 ]);
 
+const AnalyticsRange = {
+  startDate: Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)),
+  endDate: Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)),
+  timeZone: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+};
+
 export const OpenbotReadRequest = Schema.Union([
+  OpenbotDirectReadRequest,
+  Schema.Struct({
+    operation: Schema.Literal("agent.avatar.read"),
+    agentId: Id,
+    version: Schema.String.check(
+      Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
+    ),
+  }),
   OpenbotComputerReadRequest,
   OpenbotDataReadRequest,
+  OpenbotLibraryReadRequest,
+  OpenbotLibraryPreviewRequest,
   OpenbotCatalogReadRequest,
   OpenbotTemplateReadRequest,
+  OpenbotSettingsReadRequest,
   OpenbotRoutineFlowReadRequest,
   OpenbotConversationReadRequest,
   OpenbotWorkflowReadRequest,
   Schema.Struct({ operation: Schema.Literal("compatibility.read") }),
+  Schema.Struct({ operation: Schema.Literal("workspace.usage") }),
+  Schema.Struct({
+    operation: Schema.Literal("workspace.analytics"),
+    ...AnalyticsRange,
+    agentId: Schema.optional(Id),
+  }),
+  Schema.Struct({ operation: Schema.Literal("agent.analytics"), ...AnalyticsRange, agentId: Id }),
+  Schema.Struct({ operation: Schema.Literal("agent.usage"), agentId: Id }),
+  Schema.Struct({
+    operation: Schema.Literals([
+      "workspace.identity",
+      "workspace.member",
+      "workspace.reads",
+      "workspace.sidebar",
+      "workspace.presence",
+    ]),
+  }),
   OpenbotChannelReadRequest,
 
   Schema.Struct({ operation: Schema.Literal("agent.list") }),
@@ -133,6 +175,7 @@ export const OpenbotReadRequest = Schema.Union([
   Schema.Struct({ operation: Schema.Literal("provider.modelVisibility.listing") }),
   Schema.Struct({ operation: Schema.Literal("agent.status") }),
   Schema.Struct({ operation: Schema.Literal("conversation.read"), agentId: Id }),
+  Schema.Struct({ operation: Schema.Literal("context.read"), agentId: Id, threadId: Id }),
   Schema.Struct({ operation: Schema.Literal("task.list"), agentId: Id }),
   Schema.Struct({ operation: Schema.Literal("task.read"), agentId: Id, taskId: Id }),
   Schema.Struct({ operation: Schema.Literal("memory.list"), agentId: Id }),
@@ -143,6 +186,7 @@ export const OpenbotReadRequest = Schema.Union([
 export type OpenbotReadRequest = typeof OpenbotReadRequest.Type;
 
 export const OpenbotWriteRequest = Schema.Union([
+  OpenbotDirectCommand,
   OpenbotRoutineFlowCommand,
   OpenbotConversationCommand,
   OpenbotQueueCommand,
@@ -207,11 +251,49 @@ export const OpenbotAttentionResponseInput = Schema.Struct({
 export type OpenbotAttentionResponseInput = typeof OpenbotAttentionResponseInput.Type;
 
 export const OpenbotAdminRequest = Schema.Union([
+  Schema.Struct({
+    operation: Schema.Literal("mcp.catalogMatches"),
+    apps: Schema.Array(
+      Schema.Union([
+        Schema.Struct({
+          id: Id,
+          name: OpenbotMcpConfig.fields.name,
+          transport: Schema.Literal("http"),
+          url: ShortUrl,
+          userLink: Schema.Boolean,
+        }),
+        Schema.Struct({
+          id: Id,
+          name: OpenbotMcpConfig.fields.name,
+          transport: Schema.Literal("stdio"),
+          command: OpenbotMcpConfig.fields.command,
+          args: OpenbotMcpConfig.fields.args,
+        }),
+      ]),
+    ).check(Schema.isMaxLength(100)),
+  }),
+  Schema.Struct({ operation: Schema.Literal("mcp.signInRelay.start"), config: OpenbotMcpConfig }),
+  Schema.Struct({
+    operation: Schema.Literals(["mcp.testCredentialsById", "mcp.saveCredentialsById"]),
+    mcpServerId: Id,
+    headers: Schema.optional(OpenbotMcpConfig.fields.headers),
+    env: Schema.optional(OpenbotMcpConfig.fields.env),
+    url: Schema.optional(OpenbotMcpConfig.fields.url),
+  }),
+  Schema.Struct({ operation: Schema.Literal("mcp.signInRelay.startById"), mcpServerId: Id }),
+  Schema.Struct({ operation: Schema.Literal("provider.usageResets.list"), provider: ProviderId }),
+  Schema.Struct({
+    operation: Schema.Literal("provider.usageResets.consume"),
+    provider: ProviderId,
+    accountId: AccountId,
+  }),
   OpenbotVaultRequest,
   OpenbotComputerAdminRequest,
   OpenbotDataAdminRequest,
+  OpenbotLibraryAdminRequest,
   OpenbotCatalogAdminRequest,
   OpenbotTemplateAdminRequest,
+  OpenbotSettingsAdminRequest,
   OpenbotEventAdminRequest,
   OpenbotWriteRequest,
   OpenbotBrowserReadRequest,
@@ -380,6 +462,8 @@ export const OpenbotAdminRequest = Schema.Union([
     operation: Schema.Literal("browser.open"),
     url: ShortUrl,
     focus: Schema.Boolean,
+    ownerAgentId: Schema.optional(Schema.NullOr(Id)),
+    ownerThreadId: Schema.optional(Schema.NullOr(Id)),
   }),
   Schema.Struct({
     operation: Schema.Literals([
@@ -420,7 +504,7 @@ export const OpenbotAdminRequest = Schema.Union([
   }),
   Schema.Struct({ operation: Schema.Literal("mcp.list") }),
   Schema.Struct({
-    operation: Schema.Literal("mcp.updateById"),
+    operation: Schema.Literals(["mcp.updateById", "mcp.testPatchById"]),
     mcpServerId: Id,
     patch: OpenbotMcpPatch,
   }),
@@ -488,6 +572,12 @@ export const OpenbotAdminRequest = Schema.Union([
       name: Name,
       description: Description,
       initialMessage: Text,
+      avatarSeed: Schema.optional(
+        Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
+      ),
+      avatarHue: Schema.optional(
+        Schema.NullOr(Schema.Literals([0, 30, 55, 100, 150, 185, 215, 245, 280, 320])),
+      ),
       provider: Schema.optional(ProviderId),
       model: Schema.optional(Model),
       reasoningEffort: Schema.optional(ReasoningEffort),
@@ -500,11 +590,31 @@ export const OpenbotAdminRequest = Schema.Union([
       name: Schema.optional(Name),
       title: Schema.optional(Schema.String.check(Schema.isMaxLength(120))),
       description: Schema.optional(Description),
+      avatarSeed: Schema.optional(
+        Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
+      ),
+      avatarHue: Schema.optional(
+        Schema.NullOr(Schema.Literals([0, 30, 55, 100, 150, 185, 215, 245, 280, 320])),
+      ),
       notifications: Schema.optional(Schema.Boolean),
       provider: Schema.optional(ProviderId),
       model: Schema.optional(Model),
       reasoningEffort: Schema.optional(ReasoningEffort),
     }),
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("agent.avatar.set"),
+    agentId: Id,
+    image: Schema.NullOr(
+      Schema.Struct({
+        mimeType: Schema.Literals(["image/png", "image/jpeg", "image/webp"]),
+        dataBase64: Schema.String.check(
+          Schema.isMinLength(4),
+          Schema.isMaxLength(699052),
+          Schema.isPattern(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
+        ),
+      }),
+    ),
   }),
   Schema.Struct({ operation: Schema.Literal("agent.delete"), agentId: Id }),
   Schema.Struct({ operation: Schema.Literal("memory.create"), agentId: Id, text: MemoryText }),
@@ -515,6 +625,7 @@ export const OpenbotAdminRequest = Schema.Union([
     text: MemoryText,
   }),
   Schema.Struct({ operation: Schema.Literal("memory.delete"), agentId: Id, memoryId: Id }),
+  Schema.Struct({ operation: Schema.Literal("memory.clear"), agentId: Id }),
   Schema.Struct({ operation: Schema.Literal("routine.create"), agentId: Id, input: RoutineInput }),
   Schema.Struct({
     operation: Schema.Literal("routine.update"),

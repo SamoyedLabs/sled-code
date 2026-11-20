@@ -150,8 +150,12 @@ export function V5CardStackView(
       });
     }
   };
+  const firstRoute = props.state.routes[0];
+  const transparent = firstRoute
+    ? props.descriptors[firstRoute.key]?.options.presentation === "transparentModal"
+    : false;
   return (
-    <View className="flex-1 bg-screen">
+    <View className={transparent ? "flex-1" : "flex-1 bg-screen"}>
       <Stack.Host>
         {screens.routes.map((route, index) => {
           const descriptor = props.descriptors[route.key] ?? screens.descriptors[route.key];
@@ -236,6 +240,7 @@ export function V5CardStackView(
                 <NavigationRouteContext value={descriptor.route}>
                   <V5StackHeader
                     options={options}
+                    onBack={() => descriptor.navigation.goBack()}
                     canGoBack={
                       attached
                         ? props.state.routes.findIndex((current) => current.key === route.key) > 0

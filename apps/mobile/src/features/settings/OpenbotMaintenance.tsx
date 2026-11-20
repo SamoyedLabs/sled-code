@@ -1,3 +1,4 @@
+import { OpenbotContinuity } from "./OpenbotContinuity";
 import { openbotMaintenanceProgress } from "@t3tools/client-runtime/openbot/presentation";
 import { useState } from "react";
 import { StackActions, useNavigation } from "@react-navigation/native";
@@ -40,6 +41,7 @@ function MaintenancePanel({ environmentId }: { environmentId: EnvironmentId }) {
   return (
     <View className="gap-3">
       <Text className="font-semibold">Upstream maintenance</Text>
+      <OpenbotContinuity environmentId={environmentId} />
       <Text>
         Review new bot engine releases in a separate workspace. Your decision is required before
         staging; activation is separate.
@@ -223,8 +225,7 @@ function MaintenanceForm({
             Download: {p.release.assets.find((a) => a.platform === p.platform)?.sha256}
           </Text>
           <Text>
-            Compatibility still requires validation.{" "}
-            {p.stagedAt ? `Staged ${p.stagedAt}` : "Not staged"}
+            Compatibility: {p.compatibility}. {p.stagedAt ? `Staged ${p.stagedAt}` : "Not staged"}
           </Text>
           {p.reviewThreadId && (
             <Button
@@ -285,6 +286,63 @@ function MaintenanceForm({
                 }
               />
             </>
+          )}
+          {p.state === "accepted" && (
+            <>
+              <Button
+                label={
+                  p.preparationThreadId ? "Resume source preparation" : "Prepare source and patches"
+                }
+                disabled={locked || !state.policy?.enabled || state.policy.authority !== "stage"}
+                onPress={() => void send({ action: "prepare", proposalId: p.id })}
+              />
+              {p.preparationThreadId && (
+                <>
+                  <Button
+                    label="Open preparation thread"
+                    onPress={() =>
+                      navigation.dispatch(
+                        StackActions.push("Thread", {
+                          environmentId,
+                          threadId: p.preparationThreadId,
+                        }),
+                      )
+                    }
+                  />
+                  <Button
+                    label="Run compatibility checks"
+                    disabled={
+                      locked || !state.policy?.enabled || state.policy.authority !== "stage"
+                    }
+                    onPress={() => void send({ action: "validate-prepared", proposalId: p.id })}
+                  />
+                </>
+              )}
+              {p.validation?.state === "eligible" &&
+                p.validationRunId &&
+                p.compatibility !== "validated" && (
+                  <Button
+                    label="Accept verified artifact"
+                    disabled={
+                      locked || !state.policy?.enabled || state.policy.authority !== "stage"
+                    }
+                    onPress={() =>
+                      void send({ action: "promote", proposalId: p.id, runId: p.validationRunId! })
+                    }
+                  />
+                )}
+            </>
+          )}
+          {p.validation?.state==="running"&&<Button label="Cancel compatibility checks" disabled={locked} onPress={()=>void send({action:"cancel-validation",proposalId:p.id})}/> }
+          {p.validation && (
+            <View className="gap-1">
+              <Text>Checks: {p.validation.state}</Text>
+              {p.validation.checks.map((check) => (
+                <Text key={`${check.kind}:${check.outcome}:${check.detail}`}>
+                  {check.kind}: {check.outcome} · {check.detail}
+                </Text>
+              ))}
+            </View>
           )}
           {p.state === "accepted" && !p.stagedAt && (
             <Button

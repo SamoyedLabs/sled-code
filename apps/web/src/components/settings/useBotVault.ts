@@ -48,7 +48,7 @@ export function useBotVault(execute: VaultExecute) {
       .then(async (result) => {
         if (generation !== lifetime.current) return false;
         if (!result.ok) {
-          setError("The host could not complete the vault request. Refresh before retrying.");
+          setError(result.error);
           return false;
         }
         if (request.operation === "vault.reveal") {

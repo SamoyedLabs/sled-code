@@ -1,0 +1,74 @@
+{
+  "base": "/Users/cope/.t3/planning/.scratch/sled-openbot/assets/cos-maintenance/.openbot-build/source",
+  "patch": "/Users/cope/.t3/projects/sled-code-openbot-integration/apps/server/src/openbot/upstream/queue-attachments/queue-attachments-v1.patch",
+  "patchSha256": "9e1dedde9cdc853dac7b8f18639480cd0a58b4886eab0cbe227597ebfadd4b82",
+  "forwardVerified": true,
+  "reverseVerified": true,
+  "files": [
+    {
+      "path": "packages/contracts/src/team-protocol/current.ts",
+      "before": "92863900184f8e18fe5dc64f650a9c7a2fe116be0ffdccb98c0b2ee178c615f6",
+      "final": "c77f32f91ab85f6740734d94c09c97a62e7d74540e9de3decd4b5e7beda9df6b"
+    },
+    {
+      "path": "packages/contracts/src/team-protocol/optional-routes.ts",
+      "before": "f61ef950b44e96619ec16c8b940d661885eb2d146d53a263c1356247db43e874",
+      "final": "83dd09e5c0f45b04ce3920262c5231fe697d59879ab6fc54fd14f156d32b90b9"
+    },
+    {
+      "path": "packages/contracts/src/team-protocol/sled-queue-attachments-v1.ts",
+      "before": null,
+      "final": "fbd987b970d53492b40100c34f1c6be58f7116f56490f18cb9a33f24b0df95ec"
+    },
+    {
+      "path": "src/backend/agent-service.ts",
+      "before": "7ebe7c6d0054ab21eb86cd8189cfab91fccac61602b901cd4cc62aa5d2809695",
+      "final": "af6e1a60add2e33abd51c5af9a50752939f6c705c5fb64a9a03f61579a886876"
+    },
+    {
+      "path": "src/backend/agent/queue-controls.ts",
+      "before": "bb590c7b459523b51f82d20a0a300bc83231536626c208e62d1d0c97f44eea70",
+      "final": "ea015ed8861cb348ccdae1349d41117de3ff041ce16eb9323d3001e6d7752586"
+    },
+    {
+      "path": "src/backend/mailbox-store.ts",
+      "before": "60a85e9a35dc239702d828d3b393b1f13c3ee3b7d62732eed68f476f179e2ec3",
+      "final": "c267065fcb975a6c34316ccb54194e43d840b194415db6b94cdac2cc633810bd"
+    },
+    {
+      "path": "src/backend/queue-attachments.test.ts",
+      "before": null,
+      "final": "ff0698ea4083a4e267381b3467ce8fa6692e67d6c1a997b1668c964edbaa53d8"
+    },
+    {
+      "path": "src/main/host-service.ts",
+      "before": "be0fe4dc3fd7a3a27f885840ec418658cd5305b3013f6d21051a23510d9068f7",
+      "final": "47ec8426623a04f946c53e6019a687195e9908a17459a2ebcd6832539386074e"
+    },
+    {
+      "path": "src/main/team-api-server.ts",
+      "before": "3c3273d84d95ea779802f1f5767741ce9bb33641655788bc03cafc9db4a165ed",
+      "final": "ef6b36b25ef6bc7d654c7bb44a4c0369f77dd303eb59edaa033ca0d0f69c8925"
+    },
+    {
+      "path": "src/main/team-api/dependencies.ts",
+      "before": "f5d524e4ce5150836f1927685d54bbacf0733b1ad413aa42f9e4b602ad6e2dd8",
+      "final": "272df230be8e9180359d89dddbbabec2a9754bf15457e38387d20da47a20e6d0"
+    },
+    {
+      "path": "src/main/team-api/queue-attachments-binding.ts",
+      "before": null,
+      "final": "198419d58e583dd8a820af1c07eef7ad8c7ca8a7304283df549a0d14cc9767d2"
+    },
+    {
+      "path": "src/main/team-api/queue-attachments-host.ts",
+      "before": null,
+      "final": "3b8dd36fc835525bd96da275c52c97379498cb20916795428dac0c950c776572"
+    },
+    {
+      "path": "src/main/team-api/route-sled-queue-attachments.ts",
+      "before": null,
+      "final": "937d19a1b73f1c38adb766caf8e3e51151ee2dec2843215cdf1edb58d060b7e6"
+    }
+  ]
+}

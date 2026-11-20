@@ -1,3 +1,5 @@
+import * as Schema from "effect/Schema";
+import { OpenbotChannelPresentations } from "@t3tools/contracts";
 import { useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId, OpenbotChannelPage } from "@t3tools/contracts";
@@ -14,16 +16,26 @@ import {
   type ChannelActionInput,
   type ChannelEdit,
 } from "@t3tools/client-runtime/openbot/presentation";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
 import { useAtomCommand } from "../../state/use-atom-command";
 
-export function useBotChannels(environmentId: EnvironmentId, hostId: string, newId: () => string) {
-  const [selected, setSelected] = useState<string | null>(null);
-  const [edit, setEdit] = useState<ChannelEdit | null>(null);
+const decodePresentations = Schema.decodeUnknownOption(OpenbotChannelPresentations);
+export function useBotChannels(
+  environmentId: EnvironmentId,
+  hostId: string,
+  newId: () => string,
+  initialChannelId?: string,
+  initialCreate = false,
+) {
+  const [selected, setSelected] = useState<string | null>(initialChannelId ?? null);
+  const [edit, setEdit] = useState<ChannelEdit | null>(() =>
+    initialCreate ? channelNewDraft(newId()) : null,
+  );
   const [pages, setPages] = useState<readonly OpenbotChannelPage[]>([]);
+  const [around, setAround] = useState<OpenbotChannelPage | null>(null);
   const [text, setText] = useState("");
   const [recipient, setRecipient] = useState<string | null>(null);
   const [reply, setReply] = useState<string | null>(null);
@@ -52,6 +64,17 @@ export function useBotChannels(environmentId: EnvironmentId, hostId: string, new
       input: { hostId, request: { operation: "agent.list" } },
     }),
   );
+  const presentationQuery = useEnvironmentQuery(
+    openbot.readFromHost({
+      environmentId,
+      input: { hostId, request: { operation: "channel.presentation" } },
+    }),
+  );
+  const decodedPresentation = decodePresentations(presentationQuery.data);
+  const presentation =
+    decodedPresentation._tag === "Some"
+      ? decodedPresentation.value.find((item) => item.channelId === selected)
+      : undefined;
   const latest = channelPage(pageQuery.data);
   const canSettings = useAtomValue(openbot.adminToHost.permissionAtom(environmentId));
   const canManage = useAtomValue(
@@ -83,6 +106,7 @@ export function useBotChannels(environmentId: EnvironmentId, hostId: string, new
   const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
   const read = useAtomQueryRunner(openbot.readFromHost, { reportFailure: false, refresh: true });
   const refresh = () => {
+    presentationQuery.refresh();
     listQuery.refresh();
     pageQuery.refresh();
     agentsQuery.refresh();
@@ -124,7 +148,26 @@ export function useBotChannels(environmentId: EnvironmentId, hostId: string, new
     setBusy(false);
     lock.current = false;
   };
-  const olderCursor = pages.length ? pages.at(-1)!.olderCursor : (latest?.olderCursor ?? null);
+  const markReadThrough = async (throughSequence: number) => {
+    if (!selected) return false;
+    const request = channelAdminRequest(
+      { operation: "channel.markRead", channelId: selected, throughSequence },
+      newId(),
+    );
+    if (!request) return false;
+    const result = await settlePromise(() => admin({ environmentId, input: { hostId, request } }));
+    if (result._tag === "Failure" || result.value._tag === "Failure") {
+      setError("Could not update the read status. Use Mark read to retry.");
+      return false;
+    }
+    listQuery.refresh();
+    pageQuery.refresh();
+    presentationQuery.refresh();
+    return true;
+  };
+  const olderCursor = pages.length
+    ? pages.at(-1)!.olderCursor
+    : ((around ?? latest)?.olderCursor ?? null);
   const older = async () => {
     if (lock.current || !selected || olderCursor === null) return;
     lock.current = true;
@@ -149,6 +192,7 @@ export function useBotChannels(environmentId: EnvironmentId, hostId: string, new
   };
   return {
     selected,
+    presentation,
     edit,
     setEdit,
     text,
@@ -160,16 +204,59 @@ export function useBotChannels(environmentId: EnvironmentId, hostId: string, new
     channels: channelList(listQuery.data),
     agents: workflowAgents(agentsQuery.data),
     channel: latest?.channel ?? null,
-    messages: selected ? channelMessages(selected, [...pages, ...(latest ? [latest] : [])]) : [],
+    messages: selected
+      ? channelMessages(selected, [...pages, ...((around ?? latest) ? [around ?? latest!] : [])])
+      : [],
     tasks: latest?.tasks ?? [],
     throughSequence: latest?.throughSequence ?? 0,
     olderCursor,
     older,
+    hasNewer: around !== null,
+    showLatest: () => {
+      setAround(null);
+      setPages([]);
+    },
+    revealUnread: async () => {
+      if (lock.current || !selected || presentation?.firstUnreadSequence == null) return false;
+      lock.current = true;
+      setBusy(true);
+      try {
+        const result = await read({
+          environmentId,
+          input: {
+            hostId,
+            request: {
+              operation: "channel.read",
+              channelId: selected,
+              beforeSequence: presentation.firstUnreadSequence + 100,
+            },
+          },
+        });
+        if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+        const value = channelPage(result.value);
+        if (
+          !value ||
+          value.channel.id !== selected ||
+          !value.messages.some((item) => item.id === presentation.firstUnreadMessageId)
+        )
+          return false;
+        setPages([]);
+        setAround(value);
+        return true;
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Could not find the unread message.");
+        return false;
+      } finally {
+        lock.current = false;
+        setBusy(false);
+      }
+    },
     canManage,
     canSettings,
     canOperate,
     busy,
     act,
+    markReadThrough,
     notice,
     loading: listQuery.isPending || pageQuery.isPending,
     error: error ?? listQuery.error ?? pageQuery.error,
@@ -180,6 +267,7 @@ export function useBotChannels(environmentId: EnvironmentId, hostId: string, new
     },
     select: (channelId: string) => {
       setSelected(channelId);
+      setAround(null);
       setPages([]);
       setEdit(null);
       setText("");

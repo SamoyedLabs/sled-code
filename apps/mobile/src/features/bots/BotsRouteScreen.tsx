@@ -1,3 +1,13 @@
+import { useBotReducedMotion } from "./botFeedback";
+import { OpenBotTypography } from "./upstream/OpenBotTypography";
+import { BotVaultEntry } from "../settings/BotVault";
+import { BotServerStorage } from "../settings/BotServerStorage";
+import { BotHostAgentDefaults, BotBackgroundProcesses, BotHostLearning } from "../settings/BotHostAgentDefaults";
+import { BotHostTimezone } from "../settings/BotHostTimezone";
+import { BotInstanceTransfer } from "../settings/BotInstanceTransfer";
+import { BotImportEnvironment } from "../settings/BotImportEnvironment";
+import { BotRoutineNotification } from "./BotRoutineNotification";
+import { BotSettingsEnvironment } from "../settings/BotSettingsEnvironment";
 import { DataEnvironment } from "../settings/DataEnvironment";
 import { BotEvents } from "./BotEvents";
 import { BotRoutineFlows } from "./BotRoutineFlows";
@@ -20,9 +30,27 @@ import { SledToolsConnection } from "../settings/SledToolsConnection";
 import { BotConfiguration } from "../settings/BotConfiguration";
 import * as Dialog from "../../components/ui/Dialog";
 import { useAtomValue } from "@effect/atom-react";
-import { StackActions, useNavigation, type StaticScreenProps } from "@react-navigation/native";
-import { useRef, useState } from "react";
-import { View } from "react-native";
+import {
+  StackActions,
+  useIsFocused,
+  useNavigation,
+  type StaticScreenProps,
+} from "@react-navigation/native";
+import { useLayoutEffect, useRef, useState } from "react";
+import { Keyboard, Platform, View, useWindowDimensions } from "react-native";
+import Animated, {
+  ReduceMotion,
+  cancelAnimation,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
+import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
+import { requireOptionalNativeModule } from "expo";
+import { isCommittedRightSwipe } from "./bots-edge-gesture";
+import { useReturnToCode } from "./useReturnToCode";
+import { scheduleOnRN } from "react-native-worklets";
+import { BotNativeWorkspace, type BotSelection } from "./BotNativeWorkspace";
 import * as Crypto from "expo-crypto";
 import type { EnvironmentId, OpenbotAdminRequest, OpenbotWriteRequest } from "@t3tools/contracts";
 import {
@@ -46,6 +74,7 @@ import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { openbot } from "../../state/openbot";
 import { SettingsScreen } from "../settings/components/SettingsScreen";
+import { SettingsRow } from "../settings/components/SettingsRow";
 import { SettingsSection } from "../settings/components/SettingsSection";
 import {
   AndroidSettingsEnvironmentFilter,
@@ -56,46 +85,276 @@ import {
   type SettingsTarget,
 } from "../settings/settings-environment-filter";
 
-export function SettingsBotsRouteScreen() {
-  return <BotsRouteScreen />;
+const botServerSettings = {
+  general: { label: "General", icon: "gearshape", description: "Hosting and connections" },
+  ai: { label: "AI", icon: "sparkles", description: "Providers and Sled tools" },
+  data: { label: "Data", icon: "internaldrive", description: "Import and transfer agents" },
+  maintenance: { label: "Maintenance", icon: "hammer", description: "Engine releases and updates" },
+} as const;
+
+type BotSettingsCategory = keyof typeof botServerSettings;
+
+export function SettingsBotsRouteScreen({
+  route,
+}: StaticScreenProps<
+  { environmentId: EnvironmentId; category?: BotSettingsCategory } | undefined
+>) {
+  if (!route.params) return <BotsRouteScreen />;
+  return (
+    <OpenBotTypography>
+      <BotsRouteScreen
+        environmentId={route.params.environmentId}
+        category={route.params.category}
+      />
+    </OpenBotTypography>
+  );
 }
 
-export function BotWorkspaceRouteScreen() {
-  return <BotsRouteScreen workspace />;
+function LeftBotsPage({
+  openRoster,
+  openingVelocity,
+  quickAction,
+  showHiddenChats,
+  initialSelection,
+}: {
+  openRoster: boolean;
+  openingVelocity: number;
+  quickAction?: "search";
+  showHiddenChats?: boolean;
+  initialSelection?: BotSelection;
+}) {
+  const { width } = useWindowDimensions();
+  const focused = useIsFocused();
+  const returnToCode = useReturnToCode();
+  const reduceMotion = useBotReducedMotion();
+  const position = useSharedValue(reduceMotion ? 0 : -1);
+  const started = useRef(false);
+  const leaving = useRef(false);
+  const closing = useSharedValue(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [directChatOpen, setDirectChatOpen] = useState(false);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Hide the native Expo Tools overlay while it would cover the Bots menu.
+  useLayoutEffect(() => {
+    if (!__DEV__) return;
+    const devMenu = requireOptionalNativeModule<{ setToolsButtonVisible(visible: boolean): void }>(
+      "ExpoDevMenu",
+    );
+    devMenu?.setToolsButtonVisible(false);
+    return () => devMenu?.setToolsButtonVisible(true);
+  }, []);
+  const dragStart = useSharedValue(0);
+  const close = (velocity = 0) => {
+    if (leaving.current) return;
+    leaving.current = true;
+    closing.set(true);
+    Keyboard.dismiss();
+    if (reduceMotion) {
+      returnToCode();
+      return;
+    }
+    position.set(
+      withSpring(
+        -1,
+        {
+          duration: 300,
+          dampingRatio: 1,
+          overshootClamping: true,
+          velocity: Math.max(-3, Math.min(0, velocity / width)),
+          reduceMotion: ReduceMotion.System,
+        },
+        (finished) => {
+          if (finished) scheduleOnRN(returnToCode);
+        },
+      ),
+    );
+  };
+  const gesture = usePanGesture({
+    enabled: focused && !drawerOpen && !directChatOpen,
+    activeOffsetX: -16,
+    failOffsetX: 8,
+    failOffsetY: [-20, 20],
+    maxPointers: 1,
+    onActivate: () => {
+      "worklet";
+      if (closing.get()) return;
+      cancelAnimation(position);
+      dragStart.set(position.get());
+    },
+    onUpdate: (event) => {
+      "worklet";
+      if (!reduceMotion && !closing.get())
+        position.set(Math.min(0, Math.max(-1, dragStart.get() + event.translationX / width)));
+    },
+    onDeactivate: (event) => {
+      "worklet";
+      if (closing.get()) return;
+      if (
+        !event.canceled &&
+        isCommittedRightSwipe(-event.translationX, event.translationY, -event.velocityX)
+      ) {
+        scheduleOnRN(close, event.velocityX);
+      } else {
+        position.set(
+          withSpring(0, {
+            duration: 300,
+            dampingRatio: 1,
+            overshootClamping: true,
+            reduceMotion: ReduceMotion.System,
+          }),
+        );
+      }
+    },
+  });
+  const style = useAnimatedStyle(() => ({ transform: [{ translateX: width * position.get() }] }));
+  return (
+    <GestureDetector gesture={gesture}>
+      <Animated.View
+        accessibilityViewIsModal
+        onLayout={() => {
+          if (started.current) return;
+          started.current = true;
+          // Start after the native modal has laid out. Fabric can mount its stack
+          // while the presentation is still offscreen.
+          requestAnimationFrame(() => {
+            if (leaving.current) return;
+            position.set(
+              withSpring(0, {
+                duration: 300,
+                dampingRatio: 1,
+                overshootClamping: true,
+                velocity: Math.max(0, Math.min(3, openingVelocity / width)),
+                reduceMotion: ReduceMotion.System,
+              }),
+            );
+          });
+        }}
+        style={[{ flex: 1 }, style]}
+      >
+        <BotNativeWorkspace
+          openRoster={openRoster}
+          initialSelection={initialSelection}
+          onReturnToCode={() => close()}
+          drawerOpen={drawerOpen}
+          onDrawerOpenChange={setDrawerOpen}
+          onDirectChatOpenChange={setDirectChatOpen}
+          quickAction={quickAction}
+          showHiddenChats={showHiddenChats === true}
+        />
+      </Animated.View>
+    </GestureDetector>
+  );
 }
 
-function BotsRouteScreen({ workspace = false }: { workspace?: boolean }) {
+export function BotChatWorkspace({ selection }: { selection: BotSelection }) {
+  return (
+    <OpenBotTypography>
+      <LeftBotsPage openRoster={false} openingVelocity={0} initialSelection={selection} />
+    </OpenBotTypography>
+  );
+}
+
+export function BotWorkspaceRouteScreen({
+  route,
+}: StaticScreenProps<
+  | { openRoster?: boolean; openingVelocity?: number; quickAction?: "search"; showHiddenChats?: boolean }
+  | undefined
+>) {
+  if (Platform.OS !== "ios") return <BotsRouteScreen workspace />;
+  const candidate = route.params?.quickAction;
+  const quickAction = candidate === "search" ? candidate : undefined;
+  return (
+    <OpenBotTypography>
+      <LeftBotsPage
+        openRoster={route.params?.openRoster === true || quickAction !== undefined}
+        openingVelocity={route.params?.openingVelocity ?? 0}
+        quickAction={quickAction}
+        showHiddenChats={route.params?.showHiddenChats === true}
+      />
+    </OpenBotTypography>
+  );
+}
+
+function BotsRouteScreen({
+  workspace = false,
+  environmentId,
+  category,
+}: {
+  workspace?: boolean;
+  environmentId?: EnvironmentId | undefined;
+  category?: BotSettingsCategory | undefined;
+}) {
   const navigation = useNavigation();
   const { selectedTargets, availableTargets } = useSettingsEnvironmentFilter();
+  const targets =
+    environmentId === undefined
+      ? selectedTargets
+      : availableTargets.filter((target) => target.environmentId === environmentId);
+  const categoryLabel =
+    category && Object.hasOwn(botServerSettings, category)
+      ? botServerSettings[category].label
+      : undefined;
+  const scopedHome = environmentId !== undefined && categoryLabel === undefined;
   return (
     <>
-      <SettingsEnvironmentFilterHeader />
-      <SettingsScreen title="Bots" trailing={<AndroidSettingsEnvironmentFilter />}>
+      {!environmentId && <SettingsEnvironmentFilterHeader />}
+      <SettingsScreen
+        title={categoryLabel ?? (environmentId ? "Server settings" : "Bots")}
+        trailing={environmentId ? undefined : <AndroidSettingsEnvironmentFilter />}
+      >
         <ScreenScrollView
           keyboardShouldPersistTaps="handled"
           contentInsetAdjustmentBehavior="automatic"
           contentContainerClassName="gap-5 px-5 py-4"
         >
-          <Text className="text-foreground-muted">
-            Persistent teammates for ongoing responsibilities, tasks, and coding work.
-          </Text>
-          <Button
-            label={workspace ? "Engine and provider settings" : "Open bot workspace"}
-            tone="secondary"
-            onPress={() => navigation.navigate(workspace ? "SettingsBots" : "Bots")}
-          />
-          {selectedTargets.map((environment) => (
-            <BotEnvironment
-              key={environment.environmentId}
-              environment={environment}
-              workspace={workspace}
-            />
-          ))}
-          {selectedTargets.length === 0 && (
+          {environmentId === undefined && (
+            <>
+              <Text className="text-foreground-muted">
+                Persistent teammates for ongoing responsibilities, tasks, and coding work.
+              </Text>
+              <Button
+                label={workspace ? "Bot hosting and providers" : "Open bot workspace"}
+                tone="secondary"
+                onPress={() => navigation.navigate(workspace ? "SettingsBots" : "Bots")}
+              />
+            </>
+          )}
+          {scopedHome && targets.length > 0 && (
+            <SettingsSection title={targets[0]?.label}>
+              {(Object.keys(botServerSettings) as BotSettingsCategory[]).map((key) => {
+                const item = botServerSettings[key];
+                return (
+                  <SettingsRow
+                    key={key}
+                    icon={item.icon}
+                    label={item.label}
+                    value={item.description}
+                    valuePosition="below"
+                    onPress={() =>
+                      navigation.dispatch(
+                        StackActions.push("SettingsBots", { environmentId, category: key }),
+                      )
+                    }
+                  />
+                );
+              })}
+            </SettingsSection>
+          )}
+          {!scopedHome &&
+            targets.map((environment) => (
+              <BotEnvironment
+                key={environment.environmentId}
+                environment={environment}
+                workspace={workspace}
+                category={category}
+              />
+            ))}
+          {targets.length === 0 && (
             <Text>
-              {availableTargets.length === 0
-                ? "Connect an environment to manage its bots."
-                : "No environments match these filters."}
+              {environmentId
+                ? "Reconnect this computer to manage its bots."
+                : availableTargets.length === 0
+                  ? "Connect an environment to manage its bots."
+                  : "No environments match these filters."}
             </Text>
           )}
         </ScreenScrollView>
@@ -107,9 +366,11 @@ function BotsRouteScreen({ workspace = false }: { workspace?: boolean }) {
 function BotEnvironment({
   environment,
   workspace = false,
+  category,
 }: {
   environment: SettingsTarget;
   workspace?: boolean;
+  category?: BotSettingsCategory | undefined;
 }) {
   const [view, setView] = useState("bots");
   const environmentId = environment.environmentId;
@@ -147,84 +408,137 @@ function BotEnvironment({
     agents.refresh();
   };
   const state = host.data?.state;
+  const showHosting = category === undefined || category === "general";
   return (
     <SettingsSection title={environment.label}>
       <View className="gap-3 p-4">
-        <Text accessibilityLiveRegion="polite">
-          {host.isPending
-            ? "Checking bot engine…"
-            : state === "ready"
-              ? "Bot engine online"
-              : state === "disabled"
-                ? "Bot engine is not configured on this environment"
-                : state === "starting"
-                  ? "Bot engine is starting…"
-                  : state === "failed"
-                    ? `Bot engine failed: ${host.data?.reason ?? "unknown"}`
-                    : "Bot engine stopped"}
-        </Text>
-        {(error || host.error || agents.error) && (
-          <Text accessibilityRole="alert" className="text-danger">
-            {error ?? host.error ?? agents.error}
-          </Text>
+        {showHosting && (
+          <>
+            {!workspace && (
+              <Text className="text-foreground-muted">
+                This iPhone controls bot hosting on {environment.label}. Bots run on that computer,
+                not on your iPhone. Hosting is optional for each computer and is separate from
+                persistent remote-desktop streaming.
+              </Text>
+            )}
+            <Text accessibilityLiveRegion="polite">
+              {host.isPending
+                ? "Checking bot hosting…"
+                : state === "ready"
+                  ? "Bot hosting is running"
+                  : state === "disabled"
+                    ? "Bot hosting is not configured on this computer"
+                    : state === "starting"
+                      ? "Enabling bot hosting…"
+                      : state === "failed"
+                        ? `Bot hosting failed: ${host.data?.reason ?? "unknown"}`
+                        : "Bot hosting is off"}
+            </Text>
+            {(error || host.error || agents.error) && (
+              <Text accessibilityRole="alert" className="text-danger">
+                {error ?? host.error ?? agents.error}
+              </Text>
+            )}
+            <View className="flex-row flex-wrap gap-2">
+              <Button
+                label="Refresh"
+                size="compact"
+                disabled={engineBusy !== null}
+                onPress={() => {
+                  host.refresh();
+                  agents.refresh();
+                }}
+              />
+              {!workspace && state && state !== "disabled" && (
+                <Button
+                  label={
+                    engineBusy === "start"
+                      ? "Enabling…"
+                      : host.data?.desiredRunning && state !== "ready"
+                        ? "Retry bot hosting"
+                        : "Enable bot hosting"
+                  }
+                  size="compact"
+                  disabled={
+                    !canManage ||
+                    engineBusy !== null ||
+                    state === "starting" ||
+                    host.data?.recovery?.state === "switching" ||
+                    (state === "ready" && host.data?.desiredRunning !== false)
+                  }
+                  onPress={() => void act("start")}
+                />
+              )}
+              {!workspace && state && (state !== "disabled" || host.data?.desiredRunning) && (
+                <Button
+                  label={engineBusy === "stop" ? "Disabling…" : "Disable bot hosting"}
+                  size="compact"
+                  disabled={!canManage || engineBusy === "stop"}
+                  onPress={() => void act("stop")}
+                />
+              )}
+            </View>
+            {host.data && (
+              <Text textRole="footnote" className="text-foreground-muted">
+                {botHostRecoveryDescription(host.data)}
+              </Text>
+            )}
+            {!canManage && state !== "disabled" && (
+              <Text textRole="footnote" className="text-foreground-muted">
+                Settings permission is required to enable or disable bot hosting on{" "}
+                {environment.label}.
+              </Text>
+            )}
+            {!workspace && (
+              <>
+                <Button
+                  label="Connect to another computer"
+                  tone="secondary"
+                  onPress={() => navigation.navigate("Connections")}
+                />
+              </>
+            )}
+          </>
         )}
-        <View className="flex-row flex-wrap gap-2">
-          <Button
-            label="Refresh"
-            size="compact"
-            disabled={engineBusy !== null}
-            onPress={() => {
-              host.refresh();
-              agents.refresh();
-            }}
-          />
-          {!workspace && state && state !== "disabled" && (
-            <Button
-              label={
-                engineBusy === "start"
-                  ? "Starting…"
-                  : state === "ready"
-                    ? "Enable automatic startup"
-                    : host.data?.desiredRunning
-                      ? "Retry engine"
-                      : "Start engine"
-              }
-              size="compact"
-              disabled={
-                !canManage ||
-                engineBusy !== null ||
-                state === "starting" ||
-                host.data?.recovery?.state === "switching" ||
-                (state === "ready" && host.data?.desiredRunning !== false)
-              }
-              onPress={() => void act("start")}
-            />
-          )}
-          {!workspace && state && (state !== "disabled" || host.data?.desiredRunning) && (
-            <Button
-              label={engineBusy === "stop" ? "Stopping…" : "Stop engine"}
-              size="compact"
-              disabled={!canManage || engineBusy === "stop"}
-              onPress={() => void act("stop")}
-            />
-          )}
-        </View>
-        {host.data && (
-          <Text textRole="footnote" className="text-foreground-muted">
-            {botHostRecoveryDescription(host.data)}
-          </Text>
+        {!workspace && showHosting && state === "ready" && host.data?.hostId && (
+          <BotHostTimezone key={host.data.hostId} environmentId={environmentId} hostId={host.data.hostId} />
         )}
-        {!canManage && state !== "disabled" && (
-          <Text textRole="footnote" className="text-foreground-muted">
-            Settings permission is required to start or stop this engine.
-          </Text>
-        )}
-        {!workspace && (
+        {!workspace && (category === undefined || category === "maintenance") && (
           <>
             <BotRuntimeControls environmentId={environmentId} />
             <OpenbotMaintenance environmentId={environmentId} />
-            {state === "ready" && <SledToolsConnection environmentId={environment.environmentId} />}
           </>
+        )}
+        {!workspace &&
+          (category === undefined || category === "data") &&
+          state === "ready" &&
+          host.data?.hostId && (
+            <View key={`${environmentId}:${host.data.hostId}`} className="gap-4">
+              <BotServerStorage
+                environmentId={environmentId}
+                hostId={host.data.hostId}
+                name={environment.label}
+              />
+              <BotBackgroundProcesses environmentId={environmentId} hostId={host.data.hostId} />
+              <BotInstanceTransfer environmentId={environmentId} hostId={host.data.hostId} />
+              <BotVaultEntry environmentId={environmentId} hostId={host.data.hostId} />
+              <BotImportEnvironment
+                environmentId={environmentId}
+                hostId={host.data.hostId}
+                destination={environment.label}
+              />
+            </View>
+          )}
+        {!workspace && (category === undefined || category === "ai") && state === "ready" && (
+          <SledToolsConnection environmentId={environmentId} />
+        )}
+        {(category === "ai" || category === "data") && state !== "ready" && (
+          <Text accessibilityRole={host.error ? "alert" : "status"}>
+            {host.error ??
+              (host.isPending
+                ? "Checking bot hosting…"
+                : "Enable bot hosting in General to continue.")}
+          </Text>
         )}
         {workspace && (
           <View className="flex-row flex-wrap gap-2">
@@ -285,19 +599,26 @@ function BotEnvironment({
             />
           </>
         )}
-        {!workspace && state === "ready" && host.data?.hostId && (
-          <Button
-            label="Provider setup"
-            tone="secondary"
-            onPress={() => {
-              if (host.data?.hostId)
-                navigation.navigate("SettingsBotProviders", {
-                  environmentId,
-                  hostId: host.data.hostId,
-                });
-            }}
-          />
-        )}
+        {!workspace &&
+          (category === undefined || category === "ai") &&
+          state === "ready" &&
+          host.data?.hostId && (
+            <>
+              <BotHostAgentDefaults environmentId={environmentId} hostId={host.data.hostId} />
+              <BotHostLearning environmentId={environmentId} hostId={host.data.hostId} />
+              <Button
+                label="Provider setup"
+                tone="secondary"
+                onPress={() => {
+                  if (host.data?.hostId)
+                    navigation.navigate("SettingsBotProviders", {
+                      environmentId,
+                      hostId: host.data.hostId,
+                    });
+                }}
+              />
+            </>
+          )}
         {workspace && view === "bots" && state === "ready" && (
           <>
             <Button
@@ -490,16 +811,22 @@ export function SettingsBotDetailRouteScreen({
     <BotDetail key={`${route.params.environmentId}:${route.params.agentId}`} {...route.params} />
   );
 }
-function BotDetail({
+export function BotDetail({
   environmentId,
   agentId,
   name,
   hostId,
+  initialTaskId,
+  initialRoutineId,
+  initialRoutineRunId,
 }: {
   environmentId: EnvironmentId;
   agentId: string;
   name: string;
   hostId?: string;
+  initialTaskId?: string;
+  initialRoutineId?: string;
+  initialRoutineRunId?: string;
 }) {
   const pendingMessage = useRef<{ text: string; id: string } | null>(null);
   const messageIdFor = (value: string) => {
@@ -508,9 +835,11 @@ function BotDetail({
     return pendingMessage.current.id;
   };
   const navigation = useNavigation();
-  const [selectedTask, setSelectedTask] = useState<string | null>(null);
+  const [selectedTask, setSelectedTask] = useState<string | null>(initialTaskId ?? null);
   const [editingMemory, setEditingMemory] = useState<string | null>(null);
-  const [tab, setTab] = useState<BotTab>("conversation");
+  const [tab, setTab] = useState<BotTab>(
+    initialTaskId ? "task" : initialRoutineId ? "routine" : "conversation",
+  );
   const [configurationOpen, setConfigurationOpen] = useState(false);
   const [text, setText] = useState("");
   const [inputRevision, setInputRevision] = useState(0);
@@ -728,6 +1057,15 @@ function BotDetail({
             />
           </View>
         ))}
+        {initialRoutineId && hostId && (
+          <BotRoutineNotification
+            environmentId={environmentId}
+            hostId={hostId}
+            agentId={agentId}
+            routineId={initialRoutineId}
+            {...(initialRoutineRunId === undefined ? {} : { runId: initialRoutineRunId })}
+          />
+        )}
         {routines?.map((routine) => (
           <View key={routine.id} className="gap-2 rounded-xl bg-grouped-card p-3">
             <Text>
@@ -779,6 +1117,14 @@ function BotDetail({
         />
         {configurationOpen && (
           <View className="gap-4">
+            {hostId && (
+              <BotSettingsEnvironment
+                key={`${environmentId}:${hostId}:${agentId}`}
+                environmentId={environmentId}
+                hostId={hostId}
+                agentId={agentId}
+              />
+            )}
             {hostId && (
               <BotProviderSettings
                 environmentId={environmentId}

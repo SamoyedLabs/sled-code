@@ -74,6 +74,12 @@ export function SettingsScopeSentence() {
     environments,
     onChange: scope.selectScope,
   };
+  if (pathname === "/settings/bots")
+    return (
+      <p className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        Computer <EnvironmentScopeMenu {...props} />
+      </p>
+    );
   return (
     <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 px-3 text-sm text-muted-foreground sm:px-4">
       <span className="flex min-w-0 items-center gap-1.5">

@@ -1,0 +1,534 @@
+--- a/src/backend/agent-store.ts
++++ b/src/backend/agent-store.ts
+@@ -365,7 +365,19 @@
+       yield* storedIO(() => mkdir(record.workspacePath, { recursive: true, mode: 0o700 }));
+       this.#state.agents.unshift(record);
+       try {
+-        this.#persist("agent.created");
++        const adoptionTable = profileOperationId && this.#database.connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'agent_adoption_operations'").get();
++        const adoption = adoptionTable ? this.#database.connection.prepare("SELECT state FROM agent_adoption_operations WHERE internalId = ?").get(profileOperationId!) : undefined;
++        if (adoption !== undefined && profileOperationId) {
++          if (!isRecord(adoption) || adoption.state !== "pending") throw new Error("Adoption producer is no longer pending.");
++          const created = this.#database.dispatch(`agent-adoption-created:${profileOperationId}`, [{ aggregateType: "agent-adoptions", aggregateId: profileOperationId, eventType: "agent-adoption.created", payload: { agentId: record.id } }], () => {
++            // The roster and its original adoption identity commit together. No later service wrapper
++            // guesses which agent a response loss created, and rollback cannot strand an identity.
++            this.#persist("agent.created");
++            this.#database.connection.prepare("UPDATE agent_adoption_operations SET agentId = ?, name = ? WHERE internalId = ? AND state = 'pending'").run(record.id, record.name, profileOperationId);
++            return { agentId: record.id };
++          });
++          if (created.agentId !== record.id) throw new Error("Adoption producer already created another agent.");
++        } else this.#persist("agent.created");
+       } catch (error) {
+         this.#state.agents = this.#state.agents.filter((candidate) => candidate.id !== record.id);
+         yield* storedIO(() => rm(record.workspacePath, { recursive: true, force: true }));
+--- a/src/backend/agent-service.ts
++++ b/src/backend/agent-service.ts
+@@ -2567,9 +2567,10 @@
+   readonly createAgentProfile = Effect.fn("AgentService.createAgentProfile")(function* (
+     this: AgentService,
+     input: Omit<CreateAgentInput, "initialMessage"> & { title?: string },
++    profileOperationId?: string,
+   ) {
+     let agent = yield* this.#store
+-      .createAgent(input)
++      .createAgent(input, profileOperationId)
+       .pipe(
+         Effect.mapError(
+           (failure) => new AgentLifecycleFailed({ operation: "create agent profile", cause: failure.cause }),
+--- a/src/backend/agent/profile-creation-recovery.ts
++++ b/src/backend/agent/profile-creation-recovery.ts
+@@ -3,6 +3,7 @@
+ import { decodeSaveAgentProfileResult } from "@openbot/contracts/ipc";
+ import { isGeneratedAgentId, isUuidV4 } from "@openbot/contracts/validation";
+ import { Effect } from "effect";
++import { isDynamicRecord } from "@openbot/contracts/runtime-values";
+ import type { OpenBotDatabase } from "../openbot-database";
+ import { StoredStateFailure, storedIO, storedSync } from "../stored-state-effects";
+ 
+@@ -46,8 +47,30 @@
+       )
+         continue;
+       const receipt = yield* storedSync(() => database.commandResult(`agent-profile:${operationId}`));
++      const adoption = yield* storedSync(() => database.commandResult(`agent-adoption:${operationId}`));
+       const exists = yield* storedSync(() => database.listAgents().some((agent) => agent.id === agentId));
+-      if (receipt !== undefined && exists) {
++      if (adoption !== undefined && exists) {
++        if (!isDynamicRecord(adoption) || adoption.kind !== "agent-adoption-v1" || !isDynamicRecord(adoption.agent) || adoption.agent.id !== agentId)
++          return yield* new StoredStateFailure({ cause: new Error("Adoption receipt does not match its agent.") });
++      } else if (adoption === undefined && exists && (yield* storedSync(() => {
++        // An adoption operation owns the marker before the real agent is created. Its agent may
++        // already have useful work by the time the process stops: preserve it and expose the exact
++        // partial destination for reconciliation instead of treating uncertainty as permission to erase.
++        const journalExists = database.connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'agent_adoption_operations'").get();
++        if (journalExists === undefined) return false;
++        const operation = database.connection.prepare("SELECT memberId, operationId FROM agent_adoption_operations WHERE internalId = ?").get(operationId);
++        if (!isDynamicRecord(operation) || typeof operation.memberId !== "string" || typeof operation.operationId !== "string") return false;
++        const agent = database.listAgents().find(value => value.id === agentId);
++        if (!agent) return false;
++        database.dispatch(`agent-adoption-recovery:${operationId}`, [{ aggregateType: "agent-adoptions", aggregateId: operationId, eventType: "agent-adoption.interrupted", payload: { agentId } }], () => {
++          database.connection.prepare("UPDATE agent_adoption_operations SET state = 'interrupted', agentId = ?, name = ? WHERE internalId = ?").run(agent.id, agent.name, operationId);
++          return { agentId };
++        });
++        return true;
++      }))) {
++        // The durable operation now names the actual retained producer. A retry reads this status;
++        // it does not create another agent or claim the partially configured install completed.
++      } else if (receipt !== undefined && exists) {
+         if ((yield* storedSync(() => decodeSaveAgentProfileResult(receipt))).agent.id !== agentId)
+           return yield* new StoredStateFailure({
+             cause: new Error("Profile creation receipt does not match its agent."),
+--- a/src/main/agent-template-service.ts
++++ b/src/main/agent-template-service.ts
+@@ -107,7 +107,7 @@
+     description: string;
+     avatarSeed: string;
+     avatarHue: AgentTemplateSnapshot["avatarHue"];
+-  }): Effect.Effect<AgentSummary, AgentLifecycleFailed>;
++  }, profileOperationId?: string): Effect.Effect<AgentSummary, AgentLifecycleFailed>;
+   setAvatar(agentId: string, image: AvatarImageInput | null): Effect.Effect<AgentSummary, AgentLifecycleFailed>;
+   createRoutine(
+     input: {
+@@ -187,10 +187,6 @@
+     });
+   }
+ 
+-  publicationStatus(agentId: string): Effect.Effect<AgentTemplatePublication | null, AgentTemplateFailure> {
+-    return this.owned(agentId).pipe(Effect.map((owned) => owned ? this.publication(owned) : null));
+-  }
+-
+   publish({ agentId, card }: PublishAgentTemplateInput): Effect.Effect<AgentTemplatePublication, AgentTemplateFailure> {
+     return Effect.gen({ self: this }, function* (): Effect.fn.Return<AgentTemplatePublication, AgentTemplateFailure> {
+       if (card && !isAgentTemplateCardPng(card))
+@@ -247,7 +243,7 @@
+     });
+   }
+ 
+-  install(input: InstallAgentTemplateInput): Effect.Effect<InstallAgentTemplateResult, AgentTemplateFailure> {
++  install(input: InstallAgentTemplateInput, profileOperationId?: string): Effect.Effect<InstallAgentTemplateResult, AgentTemplateFailure> {
+     return Effect.gen({ self: this }, function* (): Effect.fn.Return<InstallAgentTemplateResult, AgentTemplateFailure> {
+       if (!validTimezone(input.timezone))
+         return yield* new AgentTemplateFailure({ cause: new Error(sourceText("error.marketplace.timezoneInvalid")) });
+@@ -294,7 +290,7 @@
+           description: detail.description,
+           avatarSeed: detail.avatarSeed,
+           avatarHue: detail.avatarHue,
+-        })
++        }, profileOperationId)
+         .pipe(toAgentTemplateFailure);
+       const published: Array<{ id: string; revision: number }> = [];
+       {
+@@ -391,6 +387,10 @@
+     });
+   }
+ 
++  publicationStatus(agentId: string): Effect.Effect<AgentTemplatePublication | null, AgentTemplateFailure> {
++    return this.owned(agentId).pipe(Effect.map((owned) => owned ? this.publication(owned) : null));
++  }
++
+   owned(agentId: string): Effect.Effect<OwnedTemplate | null, AgentTemplateFailure> {
+     return Effect.gen({ self: this }, function* (): Effect.fn.Return<OwnedTemplate | null, AgentTemplateFailure> {
+       const mine = yield* this.auth
+--- a/src/main/agent-marketplace-service.ts
++++ b/src/main/agent-marketplace-service.ts
+@@ -57,7 +57,7 @@
+     description: string;
+     avatarSeed: string;
+     avatarHue: MarketplaceAgentDetail["avatarHue"];
+-  }): Effect.Effect<AgentSummary, AgentLifecycleFailed>;
++  }, profileOperationId?: string): Effect.Effect<AgentSummary, AgentLifecycleFailed>;
+   updateAgent(input: {
+     agentId: string;
+     name: string;
+@@ -198,7 +198,7 @@
+     });
+   }
+ 
+-  install(input: InstallMarketplaceAgentInput): Effect.Effect<InstallMarketplaceAgentResult, AgentMarketplaceFailure> {
++  install(input: InstallMarketplaceAgentInput, profileOperationId?: string, expectedVersionId?: string): Effect.Effect<InstallMarketplaceAgentResult, AgentMarketplaceFailure> {
+     return Effect.gen({ self: this }, function* (): Effect.fn.Return<
+       InstallMarketplaceAgentResult,
+       AgentMarketplaceFailure
+@@ -208,6 +208,8 @@
+           cause: new Error(sourceText("error.marketplace.timezoneInvalid")),
+         });
+       const detail = yield* this.getListing(input.listingId);
++      if (expectedVersionId !== undefined && detail.versionId !== expectedVersionId)
++        return yield* new AgentMarketplaceFailure({ cause: new Error("The reviewed listing version changed.") });
+       const existing = input.agentId
+         ? this.agents.listAgents().find((candidate) => candidate.id === input.agentId)
+         : undefined;
+@@ -243,7 +245,7 @@
+             description: detail.description,
+             avatarSeed: detail.avatarSeed,
+             avatarHue: detail.avatarHue,
+-          })
++          }, profileOperationId)
+           .pipe(toAgentMarketplaceFailure));
+       const createdRoutineIds: string[] = [];
+       {
+--- /dev/null
++++ b/src/main/agent-adoption-service.ts
+@@ -0,0 +1,124 @@
++// Sled maintained extension for Openbot 0.60.0. Upstream license and notices apply.
++import { createHash, randomUUID } from "node:crypto";
++import { isDynamicRecord } from "@openbot/contracts/runtime-values";
++import { isUuidV4 } from "@openbot/contracts/validation";
++import { Effect, Result, Schema, Semaphore } from "effect";
++import type { OpenBotDatabase } from "../backend/openbot-database";
++import type { AgentTemplateService } from "./agent-template-service";
++import type { AgentMarketplaceService } from "./agent-marketplace-service";
++
++export interface AgentAdoptionInput {
++  operationId: string;
++  kind: "template" | "marketplace";
++  sourceId: string;
++  timezone: string;
++  expectedRevision: string;
++  agentId?: string;
++}
++export interface AgentAdoptionStatus {
++  operationId: string;
++  kind: "template" | "marketplace";
++  sourceId: string;
++  state: "pending" | "complete" | "failed" | "interrupted";
++  agentId: string | null;
++  name: string | null;
++}
++export class AgentAdoptionFailure extends Schema.TaggedError<AgentAdoptionFailure>()("AgentAdoptionFailure", {
++  cause: Schema.Unknown,
++}) {}
++interface Row {
++  operationId: string; internalId: string; kind: "template" | "marketplace"; sourceId: string;
++  hash: string; state: AgentAdoptionStatus["state"]; agentId: string | null; name: string | null;
++}
++function row(value: unknown): Row {
++  if (!isDynamicRecord(value) || typeof value.operationId !== "string" || typeof value.internalId !== "string" ||
++    (value.kind !== "template" && value.kind !== "marketplace") || typeof value.sourceId !== "string" ||
++    typeof value.hash !== "string" || !["pending", "complete", "failed", "interrupted"].includes(String(value.state)) ||
++    (value.agentId !== null && typeof value.agentId !== "string") || (value.name !== null && typeof value.name !== "string"))
++    throw new Error("Invalid adoption journal.");
++  const state = value.state;
++  if (state !== "pending" && state !== "complete" && state !== "failed" && state !== "interrupted") throw new Error("Invalid adoption state.");
++  return { operationId: value.operationId, internalId: value.internalId, kind: value.kind, sourceId: value.sourceId,
++    hash: value.hash, state, agentId: value.agentId, name: value.name };
++}
++function project(value: Row): AgentAdoptionStatus {
++  return { operationId: value.operationId, kind: value.kind, sourceId: value.sourceId,
++    state: value.state, agentId: value.agentId, name: value.name };
++}
++const step = <A>(run: () => A) => Effect.try({ try: run, catch: cause => new AgentAdoptionFailure({ cause }) });
++/** Construct only AFTER AgentStore.initialize recovered all profile creation markers. */
++export class AgentAdoptionService {
++  readonly #queue = Semaphore.makeUnsafe(1);
++  constructor(
++    private readonly database: OpenBotDatabase,
++    private readonly templates: Pick<AgentTemplateService, "install">,
++    private readonly marketplace: Pick<AgentMarketplaceService, "install">,
++  ) {
++    database.connection.exec(`CREATE TABLE IF NOT EXISTS agent_adoption_operations (
++      memberId TEXT NOT NULL, operationId TEXT NOT NULL, internalId TEXT NOT NULL UNIQUE,
++      kind TEXT NOT NULL, sourceId TEXT NOT NULL, hash TEXT NOT NULL, state TEXT NOT NULL,
++      agentId TEXT, name TEXT, PRIMARY KEY(memberId, operationId))`);
++    // Additive upgrade for task-owned extension journals created before reviewed updates existed.
++    const columns = database.connection.prepare("PRAGMA table_info(agent_adoption_operations)").all();
++    if (!columns.some(value => isDynamicRecord(value) && value.name === "targetAgentId"))
++      database.connection.exec("ALTER TABLE agent_adoption_operations ADD COLUMN targetAgentId TEXT");
++    // No in-flight workflow survives a process restart. Store recovery already retained and identified every
++    // partially configured agent. Never rerun an interrupted request implicitly.
++    database.connection.prepare("UPDATE agent_adoption_operations SET state = 'interrupted' WHERE state = 'pending'").run();
++  }
++  #find(memberId: string, operationId: string): Row | null {
++    const value = this.database.connection.prepare("SELECT * FROM agent_adoption_operations WHERE memberId = ? AND operationId = ?").get(memberId, operationId);
++    return value === undefined ? null : row(value);
++  }
++  status(memberId: string, operationId: string) {
++    return step(() => { const value = this.#find(memberId, operationId); return value ? project(value) : null; });
++  }
++  list(memberId: string) {
++    return step(() => this.database.connection.prepare("SELECT * FROM agent_adoption_operations WHERE memberId = ? ORDER BY rowid DESC LIMIT 100").all(memberId).map(value => project(row(value))));
++  }
++  install(memberId: string, input: AgentAdoptionInput) {
++    return this.#queue.withPermit(this.#install(memberId, input));
++  }
++  readonly #install = Effect.fn("AgentAdoptionService.install")(function* (this: AgentAdoptionService, memberId: string, input: AgentAdoptionInput) {
++    if (!isUuidV4(input.operationId) || !memberId || !input.sourceId || !input.expectedRevision || input.sourceId.length > 128 || input.expectedRevision.length > 128)
++      return yield* new AgentAdoptionFailure({ cause: new Error("Invalid adoption request.") });
++    if (input.agentId !== undefined && (input.kind !== "marketplace" || !input.agentId || input.agentId.length > 128))
++      return yield* new AgentAdoptionFailure({ cause: new Error("Invalid adoption target.") });
++    yield* step(() => new Intl.DateTimeFormat("en", { timeZone: input.timezone }).format(0));
++    const hash = createHash("sha256").update(JSON.stringify([input.kind, input.sourceId, input.timezone, input.expectedRevision, ...(input.agentId === undefined ? [] : [input.agentId])])).digest("hex");
++    const previous = yield* step(() => this.#find(memberId, input.operationId));
++    if (previous) {
++      if (previous.hash !== hash) return yield* new AgentAdoptionFailure({ cause: new Error("Adoption identity conflicts with its original request.") });
++      return project(previous);
++    }
++    if (input.agentId !== undefined && !this.database.listAgents().some(agent => agent.id === input.agentId && agent.marketplaceSource?.listingId === input.sourceId))
++      return yield* new AgentAdoptionFailure({ cause: new Error("The installed agent does not belong to this listing.") });
++    const internalId = randomUUID();
++    yield* step(() => this.database.connection.prepare("INSERT INTO agent_adoption_operations (memberId, operationId, internalId, kind, sourceId, hash, state, targetAgentId, agentId) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)").run(memberId, input.operationId, internalId, input.kind, input.sourceId, hash, input.agentId ?? null, input.agentId ?? null));
++    // Forward the server-created identity to the actual producer, not to marketplace statistics.
++    const outcome = yield* Effect.result(input.kind === "template"
++      ? this.templates.install({ templateId: input.sourceId, timezone: input.timezone, expectedUpdatedAt: input.expectedRevision }, internalId).pipe(Effect.mapError(cause => new AgentAdoptionFailure({ cause })))
++      : this.marketplace.install({ listingId: input.sourceId, timezone: input.timezone, receiptId: internalId, ...(input.agentId === undefined ? {} : { agentId: input.agentId }) }, internalId, input.expectedRevision).pipe(Effect.mapError(cause => new AgentAdoptionFailure({ cause }))));
++    if (Result.isFailure(outcome)) {
++      yield* step(() => {
++        const reserved = this.#find(memberId, input.operationId);
++        const retained = this.database.listAgents().find(agent => agent.id === reserved?.agentId);
++        this.database.connection.prepare("UPDATE agent_adoption_operations SET state = 'failed', agentId = ?, name = ? WHERE memberId = ? AND operationId = ? AND state = 'pending'").run(retained?.id ?? null, retained?.name ?? null, memberId, input.operationId);
++      });
++      const failed = yield* step(() => this.#find(memberId, input.operationId));
++      if (!failed) return yield* new AgentAdoptionFailure({ cause: new Error("Adoption journal missing.") });
++      return project(failed);
++    }
++    const { agent } = outcome.success;
++    if (input.agentId !== undefined && agent.id !== input.agentId)
++      return yield* new AgentAdoptionFailure({ cause: new Error("Adoption producer returned a different destination.") });
++    // This receipt and journal settlement commit in ONE SQLite transaction. The pre-creation
++    // marker reconciles to this receipt, or retains the exact partially configured agent.
++    yield* step(() => this.database.dispatch(`agent-adoption:${internalId}`, [{ aggregateType: "agent-adoptions", aggregateId: internalId, eventType: "agent-adoption.completed", payload: { agentId: agent.id } }], () => {
++      if (!this.database.listAgents().some(value => value.id === agent.id)) throw new Error("Adoption agent missing.");
++      this.database.connection.prepare("UPDATE agent_adoption_operations SET state = 'complete', agentId = ?, name = ? WHERE memberId = ? AND operationId = ? AND state = 'pending'").run(agent.id, agent.name, memberId, input.operationId);
++      return { kind: "agent-adoption-v1", agent: { id: agent.id, name: agent.name } };
++    }));
++    return { operationId: input.operationId, kind: input.kind, sourceId: input.sourceId, state: "complete" as const, agentId: agent.id, name: agent.name };
++  }, Effect.uninterruptible);
++}
+--- /dev/null
++++ b/packages/contracts/src/team-protocol/agent-adoption-v1.ts
+@@ -0,0 +1,17 @@
++// Sled maintained extension for the pinned Openbot 0.60.0 release. Upstream notices apply.
++// Requests name a reviewed host-side source. Creation identity belongs to the host journal, not
++// marketplace download statistics. A settled or interrupted operation is never executed again.
++import { adminRoute, fields, identifier, string, nullable, oneOf, list, empty, type OptionalRouteCodec } from "./admin-wire";
++export const AGENT_ADOPTION_CAPABILITY = "agent-adoption-v1";
++export const AGENT_ADOPTION_ROUTES = {
++  install: "/v1/admin/agents/adoption/install",
++  status: "/v1/admin/agents/adoption/status",
++  list: "/v1/admin/agents/adoption/list",
++} as const;
++const status = fields({ operationId: identifier, kind: oneOf("template", "marketplace"), sourceId: identifier,
++  state: oneOf("pending", "complete", "failed", "interrupted"), agentId: nullable(identifier), name: nullable(string(256)) });
++export const AGENT_ADOPTION_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
++  [AGENT_ADOPTION_ROUTES.install, adminRoute(fields({ operationId: identifier, kind: oneOf("template", "marketplace"), sourceId: identifier, timezone: string(255), expectedRevision: string(128) }, { agentId: identifier }), status)],
++  [AGENT_ADOPTION_ROUTES.status, adminRoute(fields({ operationId: identifier }), nullable(status))],
++  [AGENT_ADOPTION_ROUTES.list, adminRoute(empty, list(status, 100))],
++]);
+--- /dev/null
++++ b/src/main/team-api/route-agent-adoption.ts
+@@ -0,0 +1,39 @@
++import { AGENT_ADOPTION_CAPABILITY, AGENT_ADOPTION_ROUTES } from "@openbot/contracts/team-protocol/agent-adoption-v1";
++import { runCauseEffect } from "../../backend/effect-boundary";
++import { requireString } from "../ipc/validation";
++import type { TeamApiAdmin } from "./dependencies";
++import { HttpError } from "./http-error";
++import { readJson, requireAdmin, requireVisibleBodyAgent } from "./request-helpers";
++import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
++export async function routeAgentAdoption(context: TeamApiRequestContext, admin: Pick<TeamApiAdmin, "adoption"> | undefined, newAgentHidden: () => boolean, hiddenAgentIds: ReadonlySet<string>): Promise<RouteOutcome> {
++  const { method, url, capabilities, member, request, json } = context;
++  if (method !== "POST" || !Object.values(AGENT_ADOPTION_ROUTES).some(path => path === url.pathname)) return "unmatched";
++  requireAdmin(member);
++  if (!capabilities.has(AGENT_ADOPTION_CAPABILITY) || !admin?.adoption) throw new HttpError(400, "Agent adoption unsupported.");
++  const body = await readJson(request);
++  try {
++    if (url.pathname === AGENT_ADOPTION_ROUTES.list) {
++      const history = await runCauseEffect(admin.adoption.list(member.id));
++      return json(200, history.filter(item => !item.agentId || !hiddenAgentIds.has(item.agentId)));
++    }
++    const operationId = requireString(body.operationId, "operationId");
++    if (url.pathname === AGENT_ADOPTION_ROUTES.status) {
++      const result = await runCauseEffect(admin.adoption.status(member.id, operationId));
++      if (result?.agentId) requireVisibleBodyAgent({ agentId: result.agentId }, hiddenAgentIds);
++      return json(200, result);
++    }
++    if (body.agentId !== undefined) requireVisibleBodyAgent(body, hiddenAgentIds);
++    if (body.agentId === undefined && newAgentHidden()) throw new HttpError(403, "The new agent provider is not visible.");
++    if (body.kind !== "template" && body.kind !== "marketplace") throw new HttpError(400, "Invalid adoption source.");
++    const result = await runCauseEffect(admin.adoption.install(member.id, {
++      operationId, kind: body.kind, sourceId: requireString(body.sourceId, "sourceId"),
++      timezone: requireString(body.timezone, "timezone"), expectedRevision: requireString(body.expectedRevision, "expectedRevision"),
++      ...(body.agentId === undefined ? {} : { agentId: requireString(body.agentId, "agentId") }),
++    }));
++    if (result.agentId) requireVisibleBodyAgent({ agentId: result.agentId }, hiddenAgentIds);
++    return json(200, result);
++  } catch (error) {
++    if (error instanceof HttpError) throw error;
++    throw new HttpError(409, "Agent adoption unavailable. Check the original operation status before creating another request.");
++  }
++}
+--- /dev/null
++++ b/src/main/adoption-fixtures.test.ts
+@@ -0,0 +1,169 @@
++import { IncomingMessage, ServerResponse } from "node:http";
++import { Socket } from "node:net";
++import { routeAgentAdoption } from "./team-api/route-agent-adoption";
++import { randomUUID } from "node:crypto";
++import { mkdtemp, rm, readFile } from "node:fs/promises";
++import { writeFileSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { Effect } from "effect";
++import { afterEach, expect, it, vi } from "vitest";
++import { AgentStore } from "../backend/agent-store";
++import { OpenBotDatabase } from "../backend/openbot-database";
++import { AgentAdoptionService } from "./agent-adoption-service";
++import { AgentTemplateService } from "./agent-template-service";
++import { AgentMarketplaceService } from "./agent-marketplace-service";
++import { CentralAuthOperationError } from "./central-auth-effects";
++import { LocalSkillLibrary } from "./local-skill-library";
++const roots: string[] = [];
++afterEach(async () => { vi.restoreAllMocks(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
++const sourceId = "abcdefghijklmnopqrstuv";
++const detail = { id: sourceId, name: "Homework", title: "School", description: "Review assignments", avatarSeed: "school", avatarHue: null, skills: [], routines: [], avatarUrl: null, creatorName: "Student", updatedAt: "2026-11-04T18:00:00Z" };
++async function setup(existingRoot?: string) {
++  const root = existingRoot ?? await mkdtemp(join(tmpdir(), "sled-adoption-"));
++  if (!existingRoot) roots.push(root);
++  const database = new OpenBotDatabase(join(root, "data"));
++  const store = new AgentStore(join(root, "data"), join(root, "home"), database);
++  await Effect.runPromise(store.initialize());
++  let signedIn = true;
++  let marketVersion = "version-1";
++  const auth = {
++    requestAuthorized<T>(path: string, _init: RequestInit, decoder: (input: unknown) => T) {
++      if (!signedIn) return Effect.fail(new CentralAuthOperationError({ cause: new Error("private account credential") }));
++      return Effect.sync(() => decoder(path.endsWith("/install") ? { installed: true } : path.endsWith("/mine") ? [] : path.includes("/marketplace/") ? { ...detail, versionId: marketVersion, version: marketVersion === "version-1" ? 1 : 2, installs: 0, featured: false, skillCount: 0, routineCount: 0, activeRoutineCount: 0 } : detail));
++    },
++    downloadAuthorized: () => Effect.succeed(new Uint8Array()), resolveApiUrl: (path: string) => `https://openbot.run${path}`,
++  };
++  const library = new LocalSkillLibrary(join(root, "library"), () => store.list());
++  const create = vi.fn((input: Parameters<typeof store.createAgent>[0], operationId?: string) => store.createAgent(input, operationId).pipe(Effect.orDie));
++  const templates = new AgentTemplateService(auth, {
++    listAgents: () => store.list(), listRoutines: () => [], resolveAvatar: () => null,
++    createAgentProfile: create, setAvatar: () => Effect.die("Unexpected avatar"),
++    createRoutine: () => { throw new Error("Unexpected routine"); },
++    deleteAgent: (id: string) => store.deleteAgent(id).pipe(Effect.asVoid, Effect.orDie),
++  }, { listTemplateSkills: () => Effect.succeed([]), installVersion: () => Effect.succeed({}), library: () => library, installLocal: () => Effect.succeed({}) });
++  const marketplace = new AgentMarketplaceService(auth, {
++    listAgents: () => store.list(), listRoutines: () => [], resolveAvatar: () => null, createAgentProfile: create,
++    updateAgent: input => store.updateAgent(input).pipe(Effect.orDie), setAvatar: (id, image) => store.setAvatar(id, image).pipe(Effect.orDie),
++    setMarketplaceSource: (id, source) => store.setMarketplaceSource(id, source),
++    createRoutine: () => { throw new Error("Unexpected routine"); }, deleteRoutine: () => Effect.void,
++    deleteAgent: id => store.deleteAgent(id).pipe(Effect.asVoid, Effect.orDie),
++  }, { listPublishable: () => Effect.succeed([]), installVersion: () => Effect.succeed({}), uninstall: () => Effect.void });
++  const adoption = new AgentAdoptionService(database, templates, marketplace);
++  const input = { operationId: randomUUID(), kind: "template" as const, sourceId, timezone: "America/Chicago", expectedRevision: detail.updatedAt };
++  return { root, database, store, templates, create, adoption, marketplace, input, setMarketVersion: (version: string) => { marketVersion = version; }, signOut: () => { signedIn = false; } };
++}
++it("binds the actual template producer to a durable exact-result receipt; duplicate requests and restart create one agent", async () => {
++  const s = await setup();
++  const result = await Effect.runPromise(s.adoption.install("owner", s.input));
++  expect(result.state).toBe("complete"); expect(s.store.list()).toHaveLength(1);
++  expect(s.create.mock.calls[0]?.[1]).toMatch(/^[\da-f-]{36}$/u);
++  expect(await Effect.runPromise(s.adoption.install("owner", s.input))).toEqual(result);
++  expect(s.create).toHaveBeenCalledTimes(1);
++  s.database.close();
++  const restarted = await setup(s.root);
++  expect(restarted.store.list().map(a => a.id)).toEqual([result.agentId]);
++  expect(await Effect.runPromise(restarted.adoption.install("owner", s.input))).toEqual(result);
++  expect(restarted.create).not.toHaveBeenCalled();
++  expect(await Effect.runPromise(restarted.adoption.status("different-member", s.input.operationId))).toBeNull();
++  expect(await Effect.runPromise(restarted.adoption.list("owner"))).toEqual([result]);
++  restarted.database.close();
++});
++it("recovers the producer-to-receipt crash gap and refuses to replay the interrupted identity", async () => {
++  const s = await setup(); const dispatch = s.database.dispatch.bind(s.database);
++  vi.spyOn(s.database, "dispatch").mockImplementation((id, events, project) => { if (id.startsWith("agent-adoption:")) { const agent = s.store.list()[0]!; writeFileSync(join(agent.workspacePath, "homework.md"), "Useful work after creation"); throw new Error("simulated disk interruption before receipt"); } return dispatch(id, events, project); });
++  await expect(Effect.runPromise(s.adoption.install("owner", s.input))).rejects.toThrow();
++  expect(s.store.list()).toHaveLength(1); s.database.close();
++  const restarted = await setup(s.root);
++  expect(restarted.store.list()).toHaveLength(1);
++  const retained = restarted.store.list()[0]!;
++  expect(await readFile(join(retained.workspacePath, "homework.md"), "utf8")).toBe("Useful work after creation");
++  const result = await Effect.runPromise(restarted.adoption.install("owner", s.input));
++  expect(result.state).toBe("interrupted"); expect(result.agentId).toBe(retained.id); expect(restarted.create).not.toHaveBeenCalled();
++  restarted.database.close();
++});
++it("rejects stale source reviews and timezone conflicts before creating; a reused operation cannot change payload", async () => {
++  const s = await setup();
++  expect((await Effect.runPromise(s.adoption.install("owner", { ...s.input, expectedRevision: "stale" }))).state).toBe("failed");
++  expect(s.create).not.toHaveBeenCalled();
++  await expect(Effect.runPromise(s.adoption.install("owner", s.input))).rejects.toThrow();
++  await expect(Effect.runPromise(s.adoption.install("owner", { ...s.input, operationId: randomUUID(), timezone: "invalid" }))).rejects.toThrow();
++  expect(s.store.list()).toHaveLength(0); s.database.close();
++});
++it("distinguishes authoritative unpublished from unavailable host account without exposing account values", async () => {
++  const s = await setup(); expect(await Effect.runPromise(s.templates.publicationStatus("unused"))).toBeNull();
++  s.signOut(); await expect(Effect.runPromise(s.templates.publicationStatus("unused"))).rejects.toThrow();
++  const result = await Effect.runPromise(s.adoption.install("owner", s.input)); expect(result.state).toBe("failed");
++  expect(JSON.stringify(result)).not.toContain("credential"); expect(s.create).not.toHaveBeenCalled(); s.database.close();
++});
++
++it("updates the actual marketplace producer once at the reviewed version and recovers the same target after restart", async () => {
++  const s = await setup();
++  const first = await Effect.runPromise(s.adoption.install("owner", { ...s.input, kind: "marketplace", expectedRevision: "version-1" }));
++  expect(first.state).toBe("complete"); expect(s.store.list()).toHaveLength(1);
++  const agentId = first.agentId!;
++  const workspace = s.store.list()[0]!.workspacePath;
++  writeFileSync(join(workspace, "homework.md"), "Keep my work during update");
++  s.setMarketVersion("version-2");
++  const update = { ...s.input, operationId: randomUUID(), kind: "marketplace" as const, expectedRevision: "version-2", agentId };
++  const outcome = await Effect.runPromise(s.adoption.install("owner", update));
++  expect(outcome).toMatchObject({ state: "complete", agentId });
++  expect(s.store.list()[0]?.marketplaceSource?.versionId).toBe("version-2");
++  expect(s.create).toHaveBeenCalledTimes(1);
++  expect(await Effect.runPromise(s.adoption.install("owner", update))).toEqual(outcome);
++  await expect(Effect.runPromise(s.adoption.install("owner", { ...update, agentId: "another-agent" }))).rejects.toThrow();
++  s.database.close();
++  const restarted = await setup(s.root);
++  expect(await Effect.runPromise(restarted.adoption.install("owner", update))).toEqual(outcome);
++  expect(restarted.store.list()).toHaveLength(1); expect(restarted.create).not.toHaveBeenCalled();
++  expect(await readFile(join(workspace, "homework.md"), "utf8")).toBe("Keep my work during update");
++  // A stale review cannot change the existing agent, and its retained identity is explicit.
++  const stale = await Effect.runPromise(restarted.adoption.install("owner", { ...update, operationId: randomUUID(), expectedRevision: "version-2" }));
++  expect(stale).toMatchObject({ state: "failed", agentId });
++  expect(restarted.store.list()[0]?.marketplaceSource?.versionId).toBe("version-2");
++  restarted.database.close();
++});
++
++it("retains the updated destination when the process loses its receipt commit and never repeats the update", async () => {
++  const s = await setup();
++  const installed = await Effect.runPromise(s.adoption.install("owner", { ...s.input, kind: "marketplace", expectedRevision: "version-1" }));
++  const agentId = installed.agentId!;
++  s.setMarketVersion("version-2");
++  const update = { ...s.input, operationId: randomUUID(), kind: "marketplace" as const, expectedRevision: "version-2", agentId };
++  const dispatch = s.database.dispatch.bind(s.database);
++  vi.spyOn(s.database, "dispatch").mockImplementation((id, events, project) => {
++    if (id.startsWith("agent-adoption:")) throw new Error("lost update receipt commit");
++    return dispatch(id, events, project);
++  });
++  await expect(Effect.runPromise(s.adoption.install("owner", update))).rejects.toThrow();
++  expect(s.store.list()[0]?.marketplaceSource?.versionId).toBe("version-2");
++  s.database.close();
++  const restarted = await setup(s.root);
++  // The account fixture advertises version-1 after restart. Repeating the producer would downgrade.
++  const outcome = await Effect.runPromise(restarted.adoption.install("owner", update));
++  expect(outcome).toMatchObject({ state: "interrupted", agentId });
++  expect(restarted.store.list()).toHaveLength(1);
++  expect(restarted.store.list()[0]?.marketplaceSource?.versionId).toBe("version-2");
++  expect(restarted.create).not.toHaveBeenCalled();
++  restarted.database.close();
++});
++
++it("does not reveal a now-hidden agent by replaying its original creation request", async () => {
++  const s = await setup();
++  const installed = await Effect.runPromise(s.adoption.install("owner", s.input));
++  const request = new IncomingMessage(new Socket());
++  request.method = "POST";
++  request.url = "/v1/admin/agents/adoption/install";
++  request.push(Buffer.from(JSON.stringify(s.input))); request.push(null);
++  const json = vi.fn(() => "handled" as const);
++  await expect(routeAgentAdoption({ request, response: new ServerResponse(request), method: "POST",
++    url: new URL(request.url, "http://fixture.invalid"), protocol: 3,
++    capabilities: new Set(["agent-adoption-v1"]),
++    member: { id: "owner", username: "owner", email: null, name: null, role: "owner", createdAt: "2026-11-04T00:00:00Z", disabled: false },
++    token: "fixture", sessionId: "fixture", sessionExpiresAt: "2026-11-05T00:00:00Z", agentLevel: () => "manage",
++    json, empty: () => "handled",
++  }, { adoption: s.adoption }, () => false, new Set([installed.agentId!]))).rejects.toMatchObject({ status: 404 });
++  expect(json).not.toHaveBeenCalled();
++  expect(s.create).toHaveBeenCalledTimes(1);
++  s.database.close(); request.destroy();
++});
+--- /dev/null
++++ b/adoption-fixtures.config.ts
+@@ -0,0 +1,2 @@
++import { defineConfig } from "vitest/config";
++export default defineConfig({ test: { environment: "node", include: ["src/main/adoption-fixtures.test.ts"], maxWorkers: 1 } });

@@ -3,6 +3,7 @@ import {
   OpenbotVaultSave,
   type OpenbotVaultItem,
   type OpenbotVaultRequest,
+  type OpenbotVaultVersion,
 } from "@t3tools/contracts";
 const decodeVaultSave = Schema.decodeUnknownSync(OpenbotVaultSave);
 export type VaultExecute = (
@@ -73,13 +74,24 @@ export function vaultSaveRequest(
   id: string | null,
   fields: Record<string, string>,
   secrets: Record<string, string>,
-  version: "v1" | "v2",
+  version: OpenbotVaultVersion,
+  options?: { twoStepKey?: string; agents?: readonly string[] | null },
 ): OpenbotVaultRequest | null {
   try {
     const input = vaultSave(kind, id, fields, secrets);
     if (version === "v1")
       return input.kind === "apiKey" ? null : { operation: "vault.save", version, input };
-    return { operation: "vault.save", version, input };
+    if (version === "v2") return { operation: "vault.save", version, input };
+    const updated =
+      input.kind === "login" && options?.twoStepKey !== undefined
+        ? { ...input, twoStepKey: options.twoStepKey }
+        : input;
+    if (version === "v3") return { operation: "vault.save", version, input: updated };
+    return {
+      operation: "vault.save",
+      version,
+      input: options?.agents === undefined ? updated : { ...updated, agents: options.agents },
+    };
   } catch {
     return null;
   }

@@ -1,0 +1,377 @@
+{
+  "repository": "https://github.com/nightly-labs/openbot",
+  "version": "0.60.0",
+  "commit": "0c7753fa622c38419939cd230657f40e5883d098",
+  "adaptations": [
+    "Explicit local .ts imports",
+    "Self-contained JSON type",
+    "Frozen OPEN_PROVIDER_ID literal only"
+  ],
+  "sourceSha256": {
+    "team-protocol/agent-access-v1.ts": "1f848c3209a3421de607f3c86c215de378a45331032c9a2a79c2b77c552b5c18",
+    "team-protocol/agent-backup-models-v1.ts": "c14b2a958086185e51187a6ae1e13aca8f37c1792b83ae74dff25527e79aceca",
+    "team-protocol/agent-fast-mode-v1.ts": "e21136f47aa8f7a4da5a4951e76df103ce753113861dc990f5c4ee0711408513",
+    "team-protocol/agent-folders-v1.ts": "54c0cc515b4c34e587f947dec51fdeb26942b894aded3638d9e9a385a089f53d",
+    "team-protocol/agent-hidden-v1.ts": "b89b6604080f81cee5e89ba7884c5efccd474470ff0a2251edfb6ca5bf5d74cb",
+    "team-protocol/agent-host-settings-v1.ts": "841ba6c8d8d5e6ea79b767e5662b74a789aa42b1606b53fb9cd671aea43ae0f6",
+    "team-protocol/agent-memory-limit-v1.ts": "ab426ba4f465efa51c7de2e22bb961d0285bcdebf8412a8094691311282970e9",
+    "team-protocol/agent-new-chat-v1.ts": "bbf8219088d9a186d6fca4cbe423df80ed93d75426eb68badd69fbf47230f62f",
+    "team-protocol/agent-notification-levels-v1.ts": "5243124f351abf0e00c513e9ec111b0b6350f56f955160fb96941e8da6e54380",
+    "team-protocol/agent-plan-card-v1.ts": "399f81915a07df2ba5a885aa7370a26e8bd978744766f178c60d947a543217b6",
+    "team-protocol/agent-session-settings-v1.ts": "33da42cb11c6597bd7b29524a96ea07ca2c2f390086bf8595efe04af832f81d1",
+    "team-protocol/agent-task-limit-v1.ts": "5b6ca179014281d4dd58684307c99157eefed36fb6cf92fed5bfc8c460cdb32b",
+    "team-protocol/agent-memories-v1.ts": "0eb9a42fc0a0aedc87e514294f566bbc0fdd0ee8b283b662a26e73eb9e397a05",
+    "team-protocol/context-compact-v1.ts": "f5bd32dc5a604cda496268da5d1a204e63f7b2d220c28e427566af5203096fcc",
+    "team-protocol/context-reset-v1.ts": "88b3164b4c5cf0f56264c1ad8cea0fdea9a74a5376c5ad1b523cee522c5d7ffb",
+    "team-protocol/memory-review-v1.ts": "bae54710ab146a77a170d0bfa27fe8d9cc3239d4124934143627dc55d3f06d56",
+    "team-protocol/prompt-cache-ttl-v1.ts": "c37f5302f537f708432e30462669b1a72ad68e8c5fc59b6d46525dd9aa973c58",
+    "team-protocol/host-timezone-v1.ts": "416cbe8d3cb93ec5f30a3d8a5a750b674e96c9cdc58887ce1ce451b8f97e5e5c",
+    "team-protocol/sidebar-pins-v1.ts": "bf79f9f9837a82eae92ed36736d9793073c3a448fdcf9fffe4844ae9ee2e0dfc",
+    "team-protocol/discord-access-v1.ts": "b010143ca0d281f369b55d3e58ba7937fcbb05d0cc358871d89f07e3924d61a3"
+  },
+  "operations": [
+    {
+      "operation": "settings.agent-access.read",
+      "path": "/v1/agent-access",
+      "capability": "agent-access-v1",
+      "kind": "read",
+      "label": "Agent Access read"
+    },
+    {
+      "operation": "settings.agent-access.set",
+      "path": "/v1/agent-access/set",
+      "capability": "agent-access-v1",
+      "kind": "admin",
+      "label": "Agent Access set"
+    },
+    {
+      "operation": "settings.agent-backup-models.settings",
+      "path": "/v1/admin/agents/backup-models",
+      "capability": "agent-backup-models-v1",
+      "kind": "read",
+      "label": "Agent Backup Models settings"
+    },
+    {
+      "operation": "settings.agent-backup-models.update",
+      "path": "/v1/admin/agents/backup-models/update",
+      "capability": "agent-backup-models-v1",
+      "kind": "admin",
+      "label": "Agent Backup Models update"
+    },
+    {
+      "operation": "settings.agent-fast-mode.models",
+      "path": "/v1/agent-fast-mode/models",
+      "capability": "agent-fast-mode-v1",
+      "kind": "read",
+      "label": "Agent Fast Mode models"
+    },
+    {
+      "operation": "settings.agent-fast-mode.settings",
+      "path": "/v1/agent-fast-mode",
+      "capability": "agent-fast-mode-v1",
+      "kind": "read",
+      "label": "Agent Fast Mode settings"
+    },
+    {
+      "operation": "settings.agent-fast-mode.update",
+      "path": "/v1/agent-fast-mode/update",
+      "capability": "agent-fast-mode-v1",
+      "kind": "admin",
+      "label": "Agent Fast Mode update"
+    },
+    {
+      "operation": "settings.agent-folders.read",
+      "path": "/v1/admin/agents/folders",
+      "capability": "agent-folders-v1",
+      "kind": "read",
+      "label": "Agent Folders read"
+    },
+    {
+      "operation": "settings.agent-folders.add",
+      "path": "/v1/admin/agents/folders/add",
+      "capability": "agent-folders-v1",
+      "kind": "admin",
+      "label": "Agent Folders add"
+    },
+    {
+      "operation": "settings.agent-folders.remove",
+      "path": "/v1/admin/agents/folders/remove",
+      "capability": "agent-folders-v1",
+      "kind": "admin",
+      "label": "Agent Folders remove"
+    },
+    {
+      "operation": "settings.agent-folders.exclude",
+      "path": "/v1/admin/agents/folders/exclude",
+      "capability": "agent-folders-v1",
+      "kind": "admin",
+      "label": "Agent Folders exclude"
+    },
+    {
+      "operation": "settings.agent-folders.include",
+      "path": "/v1/admin/agents/folders/include",
+      "capability": "agent-folders-v1",
+      "kind": "admin",
+      "label": "Agent Folders include"
+    },
+    {
+      "operation": "settings.agent-folders.browse",
+      "path": "/v1/admin/agents/folders/browse",
+      "capability": "agent-folders-v1",
+      "kind": "read",
+      "label": "Agent Folders browse"
+    },
+    {
+      "operation": "settings.agent-hidden.read",
+      "path": "/v1/hidden-agents",
+      "capability": "agent-hidden-v1",
+      "kind": "read",
+      "label": "Agent Hidden read"
+    },
+    {
+      "operation": "settings.agent-hidden.set",
+      "path": "/v1/hidden-agents/set",
+      "capability": "agent-hidden-v1",
+      "kind": "admin",
+      "label": "Agent Hidden set"
+    },
+    {
+      "operation": "settings.agent-host-settings.settings",
+      "path": "/v1/admin/agents/host-settings",
+      "capability": "agent-host-settings-v1",
+      "kind": "read",
+      "label": "Agent Host Settings settings"
+    },
+    {
+      "operation": "settings.agent-host-settings.update",
+      "path": "/v1/admin/agents/host-settings/update",
+      "capability": "agent-host-settings-v1",
+      "kind": "admin",
+      "label": "Agent Host Settings update"
+    },
+    {
+      "operation": "settings.agent-memory-limit.settings",
+      "path": "/v1/admin/host/agent-memory-limit",
+      "capability": "agent-memory-limit-v1",
+      "kind": "read",
+      "label": "Agent Memory Limit settings"
+    },
+    {
+      "operation": "settings.agent-memory-limit.update",
+      "path": "/v1/admin/host/agent-memory-limit/update",
+      "capability": "agent-memory-limit-v1",
+      "kind": "admin",
+      "label": "Agent Memory Limit update"
+    },
+    {
+      "operation": "settings.agent-new-chat.settings",
+      "path": "/v1/admin/agents/new-chat",
+      "capability": "agent-new-chat-v1",
+      "kind": "read",
+      "label": "Agent New Chat settings"
+    },
+    {
+      "operation": "settings.agent-new-chat.update",
+      "path": "/v1/admin/agents/new-chat/update",
+      "capability": "agent-new-chat-v1",
+      "kind": "admin",
+      "label": "Agent New Chat update"
+    },
+    {
+      "operation": "settings.agent-notification-levels.read",
+      "path": "/v1/agent-notification-levels",
+      "capability": "agent-notification-levels-v1",
+      "kind": "read",
+      "label": "Agent Notification Levels read"
+    },
+    {
+      "operation": "settings.agent-notification-levels.set",
+      "path": "/v1/agent-notification-levels/set",
+      "capability": "agent-notification-levels-v1",
+      "kind": "admin",
+      "label": "Agent Notification Levels set"
+    },
+    {
+      "operation": "settings.agent-notification-levels.server",
+      "path": "/v1/agent-notification-levels/server",
+      "capability": "agent-notification-levels-v1",
+      "kind": "admin",
+      "label": "Agent Notification Levels server"
+    },
+    {
+      "operation": "settings.agent-plan-card.settings",
+      "path": "/v1/admin/agents/plan-card",
+      "capability": "agent-plan-card-v1",
+      "kind": "read",
+      "label": "Agent Plan Card settings"
+    },
+    {
+      "operation": "settings.agent-plan-card.update",
+      "path": "/v1/admin/agents/plan-card/update",
+      "capability": "agent-plan-card-v1",
+      "kind": "admin",
+      "label": "Agent Plan Card update"
+    },
+    {
+      "operation": "settings.agent-session-settings.read",
+      "path": "/v1/admin/agents/session-settings",
+      "capability": "agent-session-settings-v1",
+      "kind": "read",
+      "label": "Agent Session Settings read"
+    },
+    {
+      "operation": "settings.agent-session-settings.set",
+      "path": "/v1/admin/agents/session-settings/set",
+      "capability": "agent-session-settings-v1",
+      "kind": "admin",
+      "label": "Agent Session Settings set"
+    },
+    {
+      "operation": "settings.agent-session-settings.reset",
+      "path": "/v1/admin/agents/session-settings/reset",
+      "capability": "agent-session-settings-v1",
+      "kind": "admin",
+      "label": "Agent Session Settings reset"
+    },
+    {
+      "operation": "settings.agent-task-limit.settings",
+      "path": "/v1/admin/agents/task-limit",
+      "capability": "agent-task-limit-v1",
+      "kind": "read",
+      "label": "Agent Task Limit settings"
+    },
+    {
+      "operation": "settings.agent-task-limit.update",
+      "path": "/v1/admin/agents/task-limit/update",
+      "capability": "agent-task-limit-v1",
+      "kind": "admin",
+      "label": "Agent Task Limit update"
+    },
+    {
+      "operation": "settings.agent-memories.page",
+      "path": "/v1/agent-memories/page",
+      "capability": "agent-memories-v1",
+      "kind": "read",
+      "label": "Agent Memories page"
+    },
+    {
+      "operation": "settings.agent-memories.selection",
+      "path": "/v1/agent-memories/selection",
+      "capability": "agent-memories-v1",
+      "kind": "read",
+      "label": "Agent Memories selection"
+    },
+    {
+      "operation": "settings.agent-memories.inclusion",
+      "path": "/v1/agent-memories/inclusion",
+      "capability": "agent-memories-v1",
+      "kind": "admin",
+      "label": "Agent Memories inclusion"
+    },
+    {
+      "operation": "settings.context-compact.compact",
+      "path": "/v1/agent-context/compact",
+      "capability": "context-compact-v1",
+      "kind": "admin",
+      "label": "Context Compact compact"
+    },
+    {
+      "operation": "settings.context-compact.compactTask",
+      "path": "/v1/agent-context/compact-task",
+      "capability": "context-compact-v1",
+      "kind": "admin",
+      "label": "Context Compact compactTask"
+    },
+    {
+      "operation": "settings.context-reset.clear",
+      "path": "/v1/agent-context/clear",
+      "capability": "context-reset-v1",
+      "kind": "admin",
+      "label": "Context Reset clear"
+    },
+    {
+      "operation": "settings.memory-review.settings",
+      "path": "/v1/admin/host/memory-review",
+      "capability": "memory-review-v1",
+      "kind": "read",
+      "label": "Memory Review settings"
+    },
+    {
+      "operation": "settings.memory-review.update",
+      "path": "/v1/admin/host/memory-review/update",
+      "capability": "memory-review-v1",
+      "kind": "admin",
+      "label": "Memory Review update"
+    },
+    {
+      "operation": "settings.prompt-cache-ttl.settings",
+      "path": "/v1/admin/host/prompt-cache-ttl",
+      "capability": "prompt-cache-ttl-v1",
+      "kind": "read",
+      "label": "Prompt Cache Ttl settings"
+    },
+    {
+      "operation": "settings.prompt-cache-ttl.update",
+      "path": "/v1/admin/host/prompt-cache-ttl/update",
+      "capability": "prompt-cache-ttl-v1",
+      "kind": "admin",
+      "label": "Prompt Cache Ttl update"
+    },
+    {
+      "operation": "settings.host-timezone.settings",
+      "path": "/v1/admin/host/timezone",
+      "capability": "host-timezone-v1",
+      "kind": "read",
+      "label": "Host Timezone settings"
+    },
+    {
+      "operation": "settings.host-timezone.update",
+      "path": "/v1/admin/host/timezone/update",
+      "capability": "host-timezone-v1",
+      "kind": "admin",
+      "label": "Host Timezone update"
+    },
+    {
+      "operation": "settings.sidebar-pins.read",
+      "path": "/v1/sidebar-pins",
+      "capability": "sidebar-pins-v1",
+      "kind": "read",
+      "label": "Sidebar Pins read"
+    },
+    {
+      "operation": "settings.sidebar-pins.set",
+      "path": "/v1/sidebar-pins/set",
+      "capability": "sidebar-pins-v1",
+      "kind": "admin",
+      "label": "Sidebar Pins set"
+    },
+    {
+      "operation": "settings.sidebar-pins.seed",
+      "path": "/v1/sidebar-pins/seed",
+      "capability": "sidebar-pins-v1",
+      "kind": "admin",
+      "label": "Sidebar Pins seed"
+    },
+    {
+      "operation": "settings.discord-access.access",
+      "path": "/v1/admin/connectors/discord/access",
+      "capability": "discord-access-v1",
+      "kind": "read",
+      "label": "Discord Access access"
+    },
+    {
+      "operation": "settings.discord-access.roles",
+      "path": "/v1/admin/connectors/discord/roles",
+      "capability": "discord-access-v1",
+      "kind": "read",
+      "label": "Discord Access roles"
+    },
+    {
+      "operation": "settings.discord-access.update",
+      "path": "/v1/admin/connectors/discord/access/update",
+      "capability": "discord-access-v1",
+      "kind": "admin",
+      "label": "Discord Access update"
+    }
+  ]
+}

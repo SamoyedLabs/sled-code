@@ -1,0 +1,202 @@
+--- /dev/null
++++ b/packages/contracts/src/team-protocol/agent-review-v1.ts
+@@ -0,0 +1,94 @@
++// Sled maintained optional extension to Openbot 0.60.0; original released capabilities remain unchanged.
++import {
++  adminRoute,
++  boolean,
++  count,
++  fields,
++  identifier,
++  list,
++  nullable,
++  type OptionalRouteCodec,
++  oneOf,
++  string,
++  variant,
++} from "./admin-wire";
++export const AGENT_REVIEW_CAPABILITY = "agent-review-v1";
++export const AGENT_REVIEW_ROUTES = {
++  template: "/v1/admin/agents/template-detail",
++  marketplace: "/v1/admin/agents/marketplace-detail",
++  publication: "/v1/admin/agents/template-publication",
++} as const;
++const kind = (name: string) => ({ kind: oneOf(name) });
++const time = string(5);
++
++const skill = variant({
++  marketplace: fields({
++    ...kind("marketplace"),
++    skillId: string(256),
++    versionId: string(256),
++    slug: string(256),
++    name: string(256),
++    version: count,
++  }),
++  embedded: fields({
++    ...kind("embedded"),
++    slug: string(64),
++    name: string(256),
++    markdown: string(65_536),
++  }),
++});
++
++const schedule = variant({
++  hourly: fields({ ...kind("hourly"), minute: count }),
++  daily: fields({ ...kind("daily"), time }),
++  weekdays: fields({ ...kind("weekdays"), time }),
++  weekly: fields({ ...kind("weekly"), weekday: count, time }),
++  monthly: fields({ ...kind("monthly"), day: count, time }),
++  interval: fields({
++    ...kind("interval"),
++    amount: count,
++    unit: oneOf("minutes", "hours", "days"),
++    anchorAt: string(64),
++  }),
++  advanced: fields({
++    ...kind("advanced"),
++    months: list(count, 12),
++    days: variant({
++      "every-day": fields(kind("every-day")),
++      "days-of-week": fields({ ...kind("days-of-week"), days: list(count, 7) }),
++      "days-of-month": fields({ ...kind("days-of-month"), days: list(count, 31) }),
++    }),
++    time: variant({
++      "at-time": fields({ ...kind("at-time"), time }),
++      every: fields({ ...kind("every"), amount: count, unit: oneOf("minutes", "hours") }),
++    }),
++  }),
++  custom: fields({ ...kind("custom"), expression: string(255) }),
++});
++
++const routine = fields({
++  name: string(256),
++  instruction: string(100_000),
++  active: boolean,
++  schedule,
++});
++
++const detail = fields({
++  id: identifier,
++  name: string(256),
++  title: string(256),
++  description: string(100_000),
++  creatorName: string(256),
++  updatedAt: string(64),
++  versionId: nullable(identifier),
++  version: nullable(count),
++  pending: boolean,
++  skills: list(skill, 64),
++  routines: list(routine, 128),
++});
++const publication = fields({ templateId: identifier, shareUrl: string(2048), publishedAt: string(64) });
++export const AGENT_REVIEW_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
++  [AGENT_REVIEW_ROUTES.publication, adminRoute(fields({ agentId: identifier }), fields({ publication: nullable(publication) }))],
++  [AGENT_REVIEW_ROUTES.template, adminRoute(fields({ templateId: identifier }), detail)],
++  [AGENT_REVIEW_ROUTES.marketplace, adminRoute(fields({ listingId: identifier }), detail)],
++]);
+--- /dev/null
++++ b/src/main/team-api/route-agent-review.ts
+@@ -0,0 +1,89 @@
++import { isDynamicRecord } from "@openbot/contracts/runtime-values";
++import {
++  AGENT_REVIEW_CAPABILITY,
++  AGENT_REVIEW_ROUTES,
++  AGENT_REVIEW_CODECS,
++} from "@openbot/contracts/team-protocol/agent-review-v1";
++import { redactText } from "@openbot/logging";
++import { runCauseEffect } from "../../backend/effect-boundary";
++import type { TeamApiAdmin } from "./dependencies";
++import { HttpError } from "./http-error";
++import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
++import { readJson, requireAdmin, requireVisibleBodyAgent } from "./request-helpers";
++import { requireString } from "../ipc/validation";
++export async function routeAgentReview(
++  context: TeamApiRequestContext,
++  admin: TeamApiAdmin | undefined,
++  hiddenAgentIds: ReadonlySet<string>,
++): Promise<RouteOutcome> {
++  const { method, url, capabilities, member, request, json } = context;
++  if (
++    method !== "POST" ||
++    (url.pathname !== AGENT_REVIEW_ROUTES.template &&
++      url.pathname !== AGENT_REVIEW_ROUTES.marketplace &&
++      url.pathname !== AGENT_REVIEW_ROUTES.publication)
++  )
++    return "unmatched";
++  requireAdmin(member);
++  if (
++    !capabilities.has(AGENT_REVIEW_CAPABILITY) ||
++    !admin?.agentTemplates?.get ||
++    !admin.marketplaceAgents?.getListing ||
++    !admin.agentTemplates?.publicationStatus
++  )
++    throw new HttpError(400, "Agent review unsupported.");
++  const body = await readJson(request);
++  try {
++    if (url.pathname === AGENT_REVIEW_ROUTES.publication) {
++      requireVisibleBodyAgent(body, hiddenAgentIds);
++      const publication = await runCauseEffect(admin.agentTemplates.publicationStatus(requireString(body.agentId, "agentId")));
++      const codec = AGENT_REVIEW_CODECS.get(url.pathname);
++      if (!codec) throw new HttpError(400, "Agent review unsupported.");
++      const response = codec.response(200, { publication });
++      if (!isDynamicRecord(response)) throw new Error("Invalid review response.");
++      return json(200, response);
++    }
++    const marketplace = url.pathname === AGENT_REVIEW_ROUTES.marketplace;
++    const detail = marketplace
++      ? await runCauseEffect(
++          admin.marketplaceAgents.getListing(requireString(body.listingId, "listingId")),
++        )
++      : await runCauseEffect(
++          admin.agentTemplates.get(requireString(body.templateId, "templateId")),
++        );
++    const projected = {
++      id: detail.id,
++      name: redactText(detail.name),
++      title: redactText(detail.title),
++      description: redactText(detail.description),
++      creatorName: redactText(detail.creatorName),
++      updatedAt: detail.updatedAt,
++      versionId: "versionId" in detail ? detail.versionId : null,
++      version: "version" in detail ? detail.version : null,
++      pending: "pending" in detail && detail.pending === true,
++      skills: detail.skills.map((skill) =>
++        "kind" in skill && skill.kind === "embedded"
++          ? {
++              kind: "embedded",
++              slug: skill.slug,
++              name: redactText(skill.name),
++              markdown: redactText(skill.markdown),
++            }
++          : { ...skill, kind: "marketplace", name: redactText(skill.name) },
++      ),
++      routines: detail.routines.map((routine) => ({
++        name: redactText(routine.name),
++        instruction: redactText(routine.instruction),
++        active: routine.active,
++        schedule: routine.schedule,
++      })),
++    };
++    const codec = AGENT_REVIEW_CODECS.get(url.pathname);
++    if (!codec) throw new HttpError(400, "Agent review unsupported.");
++    const response = codec.response(200, projected);
++    if (!isDynamicRecord(response)) throw new Error("Invalid review response.");
++    return json(200, response);
++  } catch {
++    throw new HttpError(409, "Agent review unavailable. Check host account and source revision.");
++  }
++}
+--- a/src/main/agent-template-service.ts
++++ b/src/main/agent-template-service.ts
+@@ -185,6 +185,10 @@
+         skillsError,
+       };
+     });
++  }
++
++  publicationStatus(agentId: string): Effect.Effect<AgentTemplatePublication | null, AgentTemplateFailure> {
++    return this.owned(agentId).pipe(Effect.map((owned) => owned ? this.publication(owned) : null));
+   }
+ 
+   publish({ agentId, card }: PublishAgentTemplateInput): Effect.Effect<AgentTemplatePublication, AgentTemplateFailure> {

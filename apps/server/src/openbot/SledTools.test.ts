@@ -74,6 +74,27 @@ function fixture() {
         }),
         Layer.mock(Integration.Integration)({
           readyHostId: Effect.sync(() => host),
+          withChannelToHost: (_host, action) =>
+            action(
+              {
+                progressAvailable: Effect.succeed(false),
+                progress: () => Effect.die("unused"),
+                available: Effect.succeed(true),
+                configure: () => Effect.succeed({ configured: true }),
+                send: () => Effect.die("unused"),
+                recover: () => Effect.die("unused"),
+                verify: () => Effect.die("unused"),
+                renew: () => Effect.die("unused"),
+                receipt: () => Effect.die("unused"),
+                submit: () => Effect.die("unused"),
+              },
+              { hostId: _host, fingerprint: "fixture-pin" },
+            ).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new Integration.IntegrationError({ message: "Fixture channel failure", cause }),
+              ),
+            ),
           apiAdminToHost: (expected, input) =>
             Effect.gen(function* () {
               if (host !== expected)

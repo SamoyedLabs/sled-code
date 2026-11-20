@@ -1,14 +1,15 @@
-import { useContext, useRef, useState } from "react";
+import { useContext, useEffect, useEffectEvent, useRef, useState } from "react";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { templateState } from "@t3tools/client-runtime/openbot/template-atoms";
 import { templateIsRead, type TemplateRequest } from "@t3tools/contracts/openbot-templates";
 import {
   templateStarted,
+  templateAcknowledge,
   templateFailed,
   templateResult,
   type TemplateActions,
 } from "@t3tools/client-runtime/openbot/templates";
-export function useBotTemplates(scopeKey: string, actions: TemplateActions) {
+export function useBotTemplates(scopeKey: string, actions: TemplateActions, adoptionAvailable = false) {
   const registry = useContext(RegistryContext);
   const atom = templateState(scopeKey);
   const state = useAtomValue(atom);
@@ -39,5 +40,8 @@ export function useBotTemplates(scopeKey: string, actions: TemplateActions) {
     setBusy(false);
     return next !== null;
   };
-  return { state, busy, error, run };
+  const refreshHistory = useEffectEvent(() => run({ operation: "templates.adoptions" }));
+  useEffect(() => { if (adoptionAvailable) void refreshHistory(); }, [scopeKey, adoptionAvailable]);
+  const acknowledge = (operationId: string) => registry.set(atom, templateAcknowledge(registry.get(atom), operationId));
+  return { state, busy, error, run, acknowledge };
 }

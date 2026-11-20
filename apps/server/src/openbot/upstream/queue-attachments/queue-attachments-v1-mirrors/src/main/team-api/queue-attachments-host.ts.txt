@@ -1,0 +1,40 @@
+import type { AgentService } from "../../backend/agent-service";
+import type { QueueAttachmentAcquireCommit } from "../../backend/mailbox-store";
+import { createQueueCommitClient } from "./queue-commit-client.ts";
+import type { PrivilegedCommitClient } from "./privileged-commit-client.ts";
+export interface QueueAttachmentHost {
+  enabled: boolean;
+  secret: string;
+  environmentId: string;
+  agents: Pick<AgentService, "queueAttachmentContext" | "queueAttachmentResult" | "saveQueueAttachments">;
+  validate: (principal: string, target: { agentId: string; threadId: string; taskId: string | null }) => void;
+  acquireCommit: QueueAttachmentAcquireCommit;
+}
+/** Bootstrap supplies the ONE inherited fd4 client already owned by the retained child. */
+export function createQueueAttachmentHost(input: {
+  enabled: boolean;
+  secret: string;
+  environmentId: string;
+  agents: AgentService;
+  client: PrivilegedCommitClient;
+}): QueueAttachmentHost {
+  const acquire = createQueueCommitClient(input.client);
+  return {
+    enabled: input.enabled,
+    secret: input.secret,
+    environmentId: input.environmentId,
+    agents: input.agents,
+    validate: (_principal, target) => input.agents.validateQueueAttachmentTarget(target),
+    acquireCommit: (principal, identity) =>
+      acquire(principal, {
+        purpose: "queue-attachments",
+        agentId: identity.agentId,
+        threadId: identity.threadId,
+        taskId: identity.taskId,
+        deliveryId: identity.deliveryId,
+        editId: identity.editId,
+        expectedRevision: identity.expectedRevision,
+        requestHash: identity.requestHash,
+      }),
+  };
+}

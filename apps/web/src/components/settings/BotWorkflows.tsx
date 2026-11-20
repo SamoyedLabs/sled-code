@@ -22,9 +22,11 @@ import { Textarea } from "../ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { requestConfirmDialog } from "../../confirmDialog";
 
-type Props = { environmentId: EnvironmentId; hostId: string };
+type Props = { environmentId: EnvironmentId; hostId: string; workspace?: boolean };
 export function BotWorkflows(props: Props) {
   const [expanded, setExpanded] = useState(false);
+  if (props.workspace)
+    return <WorkflowPanel key={`${props.environmentId}:${props.hostId}`} {...props} />;
   return (
     <section className="space-y-3" aria-label="Bot workflows">
       <Button

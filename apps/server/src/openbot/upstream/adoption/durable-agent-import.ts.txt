@@ -1,0 +1,143 @@
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, open, readFile, readdir, rename, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { AGENT_IMPORT_CODECS, AGENT_IMPORT_ROUTES, AGENT_IMPORT_UPLOAD_BYTES } from "@openbot/contracts/team-protocol/agent-import-v1";
+import { parseApplyAgentImportInput } from "@openbot/contracts/ipc";
+import { runCauseEffect } from "../backend/effect-boundary";
+import type { AgentImportService, ChannelActor } from "./agent-import-service";
+
+type Json = ReturnType<NonNullable<ReturnType<typeof AGENT_IMPORT_CODECS.get>>["request"]>;
+type Receipt = {
+  requestId: string; token: string; digest: string; preview: Json;
+  state: "staged" | "applying" | "uncertain" | "complete" | "discarded";
+  result: Json | null; selection: string | null;
+};
+const codec = (route: string) => {
+  const value = AGENT_IMPORT_CODECS.get(route);
+  if (!value) throw new Error("Unknown import route");
+  return value;
+};
+const digest = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
+
+/** One instance per private directory; requests serialize before reading or writing receipts. */
+export class DurableAgentImport {
+  private tail: Promise<unknown> = Promise.resolve();
+  constructor(private readonly service: AgentImportService, private readonly directory: string) {}
+  private serial<T>(run: () => Promise<T>): Promise<T> {
+    const next = this.tail.then(run); this.tail = next.catch(() => undefined); return next;
+  }
+  private path(owner: string, suffix: string) {
+    if (!owner) throw new Error("Import principal required");
+    return join(this.directory, digest(owner) + suffix);
+  }
+  private async write(path: string, bytes: string | Uint8Array) {
+    await mkdir(this.directory, { recursive: true, mode: 0o700 });
+    const temporary = path + "." + randomUUID();
+    const file = await open(temporary, "wx", 0o600);
+    try { await file.writeFile(bytes); await file.sync(); } finally { await file.close(); }
+    await rename(temporary, path);
+    const dir = await open(this.directory, "r");
+    try { await dir.sync(); } finally { await dir.close(); }
+  }
+  private async read(owner: string): Promise<Receipt | null> {
+    try {
+      const receipt: Receipt = JSON.parse(await readFile(this.path(owner, ".json"), "utf8"));
+      if (receipt.state === "applying") receipt.state = "uncertain";
+      return receipt;
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
+      throw error;
+    }
+  }
+  private save(owner: string, receipt: Receipt) { return this.write(this.path(owner, ".json"), JSON.stringify(receipt)); }
+  status(owner: string) { return this.serial(() => this.read(owner)); }
+  stage(owner: string, requestId: string, bytes: Uint8Array) {
+    return this.stageUpload(owner, requestId, async () => bytes);
+  }
+  stageUpload(owner: string, requestId: string, read: () => Promise<Uint8Array>) {
+    return this.serial(async () => {
+      if (!requestId || requestId.length > 128) throw new Error("Invalid import request identity");
+      const prior = await this.read(owner);
+      if (prior && prior.requestId !== requestId && prior.state !== "discarded") throw new Error("Resolve or discard the previous import first");
+      const bytes = await read();
+      if (!bytes.length || bytes.length > AGENT_IMPORT_UPLOAD_BYTES) throw new Error("Archive must be at most 100 MiB");
+      const hash = digest(bytes);
+      if (prior?.requestId === requestId) {
+        if (prior.digest !== hash) throw new Error("Import request changed");
+        return prior;
+      }
+      if (prior && prior.state !== "discarded") throw new Error("Resolve or discard the previous import first");
+      const retained = await readdir(this.directory).catch((error: unknown): string[] => {
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return [];
+        throw error;
+      });
+      for (const name of retained) if (/^[a-f0-9]{64}\.(zip|json)\.[a-f0-9-]{36}$/u.test(name)) await rm(join(this.directory, name), { force: true });
+      const archives = retained.filter(name => /^[a-f0-9]{64}\.zip$/u.test(name));
+      let held = 0;
+      for (const name of archives) {
+        const journal = name.replace(/\.zip$/u, ".json");
+        if (!retained.includes(journal)) { await rm(join(this.directory, name), { force: true }); continue; }
+        const state: unknown = JSON.parse(await readFile(join(this.directory, journal), "utf8"));
+        if (typeof state === "object" && state !== null && "state" in state && (state.state === "complete" || state.state === "discarded")) await rm(join(this.directory, name), { force: true });
+        else held += 1;
+      }
+      if (held >= 4) throw new Error("Import staging is full; discard an unused archive first");
+      const path = this.path(owner, ".zip");
+      await this.write(path, bytes);
+      try {
+        const staged = await runCauseEffect(this.service.stage(path, owner));
+        const preview = codec(AGENT_IMPORT_ROUTES.stage).response(200, staged);
+        const receipt: Receipt = { requestId, token: staged.token, digest: hash, preview, state: "staged", result: null, selection: null };
+        await this.save(owner, receipt);
+        await runCauseEffect(this.service.discard(staged.token, owner));
+        return receipt;
+      } catch (error) { await rm(path, { force: true }); throw error; }
+    });
+  }
+  apply(owner: string, value: unknown, actor: ChannelActor) {
+    return this.serial(async () => {
+      const wire = codec(AGENT_IMPORT_ROUTES.apply).request(value);
+      const input = parseApplyAgentImportInput(wire);
+      const receipt = await this.read(owner);
+      if (!receipt || receipt.token !== input.token || receipt.state === "discarded") throw new Error("Import closed");
+      const selection = JSON.stringify(wire);
+      if (receipt.selection !== null && receipt.selection !== selection) throw new Error("Import selection changed");
+      if (receipt.state !== "staged") return receipt;
+      const bytes = await readFile(this.path(owner, ".zip"));
+      if (digest(bytes) !== receipt.digest) throw new Error("Staged archive changed");
+      const preview = await runCauseEffect(this.service.stage(this.path(owner, ".zip"), owner));
+      if (input.keys.some(key => !preview.agents.some(agent => agent.key === key)) || input.channelKeys.some(key => !preview.channels.some(channel => channel.key === key))) throw new Error("Selection does not belong to preview");
+      if (input.keys.length === 0) throw new Error("Select at least one agent");
+      receipt.selection = selection; receipt.state = "applying";
+      await this.save(owner, receipt);
+      try {
+        const result = await runCauseEffect(this.service.apply({ ...input, token: preview.token }, {
+          owner, actor, reviseSkills: false,
+          timezone: typeof wire === "object" && wire !== null && !Array.isArray(wire) && typeof wire.timezone === "string" ? wire.timezone : undefined,
+        }));
+        receipt.result = codec(AGENT_IMPORT_ROUTES.apply).response(200, { ...result, agents: result.agents.map(agent => ({ agentId: agent.id, name: agent.name })) });
+        receipt.state = "complete";
+        await this.save(owner, receipt);
+        await rm(this.path(owner, ".zip"), { force: true }).catch(() => undefined);
+        return receipt;
+      } catch {
+        // Persisted applying is also uncertain after restart; never dispatch this token again.
+        receipt.state = "uncertain"; receipt.result = null;
+        await this.save(owner, receipt);
+        return receipt;
+      } finally { await runCauseEffect(this.service.discard(preview.token, owner)); }
+    });
+  }
+  discard(owner: string, token: string) {
+    return this.serial(async () => {
+      const receipt = await this.read(owner);
+      if (!receipt || receipt.token !== token) return null;
+      if (receipt.state === "uncertain" || receipt.state === "applying") throw new Error("Import outcome unresolved; inspect host before another import");
+      await runCauseEffect(this.service.discard(token, owner));
+      receipt.state = "discarded";
+      await this.save(owner, receipt);
+      await rm(this.path(owner, ".zip"), { force: true });
+      return receipt;
+    });
+  }
+}

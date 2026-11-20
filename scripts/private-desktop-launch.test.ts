@@ -38,11 +38,14 @@ it.effect("private desktop launch preserves its isolated profile when opened in 
       undefined,
       undefined,
     );
+    assert.strictEqual(config.appId, "com.samoyedlabs.sled.bots-preview");
+    assert.strictEqual(config.productName, "Sled Bots Preview");
     assert.strictEqual(readMac(config).mac.type, "development");
     assert.strictEqual(readMac(config).mac.notarize, false);
     assert.deepStrictEqual(readMac(config).mac.extendInfo.LSEnvironment, {
       T3CODE_HOME: "/private/t3-remote-desktop",
       T3CODE_DISABLE_AUTO_UPDATE: "true",
+      T3CODE_DESKTOP_APP_NAME: "Sled Bots Preview",
       T3CODE_RELAY_URL: "https://relay.example.test",
       T3CODE_CLERK_PUBLISHABLE_KEY: "pk_test_public",
       T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: "public-client",
@@ -55,6 +58,8 @@ it.effect("private desktop launch preserves its isolated profile when opened in 
         ConfigProvider.fromEnv({
           env: {
             T3CODE_DESKTOP_PRIVATE_BUILD: "true",
+            T3CODE_DESKTOP_PRIVATE_APP_ID: "com.samoyedlabs.sled.bots-preview",
+            T3CODE_DESKTOP_PRIVATE_NAME: "Sled Bots Preview",
             T3CODE_DESKTOP_PRIVATE_HOME: "/private/t3-remote-desktop",
             T3CODE_RELAY_URL: "https://relay.example.test",
             T3CODE_CLERK_PUBLISHABLE_KEY: "pk_test_public",
@@ -176,6 +181,21 @@ it.effect(
     }),
 );
 
+it("private Finder launches retain Dev display and storage-stage branding", () => {
+  const environment = privateDesktopLaunchEnvironment(
+    "/private/dev-profile",
+    {},
+    {
+      displayName: " Sled Code (Dev) ",
+      stageLabel: "Dev",
+    },
+  );
+  assert.equal(environment.T3CODE_DESKTOP_APP_NAME, "Sled Code (Dev)");
+  assert.equal(environment.T3CODE_DESKTOP_STAGE_LABEL, "Dev");
+  assert.equal(environment.T3CODE_HOME, "/private/dev-profile");
+  assert.isUndefined(environment.VITE_DEV_SERVER_URL);
+});
+
 it("portable updater opt-in preserves public settings and excludes account paths", () => {
   assert.deepStrictEqual(
     privateDesktopLaunchEnvironment(
@@ -209,6 +229,7 @@ it.effect("Windows updater opt-in pins its publisher and portable profile", () =
       sledPrivateEnvironment: {
         SLED_PORTABLE_PROFILE: "true",
         T3CODE_DISABLE_AUTO_UPDATE: "false",
+        T3CODE_DESKTOP_APP_NAME: "Sled Code",
       },
     });
     assert.strictEqual(config.forceCodeSigning, true);

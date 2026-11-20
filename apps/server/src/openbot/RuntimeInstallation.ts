@@ -1,3 +1,4 @@
+import type { VerifiedCompatibilityEvidence } from "./CompatibilityEvidence.ts";
 // @effect-diagnostics nodeBuiltinImport:off -- Streamed archive hashing and ZIP decoding belong to this Node adapter.
 import * as NodeCrypto from "node:crypto";
 import * as NodeStream from "@effect/platform-node/NodeStream";
@@ -32,6 +33,11 @@ export class RuntimeInstallationError extends Schema.TaggedError<RuntimeInstalla
 export class RuntimeInstallation extends Context.Service<
   RuntimeInstallation,
   {
+    readonly installValidated: (input: {
+      readonly version: OpenbotStagedRuntime["version"];
+      readonly platform: OpenbotStagedRuntime["platform"];
+      readonly proof: VerifiedCompatibilityEvidence;
+    }) => Effect.Effect<OpenbotInstalledRuntime, RuntimeInstallationError>;
     readonly getStatus: Effect.Effect<OpenbotRuntimeInstallationStatus, RuntimeInstallationError>;
     readonly install: (
       staged: OpenbotStagedRuntime,
@@ -332,6 +338,48 @@ const make = Effect.fn("RuntimeInstallation.make")(function* (config: {
     Effect.mapError(wrapStorage),
     gate.withPermits(1),
   );
+  const installValidated = Effect.fn("RuntimeInstallation.installValidated")(function* (input: {
+    readonly version: OpenbotStagedRuntime["version"];
+    readonly platform: OpenbotStagedRuntime["platform"];
+    readonly proof: VerifiedCompatibilityEvidence;
+  }) {
+    const evidence = input.proof.evidence;
+    if (evidence.state !== "eligible" || !evidence.artifactPath)
+      return yield* new RuntimeInstallationError({ reason: "compatibility" });
+    const artifact = yield* fs.realPath(evidence.artifactPath);
+    if (artifact !== evidence.artifactPath)
+      return yield* new RuntimeInstallationError({ reason: "integrity" });
+    const bytes = yield* fs.readFile(artifact);
+    if (
+      bytes.length === 0 ||
+      bytes.length > 1_073_741_824 ||
+      NodeCrypto.createHash("sha256").update(bytes).digest("hex") !==
+        evidence.identity.artifactSha256
+    )
+      return yield* new RuntimeInstallationError({ reason: "integrity" });
+    const name = path.basename(artifact);
+    const target = path.join(
+      root,
+      "artifacts",
+      input.version,
+      evidence.identity.artifactSha256,
+      name,
+    );
+    yield* fs.makeDirectory(path.dirname(target), { recursive: true, mode: 0o700 });
+    if (artifact !== target) yield* fs.writeFile(target, bytes, { mode: 0o600 });
+    return yield* install({
+      version: input.version,
+      platform: input.platform,
+      name,
+      size: bytes.length,
+      sha256: evidence.identity.artifactSha256,
+      releaseCommit: evidence.identity.releaseCommit,
+      artifactPath: target,
+      compatibility: "validated",
+      activation: "blocked",
+      stagedAt: evidence.completedAt ?? evidence.createdAt,
+    });
+  }, Effect.mapError(wrapStorage));
   const select = Effect.fn("RuntimeInstallation.select")(function* (
     runtime: OpenbotInstalledRuntime,
   ) {
@@ -343,7 +391,7 @@ const make = Effect.fn("RuntimeInstallation.make")(function* (config: {
       return;
     yield* save({ ...state, active: current, previous: state.active });
   }, gate.withPermits(1));
-  return RuntimeInstallation.of({ getStatus: read(), install, resolve, select });
+  return RuntimeInstallation.of({ getStatus: read(), installValidated, install, resolve, select });
 });
 
 export const layer = (config: { readonly stateDirectory: string }) =>

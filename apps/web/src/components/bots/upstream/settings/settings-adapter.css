@@ -1,0 +1,31 @@
+@scope (.openbot-react) {
+  .openbot-settings-page {
+    display: grid;
+    grid-template-columns: max(var(--left-panel-width, 280px), 220px) minmax(0, 1fr);
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
+    height: 100%;
+  }
+  .openbot-settings-nav {
+    min-height: 0;
+    overflow-y: auto;
+    border-inline-end: 1px solid var(--openbot-border);
+  }
+  .openbot-settings-page > .settings-modal-page {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .openbot-settings-page .settings-modal-main {
+    height: 100%;
+  }
+  .ui-native-select {
+    appearance: auto;
+    max-width: 100%;
+  }
+  .openbot-settings-error {
+    color: var(--openbot-danger);
+    font-size: var(--openbot-text-sm);
+  }
+}

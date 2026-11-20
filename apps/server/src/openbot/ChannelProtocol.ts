@@ -1,5 +1,8 @@
 import {
+  OpenbotChannelPresentations,
+  OpenbotChannelPictureImage,
   OpenbotChannelMemory,
+  OpenbotConversationDetail,
   OpenbotChannelRoutine,
   OpenbotChannelRoutineRun,
   OpenbotChannel,
@@ -29,6 +32,42 @@ const settingsPaths = {
   "channel.routine.runs": "/v1/channels/routines/runs",
 } as const;
 export function route(request: Request) {
+  if (request.operation === "channel.trace") {
+    const { operation, ...body } = request;
+    return {
+      method: "POST" as const,
+      path: "/v1/sled/channels/trace",
+      body,
+      channelProjection: operation,
+    };
+  }
+  if (request.operation === "channel.presentation")
+    return {
+      method: "POST" as const,
+      path: "/v1/sled/channels/presentation",
+      body: {},
+      channelProjection: request.operation,
+    };
+  if (request.operation === "channel.picture.read")
+    return {
+      method: "POST" as const,
+      path: "/v1/sled/channels/picture/read",
+      body: { channelId: request.channelId, version: request.version },
+      channelProjection: request.operation,
+    };
+  if (request.operation === "channel.picture.set")
+    return {
+      method: "POST" as const,
+      path: "/v1/sled/channels/picture",
+      body: {
+        channelId: request.channelId,
+        kind: request.picture.kind,
+        icon: request.picture.kind === "icon" ? request.picture.icon : null,
+        mimeType: request.picture.kind === "image" ? request.picture.image.mimeType : null,
+        dataBase64: request.picture.kind === "image" ? request.picture.image.dataBase64 : null,
+      },
+      channelProjection: request.operation,
+    };
   if (request.operation in settingsPaths) {
     const { operation, ...body } = request;
     return {
@@ -55,6 +94,13 @@ export function route(request: Request) {
       method: "POST" as const,
       path: "/v1/channels/delete",
       body: { channelId: request.channelId },
+      channelProjection: request.operation,
+    };
+  if (request.operation === "channel.message.delete")
+    return {
+      method: "POST" as const,
+      path: "/v1/channels/messages/delete",
+      body: { channelId: request.channelId, messageId: request.messageId },
       channelProjection: request.operation,
     };
   const { operation, ...input } = request;
@@ -89,15 +135,25 @@ const settingsSchemas = {
   "channel.routine.test": OpenbotChannelRoutineRun,
   "channel.routine.runs": Schema.Array(OpenbotChannelRoutineRun).check(Schema.isMaxLength(100)),
 } as const;
+const decodePresentations = Schema.decodeUnknownEffect(OpenbotChannelPresentations);
+const decodePicture = Schema.decodeUnknownEffect(OpenbotChannelPictureImage);
 const decodeList = Schema.decodeUnknownEffect(
   Schema.Array(OpenbotChannelSummary).check(Schema.isMaxLength(10_000)),
 );
 const decodeChannel = Schema.decodeUnknownEffect(OpenbotChannel);
 const decodePage = Schema.decodeUnknownEffect(OpenbotChannelPage);
 const decodePublicJson = Schema.decodeUnknownEffect(Schema.Json);
+const decodeTraceDetail = Schema.decodeUnknownEffect(OpenbotConversationDetail);
 export const project = Effect.fn("OpenbotChannelProtocol.project")(
   (operation: Request["operation"], value: unknown) =>
     Effect.gen(function* () {
+      if (operation === "channel.trace")
+        return yield* decodeTraceDetail(value).pipe(Effect.flatMap(decodePublicJson));
+      if (operation === "channel.presentation")
+        return yield* decodePresentations(value).pipe(Effect.flatMap(decodePublicJson));
+      if (operation === "channel.picture.read")
+        return yield* decodePicture(value).pipe(Effect.flatMap(decodePublicJson));
+      if (operation === "channel.picture.set") return null;
       if (operation in settingsSchemas) {
         const schema: Schema.Codec<unknown> =
           settingsSchemas[operation as keyof typeof settingsSchemas];
@@ -106,7 +162,7 @@ export const project = Effect.fn("OpenbotChannelProtocol.project")(
         );
       }
       const projected: Effect.Effect<unknown, Schema.SchemaError> =
-        operation === "channel.delete"
+        operation === "channel.delete" || operation === "channel.message.delete"
           ? Effect.succeed(null)
           : operation === "channel.list"
             ? decodeList(value)

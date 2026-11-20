@@ -1,3 +1,4 @@
+import "~/index.css";
 import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
@@ -27,12 +28,27 @@ function setup(state: { projects?: ReadonlyArray<Project>; threads?: ReadonlyArr
 
 describe("CommandPalette open intents", () => {
   it("opens New thread in... with focus in the search input, not the Back button", async () => {
-    setup();
+    const environmentId = EnvironmentId.make("local");
+    setup({
+      projects: ["Acme", "Workshop"].map((title) => ({
+        id: ProjectId.make(title.toLowerCase()),
+        environmentId,
+        title,
+        workspaceRoot: `/work/${title.toLowerCase()}`,
+        repositoryIdentity: null,
+        defaultModelSelection: null,
+        createdAt: "2026-03-01T00:00:00.000Z",
+        updatedAt: "2026-03-01T00:00:00.000Z",
+        scripts: [],
+      })),
+    });
     await using _screen = await render(<CommandPalette>{null}</CommandPalette>);
 
     openCommandPalette({ open: "new-thread-in" });
 
     await expect.element(page.getByPlaceholder("Search...")).toHaveFocus();
+    await expect.element(page.getByRole("option", { name: /Acme/ })).toBeVisible();
+    await expect.element(page.getByRole("option", { name: /Workshop/ })).toBeVisible();
   });
 
   it("opens a search intent with its query in the focused input", async () => {
@@ -41,9 +57,28 @@ describe("CommandPalette open intents", () => {
 
     openCommandPalette({ query: "acme" });
 
-    const input = page.getByPlaceholder("Search commands, projects, and threads...");
+    const input = page.getByPlaceholder("Search threads, projects, and commands...");
     await expect.element(input).toHaveFocus();
     await expect.element(input).toHaveValue("acme");
+  });
+
+  it("opens Bots in its own scope and offers the two compose destinations", async () => {
+    setup();
+    await using screen = await render(<CommandPalette>{null}</CommandPalette>, { router: "/bots" });
+    openCommandPalette();
+    await expect
+      .element(page.getByRole("button", { name: "Bots", exact: true }))
+      .toHaveAttribute("aria-pressed", "true");
+    await expect.element(page.getByRole("option", { name: "New bot", exact: true })).toBeVisible();
+    await expect.element(page.getByRole("option", { name: /New thread/ })).not.toBeInTheDocument();
+    openCommandPalette({ open: "new-bot-chat" });
+    await expect
+      .element(page.getByRole("option", { name: "New group chat", exact: true }))
+      .toBeVisible();
+    await expect.element(page.getByRole("option", { name: "New bot", exact: true })).toBeVisible();
+    await expect
+      .poll(() => screen.container.ownerDocument.querySelectorAll('[role="option"]').length)
+      .toBe(2);
   });
 
   it("opens a searched project's latest listed thread, not a newer subagent", async () => {
@@ -90,5 +125,40 @@ describe("CommandPalette open intents", () => {
     await page.getByRole("option", { name: /Acme/ }).first().click();
 
     await vi.waitFor(() => expect(screen.router?.state.location.pathname).toBe("/local/parent"));
+  });
+});
+
+describe("Unified workspace commands", () => {
+  it("filters Bots and Commands without leaking unrelated project actions", async () => {
+    setup();
+    await using _screen = await render(<CommandPalette>{null}</CommandPalette>);
+    openCommandPalette();
+    await page.getByRole("button", { name: "Bots", exact: true }).click();
+    await expect.element(page.getByRole("option", { name: "New bot", exact: true })).toBeVisible();
+    await expect
+      .element(page.getByRole("option", { name: "Open settings", exact: true }))
+      .not.toBeInTheDocument();
+    const input = page.getByPlaceholder("Search bots, messages, and commands...");
+    await input.fill("project");
+    await expect
+      .element(page.getByRole("option", { name: "Add project...", exact: true }))
+      .not.toBeInTheDocument();
+    await input.fill("");
+    await page.getByRole("button", { name: "Commands", exact: true }).click();
+    await expect
+      .element(page.getByRole("option", { name: "Open settings", exact: true }))
+      .toBeVisible();
+  });
+  it("opens a Bots control through the same global palette used for Threads", async () => {
+    setup();
+    await using screen = await render(<CommandPalette>{null}</CommandPalette>);
+    openCommandPalette();
+    await page.getByRole("button", { name: "Bots", exact: true }).click();
+    await page.getByRole("combobox").fill("Bot tasks");
+    await page.getByRole("option", { name: "Bot tasks", exact: true }).click();
+    await vi.waitFor(() => {
+      expect(screen.router?.state.location.pathname).toBe("/bots");
+      expect(screen.router?.state.location.search).toMatchObject({ botPage: "tasks" });
+    });
   });
 });

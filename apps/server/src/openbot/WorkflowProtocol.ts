@@ -18,6 +18,8 @@ export function isRequest(input: { readonly operation: string }): input is Reque
   return input.operation.startsWith("workflow.");
 }
 const paths: Readonly<Record<Request["operation"], string>> = {
+  "workflow.rotateWebhookSecret": "rotate-webhook-secret",
+  "workflow.webhookConfiguration": "connect-webhook-configuration",
   "workflow.list": "list",
   "workflow.get": "get",
   "workflow.create": "create",
@@ -40,7 +42,10 @@ export function route(request: Request) {
   const { operation, ...body } = request;
   return {
     method: "POST" as const,
-    path: `/v1/workflows/${paths[operation]}`,
+    path:
+      operation === "workflow.webhookConfiguration"
+        ? "/v1/sled/connect-workflow-webhooks/configuration"
+        : `/v1/workflows/${paths[operation]}`,
     body,
     workflowProjection: operation,
   };
@@ -50,7 +55,7 @@ const listing = Schema.decodeUnknownEffect(
     workflows: Schema.Array(OpenbotWorkflowSummary).check(Schema.isMaxLength(10_000)),
   }),
 );
-const publicDetail = (value: typeof OpenbotWorkflowDetail.Type) => ({
+const publicDetail = (value: OpenbotWorkflowDetail) => ({
   ...value,
   triggers: value.triggers.map((trigger) => ({ ...trigger, webhookUrl: null })),
 });
@@ -72,11 +77,23 @@ const run = Schema.decodeUnknownEffect(OpenbotWorkflowRunDetail);
 const page = Schema.decodeUnknownEffect(OpenbotWorkflowRunPage);
 const step = Schema.decodeUnknownEffect(OpenbotWorkflowStep);
 const empty = Schema.decodeUnknownEffect(Schema.Struct({}));
+const webhookConfiguration = Schema.decodeUnknownEffect(
+  Schema.Struct({
+    routeId: Schema.NullOr(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512))),
+  }),
+);
+const webhookSecret = Schema.decodeUnknownEffect(
+  Schema.Struct({ secret: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)) }),
+);
 export const project = Effect.fn("OpenbotWorkflowProtocol.project")((
   operation: Request["operation"],
   value: unknown,
 ) => {
   switch (operation) {
+    case "workflow.webhookConfiguration":
+      return webhookConfiguration(value);
+    case "workflow.rotateWebhookSecret":
+      return webhookSecret(value);
     case "workflow.list":
       return listing(value);
     case "workflow.get":

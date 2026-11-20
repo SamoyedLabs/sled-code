@@ -22,6 +22,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 
 type RoutineRequest = Extract<OpenbotEventAdminRequest, { operation: "events.save" }>;
 type Owner = { kind: "agent" | "channel"; id: string };
+export type BotRoutineEditTarget = { owner: Owner; routineId: string };
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -50,7 +51,11 @@ export function useBotRoutineDiscovery(environmentId: EnvironmentId, hostId: str
     },
   };
 }
-export function useBotEvents(environmentId: EnvironmentId, hostId: string) {
+export function useBotEvents(
+  environmentId: EnvironmentId,
+  hostId: string,
+  initial?: BotRoutineEditTarget,
+) {
   const discovery = useBotRoutineDiscovery(environmentId, hostId);
   const canAdmin = useAtomValue(
     openbot.adminToHost.permissionAtom(environmentId, {
@@ -69,15 +74,15 @@ export function useBotEvents(environmentId: EnvironmentId, hostId: string) {
     }),
   );
   const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
-  const [owner, setOwner] = useState<Owner>({ kind: "agent", id: "" });
-  const [routineId, setRoutineId] = useState("");
+  const [owner, setOwner] = useState<Owner>(() => initial?.owner ?? { kind: "agent", id: "" });
+  const [routineId, setRoutineId] = useState(() => initial?.routineId ?? "");
   const [rows, setRows] = useState<readonly Record<string, unknown>[]>([]);
   const [draft, setDraft] = useState(EVENT_SCHEDULE_TEMPLATE);
   const [form, setForm] = useState<RoutineRequest>(() =>
     eventRoutineRequest(EVENT_SCHEDULE_TEMPLATE, { kind: "agent", id: "draft" })!,
   );
   const [service, setService] = useState<{ supported: boolean; connected: boolean } | null>(null);
-  const [readOnly, setReadOnly] = useState(false);
+  const [readOnly, setReadOnly] = useState(Boolean(initial));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<unknown>(null);
@@ -122,24 +127,25 @@ export function useBotEvents(environmentId: EnvironmentId, hostId: string) {
     setRows([]);
     resetEditor();
   }
+  function loadRoutine(id: string, available: typeof rows) {
+    setRoutineId(id);
+    const row = available.find((entry) => entry.id === id);
+    const next = eventRoutineDraft(row);
+    setDraft(next ?? (row ? JSON.stringify(row, null, 2) : EVENT_SCHEDULE_TEMPLATE));
+    setForm(
+      next
+        ? eventRoutineRequest(next, owner)!
+        : eventRoutineRequest(EVENT_SCHEDULE_TEMPLATE, { kind: "agent", id: "draft" })!,
+    );
+    setReadOnly(Boolean(id) && next === null);
+  }
   function selectRoutine(id: string) {
     if (lock.current) return;
     dismissConfiguration();
     setResult(null);
     setResultKind(null);
     setError(null);
-    setRoutineId(id);
-    const row = rows.find((entry) => entry.id === id);
-    if (!row) {
-      setDraft(EVENT_SCHEDULE_TEMPLATE);
-      setForm(eventRoutineRequest(EVENT_SCHEDULE_TEMPLATE, { kind: "agent", id: "draft" })!);
-      setReadOnly(false);
-      return;
-    }
-    const next = eventRoutineDraft(row);
-    setDraft(next ?? JSON.stringify(row, null, 2));
-    if (next) setForm(eventRoutineRequest(next, owner)!);
-    setReadOnly(next === null);
+    loadRoutine(id, rows);
   }
   function newRoutine(kind: "schedule" | "webhook") {
     if (lock.current) return;
@@ -167,7 +173,7 @@ export function useBotEvents(environmentId: EnvironmentId, hostId: string) {
     setForm((current) => ({ ...current, ...fields }));
     if (source) updateDraft(JSON.stringify({ ...source, ...fields }, null, 2));
   }
-  const act = async (input: OpenbotEventAdminRequest) => {
+  const act = async (input: OpenbotEventAdminRequest, selectId?: string) => {
     if (lock.current) return null;
     lock.current = true;
     setBusy(true);
@@ -186,7 +192,15 @@ export function useBotEvents(environmentId: EnvironmentId, hostId: string) {
         if (typeof status?.supported === "boolean" && typeof status.connected === "boolean")
           setService({ supported: status.supported, connected: status.connected });
       }
-      if (input.operation === "events.list") setRows(routineRows(value));
+      if (input.operation === "events.list") {
+        const available = routineRows(value);
+        setRows(available);
+        if (selectId !== undefined) {
+          loadRoutine(selectId, available);
+          if (!available.some((entry) => entry.id === selectId))
+            setError("This routine is no longer available on this host.");
+        }
+      }
       if (input.operation === "events.save") {
         const saved = record(record(value)?.routine);
         const savedOwner = record(saved?.owner);

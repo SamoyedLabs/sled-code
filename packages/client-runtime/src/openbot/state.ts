@@ -1,3 +1,8 @@
+import { changeScopeForRead, changeToken, type ChangeScope } from "./changeScope.ts";
+import { openbotAdminCommandKey } from "./browserNavigation.ts";
+import { createOpenbotPrivilegedAtoms } from "./privileged.ts";
+import { createOpenbotSettingsAtoms } from "./SettingsAtoms.ts";
+import { createOpenbotContinuityAtoms } from "./continuity.ts";
 import { createOpenbotTemplateAtoms } from "./TemplateAtoms.ts";
 import { createOpenbotCatalogAtoms } from "./CatalogAtoms.ts";
 import { createOpenbotDataAtoms } from "./DataAtoms.ts";
@@ -11,7 +16,7 @@ import {
 } from "@t3tools/contracts";
 import type * as EnvironmentRegistry from "../connection/registry.ts";
 import * as Effect from "effect/Effect";
-import type { Atom } from "effect/reactivity";
+import { Atom } from "effect/reactivity";
 import type { HttpClient } from "effect/http";
 import {
   createEnvironmentQueryAtomFamily,
@@ -42,18 +47,43 @@ export function createOpenbotAtoms<R, E>(
     tag: WS_METHODS.openbotSubscribeChanges,
     idleTtlMs: 0,
   });
-  const refreshTrigger = ({ environmentId }: { readonly environmentId: EnvironmentId }) =>
-    changes({ environmentId, input: {} });
+  const scopedTriggers = Atom.family((key: string) => {
+    const target = JSON.parse(key) as { environmentId: EnvironmentId; scope: ChangeScope };
+    return Atom.map(changes({ environmentId: target.environmentId, input: {} }), (result) =>
+      result._tag === "Success" ? changeToken(result.value, target.scope) : result._tag,
+    );
+  });
+  const triggerFor = (environmentId: EnvironmentId, scope: ChangeScope) =>
+    scopedTriggers(JSON.stringify({ environmentId, scope }));
+  const scopedRefresh =
+    (resources: ChangeScope["resources"]) =>
+    ({ environmentId }: { readonly environmentId: EnvironmentId }) =>
+      triggerFor(environmentId, { resources });
+  const refreshTrigger = scopedRefresh(["configuration"]);
+  const readRefresh = ({
+    environmentId,
+    input,
+  }: {
+    readonly environmentId: EnvironmentId;
+    readonly input: OpenbotReadRequest;
+  }) => triggerFor(environmentId, changeScopeForRead(input));
+  const hostReadRefresh = ({
+    environmentId,
+    input,
+  }: {
+    readonly environmentId: EnvironmentId;
+    readonly input: OpenbotHostReadInput;
+  }) => triggerFor(environmentId, changeScopeForRead(input.request));
   const agents = createEnvironmentQueryAtomFamily(runtime, {
     label: "openbot:agents",
     execute: (_input: Record<string, never>) => listAgents(),
     staleTimeMs: 5_000,
-    refreshTrigger,
+    refreshTrigger: scopedRefresh(["agents", "activity"]),
   });
   const attention = createEnvironmentQueryAtomFamily(runtime, {
     label: "openbot:attention",
     execute: (_input: Record<string, never>) => attentionSnapshot(),
-    refreshTrigger,
+    refreshTrigger: scopedRefresh(["attention"]),
     staleTimeMs: 5_000,
   });
   const upstream = createEnvironmentQueryAtomFamily(runtime, {
@@ -75,6 +105,7 @@ export function createOpenbotAtoms<R, E>(
     refreshTrigger,
   });
   return {
+    ...createOpenbotContinuityAtoms(runtime, refreshTrigger),
     maintenance,
     maintenanceCommand: createEnvironmentRpcCommand(runtime, {
       label: "Update upstream maintenance",
@@ -83,12 +114,24 @@ export function createOpenbotAtoms<R, E>(
         Effect.sync(() => registry.refresh(maintenance({ environmentId, input: {} }))),
       concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
     }),
-    ...createOpenbotFileAtoms(runtime, refreshTrigger),
+    ...createOpenbotFileAtoms(
+      runtime,
+      scopedRefresh(["configuration", "queue", "tasks", "conversation"]),
+    ),
+    ...createOpenbotPrivilegedAtoms(
+      runtime,
+      scopedRefresh(["configuration", "attention", "activity"]),
+    ),
     ...createOpenbotBrowserAtoms(runtime),
+    liveVoiceCommand: createEnvironmentRpcCommand(runtime, {
+      label: "Bot live voice",
+      tag: WS_METHODS.openbotLiveVoiceCommand,
+    }),
     ...createOpenbotComputerAtoms(runtime),
     ...createOpenbotDataAtoms(runtime),
     ...createOpenbotCatalogAtoms(runtime),
     ...createOpenbotTemplateAtoms(runtime),
+    ...createOpenbotSettingsAtoms(runtime),
     codingPolicy,
     codingPolicyEnable: createEnvironmentRpcCommand(runtime, {
       label: "Enable bot coding delegation",
@@ -180,13 +223,13 @@ export function createOpenbotAtoms<R, E>(
       label: "openbot:read",
       execute: (input: OpenbotReadRequest) => read(input),
       staleTimeMs: 5_000,
-      refreshTrigger,
+      refreshTrigger: readRefresh,
     }),
     readFromHost: createEnvironmentQueryAtomFamily(runtime, {
       label: "openbot:host-read",
       execute: (input: OpenbotHostReadInput) => readFromHost(input),
       staleTimeMs: 5_000,
-      refreshTrigger,
+      refreshTrigger: hostReadRefresh,
     }),
     sledTools: createEnvironmentQueryAtomFamily(runtime, {
       label: "openbot:sled-tools",
@@ -208,7 +251,7 @@ export function createOpenbotAtoms<R, E>(
       label: "openbot:coding-tasks",
       execute: (input: OpenbotCodingListInput) => codingTasks(input),
       staleTimeMs: 5_000,
-      refreshTrigger,
+      refreshTrigger: scopedRefresh(["tasks", "activity"]),
     }),
     write: createEnvironmentRpcCommand(runtime, {
       label: "Update bot task",
@@ -228,7 +271,10 @@ export function createOpenbotAtoms<R, E>(
           registry.refresh(agents({ environmentId, input: {} }));
           registry.refresh(attention({ environmentId, input: {} }));
         }),
-      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
+      concurrency: {
+        mode: "serial",
+        key: ({ environmentId, input }) => openbotAdminCommandKey(environmentId, input.operation),
+      },
     }),
     adminToHost: createEnvironmentRpcCommand(runtime, {
       label: "Update bot engine configuration",
@@ -238,7 +284,11 @@ export function createOpenbotAtoms<R, E>(
           registry.refresh(agents({ environmentId, input: {} }));
           registry.refresh(attention({ environmentId, input: {} }));
         }),
-      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
+      concurrency: {
+        mode: "serial",
+        key: ({ environmentId, input }) =>
+          openbotAdminCommandKey(environmentId, input.request.operation),
+      },
     }),
     start: createEnvironmentRpcCommand(runtime, {
       label: "Start bot engine",

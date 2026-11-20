@@ -1,0 +1,24 @@
+import { runCauseEffect } from "../../backend/effect-boundary";
+import type { TeamApiAgents } from "./dependencies";
+import { HttpError } from "./http-error";
+import type { TeamApiRequestContext, RouteOutcome } from "./request-context";
+import { readJson, requireListedAgent, requireAgentLevel, memberSender, stringField, stringArray, nullableString } from "./request-helpers";
+
+/** Exact existing main/task send. The negotiated codec is mandatory; there is no legacy fallback. */
+export async function routeSledFilesIdentity(context: TeamApiRequestContext, agents: TeamApiAgents, hiddenAgentIds: ReadonlySet<string>): Promise<RouteOutcome> {
+  if (context.method !== "POST" || context.url.pathname !== "/v1/sled/files/send") return "unmatched";
+  if (!context.capabilities.has("sled-files-identity-v1")) throw new HttpError(400, "Guarded Files unavailable.");
+  const body = await readJson(context.request);
+  const agentId = stringField(body, "agentId");
+  if (hiddenAgentIds.has(agentId)) throw new HttpError(404, "Agent unavailable.");
+  requireListedAgent(agents, agentId);
+  requireAgentLevel(context, agentId, "chat");
+  if (typeof body.receiptOnly !== "boolean") throw new HttpError(400, "Invalid receipt lookup.");
+  const taskId = nullableString(body, "taskId");
+  return context.json(202, await runCauseEffect(agents.sendMessage({
+    agentId, expectedThreadId: stringField(body, "expectedThreadId"),
+    clientMessageId: stringField(body, "clientMessageId"), receiptOnly: body.receiptOnly,
+    text: stringField(body, "text", true, 100_000), attachmentDraftIds: stringArray(body, "attachmentDraftIds"),
+    replyToMessageId: nullableString(body, "replyToMessageId"), ...(taskId === null ? {} : { taskId }),
+  }, memberSender(context.member))));
+}

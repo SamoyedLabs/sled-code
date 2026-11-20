@@ -83,3 +83,53 @@ it.effect("enforces the frozen v1 reveal limit", () =>
     ).toBe("Failure");
   }),
 );
+
+it.effect("uses the released two-step routes and omits secret material from state and codes", () =>
+  Effect.gen(function* () {
+    const state = {
+      status: "ready",
+      items: [
+        {
+          kind: "login",
+          id: "one",
+          website: "https://fixture.invalid",
+          username: "fixture",
+          notes: "",
+          hasPassword: true,
+          hasTwoStep: true,
+          agents: ["agent-fixture"],
+          twoStepKey: "SYNTHETIC_TEST_KEY",
+        },
+      ],
+    };
+    expect(Vault.route({ operation: "vault.codes", version: "v4" })).toMatchObject({
+      method: "POST",
+      path: "/v1/admin/vault/v4/codes",
+      body: {},
+    });
+    expect(yield* Vault.project("vault.list", state, "v4")).toEqual({
+      status: "ready",
+      items: [
+        Object.fromEntries(
+          Object.entries(state.items[0]!).filter(([name]) => name !== "twoStepKey"),
+        ),
+      ],
+    });
+    expect(JSON.stringify(yield* Vault.project("vault.list", state, "v3"))).not.toContain("agents");
+    expect(JSON.stringify(yield* Vault.project("vault.list", state, "v2"))).not.toContain(
+      "hasTwoStep",
+    );
+    expect(
+      yield* Vault.project(
+        "vault.codes",
+        {
+          codes: [
+            { id: "one", code: "123456", period: 30, remainingMs: 1000, twoStepKey: "PRIVATE" },
+          ],
+        },
+        "v3",
+      ),
+    ).toEqual({ codes: [{ id: "one", code: "123456", period: 30, remainingMs: 1000 }] });
+    expect(isRequest({ operation: "vault.codes", version: "v2" })).toBe(false);
+  }),
+);

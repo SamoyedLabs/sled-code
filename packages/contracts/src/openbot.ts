@@ -47,9 +47,19 @@ export const OpenbotHostStatus = Schema.Struct({
 export type OpenbotHostStatus = typeof OpenbotHostStatus.Type;
 
 export const OpenbotAgent = Schema.Struct({
+  listingId: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512))),
   id: Schema.String,
   name: Schema.String,
   provider: Schema.String,
+  title: Schema.optional(Schema.String.check(Schema.isMaxLength(512))),
+  description: Schema.optional(Schema.String.check(Schema.isMaxLength(100_000))),
+  preview: Schema.optional(Schema.String.check(Schema.isMaxLength(100_000))),
+  updatedAt: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMaxLength(160)))),
+  avatarVersion: Schema.optional(Schema.String.check(Schema.isPattern(/^[0-9a-f-]{36}$/i))),
+  avatarSeed: Schema.optional(Schema.String.check(Schema.isMaxLength(128))),
+  avatarHue: Schema.optional(
+    Schema.NullOr(Schema.Literals([0, 30, 55, 100, 150, 185, 215, 245, 280, 320])),
+  ),
 });
 
 export const OpenbotAgentList = Schema.Array(OpenbotAgent);

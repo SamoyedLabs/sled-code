@@ -22,6 +22,7 @@ export interface ManagedHostConfig {
   readonly agentRoot: string;
   readonly serverName: string;
   readonly ownerSecret: string;
+  readonly sledEnvironmentId?: string;
   readonly runtimeRoot?: string;
   readonly startupTimeoutMs?: number;
 }
@@ -222,6 +223,7 @@ const make = Effect.fn("ManagedHost.make")(function* (config: ManagedHostConfig 
       OPENBOT_LOCAL_SERVER_ROOT: config.agentRoot,
       OPENBOT_LOCAL_SERVER_NAME: config.serverName,
       OPENBOT_LOCAL_SERVER_SECRET: config.ownerSecret,
+      ...(config.sledEnvironmentId ? { OPENBOT_LOCAL_SERVER_SLED_ENVIRONMENT_ID: config.sledEnvironmentId } : {}),
       ...(config.runtimeRoot ? { OPENBOT_LOCAL_SERVER_RUNTIMES: config.runtimeRoot } : {}),
     });
     const child = yield* Effect.try({

@@ -258,6 +258,8 @@ function useSettingsIndexSections(): SettingsListSection[] {
           ? [
               page("SettingsKeyboard", "keyboard", "Keyboard"),
               page("SettingsMicrophone", "mic", "Microphone"),
+              page("SettingsBotQuickActions", "clock", "Quick actions"),
+              page("SettingsAppLock", "lock", "App Lock"),
             ]
           : []),
       ],
@@ -268,6 +270,14 @@ function useSettingsIndexSections(): SettingsListSection[] {
         serverPage("SettingsProviderAccounts", "person.crop.circle", "Providers"),
         serverPage("SettingsThreads", "text.bubble", "Threads"),
         page("SettingsBots", "bubble.left.and.bubble.right", "Bots"),
+        ...(Platform.OS === "ios"
+          ? [
+              page("SettingsBotConversations", "text.bubble", "Bot conversations"),
+              page("SettingsBotVoice", "headphones", "Bot voice"),
+              page("SettingsBotMotion", "paintbrush", "Bot animations"),
+              page("SettingsBotHaptics", "bell.badge", "Bot haptics"),
+            ]
+          : []),
         page("SettingsScheduledTasks", "clock", "Scheduled tasks"),
       ],
     },

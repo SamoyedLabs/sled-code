@@ -2,6 +2,8 @@ import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
 import {
   type OpenbotVaultRequest,
+  type OpenbotVaultVersion,
+  OpenbotVaultCodes,
   OpenbotVaultState,
   OpenbotVaultSecret,
   OpenbotVaultImportResult,
@@ -22,7 +24,7 @@ export function route(request: OpenbotVaultRequest) {
         ? `/v1/admin/connectors/onepassword/${operation.slice("vault.onepassword.".length)}`
         : operation.startsWith("vault.bitwarden.")
           ? `/v1/admin/connectors/bitwarden/${operation.slice("vault.bitwarden.".length)}`
-          : `/v1/admin/vault/${"version" in request && request.version === "v2" ? "v2/" : ""}${operation.slice("vault.".length)}`;
+          : `/v1/admin/vault/${"version" in request && request.version !== "v1" ? `${request.version}/` : ""}${operation.slice("vault.".length)}`;
   const body =
     request.operation === "vault.save"
       ? request.input
@@ -42,6 +44,13 @@ const V1State = OpenbotVaultState.check(
 );
 const V1Secret = Schema.Struct({ value: Schema.String.check(Schema.isMaxLength(1024)) });
 const publicJson = Schema.decodeUnknownEffect(Schema.Json);
+const decodeCodes = Schema.decodeUnknownEffect(OpenbotVaultCodes);
+const decodeV1State = Schema.decodeUnknownEffect(V1State);
+const decodeState = Schema.decodeUnknownEffect(OpenbotVaultState);
+const decodeV1Secret = Schema.decodeUnknownEffect(V1Secret);
+const decodeSecret = Schema.decodeUnknownEffect(OpenbotVaultSecret);
+const decodeImport = Schema.decodeUnknownEffect(OpenbotVaultImportResult);
+
 const safeError = (value: string | null) =>
   value === null ? null : "The host password-manager connection failed.";
 function safeOrigin(value: string | null) {
@@ -56,7 +65,7 @@ function safeOrigin(value: string | null) {
 export const project = Effect.fn("OpenbotVaultProtocol.project")(function* (
   operation: OpenbotVaultRequest["operation"],
   value: unknown,
-  version: "v1" | "v2" = "v2",
+  version: OpenbotVaultVersion = "v2",
 ) {
   if (operation.startsWith("vault.onepassword.")) {
     const result = yield* decodeVaultOnePasswordStatus(value);
@@ -82,15 +91,22 @@ export const project = Effect.fn("OpenbotVaultProtocol.project")(function* (
       error: safeError(result.error),
     });
   }
-  const schema: Schema.Codec<unknown> =
-    operation === "vault.reveal"
-      ? version === "v1"
-        ? V1Secret
-        : OpenbotVaultSecret
-      : operation === "vault.import"
-        ? OpenbotVaultImportResult
-        : version === "v1"
-          ? V1State
-          : OpenbotVaultState;
-  return yield* Schema.decodeUnknownEffect(schema)(value).pipe(Effect.flatMap(publicJson));
+  if (operation === "vault.codes")
+    return yield* decodeCodes(value).pipe(Effect.flatMap(publicJson));
+  if (operation === "vault.reveal")
+    return yield* (version === "v1" ? decodeV1Secret : decodeSecret)(value).pipe(
+      Effect.flatMap(publicJson),
+    );
+  if (operation === "vault.import")
+    return yield* decodeImport(value).pipe(Effect.flatMap(publicJson));
+  const state = yield* (version === "v1" ? decodeV1State : decodeState)(value);
+  if (version === "v4") return yield* publicJson(state);
+  return yield* publicJson({
+    ...state,
+    items: state.items.map(({ agents: _agents, ...item }) => {
+      if (item.kind !== "login" || version === "v3") return item;
+      const { hasTwoStep: _hasTwoStep, ...oldLogin } = item;
+      return oldLogin;
+    }),
+  });
 });

@@ -1,0 +1,37 @@
+@scope (.openbot-react) {
+  .ui-field {
+    display: grid;
+    gap: var(--openbot-space-1-5);
+  }
+
+  .ui-label {
+    color: var(--openbot-text-secondary);
+    font-size: var(--openbot-text-sm);
+    font-weight: var(--openbot-weight-medium);
+    line-height: var(--openbot-leading-sm);
+  }
+
+  .ui-field-required,
+  .ui-field-error {
+    color: var(--openbot-danger);
+  }
+
+  .ui-field-required {
+    margin-inline-start: var(--openbot-space-0-5);
+  }
+
+  .ui-field-description,
+  .ui-field-error {
+    font-size: var(--openbot-text-sm);
+    line-height: var(--openbot-leading-sm);
+  }
+
+  .ui-field-description {
+    color: var(--openbot-text-muted);
+  }
+
+  .ui-field-limit {
+    display: grid;
+    gap: var(--openbot-space-0-5);
+  }
+}

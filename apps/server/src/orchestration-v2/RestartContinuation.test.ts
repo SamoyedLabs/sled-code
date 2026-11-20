@@ -1262,3 +1262,76 @@ it.effect.each(["completed", "failed", "interrupted"] as const)(
       );
     }),
 );
+
+it.effect.each([
+  ["startup", "pending"],
+  ["shutdown", "pending"],
+  ["shutdown", "cancelled"],
+] as const)(
+  "%s records a durable recovery explanation for a %s lost approval without continuing it",
+  ([trigger, requestStatus]) =>
+    Effect.gen(function* () {
+      const base = makeProjection();
+      const projection = {
+        ...base,
+        runtimeRequests: [
+          {
+            id: RuntimeRequestId.make("request:lost-approval"),
+            nodeId: NodeId.make("node:lost-approval"),
+            providerTurnId: base.providerTurns[0]!.id,
+            kind: "command",
+            status: requestStatus,
+            responseCapability:
+              requestStatus === "pending"
+                ? { type: "live", providerSessionId: sessionId }
+                : {
+                    type: "not_resumable",
+                    reason: "The server shut down before this runtime request was resolved.",
+                  },
+          },
+        ],
+      } as unknown as OrchestrationV2ThreadProjection;
+      const commits: Array<Parameters<EventSink.EventSinkV2["Service"]["commitCommand"]>[0]> = [];
+      const recovery = yield* ProviderRuntimeRecovery.make.pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            ServerSettings.layerTest({ continueThreadsAfterServerUpdate: true }),
+            Layer.mock(ProjectionStore.ProjectionStoreV2)({
+              getRecoveryThreadIds: () => Effect.succeed([threadId]),
+              getRuntimeRecoveryProjection: () => Effect.succeed(projection),
+            }),
+            Layer.mock(EventSink.EventSinkV2)({
+              commitCommand: (input) => {
+                commits.push(input);
+                return Effect.succeed({ committed: true, cancelledEffectCount: 0 } as never);
+              },
+            }),
+            IdAllocator.layer,
+            Layer.mock(EffectOutbox.EffectOutboxV2)({
+              reconcileAfterProcessLoss: Effect.succeed({ requeued: 0, cancelled: 0 }),
+            }),
+          ),
+        ),
+      );
+      yield* recovery.reconcile(trigger);
+      const events = commits.flatMap((c) => c.events);
+      const note = events.find((e) => e.type === "turn-item.updated" && e.payload.type === "error");
+      assert.isDefined(note);
+      if (note?.type === "turn-item.updated" && note.payload.type === "error") {
+        assert.equal(note.payload.runId, runId);
+        assert.equal(note.payload.status, "failed");
+        assert.include(note.payload.failure.message, "No approval was granted");
+        assert.include(note.payload.failure.message, "Resume this thread explicitly");
+      }
+      assert.lengthOf(
+        commits.flatMap((c) => c.effects ?? []),
+        0,
+      );
+      const request = events.find((e) => e.type === "runtime-request.updated");
+      if (requestStatus === "pending")
+        assert.equal(
+          request?.type === "runtime-request.updated" && request.payload.responseCapability.type,
+          "not_resumable",
+        );
+    }),
+);

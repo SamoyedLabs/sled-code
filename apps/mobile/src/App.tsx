@@ -21,6 +21,10 @@ import { pipe } from "effect/Function";
 
 import { RegistryContext } from "@effect/atom-react";
 import { ProjectChipIconRasterizer } from "./native/ProjectChipIconImages";
+import { MermaidRendererHost } from "./features/bots/upstream/openbot-mobile/chat-preview/mermaid-renderer-host";
+import { installBotQuickActions } from "./features/shortcuts/botQuickActionsRuntime";
+import { AppLockHost } from "./features/app-lock/AppLockHost";
+import { installMobileAppLock, whenMobileAppUnlocked } from "./features/app-lock/appLockRuntime";
 import { ThreadArrangementHost } from "./features/threads/ThreadArrangementSheet";
 import * as Dialog from "./components/ui/Dialog";
 import { CloudAuthProvider } from "./features/cloud/CloudAuthProvider";
@@ -147,7 +151,7 @@ function appLinkAction(href: string): NavigationAction {
 }
 
 function linkToAppPath(href: string): void {
-  linkToRootPath(href, appLinkAction);
+  whenMobileAppUnlocked(() => linkToRootPath(href, appLinkAction));
 }
 
 const Navigation = createStaticNavigation(RootStack);
@@ -185,9 +189,11 @@ const appServiceDisposers = [
   installPermissionUpdateNotice(),
   installThreadOutboxDelivery(),
   installComposerAttachmentUploads(),
+  installMobileAppLock(),
   startIncomingShareInbox(),
   installAgentNotificationNavigation(linkToAppPath),
   installAppShortcuts(linkToAppPath),
+  installBotQuickActions(linkToAppPath),
   installAppUpdateChecks(),
   installShowcaseCapture(rootPathnameFromState),
 ];
@@ -243,9 +249,11 @@ function AppContent() {
                 <Dialog.Host />
                 <ThreadArrangementHost />
                 <ProjectChipIconRasterizer />
+                <MermaidRendererHost />
               </NativeLayoutMetricsProvider>
             </GlobalVoiceInputControl>
             <OverlayPortalHost />
+            <AppLockHost />
           </SafeAreaProvider>
         </KeyboardProvider>
       </GestureHandlerRootView>
