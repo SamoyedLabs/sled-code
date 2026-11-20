@@ -3,12 +3,13 @@ import Constants from "expo-constants";
 import { useAtomValue } from "@effect/atom-react";
 import { MASCOT_ACTIVITY_LABELS } from "@t3tools/client-runtime/state/mascot-activity";
 import { useIsFocused } from "@react-navigation/native";
+import { useGT, useMessages } from "gt-react-native";
 import { useState } from "react";
 import { Platform, View } from "react-native";
 
 import { AppText as Text } from "./ui/AppText";
 import { IPAD_HOME_TITLE_OFFSET } from "../lib/layoutMetrics";
-import { resolveMobileStageLabel } from "../lib/mobileBranding";
+import { SLED_SHORT_NAME, resolveMobileStageLabel } from "../lib/mobileBranding";
 import { useAndroidControlSizing } from "./ui/useAndroidControlSizing";
 import { MascotMark } from "./MascotMark";
 import { mascotActivityAtom } from "../state/mascot";
@@ -28,6 +29,8 @@ export function CompactBrandTitle(
     readonly fit?: boolean;
   } = {},
 ) {
+  const gt = useGT();
+  const m = useMessages();
   const stageLabel = resolveMobileStageLabel(Constants.expoConfig?.extra?.appVariant);
   const titleOffset = brandTitleOffset();
   const { scale } = useAndroidControlSizing();
@@ -45,7 +48,7 @@ export function CompactBrandTitle(
         props.fit && showStage ? (event) => setFullWidth(event.nativeEvent.layout.width) : undefined
       }
       aria-level={1}
-      accessibilityLabel={`${props.accessibilityLabel ?? `${Constants.expoConfig?.name ?? "Sled Code"}, Threads`}. ${MASCOT_ACTIVITY_LABELS[activity.state]}`}
+      accessibilityLabel={`${props.accessibilityLabel ?? gt("{product}, Threads", { product: Constants.expoConfig?.name ?? "Sled Code" })}. ${m(MASCOT_ACTIVITY_LABELS[activity.state])}`}
       accessible
       role="heading"
       className="flex-row items-center gap-1.5"
@@ -63,7 +66,7 @@ export function CompactBrandTitle(
         className="font-t3-medium text-foreground-muted"
         style={{ fontSize: 21 * scale, letterSpacing: -0.5 * scale }}
       >
-        {Constants.expoConfig?.name ?? "Sled"}
+        {Constants.expoConfig?.name ?? SLED_SHORT_NAME}
       </Text>
       {showStage ? (
         <View

@@ -320,6 +320,7 @@ const config: ExpoConfig = {
       NSBonjourServices: ["_t3desktop._tcp"],
       NSLocalNetworkUsageDescription: `Allow ${variant.appName} to connect to Sled Code servers on your local network or tailnet.`,
       NSPhotoLibraryAddUsageDescription: `Allow ${variant.appName} to save images to your photo library.`,
+      UIViewControllerBasedStatusBarAppearance: true,
       // System picture in picture needs background audio to start and survive outside the app.
       UIBackgroundModes: ["audio"],
       ITSAppUsesNonExemptEncryption: false,

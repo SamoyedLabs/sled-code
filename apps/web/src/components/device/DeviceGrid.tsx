@@ -1,3 +1,4 @@
+import { useGT } from "gt-react";
 import type { DeviceServiceState, ScopedThreadRef } from "@t3tools/contracts";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { Columns2, Grid2X2, Plus, Minimize2, ChevronLeft, ChevronRight, X } from "lucide-react";
@@ -25,6 +26,7 @@ export function DeviceGrid({
   readonly threadRef: ScopedThreadRef;
   readonly visible: boolean;
 }) {
+  const gt = useGT();
   const workspace = useDeviceWorkspaceStore(
     (value) => value.byThreadKey[scopedThreadKey(threadRef)],
   );
@@ -74,7 +76,7 @@ export function DeviceGrid({
     <div className="@container flex min-h-0 flex-1 flex-col" data-device-workspace>
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
         <ToggleGroup
-          aria-label="Device layout"
+          aria-label={gt("Device layout")}
           value={[workspace.mode]}
           onValueChange={(next) => {
             const mode = next[0];
@@ -84,13 +86,13 @@ export function DeviceGrid({
           <ToggleGroupItem value="grid">
             <span className="flex items-center gap-1.5">
               <Grid2X2 className="size-3.5" />
-              Grid
+              {gt("Grid")}
             </span>
           </ToggleGroupItem>
           <ToggleGroupItem value="focus">
             <span className="flex items-center gap-1.5">
               <Columns2 className="size-3.5" />
-              Focus
+              {gt("Focus")}
             </span>
           </ToggleGroupItem>
         </ToggleGroup>
@@ -102,7 +104,7 @@ export function DeviceGrid({
           >
             <span className="flex items-center gap-1.5">
               <Plus className="size-3.5" />
-              Add device
+              {gt("Add device")}
             </span>
           </Button>
           <Tooltip>
@@ -111,7 +113,7 @@ export function DeviceGrid({
                 <Button
                   size="icon-xs"
                   variant="ghost-muted"
-                  aria-label="Return to single device"
+                  aria-label={gt("Return to single device")}
                   onClick={() => {
                     if (selected)
                       useRightPanelStore.getState().openDevice(threadRef, {
@@ -127,7 +129,7 @@ export function DeviceGrid({
             >
               <Minimize2 className="size-3.5" />
             </TooltipTrigger>
-            <TooltipPopup>Return to single device</TooltipPopup>
+            <TooltipPopup>{gt("Return to single device")}</TooltipPopup>
           </Tooltip>
         </div>
       </div>
@@ -221,21 +223,21 @@ export function DeviceGrid({
                         <Button
                           size="icon-xs"
                           variant="ghost-muted"
-                          aria-label={`Hide ${device.name} preview`}
+                          aria-label={gt("Hide {name} preview", { name: device.name })}
                           onClick={() => hide(key)}
                         />
                       }
                     >
                       <X className="size-3.5" />
                     </TooltipTrigger>
-                    <TooltipPopup>Hide preview</TooltipPopup>
+                    <TooltipPopup>{gt("Hide preview")}</TooltipPopup>
                   </Tooltip>
                 </div>
                 <div className="relative flex min-h-0 flex-1" inert={!active}>
                   <DeviceWorkspace
                     environmentId={threadRef.environmentId}
                     device={device}
-                    hostLabel={host?.label ?? "Device host"}
+                    hostLabel={host?.label ?? gt("Device host")}
                     hostKind={host?.kind}
                     hostDiagnostics={undefined}
                     visible={visible}
@@ -281,7 +283,7 @@ export function DeviceGrid({
                     type="button"
                     tabIndex={-1}
                     className="absolute inset-x-0 bottom-0 top-9 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                    aria-label={`Control ${device.name}`}
+                    aria-label={gt("Control {name}", { name: device.name })}
                     onClick={() => setWorkspace(threadRef, { selected: key })}
                   />
                 ) : null}
@@ -291,7 +293,9 @@ export function DeviceGrid({
         </div>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-sm text-muted-foreground">
-          <p>{opened.length ? "All previews are hidden." : "Open a device to see it here."}</p>
+          <p>
+            {opened.length ? gt("All previews are hidden.") : gt("Open a device to see it here.")}
+          </p>
           <Button
             size="sm"
             variant="outline"
@@ -299,7 +303,7 @@ export function DeviceGrid({
               opened.length ? revealHidden() : setWorkspace(threadRef, { picker: true })
             }
           >
-            {opened.length ? "Show hidden previews" : "Add device"}
+            {opened.length ? gt("Show hidden previews") : gt("Add device")}
           </Button>
         </div>
       )}
@@ -308,7 +312,7 @@ export function DeviceGrid({
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t px-3 py-1 text-xs text-muted-foreground">
           {workspace.hidden.length ? (
             <Button size="xs" variant="ghost" onClick={revealHidden}>
-              Show hidden
+              {gt("Show hidden")}
             </Button>
           ) : null}
           {devices.length > 4 ? (
@@ -316,7 +320,7 @@ export function DeviceGrid({
               <Button
                 size="icon-xs"
                 variant="ghost"
-                aria-label="Previous devices"
+                aria-label={gt("Previous devices")}
                 disabled={currentPage === 0}
                 onClick={() => {
                   const device = devices[(currentPage - 1) * 4];
@@ -334,7 +338,7 @@ export function DeviceGrid({
               <Button
                 size="icon-xs"
                 variant="ghost"
-                aria-label="Next devices"
+                aria-label={gt("Next devices")}
                 disabled={(currentPage + 1) * 4 >= devices.length}
                 onClick={() => {
                   const device = devices[(currentPage + 1) * 4];

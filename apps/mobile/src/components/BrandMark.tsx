@@ -1,18 +1,25 @@
 import Constants from "expo-constants";
 import { Image } from "expo-image";
+import { msg, T, useMessages } from "gt-react-native";
 import { View } from "react-native";
 
 import { AppText as Text } from "./ui/AppText";
 import { T3_CODE_BRAND_MARK_SOURCE } from "./brandAssets";
-import { resolveMobileStageLabel } from "../lib/mobileBranding";
+import { SLED_PRODUCT_NAME, resolveMobileStageLabel } from "../lib/mobileBranding";
 
 const appVariant = Constants.expoConfig?.extra?.appVariant;
-const DEFAULT_STAGE_LABEL = resolveMobileStageLabel(appVariant);
+const stageLabels = {
+  Dev: msg("Dev", { $context: "app release stage badge" }),
+  Nightly: msg("Nightly", { $context: "app release stage badge" }),
+  Beta: msg("Beta", { $context: "app release stage badge" }),
+};
+const DEFAULT_STAGE_LABEL = stageLabels[resolveMobileStageLabel(appVariant)];
 
 export function BrandMark(props: { readonly compact?: boolean; readonly stageLabel?: string }) {
+  const m = useMessages();
   const compact = props.compact ?? false;
   const iconSize = compact ? 32 : 44;
-  const stageLabel = props.stageLabel ?? DEFAULT_STAGE_LABEL;
+  const stageLabel = props.stageLabel ?? m(DEFAULT_STAGE_LABEL);
 
   return (
     <View className="flex-row items-center gap-3">
@@ -28,7 +35,7 @@ export function BrandMark(props: { readonly compact?: boolean; readonly stageLab
       <View className="gap-1">
         <View className="flex-row items-center gap-2">
           <Text className="text-lg font-t3-bold tracking-[-0.4px] text-foreground">
-            {Constants.expoConfig?.name ?? "Sled Code"}
+            {Constants.expoConfig?.name ?? SLED_PRODUCT_NAME}
           </Text>
           <View className="rounded-full bg-subtle px-2 py-1">
             <Text className="text-3xs font-t3-bold tracking-[1.1px] uppercase text-foreground-muted">
@@ -38,7 +45,7 @@ export function BrandMark(props: { readonly compact?: boolean; readonly stageLab
         </View>
         {!compact ? (
           <Text className="text-xs font-medium text-foreground-muted">
-            Mobile control surface for your live coding environments
+            <T>Mobile control surface for your live coding environments</T>
           </Text>
         ) : null}
       </View>

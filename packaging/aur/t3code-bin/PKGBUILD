@@ -1,7 +1,7 @@
 # Maintainer: maria-rcks <maria at kuuro dot net>
 
 pkgname=t3code-bin
-pkgver=0.0.33
+pkgver=0.1.7
 pkgrel=1
 pkgdesc='Desktop control surface for local coding agents'
 arch=('x86_64')

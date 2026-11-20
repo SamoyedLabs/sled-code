@@ -1,3 +1,4 @@
+import { useGT } from "gt-react";
 import { useSyncExternalStore } from "react";
 import type { VoiceAudioSource } from "../../voice-input/MacVoiceSession";
 import { MicIcon, SquareIcon, XIcon } from "lucide-react";
@@ -8,14 +9,15 @@ import type { useMacVoiceInput } from "../../voice-input/useMacVoiceInput";
 type Voice = ReturnType<typeof useMacVoiceInput>;
 
 export function ComposerVoiceInputButton({ voice, disabled }: { voice: Voice; disabled: boolean }) {
+  const gt = useGT();
   if (!voice.available) return null;
   return (
     <Button
       type="button"
       variant="ghost"
       size="icon"
-      aria-label="Record voice input"
-      title="Record voice input"
+      aria-label={gt("Record voice input")}
+      title={gt("Record voice input")}
       disabled={disabled || voice.busy}
       onPointerDown={(event) => event.preventDefault()}
       onClick={voice.start}
@@ -53,6 +55,7 @@ function VoiceWaveform({ audio }: { audio: VoiceAudioSource }) {
 }
 
 export function ComposerVoiceInputStatus({ voice }: { voice: Voice }) {
+  const gt = useGT();
   if (!voice.busy && !voice.error) return null;
   const label =
     voice.error ??
@@ -78,14 +81,14 @@ export function ComposerVoiceInputStatus({ voice }: { voice: Voice }) {
             {voice.phase === "recording" ? (
               <Button type="button" size="sm" variant="destructive" onClick={voice.stop}>
                 <SquareIcon aria-hidden="true" />
-                Stop
+                {gt("Stop")}
               </Button>
             ) : null}
             <Button
               type="button"
               size="icon-sm"
               variant="ghost"
-              aria-label={voice.error ? "Dismiss voice input error" : "Cancel voice input"}
+              aria-label={voice.error ? gt("Dismiss voice input error") : gt("Cancel voice input")}
               onClick={voice.cancel}
             >
               <XIcon aria-hidden="true" />

@@ -1,3 +1,5 @@
+import { msg } from "gt-react";
+import { m } from "~/i18n/messages";
 import { randomUUID } from "../lib/utils";
 import type { DesktopVoiceInputBridge, DesktopVoiceInputPhase } from "@t3tools/contracts";
 import {
@@ -112,7 +114,7 @@ export class MacVoiceSession {
         this.publish({
           ...this.snapshot,
           phase: "error",
-          error: error instanceof Error ? error.message : "Voice input failed.",
+          error: error instanceof Error ? error.message : m(msg("Voice input failed.")),
         });
     } finally {
       if (this.id === id) this.id = null;
@@ -129,7 +131,7 @@ export class MacVoiceSession {
         this.publish({
           ...this.snapshot,
           phase: "error",
-          error: error instanceof Error ? error.message : "Could not stop recording.",
+          error: error instanceof Error ? error.message : m(msg("Could not stop recording.")),
         });
       }
     });
