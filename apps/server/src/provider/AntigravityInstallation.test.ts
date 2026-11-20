@@ -633,6 +633,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("Antigravity inst
       Effect.gen(function* () {
         const realSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
         // Google's linux-arm64 build aborts like this on Asahi and Raspberry Pi 5 kernels.
+        // Let the client send its first request so the fixture tests the abort diagnostic.
         const spawner = ChildProcessSpawner.make((command) =>
           ChildProcess.isStandardCommand(command) &&
           String(command.command).endsWith(executableName)
@@ -641,7 +642,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("Antigravity inst
                   "sh",
                   [
                     "-c",
-                    "echo 'F1111 11:50:12.383176 page-size.cc:19] Check failed: sysconf(_SC_PAGE_SIZE) == kPageSize (16384 vs. 4096) Compile-time page size does not match runtime page size' >&2; kill -ABRT $$",
+                    "IFS= read -r initialize; echo 'F1111 11:50:12.383176 page-size.cc:19] Check failed: sysconf(_SC_PAGE_SIZE) == kPageSize (16384 vs. 4096) Compile-time page size does not match runtime page size' >&2; kill -ABRT $$",
                   ],
                   { stdin: "pipe", stdout: "pipe", stderr: "pipe" },
                 ),
