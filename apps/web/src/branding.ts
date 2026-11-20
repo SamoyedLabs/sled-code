@@ -20,6 +20,7 @@ const hostedAppChannel = import.meta.env.VITE_HOSTED_APP_CHANNEL?.trim().toLower
 export const HOSTED_APP_CHANNEL =
   hostedAppChannel === "latest" || hostedAppChannel === "nightly" ? hostedAppChannel : null;
 export const HOSTED_APP_CHANNEL_LABEL = resolveHostedAppChannelLabel(HOSTED_APP_CHANNEL);
+export const SLED_CONNECT_NAME = "Sled Connect";
 export const APP_BASE_NAME = injectedDesktopAppBranding?.baseName ?? "Sled Code";
 export const APP_STAGE_LABEL =
   injectedDesktopAppBranding?.stageLabel ??

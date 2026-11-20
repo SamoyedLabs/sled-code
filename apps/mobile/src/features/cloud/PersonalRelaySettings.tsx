@@ -1,3 +1,4 @@
+import { useGT } from "gt-react-native";
 import { useAuth } from "@clerk/expo";
 import { reloadAppAsync } from "expo";
 import { useState } from "react";
@@ -10,6 +11,7 @@ import { resolveCloudPublicConfig } from "./publicConfig";
 import { savePersonalRelayUrl } from "./personalRelay";
 
 export function PersonalRelaySettings() {
+  const gt = useGT();
   const { userId } = useAuth();
   const config = resolveCloudPublicConfig();
   const [address, setAddress] = useState(config.relay.url ?? "");
@@ -19,7 +21,7 @@ export function PersonalRelaySettings() {
     setError(null);
     setPending(true);
     if (!config.clerk.publishableKey) {
-      setError("Sled sign-in is not configured in this build.");
+      setError(gt("Sled sign-in is not configured in this build."));
       setPending(false);
       return;
     }
@@ -31,7 +33,7 @@ export function PersonalRelaySettings() {
           reportFailure: false,
         });
         if (result._tag !== "Success") {
-          setError("Could not disconnect the previous relay. Try again.");
+          setError(gt("Could not disconnect the previous relay. Try again."));
           setPending(false);
           return;
         }
@@ -39,15 +41,15 @@ export function PersonalRelaySettings() {
       savePersonalRelayUrl(url);
       await reloadAppAsync();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not save the relay.");
+      setError(cause instanceof Error ? cause.message : gt("Could not save the relay."));
       setPending(false);
     }
   };
   return (
     <View className="gap-3 px-6 py-4">
-      <Text className="text-base text-clerk-foreground">Your Sled Connect relay</Text>
+      <Text className="text-base text-clerk-foreground">{gt("Your Sled Connect relay")}</Text>
       <TextInput
-        accessibilityLabel="Sled Connect relay address"
+        accessibilityLabel={gt("Sled Connect relay address")}
         value={address}
         onChangeText={setAddress}
         autoCapitalize="none"
@@ -58,11 +60,14 @@ export function PersonalRelaySettings() {
       />
       {userId ? (
         <Text selectable className="text-sm text-clerk-foreground-muted">
-          Your Sled user ID: {userId}
+          {gt("Your Sled user ID:")}
+          {userId}
         </Text>
       ) : null}
       <Text className="text-sm text-clerk-foreground-muted">
-        Changing relays reconnects this app. Background push notifications are not available yet.
+        {gt(
+          "Changing relays reconnects this app. Background push notifications are not available yet.",
+        )}
       </Text>
       {error ? (
         <Text accessibilityRole="alert" className="text-sm text-destructive">
@@ -77,7 +82,7 @@ export function PersonalRelaySettings() {
         className="py-3"
       >
         <Text className="text-base font-semibold text-clerk-foreground">
-          {pending ? "Checking relay…" : "Save and reconnect"}
+          {pending ? gt("Checking relay…") : gt("Save and reconnect")}
         </Text>
       </Pressable>
     </View>

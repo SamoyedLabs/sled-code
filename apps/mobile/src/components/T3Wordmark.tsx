@@ -1,6 +1,7 @@
 import type { ColorValue } from "react-native";
 import { Image } from "expo-image";
 import { T3_CODE_BRAND_MARK_SOURCE } from "./brandAssets";
+import { SLED_SHORT_NAME } from "../lib/mobileBranding";
 
 export function T3Wordmark(props: {
   readonly height: number;
@@ -10,7 +11,7 @@ export function T3Wordmark(props: {
   return (
     <Image
       source={T3_CODE_BRAND_MARK_SOURCE}
-      accessibilityLabel="Sled"
+      accessibilityLabel={SLED_SHORT_NAME}
       style={{ width: props.height, height: props.height }}
     />
   );

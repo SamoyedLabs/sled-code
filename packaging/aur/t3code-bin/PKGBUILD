@@ -43,16 +43,12 @@ provides=("t3code=$pkgver")
 conflicts=('t3code')
 options=('!debug' '!strip')
 
-_appimage="T3-Code-${pkgver}-x86_64.AppImage"
-_asset="$_appimage"
-source=(
-  "$_appimage::https://github.com/SamoyedLabs/sled-code/releases/download/v${pkgver}/$_asset"
-  "${pkgname}-${pkgver}-LICENSE::https://raw.githubusercontent.com/SamoyedLabs/sled-code/v${pkgver}/LICENSE"
-)
-sha256sums=(
-  '415c8648f43c3d22d572f27f2c50fdc8c310ea7fcde9537b903e1e2f1c8775a1' # AppImage
-  '935d8f2af0c703f9c39517ee57cc4930b19d02d533be930b63f0e82f93614b43' # upstream license
-)
+_appimage="T3-Code-${pkgver}-${CARCH/aarch64/arm64}.AppImage"
+_asset_x86_64="T3-Code-0.0.33-x86_64.AppImage"
+source=("${pkgname}-${pkgver}-LICENSE::https://raw.githubusercontent.com/SamoyedLabs/sled-code/v${pkgver}/LICENSE")
+sha256sums=('935d8f2af0c703f9c39517ee57cc4930b19d02d533be930b63f0e82f93614b43') # upstream license
+source_x86_64=("T3-Code-${pkgver}-x86_64.AppImage::https://github.com/SamoyedLabs/sled-code/releases/download/v${pkgver}/$_asset_x86_64")
+sha256sums_x86_64=('415c8648f43c3d22d572f27f2c50fdc8c310ea7fcde9537b903e1e2f1c8775a1')
 
 prepare() {
   chmod +x "$srcdir/$_appimage"

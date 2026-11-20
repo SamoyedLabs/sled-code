@@ -1,3 +1,4 @@
+import { useGT, useMessages } from "gt-react";
 import { useAtomValue } from "@effect/atom-react";
 import { MASCOT_ACTIVITY_LABELS } from "@t3tools/client-runtime/state/mascot-activity";
 import { useEffect, useRef, useSyncExternalStore, type CSSProperties } from "react";
@@ -46,6 +47,8 @@ const isVisible = () => document.visibilityState === "visible";
 const serverVisible = () => false;
 
 export function MascotMark() {
+  const gt = useGT();
+  const m = useMessages();
   const activity = useAtomValue(mascotActivityAtom);
   const visible = useSyncExternalStore(subscribeVisibility, isVisible, serverVisible);
   const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
@@ -106,7 +109,7 @@ export function MascotMark() {
       data-state={activity.state}
       data-paused={!visible || reduced}
       role="img"
-      aria-label={`Sled: ${MASCOT_ACTIVITY_LABELS[activity.state]}`}
+      aria-label={gt("Sled: {activity}", { activity: m(MASCOT_ACTIVITY_LABELS[activity.state]) })}
     >
       <span className={styles["mascot-dog"]} ref={dog}>
         <img

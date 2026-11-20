@@ -1,3 +1,4 @@
+import { msg } from "gt-i18n";
 import type { EnvironmentId, RunId } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
@@ -12,11 +13,11 @@ export interface MascotActivity {
 }
 
 export const MASCOT_ACTIVITY_LABELS: Readonly<Record<MascotActivity["state"], string>> = {
-  sleeping: "Sleeping",
-  working: "Working",
-  attention: "Needs your attention",
-  error: "Run failed",
-  offline: "Disconnected",
+  sleeping: msg("Sleeping"),
+  working: msg("Working"),
+  attention: msg("Needs your attention"),
+  error: msg("Run failed"),
+  offline: msg("Disconnected"),
 };
 
 type MascotThread = Pick<

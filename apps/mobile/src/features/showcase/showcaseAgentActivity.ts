@@ -1,3 +1,6 @@
+import { msg } from "gt-react-native";
+
+import { m } from "../../i18n/messages";
 import type {
   EnvironmentProject,
   EnvironmentThreadShell,
@@ -8,6 +11,7 @@ import type {
   AgentActivityProps,
   AgentActivityRowProps,
 } from "../../widgets/AgentActivity";
+import { SLED_PRODUCT_NAME } from "../../lib/mobileBranding";
 
 const SHOWCASE_AGENT_ACTIVITY_ROWS = [
   { threadId: "pocket-command-center", phase: "waiting_for_approval", minutesAgo: 1 },
@@ -67,8 +71,8 @@ export function buildShowcaseAgentActivity(
     });
   }
   return {
-    title: "Sled Code",
-    subtitle: "Agent work in progress",
+    title: SLED_PRODUCT_NAME,
+    subtitle: m(msg("Agent work in progress")),
     activeCount: rows.filter((row) => ACTIVE_PHASES.has(row.phase)).length,
     updatedAt: new Date(now).toISOString(),
     activities: rows,

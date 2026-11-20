@@ -1,3 +1,4 @@
+import { useGT } from "gt-react-native";
 import { useEffect, useState } from "react";
 import { useNavigation, useNavigationState } from "@react-navigation/native";
 import { BackHandler, Keyboard } from "react-native";
@@ -11,8 +12,10 @@ import {
   workspaceListFilterIcon,
   type WorkspaceListHeaderProps,
 } from "./WorkspaceListHeader.types";
+import { SLED_PRODUCT_NAME } from "../../../lib/mobileBranding";
 
 export function WorkspaceListHeader(props: WorkspaceListHeaderProps) {
+  const gt = useGT();
   const navigation = useNavigation();
   const workspace = useWorkspaceTabs();
   const isTabActive = workspace?.isTabActive;
@@ -58,7 +61,7 @@ export function WorkspaceListHeader(props: WorkspaceListHeaderProps) {
 
   return (
     <AppBar
-      title="Sled Code"
+      title={SLED_PRODUCT_NAME}
       titleContent={
         <WorkspaceBrandTitle
           accessibilityLabel={props.accessibilityLabel}
@@ -78,7 +81,7 @@ export function WorkspaceListHeader(props: WorkspaceListHeaderProps) {
         connectionState.hasConnections
           ? [
               {
-                title: "Filter threads",
+                title: gt("Filter threads"),
                 icon: workspaceListFilterIcon(props.filter.customized),
                 items: props.filter.items,
               },
