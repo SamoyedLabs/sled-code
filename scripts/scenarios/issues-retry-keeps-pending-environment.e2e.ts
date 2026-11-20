@@ -120,7 +120,9 @@ test(
       await dialog.getByPlaceholder("backend.example.com").fill(host);
       await dialog.getByPlaceholder("PAIRCODE").fill(token);
       await dialog.getByRole("button", "Add environment").tap();
-      await screen.getByRole("button", "More actions for Scenario").waitFor({ timeout: 60_000 });
+      await screen
+        .getByText(`${new URL(host).origin}/`, { exact: false })
+        .waitFor({ timeout: 60_000 });
       await app.open("/issues");
 
       await screen.getByText("Before refresh", { exact: true }).waitFor({ timeout: 60_000 });
