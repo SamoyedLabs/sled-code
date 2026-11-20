@@ -5216,6 +5216,7 @@
   "e478cfb05d78e01f": "Laissez désactivé pour garder les commandes manuelles des appareils sans donner l’accès aux agents.",
   "f37363c9cbd5debf": "Vous pouvez utiliser l’une ou l’autre plateforme. Corriger une plateforme manquante ne bloque pas l’autre.",
   "d04e26fd9c37bad3": "Les outils de l’agent sont prêts.",
+  "c2af62a97383f084": "No matching 3D model for this device",
   "f1e8eadbdfccf059": "L’iPhone Duo 3D nécessite Device Hub {version} ou ultérieur",
   "54bd987cf43dd949": "La 3D n’est pas disponible dans ce navigateur",
   "b689606071e7be24": "La 3D nécessite le flux H.264",

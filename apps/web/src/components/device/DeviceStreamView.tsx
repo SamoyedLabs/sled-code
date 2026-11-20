@@ -232,8 +232,9 @@ export function DeviceStreamView(props: {
     client?.sendTouch("end", x, y);
   };
 
-  const phoneUnavailableReason =
-    isDuo && !screen?.supportsHingeAngle
+  const phoneUnavailableReason = missingPhoneModel
+    ? gt("No matching 3D model for this device")
+    : isDuo && !screen?.supportsHingeAngle
       ? gt("iPhone Duo 3D requires Device Hub {version} or newer", { version: "0.11.0" })
       : phoneUnavailable
         ? gt("3D is unavailable on this browser")

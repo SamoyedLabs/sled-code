@@ -5217,6 +5217,7 @@
   "e478cfb05d78e01f": "Leave this off to keep manual device controls without giving agents access.",
   "f37363c9cbd5debf": "You can use either platform. Fixing a missing platform does not block the other one.",
   "d04e26fd9c37bad3": "Agent tools are ready.",
+  "c2af62a97383f084": "No matching 3D model for this device",
   "f1e8eadbdfccf059": "iPhone Duo 3D requires Device Hub {version} or newer",
   "54bd987cf43dd949": "3D is unavailable on this browser",
   "b689606071e7be24": "3D requires the H.264 stream",

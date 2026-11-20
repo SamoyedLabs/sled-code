@@ -5222,6 +5222,7 @@
   "e478cfb05d78e01f": "关闭此选项后，仍可手动控制设备，但智能体无权访问。",
   "f37363c9cbd5debf": "两个平台可独立使用。修复其中一个平台的缺失组件时，仍可使用另一个平台。",
   "d04e26fd9c37bad3": "智能体工具已就绪。",
+  "c2af62a97383f084": "No matching 3D model for this device",
   "f1e8eadbdfccf059": "iPhone Duo 3D 需要 Device Hub {version} 或更高版本",
   "54bd987cf43dd949": "此浏览器不支持 3D",
   "b689606071e7be24": "3D 需要 H.264 视频流",
