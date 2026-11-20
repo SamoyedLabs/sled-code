@@ -38,12 +38,12 @@ See the [adapter](../../packages/provider-pi/src/server/adapter.ts).
 
 Antigravity separates account profiles per instance while sharing installed executables across the
 environment. The 1.5 CLI keeps every profile's sign-in in one OS keyring entry and ignores
-`AGY_ACP_FORCE_FILE_STORAGE`; only its SSH-session check stores the sign-in in the profile, so Google
-account instances launch with `SSH_CONNECTION` set and sign in with `--login`. Gemini Enterprise
-has no such sign-in and still shares the keyring entry. The launch environment removes ambient Google credentials,
-so an instance cannot silently use another account or billing project. The agent also resolves
-its user-global skill directories under that profile, so the profile links those two directories
-back to the user's real `~/.gemini`; MCP servers, hooks, and rules there stay out of the profile.
+`AGY_ACP_FORCE_FILE_STORAGE`. Google account instances launch with `SSH_CONNECTION` set and sign
+in with `--login` to store credentials in the profile. Gemini Enterprise still shares the keyring
+entry. The launch environment removes ambient Google credentials so an instance cannot silently
+use another account or billing project. Each profile links the global skill directories and rule
+files (`AGENTS.md` and `GEMINI.md`) from `~/.gemini`. Windows profiles copy rule files and preserve
+local edits. Global MCP servers and hooks stay outside the profile.
 See [profile isolation](../../apps/server/src/provider/antigravityAuthSupport.ts).
 
 The [Antigravity installer](../../apps/server/src/provider/AntigravityInstallation.ts) outlives
