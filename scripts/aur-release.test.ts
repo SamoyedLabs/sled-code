@@ -32,8 +32,12 @@ const run = Effect.fn("test.aur.run")(function* (
   return { stdout, stderr, code };
 }, Effect.scoped);
 
-describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("AUR release", () => {
+const canRunAUR = ["linux", "darwin"].includes(HostProcess.Platform.defaultValue());
+
+describe.skipIf(!canRunAUR)("AUR release", () => {
   it.live.each([
+    { nightly: false, naming: "versioned", failure: undefined, x64Only: true },
+    { nightly: true, naming: "versionless", failure: undefined, x64Only: true },
     { nightly: false, naming: "versioned", failure: undefined },
     { nightly: true, naming: "versioned", failure: undefined },
     { nightly: false, naming: "versionless", failure: undefined },
@@ -41,7 +45,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("AUR release", 
     { nightly: false, naming: "versioned", failure: "missing" },
     { nightly: false, naming: "versioned", failure: "digest" },
     { nightly: false, naming: "versioned", failure: "version" },
-  ])("updates architecture-specific sources: %j", ({ nightly, naming, failure }) =>
+  ])("updates architecture-specific sources: %j", ({ nightly, naming, failure, x64Only }) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -52,7 +56,13 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("AUR release", 
       const tools = path.join(root, "tools");
       yield* fs.makeDirectory(tools);
       for (const [name, source] of Object.entries({
-        gh: '#!/bin/bash\nif [[ "$*" == *releases/tags/* ]]; then cat "$AUR_FIXTURE_RELEASE"; else echo "fixture license"; fi\n',
+        gh: `#!/bin/bash
+case "$*" in
+  *repos/SamoyedLabs/sled-code/releases/tags/*) cat "$AUR_FIXTURE_RELEASE" ;;
+  *repos/SamoyedLabs/sled-code/contents/LICENSE*) echo "fixture license" ;;
+  *) exit 1 ;;
+esac
+`,
         id: "#!/bin/sh\necho 1000\n",
         namcap: "#!/bin/sh\nexit 0\n",
         makepkg: '#!/bin/sh\nif [ "$1" = --packagelist ]; then echo fixture.pkg.tar.zst; fi\n',
@@ -67,7 +77,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("AUR release", 
         naming === "versioned" ? `T3-Code-${version}` : nightly ? "T3-Code-Nightly" : "T3-Code";
       const assets = [
         { name: `${prefix}-x86_64.AppImage`, digest: `sha256:${"a".repeat(64)}` },
-        ...(failure === "missing"
+        ...(x64Only || failure === "missing"
           ? []
           : [
               {
@@ -83,6 +93,19 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("AUR release", 
       yield* fs.writeFileString(fixture, JSON.stringify({ assets }));
       const packageDir = path.join(aur, pkgname);
       const recipe = path.join(packageDir, "PKGBUILD");
+      if (!x64Only) {
+        const x64Recipe = yield* fs.readFileString(recipe);
+        const armSources = x64Recipe
+          .split("\n")
+          .filter((line) => /^(?:_asset|source|sha256sums)_x86_64=/.test(line))
+          .map((line) => line.replaceAll("_x86_64", "_aarch64").replaceAll("-x86_64", "-arm64"));
+        yield* fs.writeFileString(
+          recipe,
+          x64Recipe.replace("arch=('x86_64')", "arch=('x86_64' 'aarch64')") +
+            armSources.join("\n") +
+            "\n",
+        );
+      }
       const before = yield* fs.readFileString(recipe);
       const env = {
         PATH: `${tools}:${inherited.PATH}`,
@@ -97,29 +120,42 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("AUR release", 
         return;
       }
       assert.equal(Number(result.code), 0, result.stdout + result.stderr);
-      for (const [arch, upstreamArch, checksum] of [
+      const targets = [
         ["x86_64", "x86_64", "a"],
         ["aarch64", "arm64", "b"],
-      ] as const) {
+      ] as const;
+      for (const [arch, upstreamArch, checksum] of x64Only ? targets.slice(0, 1) : targets) {
+        const metadata = path.join(root, `metadata-${arch}.txt`);
         const selected = yield* run(
           "bash",
           [
-            "-c",
-            `source PKGBUILD
-          declare -n sources="source_$CARCH" sums="sha256sums_$CARCH"
-          printf '%s\\n' "$pkgver" "\${arch[*]}" "\${sources[@]}" "\${sums[@]}" "$_appimage"`,
+            "-ec",
+            `exec > "$1"
+          source ./PKGBUILD
+          if [[ "$CARCH" == x86_64 ]]; then
+            sources=("\${source_x86_64[@]}") sums=("\${sha256sums_x86_64[@]}")
+          else
+            sources=("\${source_aarch64[@]}") sums=("\${sha256sums_aarch64[@]}")
+          fi
+          printf '%s\\n' "$pkgver" "\${arch[*]}" "\${sources[@]}" "\${sums[@]}" "$_appimage" "\${source[@]}" "\${sha256sums[@]}"`,
+            "_",
+            metadata,
           ],
           packageDir,
           { ...env, CARCH: arch },
         );
         assert.equal(Number(selected.code), 0, selected.stderr);
         const localName = `T3-Code-${version}-${upstreamArch}.AppImage`;
-        assert.deepEqual(selected.stdout.trim().split("\n"), [
-          version.replace("-nightly.", "_nightly."),
-          "x86_64 aarch64",
-          `${localName}::https://github.com/pingdotgg/t3code/releases/download/v${version}/${prefix}-${upstreamArch}.AppImage`,
+        const pkgver = version.replace("-nightly.", "_nightly.");
+        const output = yield* fs.readFileString(metadata);
+        assert.deepEqual(output.trim().split("\n"), [
+          pkgver,
+          x64Only ? "x86_64" : "x86_64 aarch64",
+          `${localName}::https://github.com/SamoyedLabs/sled-code/releases/download/v${version}/${prefix}-${upstreamArch}.AppImage`,
           checksum.repeat(64),
           localName,
+          `${pkgname}-${pkgver}-LICENSE::https://raw.githubusercontent.com/SamoyedLabs/sled-code/v${version}/LICENSE`,
+          "a7c6bf8df7d8fb707af606599f275e0eb192cd28492c95593b0608ca966c8df1",
         ]);
       }
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

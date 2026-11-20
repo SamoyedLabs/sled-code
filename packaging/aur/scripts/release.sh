@@ -19,9 +19,14 @@ fi
 
 version="${tag#v}"
 pkgver="${version//-/_}"
+package_dir="$repo_root/packaging/aur/$pkgname"
+architectures="$(CARCH=x86_64 bash -e -c 'source "$1"; printf "%s\n" "${arch[@]}"' _ "$package_dir/PKGBUILD")"
 release_json="$(gh api "repos/$repo/releases/tags/$tag")"
-declare -A appimage_names appimage_checksums
-for architecture in x86_64 aarch64; do
+recipe_updates=(
+  -e "s/^pkgver=.*/pkgver=$pkgver/"
+  -e "s/^pkgrel=.*/pkgrel=$pkgrel/"
+)
+while IFS= read -r architecture; do
   upstream_arch="${architecture/aarch64/arm64}"
   versioned_name="T3-Code-${version}-${upstream_arch}.AppImage"
   versionless_name="${asset_prefix}-${upstream_arch}.AppImage"
@@ -39,9 +44,11 @@ for architecture in x86_64 aarch64; do
     echo "Release $tag is missing the SHA-256 digest for $asset_name." >&2
     exit 1
   fi
-  appimage_names[$architecture]="$asset_name"
-  appimage_checksums[$architecture]="$checksum"
-done
+  recipe_updates+=(
+    -e "s/^_asset_${architecture}=.*/_asset_${architecture}=\"$asset_name\"/"
+    -e "s/^sha256sums_${architecture}=.*/sha256sums_${architecture}=('$checksum')/"
+  )
+done <<<"$architectures"
 
 work_dir="$(mktemp -d)"
 trap 'rm -rf -- "$work_dir"' EXIT
@@ -49,20 +56,11 @@ gh api -H 'Accept: application/vnd.github.raw' \
   "repos/$repo/contents/LICENSE?ref=$tag" > "$work_dir/LICENSE"
 license_sha256="$(sha256sum "$work_dir/LICENSE" | awk '{print $1}')"
 
-package_dir="$repo_root/packaging/aur/$pkgname"
 cd "$package_dir"
-sed -Ei \
-  -e "s/^pkgver=.*/pkgver=$pkgver/" \
-  -e "s/^pkgrel=.*/pkgrel=$pkgrel/" \
+sed -E "${recipe_updates[@]}" \
   -e "/# upstream license$/s/'[0-9a-f]{64}'/'$license_sha256'/" \
-  PKGBUILD
-
-for architecture in x86_64 aarch64; do
-  sed -Ei \
-    -e "s/^_asset_${architecture}=.*/_asset_${architecture}=\"${appimage_names[$architecture]}\"/" \
-    -e "s/^sha256sums_${architecture}=.*/sha256sums_${architecture}=('${appimage_checksums[$architecture]}')/" \
-    PKGBUILD
-done
+  PKGBUILD > "$work_dir/PKGBUILD"
+mv "$work_dir/PKGBUILD" PKGBUILD
 
 run_as_builder() {
   if [[ "$(id -u)" == 0 ]]; then
