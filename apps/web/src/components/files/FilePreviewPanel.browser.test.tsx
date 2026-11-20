@@ -425,36 +425,31 @@ describe("source file scroll", () => {
 
       const shadowRoot = () => screen.container.querySelector("diffs-container")?.shadowRoot;
       const rows = () => shadowRoot()?.querySelectorAll<HTMLElement>("[data-line]") ?? [];
+      const rowAt = (line: number) =>
+        shadowRoot()?.querySelector<HTMLElement>(`[data-line="${line}"]`) ?? null;
       await vi.waitFor(() =>
-        expect(
-          shadowRoot()?.querySelector('[data-content][contenteditable="true"]'),
-        ).not.toBeNull(),
+        expect(shadowRoot()?.querySelector('[data-content][contenteditable="true"]')).toBeTruthy(),
       );
 
       const scroller = screen.container.querySelector<HTMLElement>(".file-preview-virtualizer")!;
       if (initialScrollLine !== null) {
-        if (direction === "up") {
-          await vi.waitFor(() => expect(scroller.scrollHeight).toBeGreaterThan(5000));
-          scroller.scrollTop = scroller.scrollHeight;
-          await vi.waitFor(() =>
-            expect(
-              [...rows()].some((row) => row.getAttribute("data-line") === String(startLine)),
-            ).toBe(true),
-          );
-        }
-        const target = [...rows()].find(
-          (row) => row.getAttribute("data-line") === String(initialScrollLine),
-        );
-        expect(target).toBeDefined();
-        target!.scrollIntoView({ block: direction === "up" ? "end" : "start" });
-        await vi.waitFor(() => expect(scroller.scrollTop).toBeGreaterThan(0));
+        await vi.waitFor(() => expect(rowAt(1)?.getBoundingClientRect().height).toBeGreaterThan(0));
+        const rowHeight = rowAt(1)!.getBoundingClientRect().height;
+        const offset = direction === "up" ? scroller.clientHeight - rowHeight : 0;
+        // The starting row may sit outside the first rendered window.
+        scroller.scrollTop = (initialScrollLine - 1) * rowHeight - offset;
+        await vi.waitFor(() => expect(rowAt(initialScrollLine)).not.toBeNull());
+        rowAt(initialScrollLine)!.scrollIntoView({ block: direction === "up" ? "end" : "start" });
       }
 
-      const startRow = [...rows()].find(
-        (row) => row.getAttribute("data-line") === String(startLine),
-      );
-      expect(startRow).toBeDefined();
-      const startRect = startRow!.getBoundingClientRect();
+      await vi.waitFor(() => {
+        const row = rowAt(startLine)?.getBoundingClientRect();
+        const viewport = scroller.getBoundingClientRect();
+        expect(row?.height).toBeGreaterThan(0);
+        expect(row?.top).toBeGreaterThanOrEqual(viewport.top - 1);
+        expect(row?.bottom).toBeLessThanOrEqual(viewport.bottom + 1);
+      });
+      const startRect = rowAt(startLine)!.getBoundingClientRect();
       const scrollerRect = scroller.getBoundingClientRect();
       const nearEdgeY = direction === "down" ? scrollerRect.bottom - 5 : scrollerRect.top + 5;
       const outsideEdgeY = direction === "down" ? scrollerRect.bottom + 60 : scrollerRect.top - 60;
@@ -530,17 +525,26 @@ describe("source file scroll", () => {
     };
     const scroller = () => document.querySelector<HTMLElement>(".file-preview-virtualizer");
 
-    await using _screen = await render(
+    await using screen = await render(
       <div style={{ width: 500, height: 400, display: "flex", flexDirection: "column" }}>
         {filePreview("wrapped.ts")}
       </div>,
     );
-    await vi.waitFor(() => expect(scroller()?.scrollHeight).toBeGreaterThan(20_000));
-    const shadowRows = () =>
-      [...document.querySelectorAll("*")].flatMap((host) =>
-        host.shadowRoot ? [...host.shadowRoot.querySelectorAll<HTMLElement>("[data-line]")] : [],
-      );
-    await userEvent.click(shadowRows().find((row) => row.getAttribute("data-line") === "1")!);
+    const shadowRows = () => [
+      ...(screen.container
+        .querySelector("diffs-container")
+        ?.shadowRoot?.querySelectorAll<HTMLElement>("[data-line]") ?? []),
+    ];
+    const firstLine = () => shadowRows().find((row) => row.getAttribute("data-line") === "1");
+    await vi.waitFor(() => expect(firstLine()).toBeDefined());
+    const enableWrap = screen.container.querySelector('button[aria-label="Enable word wrap"]');
+    if (enableWrap) await userEvent.click(enableWrap);
+    await vi.waitFor(() => {
+      const row = firstLine()!;
+      const lineHeight = Number.parseFloat(getComputedStyle(row).lineHeight);
+      expect(row.getBoundingClientRect().height).toBeGreaterThan(lineHeight);
+    });
+    await userEvent.click(firstLine()!);
     await vi.waitFor(() => expect(deepActiveElement()?.matches("[data-content]")).toBe(true));
     await userEvent.keyboard(
       isMacPlatform(navigator.platform) ? "{Meta>}f{/Meta}" : "{Control>}f{/Control}",
