@@ -40,8 +40,20 @@ export function useBotTemplates(scopeKey: string, actions: TemplateActions, adop
     setBusy(false);
     return next !== null;
   };
-  const refreshHistory = useEffectEvent(() => run({ operation: "templates.adoptions" }));
-  useEffect(() => { if (adoptionAvailable) void refreshHistory(); }, [scopeKey, adoptionAvailable]);
+  const refreshHistory = useEffectEvent((_scope: string) =>
+    run({ operation: "templates.adoptions" }),
+  );
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Loads template adoption history when the active scope or capability becomes available.
+  useEffect(() => {
+    if (!adoptionAvailable) return;
+    let mounted = true;
+    queueMicrotask(() => {
+      if (mounted) void refreshHistory(scopeKey);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [scopeKey, adoptionAvailable]);
   const acknowledge = (operationId: string) => registry.set(atom, templateAcknowledge(registry.get(atom), operationId));
   return { state, busy, error, run, acknowledge };
 }

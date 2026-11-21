@@ -82,9 +82,10 @@ export const ImportRequest = Schema.Union([
   Schema.Struct({ operation: Schema.Literal("import.discard"), hostId: Key, token: Key }),
 ]);
 export type ImportRequest = typeof ImportRequest.Type;
+const decodeImportReceiptSync = Schema.decodeUnknownSync(ImportReceipt);
 export function decodeImportReceipt(value: unknown): ImportReceipt | null {
   if (value === null) return null;
-  const receipt = Schema.decodeUnknownSync(ImportReceipt)(value);
+  const receipt = decodeImportReceiptSync(value);
   AGENT_IMPORT_CODECS.get(AGENT_IMPORT_ROUTES.stage)!.response(200, receipt.preview);
   if (receipt.preview.token !== receipt.token) throw new Error("Import preview identity mismatch");
   if (receipt.result)

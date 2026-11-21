@@ -1,9 +1,6 @@
-// Adapted from OpenBot mobile 1.4.11. See openbotPinnedSettings/LICENSE.upstream.
-// Two-step (TOTP, RFC 6238) codes for a Vault login. The key is a base32 setup key or an
-// `otpauth://totp/` link, as a site shows it under its QR code. Main makes the codes from a saved key;
-// the window makes them only from a key that the user typed in the setup dialog and has not saved.
-// `crypto.subtle` is in Node, Electron and every browser, so one helper serves all of them. The phone
-// has no `crypto.subtle`: it makes the HMAC itself and uses `twoStepMessage` and `twoStepCodeFromMac`.
+// Adapted from OpenBot mobile 1.4.11; see openbotPinnedSettings/LICENSE.upstream.
+// TOTP (RFC 6238) helper for Vault logins using base32 or `otpauth://totp/` keys.
+// Web/Node use `crypto.subtle`; mobile computes HMAC directly via `twoStepMessage` + `twoStepCodeFromMac`.
 
 export type TwoStepAlgorithm = "SHA-1" | "SHA-256" | "SHA-512";
 

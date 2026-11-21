@@ -1,16 +1,6 @@
 // Adapted from pinned Openbot 0.60.0; see LICENSE.upstream. Event-only helpers omitted.
-// Frozen optional sidebar-folders-v1 wire contract.
-//
-// What it grants, recorded here because freezing it makes it permanent: a sidebar section can hold
-// other sections, three levels in all. Each section can carry `parentId`; a section without it is at
-// the top of the list. Any signed-in member reads the layout and changes it, as with
-// `/v1/sidebar-layout`, and the host refuses an agent that the member cannot see the same way.
-// The actions route takes every `/v1/sidebar-layout/actions` action, `parentId` on `create`, and
-// `nest`, which puts a section with its sections in a parent before a sibling. Each route answers the
-// whole layout with the parents. A peer that negotiated this capability gets
-// `sidebar-folders-changed` with the whole layout in place of `sidebar-layout-changed`, which drops
-// `parentId`. Bounds and meaning do not follow IPC changes; widening any of it needs a second
-// capability string.
+// Frozen optional sidebar-folders-v1 wire contract (nested sections up to 3 levels via `parentId`).
+// Bounds stay independent of IPC changes; widening any grant requires a new capability string.
 import { isDynamicRecord } from "./runtime-values.ts";
 import {
   type AdminDecoder,

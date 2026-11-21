@@ -1,10 +1,6 @@
 // Adapted from pinned Openbot 0.60.0; see LICENSE.upstream.
-// Frozen optional storage-disk-v1 wire contract.
-//
-// What it grants, recorded here because freezing it makes it permanent: every signed-in member of a
-// server can read the free and total bytes of the disk that holds the host data. It is one statfs
-// call, not a scan, so a client can ask often. It carries no path and changes nothing on the host.
-// Bounds and meaning do not follow IPC changes; widening any of it needs a second capability string.
+// Frozen optional storage-disk-v1 wire contract: single statfs read (free/total bytes, no paths).
+// Bounds stay literal and independent of IPC changes; widening needs a new capability string.
 import {
   adminRoute,
   count,

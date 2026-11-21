@@ -1,3 +1,4 @@
+// @effect-diagnostics globalDate:off -- Pure civil-calendar and Intl schedule computation outside an Effect runtime.
 import * as Schema from "effect/Schema";
 import { OpenbotRoutineSchedule } from "@t3tools/contracts";
 type RoutineSchedule =

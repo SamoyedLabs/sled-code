@@ -30,6 +30,7 @@ function Workspace(props: { port: MessagePort; accountId: string; initial: unkno
   const [appearance, setAppearance] = createSignal<AppAppearance>("system");
   function applyTheme(value: unknown) {
     if (!isDynamicRecord(value) || (value.theme !== "light" && value.theme !== "dark")) return;
+    // oxlint-disable-next-line react/immutability -- SolidJS component runs once on mount, not on React re-renders.
     document.documentElement.dataset.openbotColorScheme = value.theme;
     setAppearance(value.appearance === "system" ? "system" : value.theme);
     if (!isDynamicRecord(value.tokens)) return;
@@ -50,6 +51,7 @@ function Workspace(props: { port: MessagePort; accountId: string; initial: unkno
       <div class="web-app">
         <Toaster />
         <Errored
+          // oxlint-disable-next-line react/no-unstable-nested-components -- SolidJS Errored fallback prop runs outside React reconciliation.
           fallback={() => (
             <p role="alert">
               The Bots workspace could not load. Reload this page, or use the legacy workspace.

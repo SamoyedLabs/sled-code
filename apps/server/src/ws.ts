@@ -2638,14 +2638,13 @@ export const layerWsRpc = (
                 .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
             : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
         [WS_METHODS.openbotAdminToHost]: (input) => botAdmin(input.hostId, input.request),
-        [WS_METHODS.openbotAdmin]: (input) =>
-          Effect.gen(function* () {
-            if (Option.isNone(openbot))
-              return yield* new OpenbotError({ message: "Openbot is not configured." });
-            const hostId = yield* openbot.value.readyHostId;
-            if (!hostId) return yield* new OpenbotError({ message: "Openbot is not configured." });
-            return yield* botAdmin(hostId, input);
-          }),
+        [WS_METHODS.openbotAdmin]: Effect.fn("WsServer.openbotAdmin")(function* (input) {
+          if (Option.isNone(openbot))
+            return yield* new OpenbotError({ message: "Openbot is not configured." });
+          const hostId = yield* openbot.value.readyHostId;
+          if (!hostId) return yield* new OpenbotError({ message: "Openbot is not configured." });
+          return yield* botAdmin(hostId, input);
+        }),
         [WS_METHODS.openbotContinuityStatus]: () =>
           Option.isSome(openbotContinuity)
             ? openbotContinuity.value.execute({ action: "status" }).pipe(

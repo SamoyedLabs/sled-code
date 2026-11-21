@@ -83,6 +83,7 @@ export async function packageMacos(
   requested: OpenbotCompatibilityIdentity,
 ): Promise<PackagedCandidate> {
   if (config.platform !== "darwin") throw new Error("Only macOS packaging is implemented");
+  if (!config.asarCli.trim()) throw new Error("Packaging asarCli is required");
   const out = NodePath.join(source, "out");
   const buildSha256 = await tree(out);
   await NodeFSP.access(NodePath.join(out, "main/index.js"));

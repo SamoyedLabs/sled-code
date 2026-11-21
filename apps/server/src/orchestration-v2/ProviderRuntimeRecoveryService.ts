@@ -40,6 +40,8 @@ import {
   neverStarted,
 } from "./RestartBackgroundNote.ts";
 
+const isProviderRequestKind = Schema.is(ProviderRequestKind);
+
 export class ProviderRuntimeRecoveryError extends Schema.TaggedError<ProviderRuntimeRecoveryError>()(
   "ProviderRuntimeRecoveryError",
   {
@@ -392,7 +394,7 @@ export const make = Effect.gen(function* () {
         // but never turn an expired approval into authority for a new turn.
         const lostApproval = projection.runtimeRequests.some(
           (request) =>
-            Schema.is(ProviderRequestKind)(request.kind) &&
+            isProviderRequestKind(request.kind) &&
             (request.status === "pending" ||
               ((request.status === "cancelled" || request.status === "expired") &&
                 request.responseCapability.type === "not_resumable" &&

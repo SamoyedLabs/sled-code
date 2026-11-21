@@ -67,7 +67,7 @@ export function BotAgentImport({
                   onChange={() => c.select("keys", agent.key)}
                 />{" "}
                 {agent.name}
-                {agent.nameExists ? " (name already exists)" : ""} — {agent.skillCount} skills,{" "}
+                {agent.nameExists ? " (name already exists)" : ""}: {agent.skillCount} skills,{" "}
                 {agent.routineCount} routines, {agent.memoryCount} memories, {agent.fileCount} files
                 <p>{agent.description}</p>
               </label>
@@ -82,13 +82,13 @@ export function BotAgentImport({
                   checked={s.channelKeys.includes(channel.key)}
                   onChange={() => c.select("channelKeys", channel.key)}
                 />{" "}
-                {channel.name} — members: {channel.memberKeys.join(", ")}
+                {channel.name}: members {channel.memberKeys.join(", ")}
               </label>
             ))}
           </fieldset>
           <ul>
-            {s.receipt.preview.warnings.map((warning, i) => (
-              <li key={i}>{warning}</li>
+            {s.receipt.preview.warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
             ))}
           </ul>
           <p>Choose at least one agent. Selected chats use only agents that successfully import.</p>
@@ -117,8 +117,8 @@ export function BotAgentImport({
                     {item.name}: {item.reason}
                   </li>
                 ))}
-                {s.receipt.result.warnings.map((warning, i) => (
-                  <li key={i}>{warning}</li>
+                {s.receipt.result.warnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
                 ))}
               </ul>
             </>

@@ -5,7 +5,7 @@ import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { AsyncResult } from "effect/reactivity";
 import * as Option from "effect/Option";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { appAtomRegistry } from "../../rpc/atomRegistry";
 import { environmentSession, readPreparedConnection, usePreparedConnection } from "../../state/session";
 import { openbot } from "../../state/openbot";
@@ -26,7 +26,17 @@ export function BotImportEnvironment({environmentId, hostId, destination}: {envi
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const session = AsyncResult.getOrElse(auth, () => null);
-  const authenticated = auth._tag !== "Failure" && session?.authenticated && (!session.expiresAt || session.expiresAt.epochMilliseconds > Date.now());
+  const expiresAtMs = session?.expiresAt?.epochMilliseconds ?? null;
+  const [expiredAtMs, setExpiredAtMs] = useState<number | null>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Marks the current session expired once its expiry timestamp arrives.
+  useEffect(() => {
+    if (expiresAtMs === null) return;
+    const delay = Math.max(0, expiresAtMs - Date.now());
+    const timer = setTimeout(() => setExpiredAtMs(expiresAtMs), delay);
+    return () => clearTimeout(timer);
+  }, [expiresAtMs]);
+  const expired = expiresAtMs !== null && expiredAtMs === expiresAtMs;
+  const authenticated = auth._tag !== "Failure" && session?.authenticated && !expired;
   const visible = panel && Option.isSome(connection) && panel.connection === connection.value && authenticated && permission && uploadPermission;
   async function show() {
     const prepared = readPreparedConnection(environmentId);

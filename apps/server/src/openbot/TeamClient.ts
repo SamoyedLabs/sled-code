@@ -17,7 +17,7 @@ import * as BrowserDisplayProtocol from "./BrowserDisplayProtocol.ts";
 import { createTeamPrivilegedClient, type PrivilegedTransport } from "./TeamPrivilegedClient.ts";
 import { signQueueAttachmentsBinding } from "./QueueAttachmentsBinding.ts";
 // @effect-diagnostics nodeBuiltinImport:off -- authenticated import body digest.
-import { createHash } from "node:crypto";
+import * as NodeCrypto from "node:crypto";
 import * as Clock from "effect/Clock";
 import {
   type ImportRequest,
@@ -33,6 +33,11 @@ import * as ChannelCodingTransport from "./ChannelCodingTransport.ts";
 import * as UiBlocks from "./UiBlocks.ts";
 import { OpenbotAgent, OpenbotConversationSnapshot } from "@t3tools/contracts";
 import * as CatalogProtocol from "./CatalogProtocol.ts";
+const isHostAccountRequired = Schema.is(
+  Schema.Struct({ code: Schema.Literal("host_account_required") }),
+);
+const decodeOpenbotTransferPreview = Schema.decodeUnknownEffect(OpenbotTransferPreview);
+const encodeUnknownJsonString = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
 import * as ComputerViewSession from "./ComputerViewSession.ts";
 import * as DataProtocol from "./DataProtocol.ts";
 import * as VaultProtocol from "./VaultProtocol.ts";
@@ -1168,10 +1173,7 @@ const make = Effect.gen(function* () {
       .pipe(Effect.mapError((cause) => new TeamClientError({ reason: "transport", cause })));
     if (response.status === 409 && new URL(request.url).pathname.startsWith("/v1/admin/catalog/")) {
       const payload = yield* readJson(response).pipe(Effect.result);
-      if (
-        payload._tag === "Success" &&
-        Schema.is(Schema.Struct({ code: Schema.Literal("host_account_required") }))(payload.success)
-      )
+      if (payload._tag === "Success" && isHostAccountRequired(payload.success))
         return yield* new TeamClientError({
           reason: "http",
           status: 409,
@@ -1657,7 +1659,7 @@ const make = Effect.gen(function* () {
               HttpClientRequest.bodyUint8Array(bytes, "application/zip"),
             ),
           ).pipe(Effect.flatMap(readJson));
-          return yield* Schema.decodeUnknownEffect(OpenbotTransferPreview)(result).pipe(
+          return yield* decodeOpenbotTransferPreview(result).pipe(
             Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
           );
         }),
@@ -1741,9 +1743,7 @@ const make = Effect.gen(function* () {
             request.operation === "import.stage"
               ? bytes
               : Buffer.from(
-                  yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
-                    importRoute(request).body,
-                  ).pipe(
+                  yield* encodeUnknownJsonString(importRoute(request).body).pipe(
                     Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
                   ),
                 );
@@ -1759,7 +1759,7 @@ const make = Effect.gen(function* () {
                   hostId: request.hostId,
                   method: "POST",
                   path: route.path,
-                  bodySha256: createHash("sha256").update(body).digest("hex"),
+                  bodySha256: NodeCrypto.createHash("sha256").update(body).digest("hex"),
                 },
                 now,
               ),
@@ -1932,7 +1932,7 @@ const make = Effect.gen(function* () {
                     hostId: decoded.hostId,
                     method: "POST",
                     path,
-                    bodySha256: createHash("sha256").update(bytes).digest("hex"),
+                    bodySha256: NodeCrypto.createHash("sha256").update(bytes).digest("hex"),
                   },
                   now,
                 ),
@@ -1955,9 +1955,9 @@ const make = Effect.gen(function* () {
             typeof body.hostId !== "string"
           )
             return yield* new TeamClientError({ reason: "decode" });
-          const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
-            body,
-          ).pipe(Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })));
+          const encoded = yield* encodeUnknownJsonString(body).pipe(
+            Effect.mapError((cause) => new TeamClientError({ reason: "decode", cause })),
+          );
           const bytes = Buffer.from(encoded);
           if (bytes.byteLength > 139_820_000)
             return yield* new TeamClientError({ reason: "decode" });
@@ -1972,7 +1972,7 @@ const make = Effect.gen(function* () {
                   hostId,
                   method: "POST",
                   path,
-                  bodySha256: createHash("sha256").update(bytes).digest("hex"),
+                  bodySha256: NodeCrypto.createHash("sha256").update(bytes).digest("hex"),
                 },
                 now,
               ),

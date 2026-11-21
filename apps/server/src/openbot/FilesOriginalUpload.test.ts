@@ -2,7 +2,7 @@ import * as Schema from "effect/Schema";
 import type { OpenbotOriginalUploadIdentity } from "../../../../packages/contracts/src/openbotFiles.ts";
 import { resolveAttachmentRelativePath } from "../attachmentPaths.ts";
 // @effect-diagnostics nodeBuiltinImport:off -- Hashing owned binary test fixtures.
-import { createHash } from "node:crypto";
+import * as NodeCrypto from "node:crypto";
 import { expect, it } from "@effect/vitest";
 import { AuthSessionId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -22,11 +22,10 @@ import * as TeamClient from "./TeamClient.ts";
 import { createFileSession } from "./FileProtocol.ts";
 import { createPendingAttachmentId } from "../attachmentStore.ts";
 
-for (const channelId of [undefined, "group"] as const) {
-  it.live(
-    `recovers the ${channelId ? "group" : "direct"} upload journal and fences it to the original app session`,
-    () =>
-      Effect.gen(function* () {
+it.live.each([undefined, "group"] as const)(
+  "recovers the %s upload journal and fences it to the original app session",
+  (channelId) =>
+    Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         const fs = yield* FileSystem.FileSystem;
         const config = yield* Config.ServerConfig;
@@ -48,7 +47,7 @@ for (const channelId of [undefined, "group"] as const) {
           name: "source.txt",
           size: bytes.length,
           mimeType: "text/plain",
-          sha256: createHash("sha256").update(bytes).digest("hex"),
+          sha256: NodeCrypto.createHash("sha256").update(bytes).digest("hex"),
           attachmentId,
         };
         const principal = AuthSessionId.make("session-original");
@@ -232,5 +231,4 @@ for (const channelId of [undefined, "group"] as const) {
         Effect.scoped,
         Effect.provide(NodeServices.layer),
       ),
-  );
-}
+);

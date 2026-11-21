@@ -31,7 +31,7 @@ export class ProfileRecovery extends Context.Service<
   {
     readonly prepare: (input: {
       readonly id: string;
-      readonly identity: typeof OpenbotCompatibilityIdentity.Type;
+      readonly identity: OpenbotCompatibilityIdentity;
     }) => Effect.Effect<ProfileManifest, ProfileRecoveryError>;
     readonly get: (id: string) => Effect.Effect<ProfileManifest, ProfileRecoveryError>;
     readonly transition: (
@@ -134,7 +134,7 @@ const make = Effect.fn("ProfileRecovery.make")(
     const prepare = Effect.fn("ProfileRecovery.prepare")(
       function* (input: {
         readonly id: string;
-        readonly identity: typeof OpenbotCompatibilityIdentity.Type;
+        readonly identity: OpenbotCompatibilityIdentity;
       }) {
         const home = yield* directory(input.id);
         if (yield* fs.exists(path.join(home, "manifest.json")))

@@ -3,6 +3,7 @@ import { GlassView } from "expo-glass-effect";
 import type { PropsWithChildren, RefObject } from "react";
 import { Platform, StyleSheet, View, type ViewInstance } from "react-native";
 import Animated, { cubicBezier } from "react-native-reanimated";
+// oxlint-disable-next-line t3code/no-mobile-uniwind-theme-escape-hatches -- Upstream OpenBot glass reads custom --openbot-* chrome variables for native BlurView fallback.
 import { useCSSVariable, useUniwind } from "uniwind";
 import { ChromeGlassSheen } from "./chrome-glass-sheen";
 import { useChromeGlass } from "../lib/chrome-glass";

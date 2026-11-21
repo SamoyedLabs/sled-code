@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { StyleSheet, type ViewStyle } from "react-native";
+// oxlint-disable-next-line t3code/no-mobile-uniwind-theme-escape-hatches -- Upstream OpenBot glass reads custom --openbot-* chrome variables for native fallback styling.
 import { useCSSVariable } from "uniwind";
 
 /**

@@ -16,16 +16,8 @@ export function anchorNewMessages(rows: readonly TimelineRow[]): NewMessageTally
 }
 
 /**
- * The tally after a timeline change.
- *
- * Every row anchors, including the rows that never count. A reader who opened a thread, wrote a
- * prompt and scrolled up has nothing countable behind them, and an anchor drawn from countable
- * rows alone would be missing: the first reply would then read as the first page of a thread and
- * count nothing.
- *
- * `following` is whether the view still sticks to the newest message. It has to be read at the
- * moment the messages change, not after the frame that scrolls the view: by then every arrival
- * would look like one the reader watched.
+ * Tally after a timeline change. Every row anchors (including non-countable rows) so the first
+ * reply after a user prompt still counts; `following` must be read before any scroll frame.
  */
 export function tallyNewMessages(
   previous: NewMessageTally,

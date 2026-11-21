@@ -74,4 +74,4 @@ export function blockValuesAfterAttempt(
   return Object.fromEntries(Object.entries(values).filter(([id]) => !privateIds.has(id)));
 }
 
-export { decodeOpenbotTrace } from "./trace";
+export { decodeOpenbotTrace } from "./trace.ts";

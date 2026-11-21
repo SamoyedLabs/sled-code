@@ -1,13 +1,6 @@
 // Adapted from pinned Openbot 0.60.0; see LICENSE.upstream. Event-only helpers omitted.
-// Frozen optional side-question-v1 wire contract.
-//
-// What it grants, recorded here because freezing it makes it permanent: any member of a server can
-// ask a question about the chat of one agent of the host that the member can see. The host answers
-// with the agent's own provider and model, from the agent's profile and the end of its chat, with no
-// tools. The question and the answer do not go into the chat, and the host keeps nothing of them, so
-// the request carries the earlier questions and answers of the side question. At most 20 earlier
-// turns cross in one request. A question and an answer have at most 100,000 characters, and an earlier
-// answer at most 32,000. Widening any of it needs a second capability string.
+// Frozen optional side-question-v1 wire contract (stateless, no tools, max 20 prior turns).
+// Bounds: 100k chars per question/answer, 32k per earlier answer; widening needs a new capability.
 import {
   adminRoute,
   fields,

@@ -1,15 +1,7 @@
 // Adapted from pinned Openbot 0.60.0; see LICENSE.upstream.
-// Frozen optional storage-v1 wire contract. Keep IPC types and limits out of this file: every bound
-// is written as a literal, so a change to `STORAGE_LIMITS` or `INPUT_LIMITS` cannot move a shipped
-// wire contract.
-//
-// What this contract grants was a product decision and is recorded here because freezing it makes
-// it permanent: every member of a server can read the host's storage - category sizes, per-agent and
-// per-chat totals, and the names and sizes of the files sent in chats. An owner or admin can delete
-// one of those files and clear the host's caches and logs; `requireAdmin` on those two routes is the
-// only gate. Rows never carry a path, and workspace files and downloads travel only as category
-// totals: the wire `source` is `attachment` or `generated`. Widening any of it needs a second
-// capability string, never an edit to this one.
+// Frozen optional storage-v1 wire contract with literal bounds independent of IPC limits.
+// Members read usage/chat files (no host paths); file deletion and cache/log clearing require admin.
+// Widening any grant requires a new capability string.
 import { isDynamicRecord, isString } from "./runtime-values.ts";
 import type { PinnedJson as TeamProtocolV2Json } from "./values.ts";
 

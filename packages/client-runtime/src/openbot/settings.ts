@@ -32,10 +32,14 @@ export function settingIsRead(
 ): request is typeof OpenbotSettingsReadRequest.Type {
   return pinnedSetting(request.operation)?.kind === "read";
 }
+const decodeCapabilitiesResult = Schema.decodeUnknownResult(
+  Schema.Struct({ capabilities: Schema.Array(Schema.String).check(Schema.isMaxLength(512)) }),
+);
+const decodeSettingRecordResult = Schema.decodeUnknownResult(
+  Schema.Record(Schema.String, Schema.Json),
+);
 export function settingsCapabilities(value: unknown): readonly string[] {
-  const decoded = Schema.decodeUnknownResult(
-    Schema.Struct({ capabilities: Schema.Array(Schema.String).check(Schema.isMaxLength(512)) }),
-  )(value);
+  const decoded = decodeCapabilitiesResult(value);
   return Result.isSuccess(decoded) ? decoded.success.capabilities : [];
 }
 export type SettingsField = {
@@ -180,7 +184,7 @@ export const SETTING_FORMS = [
   readonly fields: readonly SettingsField[];
 }[];
 export function settingRecord(value: unknown): Record<string, Schema.Json> {
-  const decoded = Schema.decodeUnknownResult(Schema.Record(Schema.String, Schema.Json))(value);
+  const decoded = decodeSettingRecordResult(value);
   return Result.isSuccess(decoded) ? decoded.success : {};
 }
 export function settingOptions(

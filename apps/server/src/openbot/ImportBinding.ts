@@ -1,5 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off -- shared server/engine authentication boundary.
-import { createHmac, timingSafeEqual } from "node:crypto";
+import * as NodeCrypto from "node:crypto";
 
 export interface ImportBindingRequest {
   readonly principal: string;
@@ -13,7 +13,7 @@ const fail = (): never => {
   throw new Error("Invalid import principal binding");
 };
 const signature = (secret: string, payload: string) =>
-  createHmac("sha256", secret)
+  NodeCrypto.createHmac("sha256", secret)
     .update(domain + payload)
     .digest();
 const validRequest = (request: ImportBindingRequest) =>
@@ -53,7 +53,7 @@ export function verifyImportBinding(
   if (!payload || !mac) return fail();
   const actual = Buffer.from(mac, "base64url"),
     wanted = signature(secret, payload);
-  if (actual.length !== wanted.length || !timingSafeEqual(actual, wanted)) return fail();
+  if (actual.length !== wanted.length || !NodeCrypto.timingSafeEqual(actual, wanted)) return fail();
   let value: unknown;
   try {
     value = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));

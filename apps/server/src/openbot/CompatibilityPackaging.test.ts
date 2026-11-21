@@ -5,7 +5,8 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeCrypto from "node:crypto";
-import { expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import { packageMacos } from "./CompatibilityPackaging.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NodeCryptoLayer from "@effect/platform-node/NodeCrypto";
@@ -26,7 +27,93 @@ import { EventId, ProjectId, ProviderInstanceId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Packaging from "./CompatibilityPackaging.ts";
 const exec = NodeUtil.promisify(NodeChildProcess.execFile);
-const asarCli = process.env.OPENBOT_TEST_ASAR_CLI ?? "";
+const configuredAsarCli = process.env.OPENBOT_TEST_ASAR_CLI?.trim() ?? "";
+const FIXTURE_ASAR_CLI_SOURCE = `
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+
+const [command, source, destination, ...rest] = process.argv.slice(2);
+const unpackAll = rest.includes("--unpack");
+
+async function walk(root, relative = "") {
+  const dir = path.join(root, relative);
+  const entries = (await fs.readdir(dir, { withFileTypes: true })).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  const files = {};
+  const blobs = [];
+  let offset = 0;
+  async function visit(currentRel, target) {
+    const curDir = path.join(root, currentRel);
+    const items = (await fs.readdir(curDir, { withFileTypes: true })).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    for (const item of items) {
+      const rel = currentRel ? path.join(currentRel, item.name) : item.name;
+      const full = path.join(root, rel);
+      if (item.isDirectory()) {
+        const sub = {};
+        target[item.name] = { files: sub };
+        await visit(rel, sub);
+      } else if (item.isFile()) {
+        const data = await fs.readFile(full);
+        if (unpackAll) {
+          target[item.name] = { size: data.length, unpacked: true };
+        } else {
+          target[item.name] = { size: data.length, offset: String(offset) };
+          blobs.push(data);
+          offset += data.length;
+        }
+      }
+    }
+  }
+  await visit("", files);
+  return { header: { files }, blobs };
+}
+
+if (command === "pack") {
+  const { header, blobs } = await walk(source);
+  const headerBytes = Buffer.from(JSON.stringify(header), "utf8");
+  const pad = (4 - (headerBytes.length % 4)) % 4;
+  const headerBuf = Buffer.alloc(16 + headerBytes.length + pad);
+  headerBuf.writeUInt32LE(4, 0);
+  headerBuf.writeUInt32LE(headerBytes.length + pad + 8, 4);
+  headerBuf.writeUInt32LE(headerBytes.length + pad + 4, 8);
+  headerBuf.writeUInt32LE(headerBytes.length, 12);
+  headerBytes.copy(headerBuf, 16);
+  await fs.mkdir(path.dirname(destination), { recursive: true });
+  await fs.writeFile(destination, Buffer.concat([headerBuf, ...blobs]));
+  if (unpackAll) {
+    await fs.cp(source, destination + ".unpacked", { recursive: true });
+  }
+} else if (command === "extract") {
+  const raw = await fs.readFile(source);
+  const headerSize = raw.readUInt32LE(12);
+  const dataOffset = 16 + headerSize + ((4 - (headerSize % 4)) % 4);
+  const header = JSON.parse(raw.subarray(16, 16 + headerSize).toString("utf8"));
+  await fs.mkdir(destination, { recursive: true });
+  async function extractTree(node, currentRel) {
+    for (const [name, entry] of Object.entries(node.files ?? {})) {
+      const rel = currentRel ? path.join(currentRel, name) : name;
+      const outPath = path.join(destination, rel);
+      if (entry.files) {
+        await fs.mkdir(outPath, { recursive: true });
+        await extractTree(entry, rel);
+      } else if (entry.unpacked) {
+        await fs.mkdir(path.dirname(outPath), { recursive: true });
+        await fs.copyFile(path.join(source + ".unpacked", rel), outPath);
+      } else {
+        const start = dataOffset + Number(entry.offset);
+        await fs.mkdir(path.dirname(outPath), { recursive: true });
+        await fs.writeFile(outPath, raw.subarray(start, start + entry.size));
+      }
+    }
+  }
+  await extractTree(header, "");
+} else {
+  process.exit(1);
+}
+`;
 const identity = {
   releaseCommit: "a".repeat(40),
   patchSetSha256: "b".repeat(64),
@@ -44,10 +131,12 @@ async function fixture(version = "0.60.0") {
     payload = NodePath.join(root, "payload"),
     app = NodePath.join(root, "OpenBot.app"),
     baseArchive = NodePath.join(root, "base.zip");
+  const asarCli = configuredAsarCli || NodePath.join(root, "asar-fixture.mjs");
   const write = async (p: string, data: string) => {
     await NodeFSP.mkdir(NodePath.dirname(p), { recursive: true });
     await NodeFSP.writeFile(p, data);
   };
+  if (!configuredAsarCli) await write(asarCli, FIXTURE_ASAR_CLI_SOURCE);
   for (const file of ["main/index.js", "preload/index.cjs", "renderer/index.html"])
     await write(NodePath.join(source, "out", file), `rebuilt ${file}`);
   await write(
@@ -84,6 +173,7 @@ async function fixture(version = "0.60.0") {
     },
   };
 }
+describe.runIf(HostProcess.Platform.defaultValue() === "darwin")("macOS compatibility packaging", () => {
 it("packages this build instead of caller archive; binds manifest/output and preserves native/license resources", async () => {
   await using f = await fixture();
   await NodeFSP.writeFile(NodePath.join(f.source, "old.zip"), "unrelated supplied archive");
@@ -160,10 +250,7 @@ it.live(
   "applies a reviewed patch and independently builds in the bound nested source while missing client checks block promotion",
   () =>
     Effect.gen(function* () {
-      const f = yield* Effect.acquireRelease(
-        Effect.promise(() => fixture()),
-        (f) => Effect.promise(() => f[Symbol.asyncDispose]()),
-      );
+      const f = yield* Effect.acquireDisposable(Effect.promise(() => fixture()));
       const fs = yield* FileSystem.FileSystem,
         path = yield* Path.Path,
         process = yield* ProcessRunner.ProcessRunner;
@@ -324,4 +411,5 @@ it("rejects a hash-matching base with wrong package metadata and unsupported pla
   await expect(
     packageMacos({ ...f.config, platform: "win32" }, f.source, identity),
   ).rejects.toThrow("Only macOS");
+});
 });

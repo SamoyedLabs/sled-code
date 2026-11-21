@@ -1,18 +1,7 @@
 // Adapted from pinned Openbot 0.60.0; see LICENSE.upstream. Event-only helpers omitted.
 // Frozen optional workflows-github-v1 wire contract. Keep IPC types and limits out of this file.
-//
-// What it grants, recorded here because freezing it makes it permanent: it adds GitHub triggers and
-// GitHub outputs to `workflows-v1`, whose routes and grants stay as they are. A host that advertises
-// it runs a trigger node with `trigger: "github"` and an output node with `target: "github"`; their
-// settings cross in the open node fields of `workflows-v1`. A GitHub output acts as the host's GitHub
-// App bot, so only an owner or admin can add a GitHub trigger or a GitHub output, or change one, as
-// only they can for an output that posts to a messaging place; a member can run one that is there.
-// A member who reads a workflow reads its GitHub event history: for each event, the item number,
-// its title, the event name and what the host did with it. The event body does not cross. The
-// repository list, labels and people of the host's GitHub connection go only to an owner or admin,
-// as they show what the host's GitHub sign-in reaches. A run with the last event needs the chat level
-// for each agent of the workflow, as `workflows-v1` start-run does. Widening any of it needs a second
-// capability string.
+// GitHub trigger/output editing and repo metadata require owner/admin; members may run or read event summaries.
+// Widening any grant requires a new capability string.
 import {
   type AdminDecoder,
   adminRoute,

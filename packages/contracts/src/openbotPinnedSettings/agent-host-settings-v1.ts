@@ -1,18 +1,7 @@
-// Adapted from nightly-labs/openbot 0.60.0, 0c7753fa622c38419939cd230657f40e5883d098.
-// Copyright upstream authors; see LICENSE.upstream. Only import paths/types adapted.
-// Frozen optional agent-host-settings-v1 wire contract.
-//
-// What it grants, recorded here because freezing it makes it permanent: an owner or admin of a
-// server can read and change three settings of each agent that act only on the host: whether the
-// agent gets the Computer Use tools there (`computerUse`), whether a script on the host can run its
-// routines, send messages, and answer questions and approvals (`allowAutomation`), and what a message
-// sent while the agent works does (`busyMessageMode`; null follows the host default). The host default stays a
-// local choice: the client reads it as `defaultBusyMessageMode` and cannot change it. A member
-// cannot use either route; `requireAdmin` on the host is the only gate.
-//
-// Developer-approved exception in #1720: Local scripts stays one grant. The added message and
-// attention operations also apply to existing enabled agents, without another opt-in or capability.
-// See docs/architecture/agents.md#local-scripts-api. Any other widening needs a second capability.
+// Adapted from nightly-labs/openbot 0.60.0; see LICENSE.upstream.
+// Frozen optional agent-host-settings-v1 wire contract gated by `requireAdmin`.
+// Covers `computerUse`, `allowAutomation` (single local-scripts grant), and `busyMessageMode`.
+// Any further widening requires a new capability string.
 import {
   type AdminDecoder,
   adminRoute,

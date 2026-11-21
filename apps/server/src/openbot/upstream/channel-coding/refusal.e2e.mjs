@@ -1,14 +1,14 @@
-import assert from "node:assert/strict";
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
+import * as NodeAssert from "node:assert/strict";
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import { Effect } from "effect";
 import { ChannelService } from "../src/backend/channel-service.ts";
 import { ChannelCodingRuntime } from "../src/backend/channel-coding-runtime.ts";
 import { OpenBotDatabase } from "../src/backend/openbot-database.ts";
 
 // Actual maintained runtime, service, store and SQLite. Only the outbound HTTP peer is replaced.
-const root = fs.mkdtempSync(path.join(os.tmpdir(), "openbot-coding-refusal-"));
+const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "openbot-coding-refusal-"));
 let database = new OpenBotDatabase(root);
 await Effect.runPromise(database.initialize());
 const hooks = {
@@ -40,21 +40,21 @@ const realFetch = globalThis.fetch;
 try {
   runtime.configure("sled");
   globalThis.fetch = async () => refused();
-  await assert.rejects(run(runtime.launch(seed("refused"), intent, servers)), /refused/);
+  await NodeAssert.rejects(run(runtime.launch(seed("refused"), intent, servers)), /refused/);
   await run(service.complete("refused", "refused", "completed"));
-  assert.equal(assignment("refused").state, "completed", "definite refusal must not leave an active reservation until deadline");
-  assert.equal(assignment("refused").coding.result, null, "refusal must not fabricate a coding result");
+  NodeAssert.equal(assignment("refused").state, "completed", "definite refusal must not leave an active reservation until deadline");
+  NodeAssert.equal(assignment("refused").coding.result, null, "refusal must not fabricate a coding result");
   service.store.rebuild("refused");
-  assert.equal(assignment("refused").coding.attestation.refused, true);
+  NodeAssert.equal(assignment("refused").coding.attestation.refused, true);
 
   for (const id of ["lost", "unmarked-403", "server-500", "bad-json"]) {
     globalThis.fetch = async () => {
       if (id === "lost") throw new TypeError("Lost response after possible acceptance");
       return id === "bad-json" ? new Response("invalid", { status: 200 }) : new Response(null, { status: id === "server-500" ? 500 : 403 });
     };
-    await assert.rejects(run(runtime.launch(seed(id), intent, servers)));
+    await NodeAssert.rejects(run(runtime.launch(seed(id), intent, servers)));
     await run(service.complete(id, id, "completed"));
-    assert.equal(assignment(id).state, "running", `${id} must retain uncertain acceptance`);
+    NodeAssert.equal(assignment(id).state, "running", `${id} must retain uncertain acceptance`);
   }
   await run(service.stop());
   database.close();
@@ -64,14 +64,14 @@ try {
   runtime = new ChannelCodingRuntime(service);
   globalThis.fetch = async () => refused();
   for (const id of ["lost", "unmarked-403", "server-500", "bad-json"]) {
-    await assert.rejects(run(runtime.launch(actors.get(id), intent, servers)), /refused/);
-    assert.equal(assignment(id).state, "running", "later refusal must not erase earlier ambiguous acceptance after restart");
-    assert.notEqual(assignment(id).coding.attestation.refused, true);
+    await NodeAssert.rejects(run(runtime.launch(actors.get(id), intent, servers)), /refused/);
+    NodeAssert.equal(assignment(id).state, "running", "later refusal must not erase earlier ambiguous acceptance after restart");
+    NodeAssert.notEqual(assignment(id).coding.attestation.refused, true);
   }
   console.log("PASS actual ChannelCodingRuntime + ChannelService + SQLite: definitive refusal releases; unmarked/transport/5xx/malformed receipt preserve uncertainty across restart");
 } finally {
   globalThis.fetch = realFetch;
   await run(service.stop());
   database.close();
-  fs.rmSync(root, { recursive: true, force: true });
+  NodeFS.rmSync(root, { recursive: true, force: true });
 }

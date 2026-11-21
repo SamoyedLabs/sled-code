@@ -1,3 +1,4 @@
+// @effect-diagnostics globalDate:off -- Pure civil-calendar and Intl schedule computation outside an Effect runtime.
 /**
  * Calendar days for the routine calendar. A day is a civil date, "2026-10-26", in the viewer's time
  * zone. Day arithmetic happens in UTC on that civil date, so a daylight-saving change never adds or

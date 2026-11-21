@@ -83,8 +83,7 @@ it.live("uses existing Files rows atomically and never replays a persisted queue
       Layer.mergeAll(
         Config.layerTest(process.cwd(), { prefix: "queue-files-" }),
         Sqlite.layerMemory,
-      ),
+      ).pipe(Layer.provideMerge(NodeServices.layer)),
     ),
-    Effect.provide(NodeServices.layer),
   ),
 );
