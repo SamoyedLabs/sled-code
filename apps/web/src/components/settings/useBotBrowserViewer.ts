@@ -9,7 +9,7 @@ import { AtomRegistry } from "effect/reactivity";
 import { openbot } from "../../state/openbot";
 import { environmentSession } from "../../state/session";
 
-export function useBotBrowserConnection(environmentId: EnvironmentId, hostId: string) {
+function useBotBrowserConnection(environmentId: EnvironmentId, hostId: string) {
   const registry = useContext(RegistryContext);
   const prepared = useAtomValue(environmentSession.preparedConnectionValueAtom(environmentId));
   return async (tabId: string, viewport?: { width: number; height: number }) => {

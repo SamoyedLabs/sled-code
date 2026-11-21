@@ -44,7 +44,7 @@ function readDataUrlBlob(src: string): Blob {
   }
 }
 
-export async function fetchMediaBlob(src: string): Promise<Blob> {
+async function fetchMediaBlob(src: string): Promise<Blob> {
   const response = await fetch(src).catch(() => null);
   if (response?.ok) return response.blob();
   // An <img> can show media that fetch() may not read (CORS, CSP, cookies); desktop reads it natively.

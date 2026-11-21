@@ -1,7 +1,7 @@
 import type { SettingsScopeSearch } from "../settings/settingsScope";
 import { validateSettingsRouteSearch } from "../settings/settingsScopeNavigation";
 
-export const BOT_WORKSPACE_PAGES = [
+const BOT_WORKSPACE_PAGES = [
   "chats",
   "tasks",
   "flows",

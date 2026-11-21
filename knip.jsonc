@@ -79,6 +79,8 @@
         "src/openbot/upstream/channel-coding/idle-deadline.e2e.mjs",
         "src/openbot/upstream/channel-coding/origin.e2e.mjs",
         "src/openbot/upstream/channel-coding/origin.ts",
+        "src/openbot/upstream/channel-coding/progress.e2e.mjs",
+        "src/openbot/upstream/channel-coding/refusal.e2e.mjs",
       ],
       // The generated operations export every selection's class.
       "ignoreIssues": { "**/*.graphql.ts": ["exports", "types", "namespaceMembers"] },
@@ -128,7 +130,12 @@
       // UI component modules are copied and adapted as cohesive sets. Keep their
       // named subcomponents even before they have callers; the file audit still
       // reports an entire component module when nothing imports it.
-      "ignoreIssues": { "src/components/ui/*.tsx": ["exports", "nsExports", "duplicates"] },
+      "ignoreIssues": {
+        "src/components/ui/*.tsx": ["exports", "nsExports", "duplicates"],
+        // Copied and adapted upstream OpenBot UI/helper modules retain cohesive helper exports.
+        "src/components/bots/upstream/**": ["exports", "nsExports", "duplicates"],
+        "src/components/bots/avatar/vendor/**": ["exports", "nsExports", "duplicates"],
+      },
     },
     "apps/marketing": {
       // `astro check` runs from the typecheck task in vite.config.ts, which knip does not read.
@@ -145,6 +152,7 @@
         "scripts/generate-device-stream.mts",
         "src/features/devices/device-stream.browser.ts!",
         "src/features/browser/preview-stream.browser.ts!",
+        "src/features/bots/upstream/openbot-mobile/chat-preview/mermaid-renderer.browser.ts!",
       ],
       // Fonts are configured as asset paths; Expo autolinks the native packages.
       "ignoreDependencies": [
@@ -186,11 +194,25 @@
       // These workspace packages are private to this monorepo.
       "includeEntryExports": true,
     },
+    "packages/client-runtime": {
+      "includeEntryExports": true,
+      // Copied upstream OpenBot schedule helpers retained as cohesive modules.
+      "ignoreIssues": {
+        "src/openbot/routineSchedule.ts": ["exports"],
+        "src/openbot/routineCalendarDates.ts": ["exports"],
+      },
+    },
     "packages/contracts": {
       "includeEntryExports": true,
       // Preserve pinned upstream wire and UI-block modules as complete protocol surfaces.
       "ignoreIssues": {
         "src/openbotBrowserWire.ts": ["exports"],
+        "src/openbotConnectWebhooksWire.ts": ["exports"],
+        "src/openbotEventsWire.ts": ["exports"],
+        "src/openbotLocalCatalogWire.ts": ["exports"],
+        "src/openbotOnceRoutinesWire.ts": ["exports"],
+        "src/openbotPinnedSettings/*.ts": ["exports"],
+        "src/openbotTwoStepCode.ts": ["exports"],
         "src/openbotUiBlocks.ts": ["exports"],
       },
     },

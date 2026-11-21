@@ -77,7 +77,7 @@ export function WorkspaceViewSwitcher({
   );
 }
 
-export function WorkspaceModeTabs() {
+function WorkspaceModeTabs() {
   const bots = useWorkspaceBotsMode();
   const navigate = useNavigate();
   const openCode = useNavigateToMainApp();

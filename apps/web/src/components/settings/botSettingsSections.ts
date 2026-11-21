@@ -1,5 +1,6 @@
 import {
   BellIcon,
+  BlocksIcon,
   BrainIcon,
   CpuIcon,
   FolderIcon,
@@ -68,7 +69,7 @@ export const botSettingsSections = [
   {
     id: "skills",
     label: "Skills",
-    icon: SparklesIcon,
+    icon: BlocksIcon,
     description: "Browse, review, and manage the skills available on this host.",
     forms: [],
     advanced: ["installed-skills", "catalog"],

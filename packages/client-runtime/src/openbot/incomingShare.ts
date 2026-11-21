@@ -23,7 +23,7 @@ export const BotShareTransfer = Schema.Struct({
   uploadOutcome: Schema.optional(Schema.Literals(["released", "absent"])),
 });
 export type BotShareTransfer = typeof BotShareTransfer.Type;
-export function botShareDestinationKey(d: BotShareDestination) {
+function botShareDestinationKey(d: BotShareDestination) {
   return JSON.stringify([
     d.environmentId,
     d.principalId,

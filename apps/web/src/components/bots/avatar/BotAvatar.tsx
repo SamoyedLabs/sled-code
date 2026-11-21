@@ -2,7 +2,6 @@ import { useEffect, useId, useRef } from "react";
 import type { AvatarMood } from "./avatar-types";
 import { createPlushController } from "./plush-controller";
 
-export { botAvatarProfile } from "./avatar-profile";
 export type { AvatarMood } from "./avatar-types";
 
 export function BotAvatar({

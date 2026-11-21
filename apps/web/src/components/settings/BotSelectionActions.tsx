@@ -95,7 +95,7 @@ export function BotSelectionActions(props: {
     />
   );
 }
-export function BotSelectionBar({
+function BotSelectionBar({
   selection,
   mac,
   onQuote,

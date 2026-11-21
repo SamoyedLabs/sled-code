@@ -14,7 +14,6 @@ import { providerAgent } from "@t3tools/client-runtime/openbot/presentation";
 import { useOpenbotProviderData } from "./upstream/provider/useOpenbotProviderData";
 import { BotModelPicker } from "./BotModelPicker";
 import { AccountUsageDetails } from "./upstream/provider/AccountUsageDetails";
-import { AccountUsageRings } from "./upstream/provider/OpenbotAccountUsageRail";
 import { accountUsageProviderRows } from "./upstream/provider/account-usage-view";
 import { isReasoningEffort } from "./upstream/provider/types";
 const decodeAdmin = Schema.decodeUnknownResult(OpenbotAdminRequest);
@@ -56,15 +55,6 @@ function Ready({
   );
 }
 export const useSourceProviderData = () => useContext(Context);
-export function SourceUsageRings({ onOpen }: { onOpen: () => void }) {
-  const data = useContext(Context);
-  return data ? (
-    <AccountUsageRings
-      rows={accountUsageProviderRows(data.usage, data.status?.providers)}
-      onOpen={onOpen}
-    />
-  ) : null;
-}
 export function SourceModelPicker({
   environmentId,
   hostId,

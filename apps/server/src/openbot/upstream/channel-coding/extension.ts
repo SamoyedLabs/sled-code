@@ -1,6 +1,6 @@
 /** Maintained Openbot service extension. No HTTP route or runtime capability is implied. */
 // @effect-diagnostics-next-line extendsNativeError:off
-export class ChannelCodingAuthorityError extends Error {
+class ChannelCodingAuthorityError extends Error {
   override readonly name = "ChannelCodingAuthorityError";
 }
 export interface CodingBinding {
@@ -22,7 +22,7 @@ export interface CodingProgress {
 export interface CodingProgressReceipt extends CodingProgress {
   delivery: "accepted" | "rejected" | "uncertain";
 }
-export function decodeCodingProgress(value: unknown): CodingProgress {
+function decodeCodingProgress(value: unknown): CodingProgress {
   if (
     !isCodingObject(value) ||
     !("eventId" in value) ||

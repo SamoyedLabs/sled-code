@@ -131,7 +131,6 @@ export * from "./openbotTemplates.ts";
 export {
   OpenbotSettingsReadRequest,
   OpenbotSettingsAdminRequest,
-  settingsRequiredScopes,
   type OpenbotSettingsRequest,
 } from "./openbotSettings.ts";
 
