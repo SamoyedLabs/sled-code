@@ -9,7 +9,7 @@ import type {
   OpenbotAgent,
   OpenbotChannelAdminRequest,
 } from "@t3tools/contracts";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../../../state/openbot";
 import { useAtomCommand } from "../../../../state/use-atom-command";
 import { readPreparedConnection } from "../../../../state/session";
@@ -52,7 +52,7 @@ export function GroupPictureEditor({
     setBusy(true);
     setError(null);
     const connection = readPreparedConnection(environmentId);
-    try {
+    const settled = await settlePromise(async () => {
       const result = await admin({
         environmentId,
         input: {
@@ -64,12 +64,13 @@ export function GroupPictureEditor({
       if (result._tag === "Failure") throw squashAtomCommandFailure(result);
       refresh();
       onSaved();
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : "Could not save the group picture.");
-    } finally {
-      lock.current = false;
-      setBusy(false);
     }
+    lock.current = false;
+    setBusy(false);
   };
   const disabled = busy || !permission;
   return (

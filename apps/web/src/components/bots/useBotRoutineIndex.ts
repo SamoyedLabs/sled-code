@@ -10,6 +10,7 @@ import {
 } from "@t3tools/contracts";
 import { routineViews } from "@t3tools/client-runtime/openbot/presentation";
 import { settingsCapabilities } from "@t3tools/client-runtime/openbot/settings";
+import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../state/openbot";
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -75,7 +76,7 @@ export function useBotRoutineIndex({
     for (let offset = 0; offset < owners.length && fresh(); offset += 4) {
       const batches = await Promise.all(
         owners.slice(offset, offset + 4).map(async (owner) => {
-          try {
+          const settled = await settlePromise(async () => {
             if (!fresh()) return [];
             const request = {
               operation: "events.list" as const,
@@ -111,10 +112,12 @@ export function useBotRoutineIndex({
               agentId: owner.id,
               detail: owner.name,
             }));
-          } catch {
+          });
+          if (settled._tag === "Failure") {
             failed = true;
             return [];
           }
+          return settled.value;
         }),
       );
       if (!fresh()) return;

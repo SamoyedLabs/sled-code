@@ -1,6 +1,7 @@
 /* oxlint-disable react/no-array-index-key -- Source filter rows retain positional identity while their text is edited. */
 /* oxlint-disable shadcn/no-unknown-classes -- Source diagram and settings field selectors. */
 import { useState } from "react";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, OpenbotRoutineFlowCanvas } from "@t3tools/contracts";
 import { Plus, X, Copy } from "lucide-react";
 import { SourceButton } from "../settings/SettingsParts";
@@ -86,14 +87,15 @@ export function DiagramWebhookConfig({
     if (busy) return;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       await action();
       onRefresh();
-    } catch (e) {
+    });
+    if (settled._tag === "Failure") {
+      const e = squashAtomCommandFailure(settled);
       setError(e instanceof Error ? e.message : "The webhook change failed.");
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
   return (
     <section className="diagram-inspector-section">

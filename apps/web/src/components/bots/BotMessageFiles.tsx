@@ -10,7 +10,7 @@ import {
 } from "@t3tools/contracts";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../state/openbot";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
@@ -60,7 +60,7 @@ export function BotMessageFiles({
     if (busy || !canRead) return;
     setBusy(attachmentId);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       const file = await materialize({
         environmentId,
         input: {
@@ -96,11 +96,12 @@ export function BotMessageFiles({
       const url = connection && resolveAssetUrl(connection.httpBaseUrl, minted.value.relativeUrl);
       if (!url) throw new Error("Reconnect to open this file.");
       await downloadMedia(url, file.value.name);
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : "Could not open this file.");
-    } finally {
-      setBusy(null);
     }
+    setBusy(null);
   };
   return (
     <div className="space-y-2">

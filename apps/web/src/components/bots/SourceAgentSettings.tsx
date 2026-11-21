@@ -142,9 +142,9 @@ function Ready({
       roster.refresh();
       return result.value;
     },
-    setting: async (operation, parameters = { agentId: agent.id }) => {
+    setting: async (operation, parameters) => {
       fresh();
-      const request = settingRequest(operation, parameters);
+      const request = settingRequest(operation, parameters ?? { agentId: agent.id });
       if (!request) throw new Error("The host cannot accept this setting.");
       const result = settingIsRead(request)
         ? await (async () => {

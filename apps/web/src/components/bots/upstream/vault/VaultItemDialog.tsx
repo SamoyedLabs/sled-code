@@ -1,6 +1,7 @@
 /* oxlint-disable shadcn/no-unknown-classes -- Source ItemDialog fields, secret visibility and dialog styling. */
 import { Dialog } from "@base-ui/react/dialog";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { Eye, EyeOff, X } from "lucide-react";
 import type { OpenbotVaultSave } from "@t3tools/contracts";
 import { SourceButton } from "../settings/SettingsParts";
@@ -75,15 +76,16 @@ export function VaultItemDialog(props: {
     lock.current = true;
     setSaving(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       await props.onSave(saveInput(draft, props.item?.id ?? null));
       props.onClose();
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : t("vault.failed"));
-    } finally {
-      lock.current = false;
-      setSaving(false);
     }
+    lock.current = false;
+    setSaving(false);
   };
   const countries = VAULT_COUNTRY_CODES.map((code) => ({
     code,
@@ -460,17 +462,20 @@ function SecretInput(props: {
     const requested = generation.current;
     if (props.saved && props.value === "") {
       setRevealing(true);
-      try {
+      const settled = await settlePromise(async () => {
         const value = await props.onReveal();
-        if (!active.current || requested !== generation.current) return;
+        if (!active.current || requested !== generation.current) return false;
         props.onChange(value);
-      } catch (cause) {
+        return true;
+      });
+      if (active.current) setRevealing(false);
+      if (settled._tag === "Failure") {
+        const cause = squashAtomCommandFailure(settled);
         if (active.current)
           props.onError(cause instanceof Error ? cause.message : t("vault.revealFailed"));
         return;
-      } finally {
-        if (active.current) setRevealing(false);
       }
+      if (!settled.value) return;
     }
     if (active.current) setShown(true);
   };

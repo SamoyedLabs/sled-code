@@ -4,6 +4,7 @@ import {
   hostedSites,
   dataFailure,
 } from "@t3tools/client-runtime/openbot/presentation";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { DataActions, DataRequest } from "@t3tools/client-runtime/openbot/presentation";
 
 export function useBotData(actions: DataActions) {
@@ -33,7 +34,7 @@ export function useBotData(actions: DataActions) {
     const isTable = request.operation.startsWith("tables.");
     const resource = isTable ? "tables" : "sites";
     setErrors((current) => ({ ...current, [resource]: null }));
-    try {
+    const settled = await settlePromise(async () => {
       const response = await actions.execute(request);
       const failure = dataFailure(response);
       if (failure) throw new Error(failure);
@@ -52,14 +53,15 @@ export function useBotData(actions: DataActions) {
         if (next === null) throw new Error("The host returned an unreadable site list.");
         setSites(next);
       }
-    } catch (cause) {
+    });
+    lock.current = false;
+    setBusy(false);
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       const message =
         cause instanceof Error ? cause.message : "Could not load host data. Try refreshing.";
       setErrors((current) => ({ ...current, [resource]: message }));
       return message;
-    } finally {
-      lock.current = false;
-      setBusy(false);
     }
   };
   const load = useEffectEvent(async () => {

@@ -11,7 +11,7 @@ import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
 import { type EnvironmentId, OpenbotAdminRequest } from "@t3tools/contracts";
 import { settingsCapabilities } from "@t3tools/client-runtime/openbot/settings";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../state/openbot";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useEnvironmentQuery } from "../../state/query";
@@ -155,7 +155,7 @@ function CreateHost(props: SourceCreateAgentProps) {
     lock.current = true;
     setBusy(true);
     retainCreateAttempt(connection, scope, { draft, agentId: null });
-    try {
+    const settled = await settlePromise(async () => {
       const result = await admin({
         environmentId: props.environmentId,
         input: { hostId: props.hostId, request },
@@ -167,18 +167,32 @@ function CreateHost(props: SourceCreateAgentProps) {
       setBlocked(true);
       await props.onCreated(created.id);
       clearCreateAttempt(connection, scope);
-    } catch (cause) {
-      if (alive.current) {
-        setBlocked(true);
-        setError(
-          `The creation could not be confirmed. Check the host’s agents before creating another. ${cause instanceof Error ? cause.message : ""}`,
-        );
-      }
-    } finally {
-      lock.current = false;
-      if (alive.current) setBusy(false);
+    });
+    if (settled._tag === "Failure" && alive.current) {
+      const cause = squashAtomCommandFailure(settled);
+      setBlocked(true);
+      setError(
+        `The creation could not be confirmed. Check the host’s agents before creating another. ${cause instanceof Error ? cause.message : ""}`,
+      );
     }
+    lock.current = false;
+    if (alive.current) setBusy(false);
   };
+  const openCreated = previous?.agentId
+    ? async () => {
+        if (!connection || readPreparedConnection(props.environmentId) !== connection) return;
+        setBusy(true);
+        const settled = await settlePromise(async () => {
+          await props.onCreated(previous.agentId!);
+          clearCreateAttempt(connection, scope);
+        });
+        if (settled._tag === "Failure") {
+          const cause = squashAtomCommandFailure(settled);
+          setError(cause instanceof Error ? cause.message : "Could not open the created agent.");
+        }
+        if (alive.current) setBusy(false);
+      }
+    : undefined;
   const form: ComponentProps<typeof FirstAgentSetup> = {
     value: draft,
     first: props.first ?? false,
@@ -193,23 +207,19 @@ function CreateHost(props: SourceCreateAgentProps) {
     providerData: data,
     onChange: change,
     onSubmit: create,
-    onOpenCreated: previous?.agentId
-      ? async () => {
-          if (!connection || readPreparedConnection(props.environmentId) !== connection) return;
-          setBusy(true);
-          try {
-            await props.onCreated(previous.agentId!);
-            clearCreateAttempt(connection, scope);
-          } catch (cause) {
-            setError(cause instanceof Error ? cause.message : "Could not open the created agent.");
-          } finally {
-            if (alive.current) setBusy(false);
-          }
-        }
-      : undefined,
+    onOpenCreated: openCreated,
     onCancel: props.onCancel,
     onManageProviders: props.onManageProviders,
   };
-  // oxlint-disable-next-line react/refs -- The render callback receives form data and event handlers, never the creation lock itself.
-  return props.render ? props.render(form) : <FirstAgentSetup {...form} />;
+  return props.render ? <CreateFormSlot render={props.render} form={form} /> : <FirstAgentSetup {...form} />;
+}
+
+function CreateFormSlot({
+  render,
+  form,
+}: {
+  render: (form: ComponentProps<typeof FirstAgentSetup>) => ReactNode;
+  form: ComponentProps<typeof FirstAgentSetup>;
+}) {
+  return render(form);
 }

@@ -4,7 +4,7 @@ import { useContext, useState } from "react";
 import * as Schema from "effect/Schema";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { settingsCapabilities } from "@t3tools/client-runtime/openbot/settings";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../../../state/openbot";
 import { useAtomCommand } from "../../../../state/use-atom-command";
 import { readPreparedConnection } from "../../../../state/session";
@@ -97,7 +97,7 @@ export function DiscordAccess(props: {
   const edit = async (id: string, name: string) => {
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       const roles = decodeRoles(await read("settings.discord-access.roles", id)).roles,
         held = c.value?.[id] ?? [];
       setEditing({
@@ -106,11 +106,12 @@ export function DiscordAccess(props: {
         roles: [...roles, ...held.filter((role) => !roles.some((row) => row.id === role.id))],
         selected: held.map((role) => role.id),
       });
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : "Could not read roles.");
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
   return (
     <SettingsSection
@@ -164,7 +165,7 @@ export function DiscordAccess(props: {
           if (!editing) return;
           setBusy(true);
           setError(null);
-          try {
+          const settled = await settlePromise(async () => {
             await props.execute({
               operation: "settings.discord-access.update",
               parameters: {
@@ -176,11 +177,12 @@ export function DiscordAccess(props: {
             });
             setEditing(null);
             await c.refresh();
-          } catch (cause) {
+          });
+          if (settled._tag === "Failure") {
+            const cause = squashAtomCommandFailure(settled);
             setError(cause instanceof Error ? cause.message : "Could not save Discord access.");
-          } finally {
-            setBusy(false);
           }
+          setBusy(false);
         }}
       >
         <ul className="discord-roles">

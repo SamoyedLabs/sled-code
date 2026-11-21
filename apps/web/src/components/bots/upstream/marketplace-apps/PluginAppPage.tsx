@@ -1,5 +1,6 @@
 /* oxlint-disable shadcn/no-unknown-classes -- Source MarketplaceAppPage PluginAppPage layout. */
 import { useState } from "react";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { SkillGradient } from "../marketplace/SkillGradient";
 import { ArrowRight, Copy, ExternalLink } from "lucide-react";
 import { DetailHeader, Information, SkillMark } from "../marketplace/MarketplaceParts";
@@ -246,14 +247,15 @@ export function PluginAppPage(props: {
         onConfirm={async () => {
           if (!rename?.name.trim()) return;
           setBusy(true);
-          try {
+          const settled = await settlePromise(async () => {
             await props.onRename(rename.id, rename.name);
             setRename(null);
-          } catch (cause) {
+          });
+          if (settled._tag === "Failure") {
+            const cause = squashAtomCommandFailure(settled);
             setError(cause instanceof Error ? cause.message : "Could not rename account.");
-          } finally {
-            setBusy(false);
           }
+          setBusy(false);
         }}
       >
         <label className="ui-field">
@@ -279,14 +281,15 @@ export function PluginAppPage(props: {
         onConfirm={async () => {
           if (!removeAccount) return;
           setBusy(true);
-          try {
+          const settled = await settlePromise(async () => {
             await props.onRemove([removeAccount]);
             setRemoveAccount(null);
-          } catch (cause) {
+          });
+          if (settled._tag === "Failure") {
+            const cause = squashAtomCommandFailure(settled);
             setError(cause instanceof Error ? cause.message : "Could not remove account.");
-          } finally {
-            setBusy(false);
           }
+          setBusy(false);
         }}
       />
 
@@ -319,14 +322,15 @@ export function PluginAppPage(props: {
         onConfirm={async () => {
           setBusy(true);
           setError(null);
-          try {
+          const settled = await settlePromise(async () => {
             await props.onRemove(rows.map((row) => row.id));
             setConfirm(false);
-          } catch (cause) {
+          });
+          if (settled._tag === "Failure") {
+            const cause = squashAtomCommandFailure(settled);
             setError(cause instanceof Error ? cause.message : "Could not disconnect.");
-          } finally {
-            setBusy(false);
           }
+          setBusy(false);
         }}
       />
     </div>

@@ -1,6 +1,7 @@
 import { serializeBotReference } from "../../../settings/botComposerModel";
 import { SourceSwitch } from "../settings/SourceSwitch";
 import { useStableCallback } from "../../../../hooks/useStableCallback";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 /* oxlint-disable shadcn/no-unknown-classes -- Pinned OpenBot selectors are supplied by source CSS. */
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -307,22 +308,23 @@ function SkillDetailPage({
     lock.current = true;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       await execute(operation, parameters);
       await refreshSkills();
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : "The skill could not be changed.");
-    } finally {
-      lock.current = false;
-      setBusy(false);
     }
+    lock.current = false;
+    setBusy(false);
   };
   const install = async () => {
     if (!detail || lock.current || !selected.length) return;
     lock.current = true;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       for (const agentId of selected)
         await execute(
           local ? "settings.local-catalog.localInstall" : "settings.skills-admin.install",
@@ -334,13 +336,14 @@ function SkillDetailPage({
         );
       await refreshSkills();
       setChoose(false);
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : "The skill could not be added.");
-      await refreshSkills();
-    } finally {
-      lock.current = false;
-      setBusy(false);
+      await settlePromise(() => refreshSkills());
     }
+    lock.current = false;
+    setBusy(false);
   };
   return (
     <div className="marketplace-view">

@@ -217,10 +217,12 @@ export function useBotChannels(
       setPages([]);
     },
     revealUnread: async () => {
-      if (lock.current || !selected || presentation?.firstUnreadSequence == null) return false;
+      const firstUnreadSequence = presentation?.firstUnreadSequence;
+      const firstUnreadMessageId = presentation?.firstUnreadMessageId;
+      if (lock.current || !selected || firstUnreadSequence == null) return false;
       lock.current = true;
       setBusy(true);
-      try {
+      const settled = await settlePromise(async () => {
         const result = await read({
           environmentId,
           input: {
@@ -228,7 +230,7 @@ export function useBotChannels(
             request: {
               operation: "channel.read",
               channelId: selected,
-              beforeSequence: presentation.firstUnreadSequence + 100,
+              beforeSequence: firstUnreadSequence + 100,
             },
           },
         });
@@ -237,19 +239,21 @@ export function useBotChannels(
         if (
           !value ||
           value.channel.id !== selected ||
-          !value.messages.some((item) => item.id === presentation.firstUnreadMessageId)
+          !value.messages.some((item) => item.id === firstUnreadMessageId)
         )
           return false;
         setPages([]);
         setAround(value);
         return true;
-      } catch (cause) {
+      });
+      lock.current = false;
+      setBusy(false);
+      if (settled._tag === "Failure") {
+        const cause = squashAtomCommandFailure(settled);
         setError(cause instanceof Error ? cause.message : "Could not find the unread message.");
         return false;
-      } finally {
-        lock.current = false;
-        setBusy(false);
       }
+      return settled.value;
     },
     canManage,
     canSettings,

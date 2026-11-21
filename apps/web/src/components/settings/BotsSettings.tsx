@@ -6,7 +6,7 @@ import type { EnvironmentId } from "@t3tools/contracts";
 import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { SettingsPageContainer } from "./settingsLayout";
 import { botHostSettingsSection, BOT_HOST_SETTINGS } from "./unifiedBotSettings";
@@ -131,15 +131,15 @@ function BotHostPreferences({
     if (busy) return;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       const result = await (running ? stop : start)({ environmentId, input: {} });
       if (result._tag === "Failure") setError(String(squashAtomCommandFailure(result)));
       host.refresh();
-    } catch {
+    });
+    if (settled._tag === "Failure") {
       setError("Could not change bot hosting. Refresh and try again.");
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
   const definition = BOT_HOST_SETTINGS.find((item) => item.id === section);
   return (

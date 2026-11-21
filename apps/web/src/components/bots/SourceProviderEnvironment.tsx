@@ -10,6 +10,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { useEnvironmentQuery } from "../../state/query";
 import { readPreparedConnection } from "../../state/session";
 import { settingsCapabilities } from "@t3tools/client-runtime/openbot/settings";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { providerAgent } from "@t3tools/client-runtime/openbot/presentation";
 import { useOpenbotProviderData } from "./upstream/provider/useOpenbotProviderData";
 import { BotModelPicker } from "./BotModelPicker";
@@ -125,7 +126,7 @@ export function SourceModelPicker({
     lock.current = true;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       for (const request of requests) {
         if (!Result.isSuccess(request)) return;
         if (
@@ -141,19 +142,19 @@ export function SourceModelPicker({
             "Provider change was refused or its outcome is unknown. Refresh before retrying.",
           );
       }
-    } catch (failure) {
-      if (readPreparedConnection(environmentId) === connection)
-        setError(
-          failure instanceof Error ? failure.message : "Provider change could not be confirmed.",
-        );
-    } finally {
-      lock.current = false;
-      if (readPreparedConnection(environmentId) === connection) {
-        setBusy(false);
-        details.refresh();
-        fast.refresh();
-        data?.refresh();
-      }
+    });
+    if (settled._tag === "Failure" && readPreparedConnection(environmentId) === connection) {
+      const failure = squashAtomCommandFailure(settled);
+      setError(
+        failure instanceof Error ? failure.message : "Provider change could not be confirmed.",
+      );
+    }
+    lock.current = false;
+    if (readPreparedConnection(environmentId) === connection) {
+      setBusy(false);
+      details.refresh();
+      fast.refresh();
+      data?.refresh();
     }
   };
   if (!data?.status || !current)

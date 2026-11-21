@@ -2,7 +2,7 @@
 import { useState, type ComponentProps, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId, OpenbotMaterializedFile } from "@t3tools/contracts";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { TextQuoteIcon } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "./upstream/OpenbotTooltip";
 import {
@@ -80,18 +80,19 @@ function SharedFileLink({
     if (!canRead || busy) return;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       const result = await materialize({
         environmentId,
         input: { hostId, agentId, source: { kind: "shared", path } },
       });
       if (result._tag === "Failure") throw squashAtomCommandFailure(result);
       setFile(result.value);
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : "Could not open this file.");
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
   return (
     <>

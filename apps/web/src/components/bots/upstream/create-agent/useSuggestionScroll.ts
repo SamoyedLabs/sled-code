@@ -7,6 +7,11 @@ import {
   type PointerEvent,
 } from "react";
 import { observeResize } from "../../../../lib/observeResize";
+
+function setHorizontalScroll(element: HTMLUListElement, next: number) {
+  element.scrollLeft = next;
+}
+
 export function useSuggestionScroll(
   list: RefObject<HTMLUListElement | null>,
   disabled: boolean,
@@ -84,7 +89,7 @@ export function useSuggestionScroll(
       const elapsed = Math.min(now - previous, 1000 / 30);
       previous = now;
       const before = element.scrollLeft;
-      element.scrollLeft += state.velocity * elapsed;
+      setHorizontalScroll(element, before + state.velocity * elapsed);
       state.velocity *= 0.88 ** (elapsed / (1000 / 60));
       update();
       if (Math.abs(element.scrollLeft - before) >= 0.1 && Math.abs(state.velocity) >= 0.01)
@@ -124,8 +129,7 @@ export function useSuggestionScroll(
     state.velocity = state.velocity * 0.65 + immediate * 0.35;
     state.previousX = event.clientX;
     state.previousTime = event.timeStamp;
-    // oxlint-disable-next-line react/immutability -- Imperative scrolling changes the owned DOM element, not React data.
-    element.scrollLeft = state.startScroll - distance;
+    setHorizontalScroll(element, state.startScroll - distance);
     update();
   };
   const finish = (event: PointerEvent<HTMLUListElement>) => {

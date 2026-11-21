@@ -14,7 +14,7 @@ import {
   OpenbotPendingTransfer,
   type OpenbotTransferCommand,
 } from "@t3tools/contracts/openbot-instance-transfer";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
 import { openbot } from "../../../../state/openbot";
 import { useAtomCommand } from "../../../../state/use-atom-command";
@@ -107,7 +107,7 @@ function TransferEnvironment({
     setBusy("refresh");
     setError(null);
     const captured = readPreparedConnection(environmentId);
-    try {
+    const settled = await settlePromise(async () => {
       const bound = await context({ environmentId, input: { hostId } });
       check(captured);
       if (bound._tag === "Failure") throw squashAtomCommandFailure(bound);
@@ -137,12 +137,13 @@ function TransferEnvironment({
           setScreen("import");
         }
       }
-    } catch (cause) {
-      if (alive.current) setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      lock.current = false;
-      if (alive.current) setBusy(null);
+    });
+    if (settled._tag === "Failure" && alive.current) {
+      const cause = squashAtomCommandFailure(settled);
+      setError(cause instanceof Error ? cause.message : String(cause));
     }
+    lock.current = false;
+    if (alive.current) setBusy(null);
   };
   const load = useStableCallback(refresh);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Read the host summary and the original session-bound receipt on mount; this never applies or restages an import.
@@ -164,18 +165,15 @@ function TransferEnvironment({
     lock.current = true;
     setBusy(operation);
     setError(null);
-    try {
-      await action(captured);
-    } catch (cause) {
-      if (alive.current) {
-        setError(cause instanceof Error ? cause.message : String(cause));
-        if (operation === "apply")
-          setReceipt((previous) => (previous ? { ...previous, state: "uncertain" } : previous));
-      }
-    } finally {
-      lock.current = false;
-      if (alive.current) setBusy(null);
+    const settled = await settlePromise(() => action(captured));
+    if (settled._tag === "Failure" && alive.current) {
+      const cause = squashAtomCommandFailure(settled);
+      setError(cause instanceof Error ? cause.message : String(cause));
+      if (operation === "apply")
+        setReceipt((previous) => (previous ? { ...previous, state: "uncertain" } : previous));
     }
+    lock.current = false;
+    if (alive.current) setBusy(null);
   };
   const finish = () => {
     if (storageKey.current) window.sessionStorage.removeItem(storageKey.current);

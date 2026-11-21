@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { useStableCallback } from "../../../../hooks/useStableCallback";
 export type SearchPage<T> = { results: readonly T[]; total?: number; nextCursor: string | null };
 type Snapshot<T> = {
@@ -34,7 +35,7 @@ export function useSearchPages<T>(
       lock.current = true;
       failedCursor.current = cursor;
       setSnapshot((old) => ({ ...old, pending: true, failed: null }));
-      try {
+      const settled = await settlePromise(async () => {
         const page = await fetch(value, cursor);
         if (request !== generation.current) return;
         setSnapshot((old) => {
@@ -54,16 +55,14 @@ export function useSearchPages<T>(
             failed: null,
           };
         });
-      } catch {
-        if (request === generation.current)
-          setSnapshot((old) => ({
-            ...old,
-            pending: false,
-            failed: "Search could not be completed.",
-          }));
-      } finally {
-        if (request === generation.current) lock.current = false;
-      }
+      });
+      if (settled._tag === "Failure" && request === generation.current)
+        setSnapshot((old) => ({
+          ...old,
+          pending: false,
+          failed: "Search could not be completed.",
+        }));
+      if (request === generation.current) lock.current = false;
     },
   );
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Remote search follows an external query with the exact source debounce and invalidates responses after query/scope change or unmount.

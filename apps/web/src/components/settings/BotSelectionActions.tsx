@@ -10,6 +10,7 @@ import {
 import { createPortal } from "react-dom";
 import { TextQuoteIcon } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "../bots/upstream/OpenbotTooltip";
+import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { isMacPlatform } from "../../lib/utils";
 import { observeResize } from "../../lib/observeResize";
 import { useStableCallback } from "../../hooks/useStableCallback";
@@ -143,14 +144,12 @@ function BotSelectionBar({
     sending.current = true;
     setExpanded(false);
     setMode("sending");
-    try {
+    const settled = await settlePromise(async () => {
       if (await onSend(selection.messageId, body)) onDetach();
       else setMode("error");
-    } catch {
-      setMode("error");
-    } finally {
-      sending.current = false;
-    }
+    });
+    if (settled._tag === "Failure") setMode("error");
+    sending.current = false;
   };
   const measureWidth = useStableCallback(() => {
     if (!content.current) return;

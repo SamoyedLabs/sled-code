@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { OpenbotAdminRequest } from "@t3tools/contracts";
 import type { OpenbotSettingsRequest } from "@t3tools/contracts/openbot-settings";
 import type { Json } from "effect/Schema";
@@ -20,15 +21,14 @@ export function useAgentSettingsValue<T>(load: () => Promise<T>, key: string) {
     const current = ++generation.current;
     setBusy(true);
     setError(null);
-    try {
-      const result = await load();
-      if (generation.current === current) setValue(result);
-    } catch (cause) {
-      if (generation.current === current)
-        setError(cause instanceof Error ? cause.message : "The setting could not be read.");
-    } finally {
-      if (generation.current === current) setBusy(false);
+    const settled = await settlePromise(load);
+    if (settled._tag === "Success") {
+      if (generation.current === current) setValue(settled.value);
+    } else if (generation.current === current) {
+      const cause = squashAtomCommandFailure(settled);
+      setError(cause instanceof Error ? cause.message : "The setting could not be read.");
     }
+    if (generation.current === current) setBusy(false);
   });
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Read this source page's guarded host setting and discard responses after its page scope is disposed.
   useEffect(() => {
@@ -42,15 +42,16 @@ export function useAgentSettingsValue<T>(load: () => Promise<T>, key: string) {
     lock.current = true;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       await action();
       await refresh();
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : "The setting could not be saved.");
-    } finally {
-      lock.current = false;
-      setBusy(false);
     }
+    lock.current = false;
+    setBusy(false);
   };
   return { value, error, busy, refresh, change };
 }

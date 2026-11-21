@@ -19,7 +19,7 @@ import { useAtomValue } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
 import * as Result from "effect/Result";
 import type { EnvironmentId, OpenbotDraftFile } from "@t3tools/contracts";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { X, Paperclip } from "lucide-react";
 import { openbot } from "../../../../state/openbot";
 import { useAtomCommand } from "../../../../state/use-atom-command";
@@ -148,21 +148,19 @@ function NewThreadDraft({
     setBusy(true);
     setError(null);
     const connection = readPreparedConnection(environmentId);
-    let principalId: string;
-    try {
+    const boundSettled = await settlePromise(async () => {
       const bound = await fileContext({ environmentId, input: { hostId } });
       if (bound._tag === "Failure") throw squashAtomCommandFailure(bound);
-      if (!alive.current || readPreparedConnection(environmentId) !== connection) {
-        lock.current = false;
-        if (alive.current) setBusy(false);
-        return;
-      }
-      principalId = bound.value.principalId;
-      if (attempt && attempt.principalId !== principalId)
+      if (!alive.current || readPreparedConnection(environmentId) !== connection) return null;
+      const pid = bound.value.principalId;
+      if (attempt && attempt.principalId !== pid)
         throw Error(
           "This start belongs to an earlier sign-in. Check its original task list; it will not be started again from this session.",
         );
-    } catch (cause) {
+      return pid;
+    });
+    if (boundSettled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(boundSettled);
       if (alive.current) {
         setError(
           cause instanceof Error
@@ -174,6 +172,12 @@ function NewThreadDraft({
       lock.current = false;
       return;
     }
+    if (boundSettled.value === null) {
+      lock.current = false;
+      if (alive.current) setBusy(false);
+      return;
+    }
+    const principalId = boundSettled.value;
     const current = attempt ?? {
       principalId,
       clientMessageId: randomUUID(),
@@ -195,7 +199,7 @@ function NewThreadDraft({
       }
       setAttempt(current);
     }
-    try {
+    const settled = await settlePromise(async () => {
       if (current.attachmentIds?.length) {
         if (!canSendFiles) throw Error("Permission to send files is required.");
         const result = await fileSend({
@@ -261,15 +265,15 @@ function NewThreadDraft({
         pendingChanged(false);
         onCreated(created.success.id);
       }
-    } catch (cause) {
-      if (alive.current)
-        setError(
-          `${cause instanceof Error ? cause.message : "The connection ended before the start was confirmed."} Retry checks the same request.`,
-        );
-    } finally {
-      lock.current = false;
-      if (alive.current) setBusy(false);
+    });
+    if (settled._tag === "Failure" && alive.current) {
+      const cause = squashAtomCommandFailure(settled);
+      setError(
+        `${cause instanceof Error ? cause.message : "The connection ended before the start was confirmed."} Retry checks the same request.`,
+      );
     }
+    lock.current = false;
+    if (alive.current) setBusy(false);
   }
   return (
     <section className="ob-chat" data-workspace aria-label="New thread" aria-busy={busy}>

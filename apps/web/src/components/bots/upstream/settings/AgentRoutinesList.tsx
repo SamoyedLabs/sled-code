@@ -1,6 +1,7 @@
 /* oxlint-disable shadcn/no-unknown-classes -- Original AgentRoutinesSettings list selectors are supplied by source CSS. */
 import { CircleCheck, Clock3, Link, Plus } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { SourceButton } from "./SettingsParts";
 import { SourceSwitch } from "./SourceSwitch";
 import { SettingsPanelContent } from "./SettingsPanel";
@@ -43,14 +44,13 @@ export function AgentRoutinesList({
     locks.current.add(routine.id);
     setPending(new Set(locks.current));
     setError(null);
-    try {
-      await onSetActive(routine.id, active);
-    } catch (cause) {
+    const settled = await settlePromise(() => onSetActive(routine.id, active));
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : "Could not change the routine.");
-    } finally {
-      locks.current.delete(routine.id);
-      setPending(new Set(locks.current));
     }
+    locks.current.delete(routine.id);
+    setPending(new Set(locks.current));
   };
   const listed = [...routines].sort((a, b) =>
     a.createdAt === b.createdAt

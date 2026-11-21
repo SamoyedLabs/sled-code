@@ -13,7 +13,7 @@ import {
   workflowAgents,
   channelExtras,
 } from "@t3tools/client-runtime/openbot/presentation";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -75,7 +75,7 @@ export function useBotChannelGrants(props: ChannelGrantsProps) {
     lock.current = true;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       const result = await admin({
         environmentId: props.environmentId,
         input: { hostId: props.hostId, request: { operation: "channel.grants", command } },
@@ -85,12 +85,12 @@ export function useBotChannelGrants(props: ChannelGrantsProps) {
         setGrants(channelGrantList(result.value));
         if (command.action === "create") approval.current = null;
       }
-    } catch {
+    });
+    if (settled._tag === "Failure") {
       setError("The permission request could not complete. Refresh before approving again.");
-    } finally {
-      setBusy(false);
-      lock.current = false;
     }
+    setBusy(false);
+    lock.current = false;
   };
   const duration = Number(hours);
   const valid =

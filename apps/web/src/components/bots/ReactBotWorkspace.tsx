@@ -17,7 +17,7 @@ import { useSettingsScope } from "../settings/SettingsScopeContext";
 import { useEnvironmentQuery } from "../../state/query";
 import { openbot } from "../../state/openbot";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { settlePromise } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { readWorkspaceBot, retainWorkspaceBot } from "./upstream/workspaceSelection";
 import { selectWorkspaceEnvironment } from "./upstream/environment";
 import { BotDetail } from "./BotEnvironment";
@@ -388,7 +388,7 @@ function EnvironmentWorkspace({
     if (!scope) return;
     const captured = threadScope,
       connection = readPreparedConnection(environmentId);
-    try {
+    const settled = await settlePromise(async () => {
       const result = await readNavigation({
         environmentId,
         input: {
@@ -412,9 +412,10 @@ function EnvironmentWorkspace({
           "This conversation could not be matched to a current thread. Refresh the thread list.",
         );
       openAgentThread(scope.agentId, target.taskId, messageId);
-    } catch (cause) {
-      if (getNavigationScope() === captured)
-        setThreadError(cause instanceof Error ? cause.message : "Conversation lookup failed.");
+    });
+    if (settled._tag === "Failure" && getNavigationScope() === captured) {
+      const cause = squashAtomCommandFailure(settled);
+      setThreadError(cause instanceof Error ? cause.message : "Conversation lookup failed.");
     }
   };
   const moveHistory = (step: -1 | 1) => {
@@ -556,27 +557,24 @@ function EnvironmentWorkspace({
           if (!hostId || !bot || renameLock.current) return false;
           renameLock.current = true;
           setThreadError(null);
-          try {
-            const result = await settlePromise(() =>
-              renameThread({
-                environmentId,
-                input: {
-                  hostId,
-                  request: { operation: "thread.rename", agentId: bot.id, taskId, title },
-                },
-              }),
+          const result = await settlePromise(() =>
+            renameThread({
+              environmentId,
+              input: {
+                hostId,
+                request: { operation: "thread.rename", agentId: bot.id, taskId, title },
+              },
+            }),
+          );
+          renameLock.current = false;
+          if (result._tag === "Failure" || result.value._tag === "Failure") {
+            setThreadError(
+              "Thread rename was refused or its outcome is unknown. Refresh the thread list before trying again.",
             );
-            if (result._tag === "Failure" || result.value._tag === "Failure") {
-              setThreadError(
-                "Thread rename was refused or its outcome is unknown. Refresh the thread list before trying again.",
-              );
-              return false;
-            }
-            tasks.refresh();
-            return true;
-          } finally {
-            renameLock.current = false;
+            return false;
           }
+          tasks.refresh();
+          return true;
         }}
         agents={agents.data ?? []}
         channels={(channelList(channels.data) ?? []).filter((item) => !item.archived)}

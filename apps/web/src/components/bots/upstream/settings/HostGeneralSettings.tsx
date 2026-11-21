@@ -1,5 +1,6 @@
 /* oxlint-disable shadcn/no-unknown-classes -- Pinned OpenBot selectors are supplied by source CSS. */
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import * as Schema from "effect/Schema";
 import {
   settingRequest,
@@ -65,15 +66,16 @@ function useSetting<T>(
       lock.current = true;
       setBusy(true);
       setError(null);
-      try {
+      const settled = await settlePromise(async () => {
         const response = settingResult(next, await actions.execute(request));
         setValue(decode(response));
-      } catch (cause) {
+      });
+      if (settled._tag === "Failure") {
+        const cause = squashAtomCommandFailure(settled);
         setError(cause instanceof Error ? cause.message : "Could not load the server setting.");
-      } finally {
-        lock.current = false;
-        setBusy(false);
       }
+      lock.current = false;
+      setBusy(false);
     },
   );
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- The selected server owns the persisted preference; read it before offering an edit.

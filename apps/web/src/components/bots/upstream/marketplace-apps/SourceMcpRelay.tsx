@@ -1,6 +1,7 @@
 import { SourceSignInRelayControls } from "../provider/ProviderSignInDialogs";
 /* oxlint-disable shadcn/no-unknown-classes -- Source web-mcp-relay and McpSignInPage. */
 import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import * as Schema from "effect/Schema";
 import type { OpenbotAdminRequest } from "@t3tools/contracts";
 import { relayCallbackQuery } from "./relay-callback";
@@ -75,16 +76,16 @@ export function SourceMcpRelay(props: {
       return;
     }
     lock.current = true;
-    try {
+    const settled = await settlePromise(async () => {
       await accept(
         await props.execute({ operation: "provider.signInRelay.status", flowId: flow.flowId }),
       );
-    } catch (cause) {
-      if (alive.current)
-        setError(cause instanceof Error ? cause.message : "Could not read sign-in status.");
-    } finally {
-      lock.current = false;
+    });
+    if (settled._tag === "Failure" && alive.current) {
+      const cause = squashAtomCommandFailure(settled);
+      setError(cause instanceof Error ? cause.message : "Could not read sign-in status.");
     }
+    lock.current = false;
   });
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Poll only the explicitly started, host-owned relay flow; never start sign-in in an effect.
   useEffect(() => {
@@ -98,7 +99,7 @@ export function SourceMcpRelay(props: {
     setBusy(true);
     props.onActiveChange?.(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       const request: OpenbotAdminRequest = props.mcpServerId
         ? { operation: "mcp.signInRelay.startById", mcpServerId: props.mcpServerId }
         : props.config
@@ -108,12 +109,13 @@ export function SourceMcpRelay(props: {
             })();
       const next = decodeStarted(await props.execute(request));
       if (alive.current) setFlow(next);
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : "Could not start sign-in.");
-    } finally {
-      lock.current = false;
-      setBusy(false);
     }
+    lock.current = false;
+    setBusy(false);
   };
   const complete = async (address: string) => {
     if (!flow || !status?.authorizeUrl || lock.current) return;
@@ -127,7 +129,7 @@ export function SourceMcpRelay(props: {
     lock.current = true;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       await accept(
         await props.execute({
           operation: "provider.signInRelay.complete",
@@ -135,12 +137,13 @@ export function SourceMcpRelay(props: {
           query,
         }),
       );
-    } catch (cause) {
+    });
+    lock.current = false;
+    if (alive.current) setBusy(false);
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : "Could not complete sign-in.");
       throw cause;
-    } finally {
-      lock.current = false;
-      if (alive.current) setBusy(false);
     }
   };
   const cancel = async () => {

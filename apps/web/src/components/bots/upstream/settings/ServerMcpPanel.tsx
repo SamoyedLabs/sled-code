@@ -1,6 +1,7 @@
 /* oxlint-disable react/no-array-index-key -- Original repeatable MCP form rows use positional identity (Solid For keyed=false) to preserve the focused input while its value changes. */
 /* oxlint-disable shadcn/no-unknown-classes -- Original ServerMcpPanel selectors are supplied by source CSS. */
 import { Menu } from "@base-ui/react/menu";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { Blocks, Ellipsis, Pencil, Plug, Plus, Trash2 } from "lucide-react";
 import { useId, useRef, useState, type ReactNode } from "react";
 import { confirmed } from "../../../settings/BotConnectionControls";
@@ -58,14 +59,13 @@ export function ServerMcpPanel(props: ServerMcpPanelProps) {
     lock.current = true;
     setBusy(id);
     setError(null);
-    try {
-      await action();
-    } catch (cause) {
+    const settled = await settlePromise(action);
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : "Could not change the MCP server.");
-    } finally {
-      lock.current = false;
-      setBusy(null);
     }
+    lock.current = false;
+    setBusy(null);
   };
   const open = (server: McpServerConfig | null) => {
     setError(null);
@@ -259,7 +259,7 @@ function McpForm({
     setBusy(true);
     setError(null);
     const config = normalizeMcpConfig(draft);
-    try {
+    const settled = await settlePromise(async () => {
       if (!save || mcpSaveConnects(config, baseline, !baseline.id)) {
         if (!props.onTest) throw new Error("This server cannot be tested here.");
         const result = await props.onTest(config);
@@ -270,12 +270,13 @@ function McpForm({
         await props.onSave({ ...config, id: config.id || newId });
         onBack();
       }
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : "Could not save the MCP server.");
-    } finally {
-      lock.current = false;
-      setBusy(false);
     }
+    lock.current = false;
+    setBusy(false);
   };
   const back = async () => {
     if (!changed || (await confirmed("Discard unsaved MCP server changes?"))) onBack();

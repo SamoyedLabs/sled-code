@@ -1,5 +1,6 @@
 /* oxlint-disable shadcn/no-unknown-classes -- Pinned OpenBot selectors are supplied by source CSS. */
 import { useState, type ReactNode } from "react";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { Pencil, UserRound } from "lucide-react";
 import { confirmed } from "../../../settings/BotConnectionControls";
 import { SettingsCard, SettingsRow, SettingsSection, SourceButton } from "./SettingsParts";
@@ -43,13 +44,12 @@ export function SettingsProfile({
     if (busy) return;
     setBusy(key);
     setError(null);
-    try {
-      await action();
-    } catch (cause) {
+    const settled = await settlePromise(action);
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : "This account action failed.");
-    } finally {
-      setBusy(null);
     }
+    setBusy(null);
   };
   const name = account.name?.trim() || account.email.split("@")[0] || account.email;
   return (

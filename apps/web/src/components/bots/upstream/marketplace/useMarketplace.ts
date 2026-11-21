@@ -1,6 +1,7 @@
 /* oxlint-disable react/set-state-in-effect -- Host reads publish pending and response state when the request identity changes. */
 import { useStableCallback } from "../../../../hooks/useStableCallback";
 import { useEffect, useRef, useState } from "react";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { settingRequest, settingResult } from "@t3tools/client-runtime/openbot/settings";
 import type { OpenbotSettingsRequest } from "@t3tools/contracts/openbot-settings";
 import type { Json } from "effect/Schema";
@@ -62,7 +63,7 @@ export function useMarketplace(
     }
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       const parameters = {
         query,
         limit: 50,
@@ -103,12 +104,12 @@ export function useMarketplace(
           cursor: next.nextCursor,
         }));
       }
-    } catch (cause) {
-      if (version === generation.current)
-        setError(cause instanceof Error ? cause.message : "The Marketplace could not be loaded.");
-    } finally {
-      if (version === generation.current) setBusy(false);
+    });
+    if (settled._tag === "Failure" && version === generation.current) {
+      const cause = squashAtomCommandFailure(settled);
+      setError(cause instanceof Error ? cause.message : "The Marketplace could not be loaded.");
     }
+    if (version === generation.current) setBusy(false);
   });
   const readSkills = useStableCallback(async () => {
     const generation = ++skillsGeneration.current;

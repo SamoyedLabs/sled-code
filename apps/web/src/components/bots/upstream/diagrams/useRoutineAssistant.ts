@@ -2,7 +2,7 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { type EnvironmentId, type OpenbotConversationMessage } from "@t3tools/contracts";
 import { botConversationPage } from "@t3tools/client-runtime/openbot/presentation";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../../../state/openbot";
 import { useEnvironmentQuery } from "../../../../state/query";
 import { useAtomCommand } from "../../../../state/use-atom-command";
@@ -119,7 +119,7 @@ export function useRoutineAssistant(environmentId: EnvironmentId, hostId: string
     setError(null);
     const clientMessageId = randomUUID();
     setMessages((old) => [...old, { id: clientMessageId, author: "user", text: body }]);
-    try {
+    const settled = await settlePromise(async () => {
       const result = await write({
         environmentId,
         input: {
@@ -131,16 +131,15 @@ export function useRoutineAssistant(environmentId: EnvironmentId, hostId: string
       const receipt = assistantReceipt(result.value, agentId, clientMessageId);
       if (!receipt) throw new Error("The host did not return this agent’s delivery receipt.");
       if (current()) setPending(receipt);
-    } catch (cause) {
-      if (current()) {
-        setUncertain(true);
-        setError(
-          `The request outcome could not be confirmed. Open the agent conversation before sending again. ${cause instanceof Error ? cause.message : ""}`,
-        );
-      }
-    } finally {
-      if (alive.current) setSending(false);
+    });
+    if (settled._tag === "Failure" && current()) {
+      const cause = squashAtomCommandFailure(settled);
+      setUncertain(true);
+      setError(
+        `The request outcome could not be confirmed. Open the agent conversation before sending again. ${cause instanceof Error ? cause.message : ""}`,
+      );
     }
+    if (alive.current) setSending(false);
   };
   return {
     messages,

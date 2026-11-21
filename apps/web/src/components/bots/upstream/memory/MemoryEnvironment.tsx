@@ -2,7 +2,7 @@ import * as Option from "effect/Option";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { useContext, useEffect, useEffectEvent, useRef, useState } from "react";
 import type { EnvironmentId, OpenbotAdminRequest } from "@t3tools/contracts";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../../../state/openbot";
 import { useEnvironmentQuery } from "../../../../state/query";
 import { useAtomCommand } from "../../../../state/use-atom-command";
@@ -171,7 +171,7 @@ function MemoryHost({
     lock.current = true;
     setSavingId(id);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       await run(request);
       const updated = await reload({
         environmentId,
@@ -179,14 +179,15 @@ function MemoryHost({
       });
       if (updated._tag === "Failure") throw squashAtomCommandFailure(updated);
       await refreshSelection();
-      return true;
-    } catch (cause) {
+    });
+    lock.current = false;
+    setSavingId(null);
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : t("memory.saveFailed"));
       return false;
-    } finally {
-      lock.current = false;
-      setSavingId(null);
     }
+    return true;
   };
   const hide = (id: string, value: boolean) =>
     setHidden((current) => {

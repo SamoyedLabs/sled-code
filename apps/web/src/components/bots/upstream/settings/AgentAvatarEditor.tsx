@@ -1,6 +1,7 @@
 /* oxlint-disable shadcn/no-unknown-classes -- Original AgentSettingsPanel avatar selectors are supplied by source CSS. */
 import { Popover } from "@base-ui/react/popover";
 import { useRef, useState } from "react";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { Pencil, Plus, RotateCcw, Shuffle } from "lucide-react";
 import { BotAvatar } from "../../avatar/BotAvatar";
 import { SourceButton } from "./SettingsParts";
@@ -69,14 +70,13 @@ export function AgentAvatarEditor({
     lock.current = true;
     setBusy(true);
     setError(null);
-    try {
-      await action();
-    } catch (cause) {
+    const settled = await settlePromise(action);
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : "Could not save the agent avatar.");
-    } finally {
-      lock.current = false;
-      setBusy(false);
     }
+    lock.current = false;
+    setBusy(false);
   };
   const generated = async (seed: string) => {
     if (!onUpdate) return;

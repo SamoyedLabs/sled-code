@@ -6,7 +6,7 @@ import { useAtomValue } from "@effect/atom-react";
 import * as Option from "effect/Option";
 import type { EnvironmentId, OpenbotAdminRequest } from "@t3tools/contracts";
 import { browserProfiles } from "@t3tools/client-runtime/openbot/presentation";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import {
   EllipsisIcon,
   PlusIcon,
@@ -99,30 +99,32 @@ function ProfilesEnvironment({
     lock.current = true;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       const result = await admin({ environmentId, input: { hostId, request } });
       if (readPreparedConnection(environmentId) !== connection) return false;
       if (result._tag === "Failure") throw squashAtomCommandFailure(result);
-      try {
-        await load(connection);
-      } catch {
+      const reloaded = await settlePromise(() => load(connection));
+      if (reloaded._tag === "Failure") {
         setError(
           "The profile change was confirmed, but the list could not refresh. Refresh to see the saved result.",
         );
       }
       return true;
-    } catch (cause) {
-      if (readPreparedConnection(environmentId) === connection)
+    });
+    lock.current = false;
+    setBusy(false);
+    if (settled._tag === "Failure") {
+      if (readPreparedConnection(environmentId) === connection) {
+        const cause = squashAtomCommandFailure(settled);
         setError(
           cause instanceof Error
             ? cause.message
             : "The profile change could not be confirmed. Refresh before trying again.",
         );
+      }
       return false;
-    } finally {
-      lock.current = false;
-      setBusy(false);
     }
+    return settled.value;
   };
   return (
     <BrowserProfilesPanel

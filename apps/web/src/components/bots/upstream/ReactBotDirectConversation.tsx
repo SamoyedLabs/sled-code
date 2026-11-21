@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId, OpenbotPerson, OpenbotDirectPage } from "@t3tools/contracts";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../../state/openbot";
 import { useEnvironmentQuery } from "../../../state/query";
 import { useAtomCommand } from "../../../state/use-atom-command";
@@ -108,7 +108,7 @@ export function ReactBotDirectConversation({
     lock.current = true;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       const result = await write({
         environmentId,
         input: {
@@ -135,13 +135,13 @@ export function ReactBotDirectConversation({
       setWindow(null);
       setOlder([]);
       refresh();
-    } catch (cause) {
-      if (current(connection))
-        setError(cause instanceof Error ? cause.message : "The message could not be confirmed.");
-    } finally {
-      lock.current = false;
-      if (alive.current) setBusy(false);
+    });
+    if (settled._tag === "Failure" && current(connection)) {
+      const cause = squashAtomCommandFailure(settled);
+      setError(cause instanceof Error ? cause.message : "The message could not be confirmed.");
     }
+    lock.current = false;
+    if (alive.current) setBusy(false);
   };
   const loadOlder = async () => {
     const page = older.at(-1) ?? shown,
@@ -152,7 +152,7 @@ export function ReactBotDirectConversation({
     lock.current = true;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       const result = await read({
         environmentId,
         input: {
@@ -175,13 +175,13 @@ export function ReactBotDirectConversation({
       )
         throw Error("The host returned a different conversation.");
       setOlder((pages) => [...pages, value.value]);
-    } catch (cause) {
-      if (current(connection))
-        setError(cause instanceof Error ? cause.message : "Older messages could not be loaded.");
-    } finally {
-      lock.current = false;
-      if (alive.current) setBusy(false);
+    });
+    if (settled._tag === "Failure" && current(connection)) {
+      const cause = squashAtomCommandFailure(settled);
+      setError(cause instanceof Error ? cause.message : "Older messages could not be loaded.");
     }
+    lock.current = false;
+    if (alive.current) setBusy(false);
   };
   const openMessage = async (messageId: string) => {
     if (lock.current) return;
@@ -189,7 +189,7 @@ export function ReactBotDirectConversation({
     lock.current = true;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       const result = await read({
         environmentId,
         input: {
@@ -213,15 +213,15 @@ export function ReactBotDirectConversation({
         throw Error("The host did not return the original message.");
       setWindow(value.value);
       setOlder([]);
-    } catch (cause) {
-      if (current(connection))
-        setError(
-          cause instanceof Error ? cause.message : "The original message could not be loaded.",
-        );
-    } finally {
-      lock.current = false;
-      if (alive.current) setBusy(false);
+    });
+    if (settled._tag === "Failure" && current(connection)) {
+      const cause = squashAtomCommandFailure(settled);
+      setError(
+        cause instanceof Error ? cause.message : "The original message could not be loaded.",
+      );
     }
+    lock.current = false;
+    if (alive.current) setBusy(false);
   };
   const markRead = async () => {
     const throughSequence = shown?.messages.at(-1)?.sequence;
@@ -230,7 +230,7 @@ export function ReactBotDirectConversation({
     lock.current = true;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       const result = await write({
         environmentId,
         input: {
@@ -244,13 +244,13 @@ export function ReactBotDirectConversation({
       if (readState._tag !== "Some") throw Error("The host returned an unsupported read boundary.");
       setWindow((current) => (current ? { ...current, readState: readState.value } : null));
       refresh();
-    } catch (cause) {
-      if (current(connection))
-        setError(cause instanceof Error ? cause.message : "Read status could not be saved.");
-    } finally {
-      lock.current = false;
-      if (alive.current) setBusy(false);
+    });
+    if (settled._tag === "Failure" && current(connection)) {
+      const cause = squashAtomCommandFailure(settled);
+      setError(cause instanceof Error ? cause.message : "Read status could not be saved.");
     }
+    lock.current = false;
+    if (alive.current) setBusy(false);
   };
   return (
     <SourceDirectConversation

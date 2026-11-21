@@ -7,7 +7,7 @@ import {
   deletePendingAttachmentUpload,
 } from "@t3tools/client-runtime/state/attachments";
 import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { appAtomRegistry } from "../../../../rpc/atomRegistry";
 import { attachmentEnvironment } from "../../../../state/attachments";
 import { readPreparedConnection } from "../../../../state/session";
@@ -61,7 +61,7 @@ export function useNewThreadAttachments(
     setBusy(true);
     setError(null);
     const accepted: OpenbotDraftFile[] = [];
-    try {
+    const settled = await settlePromise(async () => {
       for (const file of files) {
         if (file.size === 0 || file.size > 104_857_600)
           throw Error("Choose a nonempty file up to 100 MiB.");
@@ -102,7 +102,7 @@ export function useNewThreadAttachments(
           }),
         );
         transfers.current.delete(abort);
-        if (!alive.current) return;
+        if (!alive.current) return undefined;
         if (pending.status !== "uploaded") throw Error("The file upload did not complete.");
         if (readPreparedConnection(environmentId) !== connection)
           throw Error("The original connection changed. The file was not sent.");
@@ -131,7 +131,9 @@ export function useNewThreadAttachments(
         if (alive.current && notify) onReady(result.value);
       }
       return accepted;
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       if (!notify)
         for (const draft of accepted) {
           originals.current.delete(draft.attachment.id);
@@ -146,10 +148,10 @@ export function useNewThreadAttachments(
             ? cause.message
             : "The file upload could not be confirmed. Check Files before uploading again.",
         );
-    } finally {
-      lock.current = false;
-      if (alive.current) setBusy(false);
     }
+    lock.current = false;
+    if (alive.current) setBusy(false);
+    return settled._tag === "Success" ? settled.value : undefined;
   };
   const reassign = async (drafts: readonly OpenbotDraftFile[], nextAgentId: string) => {
     const files = drafts.map((draft) => originals.current.get(draft.attachment.id));

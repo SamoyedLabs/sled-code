@@ -2,7 +2,7 @@ import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { useContext, useEffect, useEffectEvent, useState } from "react";
 import * as Option from "effect/Option";
 import type { EnvironmentId, OpenbotMaterializedFile } from "@t3tools/contracts";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
 import { openbot } from "../../../../state/openbot";
 import { assetEnvironment } from "../../../../state/assets";
@@ -92,7 +92,7 @@ function FilesHost(props: FilesEnvironmentProps) {
       },
     });
     if (!current() || readPreparedConnection(environmentId) !== connection) return;
-    try {
+    const settled = await settlePromise(async () => {
       if (result._tag === "Failure") throw squashAtomCommandFailure(result);
       const next = readStorageUsage(result.value);
       if (
@@ -103,11 +103,12 @@ function FilesHost(props: FilesEnvironmentProps) {
         throw new Error("The file inventory belongs to another conversation.");
       // Team storage rows may name a host-only preview scheme. Only the materialized gateway supplies browser URLs.
       setUsage({ ...next, files: next.files.map((file) => ({ ...file, previewUrl: null })) });
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : "Could not load the files.");
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   });
   /* oxlint-disable t3code/no-unreasoned-state-sync, react/set-state-in-effect, react/exhaustive-effect-dependencies -- Load the guarded storage inventory on permission and explicit refresh changes, fencing late host responses. */
   useEffect(() => {
@@ -136,12 +137,12 @@ function FilesHost(props: FilesEnvironmentProps) {
       };
       if (!registry.get(openbot.adminToHost.permissionAtom(environmentId, { hostId, request })))
         throw new Error("You don’t have permission to delete this file.");
-      try {
+      const settled = await settlePromise(async () => {
         const result = await admin({ environmentId, input: { hostId, request } });
         if (result._tag === "Failure") throw squashAtomCommandFailure(result);
-      } finally {
-        if (readPreparedConnection(environmentId) === connection) setRevision((value) => value + 1);
-      }
+      });
+      if (readPreparedConnection(environmentId) === connection) setRevision((value) => value + 1);
+      if (settled._tag === "Failure") throw squashAtomCommandFailure(settled);
       return;
     }
     if (action === "reveal") throw new Error("This file belongs to the host computer.");

@@ -10,7 +10,7 @@ class ScheduleLoadError extends Schema.TaggedError<ScheduleLoadError>()("Schedul
 }) {}
 import type { EnvironmentId, OpenbotReadRequest } from "@t3tools/contracts";
 import { channelList, workflowAgents } from "@t3tools/client-runtime/openbot/presentation";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { ArrowLeft, ChevronLeft, ChevronRight, Check, CirclePause, X } from "lucide-react";
 import { openbot } from "../../../../state/openbot";
 import { useAtomQueryRunner } from "../../../../state/use-atom-query-runner";
@@ -113,7 +113,7 @@ function ScheduleBody(props: SchedulePageProps) {
       const request = ++generation.current;
       if (!background) setPhase("loading");
       setError("");
-      try {
+      const settled = await settlePromise(async () => {
         const visible = daysFor(currentAnchor, currentView);
         const range = {
           from: new Date(`${addCalendarDays(visible[0] ?? currentAnchor, -1)}T00:00:00Z`),
@@ -197,11 +197,11 @@ function ScheduleBody(props: SchedulePageProps) {
         setCalendar({ routines, runs });
         setNow(clock);
         setPhase("ready");
-      } catch (cause) {
-        if (request === generation.current && !(background && calendar)) {
-          setError(cause instanceof Error ? cause.message : "Could not load the schedule.");
-          setPhase("error");
-        }
+      });
+      if (settled._tag === "Failure" && request === generation.current && !(background && calendar)) {
+        const cause = squashAtomCommandFailure(settled);
+        setError(cause instanceof Error ? cause.message : "Could not load the schedule.");
+        setPhase("error");
       }
     },
   );

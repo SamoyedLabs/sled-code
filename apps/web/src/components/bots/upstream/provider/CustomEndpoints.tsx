@@ -1,5 +1,6 @@
 /* oxlint-disable shadcn/no-unknown-classes -- Source CustomEndpointsPage, CustomProviderDialog and RepeatableRows presentation. */
 import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { Dialog } from "@base-ui/react/dialog";
 import { SlidersHorizontal, Plus, Trash2, X } from "lucide-react";
 import {
@@ -133,15 +134,15 @@ export function CustomEndpoints({
           if (!removing) return;
           setBusy(true);
           setError(null);
-          try {
+          const settled = await settlePromise(async () => {
             await execute({ operation: "provider.custom.delete", id: removing.id });
             await changed();
             setRemoving(null);
-          } catch (cause) {
-            setError(String(cause));
-          } finally {
-            setBusy(false);
+          });
+          if (settled._tag === "Failure") {
+            setError(String(squashAtomCommandFailure(settled)));
           }
+          setBusy(false);
         }}
       />
       {adding && (
@@ -250,15 +251,16 @@ export function CustomProviderDialog({
     lock.current = true;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       await onSave(request);
       setApiKey("");
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      lock.current = false;
-      setBusy(false);
     }
+    lock.current = false;
+    setBusy(false);
   };
   const repeat = (kind: "model" | "header", rows: Row[], setRows: (rows: Row[]) => void) => (
     <section

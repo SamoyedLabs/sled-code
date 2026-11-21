@@ -1,5 +1,6 @@
 /* oxlint-disable shadcn/no-unknown-classes -- Original AgentSettingsPanel selectors are supplied by source CSS. */
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { useStableCallback } from "../../../../hooks/useStableCallback";
 import { AgentAvatarEditor, type AgentAvatarValue } from "./AgentAvatarEditor";
 import type { AvatarHue } from "./avatar-editor-model";
@@ -98,20 +99,21 @@ function AgentSettingsContents({
   const id = useId();
   const drain = useStableCallback(async () => {
     if (active.current || !onUpdateAgent) return;
-    const request = pending.current.values().next().value;
-    if (!request) return;
-    pending.current.delete(request.field);
-    active.current = request;
-    if (!disposed.current) setError(null);
-    try {
-      await onUpdateAgent(agent.id, { [request.field]: request.stored });
-      if (draft.current[request.field] === request.draft) dirty.current[request.field] = false;
-    } catch (cause) {
-      if (!disposed.current)
+    for (;;) {
+      const request = pending.current.values().next().value;
+      if (!request) return;
+      pending.current.delete(request.field);
+      active.current = request;
+      if (!disposed.current) setError(null);
+      const settled = await settlePromise(async () => {
+        await onUpdateAgent(agent.id, { [request.field]: request.stored });
+        if (draft.current[request.field] === request.draft) dirty.current[request.field] = false;
+      });
+      if (settled._tag === "Failure" && !disposed.current) {
+        const cause = squashAtomCommandFailure(settled);
         setError(cause instanceof Error ? cause.message : "Could not save the agent settings.");
-    } finally {
+      }
       active.current = null;
-      if (pending.current.size) void drain();
     }
   });
   const queue = useStableCallback((field: TextField) => {

@@ -1,6 +1,7 @@
 /* oxlint-disable shadcn/no-unknown-classes -- Original AgentRoutinesSettings, RoutineRunHistory, and RoutineWebhookEvents selectors. */
 /* oxlint-disable react/no-array-index-key -- Source filter rows use positional identity to keep focus while typing. */
 import { useRef, useState, type ReactNode } from "react";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import * as Schema from "effect/Schema";
 import {
   type EnvironmentId,
@@ -263,19 +264,18 @@ function Routines({
     lock.current = true;
     setBusy(true);
     setError(null);
-    try {
-      await action();
-    } catch (cause) {
+    const settled = await settlePromise(action);
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       if (mayHaveRun) setUncertain(true);
       setError(
         cause instanceof Error
           ? cause.message
           : "The request could not complete. Reload before retrying.",
       );
-    } finally {
-      lock.current = false;
-      setBusy(false);
     }
+    lock.current = false;
+    setBusy(false);
   };
   const save = () => {
     setShowErrors(true);
@@ -820,24 +820,26 @@ function WebhookEditor({
     }
   };
   const send = async () => {
-    if (lock.current || !input.id) return;
+    const routineId = input.id;
+    if (lock.current || !routineId) return;
     lock.current = true;
     setTesting(true);
-    try {
+    const settled = await settlePromise(async () => {
       const result = decodeReceipt(
-        await execute({ operation: "events.sendTest", owner: input.owner, id: input.id }),
+        await execute({ operation: "events.sendTest", owner: input.owner, id: routineId }),
       );
       setTest(
         result.status === "started"
           ? `Started · ${result.eventType}`
           : `Ignored · ${result.reason}`,
       );
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : "Could not send the test.");
-    } finally {
-      lock.current = false;
-      setTesting(false);
     }
+    lock.current = false;
+    setTesting(false);
   };
   const eventType = input.trigger.kind === "webhook" ? (input.trigger.eventType ?? "") : "";
   return (

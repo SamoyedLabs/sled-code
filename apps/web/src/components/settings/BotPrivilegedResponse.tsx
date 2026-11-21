@@ -13,6 +13,7 @@ import type {
   PrivilegedResponseRequest,
   PrivilegedResponseResult,
 } from "@t3tools/contracts/openbot-privileged-response";
+import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
@@ -83,7 +84,7 @@ function ResponseForm({ scope, spec, available, current, execute }: Props) {
     setAction(null);
     setStatus("");
     let attempted = false;
-    try {
+    const settled = await settlePromise(async () => {
       if (!(await active.prepare())) {
         setStatus("This request is no longer available. Reopen the current request.");
         return;
@@ -95,16 +96,16 @@ function ResponseForm({ scope, spec, available, current, execute }: Props) {
           ? "Response delivered."
           : "Delivery is not confirmed. Check the result before taking further action.",
       );
-    } catch {
+    });
+    if (settled._tag === "Failure") {
       setStatus(
         attempted
           ? "Delivery is not confirmed. Check the result before taking further action."
           : "This request is unavailable. Your fields were cleared.",
       );
-    } finally {
-      inFlight.current = false;
-      setPhase(attempted ? "submitted" : "editing");
     }
+    inFlight.current = false;
+    setPhase(attempted ? "submitted" : "editing");
   };
   const options = (id: string, label: string, entries: readonly string[]) => (
     <Select

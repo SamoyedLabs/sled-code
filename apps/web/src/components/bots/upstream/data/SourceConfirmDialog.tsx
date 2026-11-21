@@ -2,6 +2,7 @@
 import { AlertDialog } from "@base-ui/react/alert-dialog";
 import { useRef, useState, type ReactNode } from "react";
 import { ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
+import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import "../OpenbotSidebarDeleteDialog.css";
 import { t } from "./source-text";
 
@@ -29,12 +30,12 @@ export function SourceConfirmDialog(props: {
     if (lock.current || pending) return;
     lock.current = true;
     setRunning(true);
-    try {
+    const settled = await settlePromise(async () => {
       await props.onConfirm();
-    } finally {
-      lock.current = false;
-      setRunning(false);
-    }
+    });
+    lock.current = false;
+    setRunning(false);
+    if (settled._tag === "Failure") throw settled.cause;
   };
   return (
     <AlertDialog.Root

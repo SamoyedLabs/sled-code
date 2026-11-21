@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { OpenbotConversationDetail, type EnvironmentId } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import * as Result from "effect/Result";
+import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../state/openbot";
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
 import { readPreparedConnection } from "../../state/session";
@@ -56,7 +57,7 @@ export function BotDeferredToolActivity({ scope }: { scope: BotTraceScope }) {
       currentScope() === identity &&
       readPreparedConnection(scope.environmentId) === connection;
     setState({ phase: "loading" });
-    try {
+    const settled = await settlePromise(async () => {
       let offset = 0,
         version: string | null = null,
         text = "";
@@ -111,11 +112,9 @@ export function BotDeferredToolActivity({ scope }: { scope: BotTraceScope }) {
         version = page.version;
       }
       throw Error("Trace too large");
-    } catch {
-      if (valid()) setState({ phase: "error" });
-    } finally {
-      if (lock.current === attempt) lock.current = null;
-    }
+    });
+    if (settled._tag === "Failure" && valid()) setState({ phase: "error" });
+    if (lock.current === attempt) lock.current = null;
   };
   if (state.phase === "ready") return <BotToolActivity trace={state.trace} initialOpen />;
   return (

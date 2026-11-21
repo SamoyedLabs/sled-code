@@ -106,7 +106,7 @@ export function SourceChatScrollRail({
       | { starts: number[]; ends: number[]; lastScroll: number; height: number }
       | undefined;
     const schedule = (layout = false) => {
-      relayout ||= layout;
+      relayout = relayout || layout;
       if (frame) return;
       frame = requestAnimationFrame(update);
     };

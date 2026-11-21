@@ -15,7 +15,7 @@ import {
   botModelVisibility,
 } from "@t3tools/client-runtime/openbot/presentation";
 import { settingsCapabilities } from "@t3tools/client-runtime/openbot/settings";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../../../state/openbot";
 import { usePreparedConnection, readPreparedConnection } from "../../../../state/session";
 import { useAtomCommand } from "../../../../state/use-atom-command";
@@ -167,16 +167,17 @@ function Host(props: Props) {
     lock.current = true;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       await execute(input);
       data?.refresh();
-    } catch (cause) {
+    });
+    lock.current = false;
+    if (alive.current) setBusy(false);
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       if (alive.current)
         setError(cause instanceof Error ? cause.message : "Provider change failed.");
       throw cause;
-    } finally {
-      lock.current = false;
-      if (alive.current) setBusy(false);
     }
   };
   const keyProviders = (data?.status?.providers ?? [])
@@ -518,14 +519,15 @@ function KeyConnection({
   const change = async (input: unknown) => {
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       await execute(input);
       onSaved();
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
   return (
     <ProviderKeyDialog
@@ -584,7 +586,7 @@ function SignInConnection(
     let timer: ReturnType<typeof setTimeout> | undefined;
     const loop = async () => {
       if (!session.active) return;
-      try {
+      const settled = await settlePromise(async () => {
         const deadline =
           setup.current.relay?.expiresAt ??
           (setup.current.codeSignIn && setup.current.codeSignIn.kind !== "connected"
@@ -660,8 +662,10 @@ function SignInConnection(
           }
         }
         if (session.active) timer = setTimeout(() => void loop(), 1500);
-      } catch (cause) {
-        if (session.active) setError(cause instanceof Error ? cause.message : String(cause));
+      });
+      if (settled._tag === "Failure" && session.active) {
+        const cause = squashAtomCommandFailure(settled);
+        setError(cause instanceof Error ? cause.message : String(cause));
       }
     };
     try {
@@ -732,7 +736,7 @@ function SignInConnection(
   const submit = async (value: string) => {
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       if (setup.current.relay) {
         const flow = setup.current.relay;
         const query = flow.status?.callback
@@ -750,11 +754,12 @@ function SignInConnection(
         await call({ operation: "provider.codeLogin.submit", provider, code: value });
         setState({ phase: "verifying" });
       }
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
   return (
     <ProviderCodeLoginDialog
@@ -824,7 +829,7 @@ function ProviderModels({
     setError(null);
     const previous = list;
     if (shown && list) setList({ ...list, shown });
-    try {
+    const settled = await settlePromise(async () => {
       const value = botModelVisibility(
         await execute({ operation: "provider.modelVisibility.update", provider, shown }),
         provider,
@@ -832,13 +837,13 @@ function ProviderModels({
       if (!value) throw new Error("Invalid model list.");
       setList(value);
       onChange();
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
       setList(previous);
-      setError(String(cause));
-    } finally {
-      lock.current = false;
-      setBusy(false);
+      setError(String(squashAtomCommandFailure(settled)));
     }
+    lock.current = false;
+    setBusy(false);
   };
   const shown = new Set(list?.shown ?? []);
   const models = new Map(list?.models.map((m) => [m.id, m]) ?? []);
@@ -983,17 +988,17 @@ function PromptCache({
     if (ttl === value || busy) return;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       setValue(
         decodeCache(
           await execute({ operation: "settings.prompt-cache-ttl.update", parameters: { ttl } }),
         ).ttl,
       );
-    } catch (cause) {
-      setError(String(cause));
-    } finally {
-      setBusy(false);
+    });
+    if (settled._tag === "Failure") {
+      setError(String(squashAtomCommandFailure(settled)));
     }
+    setBusy(false);
   };
   return (
     <SettingsSection title={t("provider.settings.cache")}>

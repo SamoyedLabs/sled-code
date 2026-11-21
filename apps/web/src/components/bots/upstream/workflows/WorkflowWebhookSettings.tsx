@@ -5,7 +5,7 @@ import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
 import { Copy, RefreshCw, X } from "lucide-react";
 import type { EnvironmentId } from "@t3tools/contracts";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../../../state/openbot";
 import { readPreparedConnection, usePreparedConnection } from "../../../../state/session";
 import { useAtomCommand } from "../../../../state/use-atom-command";
@@ -73,7 +73,7 @@ function WebhookSettings({
   const current = () =>
     Boolean(mounted.current && connection && readPreparedConnection(environmentId) === connection);
   const load = useStableCallback(async (active: () => boolean) => {
-    try {
+    const settled = await settlePromise(async () => {
       const result = await admin({
         environmentId,
         input: {
@@ -88,9 +88,9 @@ function WebhookSettings({
         throw Error("The webhook destination changed.");
       setConfig(value);
       setError(null);
-    } catch (cause) {
-      if (active() && current()) setError(String(cause));
-    }
+    });
+    if (settled._tag === "Failure" && active() && current())
+      setError(String(squashAtomCommandFailure(settled)));
   });
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Pull the admin-only address for this exact saved workflow and invalidate late replies on close/session replacement.
   useEffect(() => {
@@ -106,7 +106,7 @@ function WebhookSettings({
     pending.current = true;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       const result = await admin({
         environmentId,
         input: {
@@ -119,12 +119,10 @@ function WebhookSettings({
       setSecret(signingSecret(result.value).secret);
       await load(() => mounted.current);
       if (current()) onChanged();
-    } catch (cause) {
-      if (current()) setError(String(cause));
-    } finally {
-      pending.current = false;
-      if (current()) setBusy(false);
-    }
+    });
+    if (settled._tag === "Failure" && current()) setError(String(squashAtomCommandFailure(settled)));
+    pending.current = false;
+    if (current()) setBusy(false);
   };
   const copy = (text: string) =>
     void navigator.clipboard.writeText(text).catch((cause) => setError(String(cause)));

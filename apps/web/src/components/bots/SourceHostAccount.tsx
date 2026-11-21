@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Lock } from "lucide-react";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { settingRequest } from "@t3tools/client-runtime/openbot/settings";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { readPreparedConnection, usePreparedConnection } from "../../state/session";
 import * as Option from "effect/Option";
 import type * as Schema from "effect/Schema";
@@ -90,21 +91,25 @@ function HostAccount({
       lock.current = true;
       setPending(action);
       setError(null);
-      try {
+      const settled = await settlePromise(async () => {
         const value = decodeHostAccount(await actions.execute(request));
         if (mounted.current && connection.current === readPreparedConnection(environmentId))
           setView(value);
-      } catch (cause) {
-        if (mounted.current && connection.current === readPreparedConnection(environmentId))
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "The account request could not complete. Check its status before retrying.",
-          );
-      } finally {
-        lock.current = false;
-        if (mounted.current) setPending(null);
+      });
+      if (
+        settled._tag === "Failure" &&
+        mounted.current &&
+        connection.current === readPreparedConnection(environmentId)
+      ) {
+        const cause = squashAtomCommandFailure(settled);
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "The account request could not complete. Check its status before retrying.",
+        );
       }
+      lock.current = false;
+      if (mounted.current) setPending(null);
     },
   );
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Read the selected host's account through its guarded bridge; discard replies after unmount or connection replacement.

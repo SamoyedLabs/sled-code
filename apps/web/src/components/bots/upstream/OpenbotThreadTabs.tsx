@@ -21,6 +21,7 @@ import { Tooltip, TooltipTrigger, TooltipPopup } from "../../ui/tooltip";
 import { Menu, MenuTrigger, MenuItem, MenuSeparator } from "../../ui/menu";
 import { MenuPopup } from "./OpenbotMenu";
 import { menuMotionRef } from "./openbotMenuMotion";
+import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { useStableCallback } from "../../../hooks/useStableCallback";
 import {
   bindThreadTabDrag,
@@ -208,17 +209,13 @@ export function OpenbotThreadTabs(props: OpenbotThreadTabsProps) {
     } else {
       renameSaving.current = true;
       setSaving(true);
-      try {
-        if (await onRename(edit.id, edit.title.trim())) {
-          setRename(null);
-          finished = true;
-        } else setRenameError("The thread title could not be saved.");
-      } catch {
-        setRenameError("The thread title could not be saved.");
-      } finally {
-        renameSaving.current = false;
-        setSaving(false);
-      }
+      const settled = await settlePromise(async () => onRename(edit.id, edit.title.trim()));
+      renameSaving.current = false;
+      setSaving(false);
+      if (settled._tag === "Success" && settled.value) {
+        setRename(null);
+        finished = true;
+      } else setRenameError("The thread title could not be saved.");
     }
     if (refocus && finished)
       requestAnimationFrame(() =>

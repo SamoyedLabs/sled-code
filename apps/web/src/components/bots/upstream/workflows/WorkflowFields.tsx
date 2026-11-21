@@ -5,7 +5,7 @@ import * as Schema from "effect/Schema";
 import type { EnvironmentId, OpenbotWorkflowDetail } from "@t3tools/contracts";
 import { Menu } from "@base-ui/react/menu";
 import { Check, ChevronDown } from "lucide-react";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../../../state/openbot";
 import { useEnvironmentQuery } from "../../../../state/query";
 import { useAtomCommand } from "../../../../state/use-atom-command";
@@ -279,7 +279,7 @@ export function WorkflowFields({
     setError(null);
     const requestId = runReceipt.current ?? randomUUID();
     runReceipt.current = requestId;
-    try {
+    const settled = await settlePromise(async () => {
       const result = await admin({
         environmentId,
         input: {
@@ -296,12 +296,12 @@ export function WorkflowFields({
         onRunAccepted();
         historyQuery.refresh();
       }
-    } catch (cause) {
-      setError(String(cause));
-    } finally {
-      pending.current = false;
-      setBusy(false);
+    });
+    if (settled._tag === "Failure") {
+      setError(String(squashAtomCommandFailure(settled)));
     }
+    pending.current = false;
+    setBusy(false);
   };
   const model = catalogs.models.find(
     (item) => item.id === field("model") && item.provider === field("provider"),

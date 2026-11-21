@@ -9,7 +9,7 @@ import {
   type OpenbotMaterializedFile,
 } from "@t3tools/contracts";
 import { providerAdminRequest } from "@t3tools/client-runtime/openbot/presentation";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
 import { openbot } from "../../../../state/openbot";
 import { useEnvironmentQuery } from "../../../../state/query";
@@ -101,7 +101,7 @@ function HostStorage(props: SourceHostStorageProps) {
     const currentScan = () => current() && serial === scanSerial.current;
     setLoading(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       const response = await read({
         environmentId,
         input: {
@@ -119,12 +119,13 @@ function HostStorage(props: SourceHostStorageProps) {
       if (next.scope !== "host" || next.agentId !== null || next.conversationId !== null)
         throw new Error("The storage inventory belongs to another scope.");
       setUsage({ ...next, files: next.files.map((file) => ({ ...file, previewUrl: null })) });
-    } catch (cause) {
+    });
+    if (alive.current && currentScan()) setLoading(false);
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       if (alive.current && currentScan())
         setError(cause instanceof Error ? cause.message : "Could not measure storage.");
       throw cause;
-    } finally {
-      if (alive.current && currentScan()) setLoading(false);
     }
   };
   const load = useEffectEvent(async (scanRevision: number) => {
@@ -140,14 +141,14 @@ function HostStorage(props: SourceHostStorageProps) {
     if (!request) throw new Error("This host does not support that storage change.");
     if (!registry.get(openbot.adminToHost.permissionAtom(environmentId, { hostId, request })))
       throw new Error("You do not have permission to manage this storage.");
-    try {
+    const settled = await settlePromise(async () => {
       const response = await admin({ environmentId, input: { hostId, request } });
       assertCurrent();
       if (response._tag === "Failure") throw squashAtomCommandFailure(response);
-    } finally {
-      if (alive.current && readPreparedConnection(environmentId) === connection)
-        await readUsage(() => alive.current, true);
-    }
+    });
+    if (alive.current && readPreparedConnection(environmentId) === connection)
+      await readUsage(() => alive.current, true);
+    if (settled._tag === "Failure") throw squashAtomCommandFailure(settled);
   };
   const fileAction = async (file: StoredFileRow, action: StoredFileAction) => {
     assertCurrent();

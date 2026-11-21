@@ -2,6 +2,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { useRef, useState } from "react";
 import * as Schema from "effect/Schema";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { SourceButton } from "../settings/SettingsParts";
 import { SkillMark } from "../marketplace/MarketplaceParts";
 import { SourceMcpRelay, type McpExecute } from "./SourceMcpRelay";
@@ -51,7 +52,7 @@ export function AppConnectDialog(props: {
     lock.current = true;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       if (!mcpFlowComplete(flow, values)) throw new Error("Fill in the required fields.");
       for (const field of mcpFlowFields(flow)) {
         if (field.url && !isListingUrl((values[field.id] ?? "").trim(), base.url))
@@ -73,12 +74,13 @@ export function AppConnectDialog(props: {
       );
       if (result.error) throw new Error(result.error);
       await save(config);
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : "Could not connect the app.");
-    } finally {
-      lock.current = false;
-      setBusy(false);
     }
+    lock.current = false;
+    setBusy(false);
   };
   const close = () => {
     if (!busy && !relayActive) props.onClose();

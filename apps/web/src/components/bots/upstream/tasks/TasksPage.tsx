@@ -24,7 +24,7 @@ import {
   X,
   Paperclip,
 } from "lucide-react";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../../../state/openbot";
 import { useAtomCommand } from "../../../../state/use-atom-command";
 import { formatEnvironmentQueryError } from "../../../../state/query";
@@ -185,7 +185,7 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
     lock.current = true;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       const result = await send({ environmentId, input: { hostId, request } });
       if (result._tag === "Failure") {
         setError(String(squashAtomCommandFailure(result)));
@@ -193,13 +193,15 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
       }
       refresh();
       return result.value;
-    } catch (cause) {
+    });
+    lock.current = false;
+    setBusy(false);
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : "The task request failed. Try again.");
       return null;
-    } finally {
-      lock.current = false;
-      setBusy(false);
     }
+    return settled.value;
   }
   function persist(next: GlobalTaskAttempt) {
     try {
@@ -224,7 +226,7 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
     setBusy(true);
     setError(null);
     const next: GlobalTaskAttempt = { ...original, phase: "attempted" };
-    try {
+    const settled = await settlePromise(async () => {
       if ((await principal()) !== next.principalId)
         throw Error(
           "This start belongs to the original sign-in. It will not be started again from another session.",
@@ -279,17 +281,17 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
       });
       if (alive.current && listed._tag === "Success")
         setTook(taskSnapshot(listed.value)?.find((task) => task.id === taskId) ?? null);
-    } catch (cause) {
-      if (alive.current)
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "The original task start could not be confirmed. Check it before starting another.",
-        );
-    } finally {
-      lock.current = false;
-      if (alive.current) setBusy(false);
+    });
+    if (settled._tag === "Failure" && alive.current) {
+      const cause = squashAtomCommandFailure(settled);
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "The original task start could not be confirmed. Check it before starting another.",
+      );
     }
+    lock.current = false;
+    if (alive.current) setBusy(false);
   }
   async function start() {
     if (
@@ -307,7 +309,7 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
     lock.current = true;
     setBusy(true);
     setError(null);
-    try {
+    const settled = await settlePromise(async () => {
       const principalId = await principal();
       const next: GlobalTaskAttempt = {
         agentId,
@@ -324,12 +326,13 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
       setSelectedFileIds([]);
       setTook(null);
       timer.current = setTimeout(() => void commit(), 6000);
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       setError(cause instanceof Error ? cause.message : "The task could not be queued.");
-    } finally {
-      lock.current = false;
-      setBusy(false);
     }
+    lock.current = false;
+    setBusy(false);
   }
   function undo() {
     if (pendingRef.current?.phase !== "queued" || lock.current) return;
@@ -352,7 +355,7 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
     setBusy(true);
     setError(null);
     let stagedMove: readonly OpenbotDraftFile[] | null = null;
-    try {
+    const settled = await settlePromise(async () => {
       if (original && (await principal()) !== original.principalId)
         throw Error("Only the original sign-in can change this pending start.");
       const ids = original?.fileIds ?? selectedFileIds;
@@ -389,13 +392,14 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
       void uploads.discardUnused(
         originals.filter((file): file is OpenbotDraftFile => file !== undefined),
       );
-    } catch (cause) {
+    });
+    if (settled._tag === "Failure") {
+      const cause = squashAtomCommandFailure(settled);
       if (stagedMove) void uploads.discardUnused(stagedMove);
       setError(cause instanceof Error ? cause.message : "The original pending start is retained.");
-    } finally {
-      lock.current = false;
-      setBusy(false);
     }
+    lock.current = false;
+    setBusy(false);
   }
   const commitPending = useStableCallback(commit);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Commit an authorized pending start on navigation, matching upstream TasksView cleanup.

@@ -36,7 +36,7 @@ import { resolveBotQuotedFileSource } from "@t3tools/client-runtime/openbot/pres
 import { botMessageSections } from "@t3tools/client-runtime/openbot/presentation";
 import { BotFilePreview, type BotQuotedFilePreview } from "../bots/BotFilePreview";
 import { watchBotQuotedText } from "../bots/upstream/conversation/quotedText";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../state/openbot";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { readPreparedConnection } from "../../state/session";
@@ -83,6 +83,11 @@ type Props = {
   focusMessageId?: string;
   onDraftChange?: (text: string) => void;
 };
+
+function clearBotQuoteWatcher(ref: { current: { release: (() => void) | undefined } }) {
+  ref.current.release?.();
+  ref.current.release = undefined;
+}
 
 // React translation of OpenBot ConversationComposer, ChatMessageRow and MessageActions.
 // The host controller remains the authority for identities, permissions and delivery receipts.
@@ -213,7 +218,7 @@ function ConversationBody({
     onRead: markReadThrough,
   });
   const showLatest = async () => {
-    releaseQuote.current?.();
+    clearBotQuoteWatcher(releaseQuote);
     if (c.hasNewer) await c.showLatest();
     followLatest.current = true;
     setAwayFromLatest(false);
@@ -313,27 +318,18 @@ function ConversationBody({
 
   const materialize = useAtomCommand(openbot.fileMaterialize, { reportFailure: false });
   const quoteRequest = useRef(0);
-  const releaseQuote = useRef<(() => void) | undefined>(undefined);
+  const releaseQuote = useRef<{ release: (() => void) | undefined }>({ release: undefined });
   const [localQuotedFile, setLocalQuotedFile] = useState<BotQuotedFilePreview | null>(null);
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Cancel quote observers and reject late file reads when this identity-scoped chat leaves the workspace.
-  useEffect(
-    () => () => {
-      quoteRequest.current += 1;
-      releaseQuote.current?.();
-    },
-    [releaseQuote],
-  );
   const openQuote = async (id: string, text: string) => {
     const root = scroller.current;
     if (!root) return;
     const request = ++quoteRequest.current;
-    releaseQuote.current?.();
+    clearBotQuoteWatcher(releaseQuote);
     setCopyError(null);
     const target = botFileQuoteTarget(id);
     if (!target) {
       followLatest.current = false;
-      // oxlint-disable-next-line react/immutability -- This ref owns the imperative quote observer’s cleanup handle; replacing it does not mutate React state.
-      releaseQuote.current = watchBotQuotedText(
+      releaseQuote.current.release = watchBotQuotedText(
         root,
         `[data-selection-message-id="${CSS.escape(id)}"]`,
         text,
@@ -352,7 +348,7 @@ function ConversationBody({
       setCopyError("The quoted attachment is unavailable in this conversation.");
       return;
     }
-    try {
+    const settled = await settlePromise(async () => {
       const result = await materialize({ environmentId, input: { hostId, agentId, source } });
       if (request !== quoteRequest.current || readPreparedConnection(environmentId) !== connection)
         return;
@@ -360,13 +356,20 @@ function ConversationBody({
       const preview = { file: result.value, target, text };
       if (onOpenQuotedFile) onOpenQuotedFile(preview);
       else setLocalQuotedFile(preview);
-    } catch (cause) {
-      if (request === quoteRequest.current)
-        setCopyError(
-          cause instanceof Error ? cause.message : "The quoted file could not be opened.",
-        );
+    });
+    if (settled._tag === "Failure" && request === quoteRequest.current) {
+      const cause = squashAtomCommandFailure(settled);
+      setCopyError(cause instanceof Error ? cause.message : "The quoted file could not be opened.");
     }
   };
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Cancel quote observers and reject late file reads when this identity-scoped chat leaves the workspace.
+  useEffect(
+    () => () => {
+      quoteRequest.current += 1;
+      clearBotQuoteWatcher(releaseQuote);
+    },
+    [releaseQuote],
+  );
 
   const openMessageQuote = useStableCallback((id: string, text: string) => {
     void openQuote(id, text);

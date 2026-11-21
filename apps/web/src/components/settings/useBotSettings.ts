@@ -7,6 +7,7 @@ import {
   settingResult,
   type SettingsActions,
 } from "@t3tools/client-runtime/openbot/settings";
+import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import type { OpenbotSettingsRequest } from "@t3tools/contracts/openbot-settings";
 export function useBotSettings(actions: SettingsActions) {
   const [results, setResults] = useState<Readonly<Record<string, Json>>>({});
@@ -24,7 +25,7 @@ export function useBotSettings(actions: SettingsActions) {
     setNotice(null);
     if (!settingIsRead(request))
       setResults((current) => invalidateSettingGroup(current, operation));
-    try {
+    const settled = await settlePromise(async () => {
       const value = await actions.execute(request);
       const result = settingResult(operation, value);
       if (result === null && value !== null) throw new Error("Unexpected host result");
@@ -38,17 +39,18 @@ export function useBotSettings(actions: SettingsActions) {
       if (!settingIsRead(request))
         setNotice("Saved on the selected host. Refresh to read the current setting.");
       return result;
-    } catch {
+    });
+    lock.current = false;
+    setBusy(false);
+    if (settled._tag === "Failure") {
       setNotice(
         settingIsRead(request)
           ? "This setting could not be read. Check host support and access."
           : "The connection ended before confirmation. Refresh this setting before changing it again.",
       );
       return null;
-    } finally {
-      lock.current = false;
-      setBusy(false);
     }
+    return settled.value;
   };
   return { results, busy, notice, run };
 }
