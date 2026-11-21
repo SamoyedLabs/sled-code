@@ -3,6 +3,8 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   authScopeResponse,
   AuthAdministrativeClientScopes,
+  AuthDesktopOperateScope,
+  AuthStandardClientScopes,
   connectDeviceVerificationCode,
 } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
@@ -385,6 +387,10 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodePlatformCrypto.layer))(
           });
           const [oldestDeviceSession, newestDeviceSession] = yield* deviceSessions();
           expect(newestDeviceSession).toBeDefined();
+          expect(newestDeviceSession?.permissions).toEqual([
+            ...AuthStandardClientScopes,
+            AuthDesktopOperateScope,
+          ]);
           // Authorized clients lists T3 Connect sessions under this name.
           expect(newestDeviceSession?.client.label).toBe("T3 Connect");
           // Revoking any one of the device's sessions ends all of them and its trust.

@@ -1269,6 +1269,42 @@ describe("RemoteEnvironmentAuthorization", () => {
       }),
   );
 
+  it.effect("refreshes only the selected same-account relay credential", () =>
+    Effect.gen(function* () {
+      const original = persistedToken();
+      const other = persistedToken({ environmentId: EnvironmentId.make("other-environment") });
+      const harness = yield* makeHarness({
+        initialToken: original,
+        responses: [Response.json(DESCRIPTOR), accessToken("refreshed-token")],
+      });
+      yield* Ref.update(harness.tokens, (tokens) =>
+        new Map(tokens).set(other.environmentId, other),
+      );
+      yield* Effect.gen(function* () {
+        const remote = yield* RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization;
+        const refresh = () =>
+          remote.authorizeDpopHttp({
+            expectedEnvironmentId: ENVIRONMENT_ID,
+            refreshRelayAccess: true,
+          });
+        yield* Ref.set(harness.session, Option.some({ accountId: "account-2" }));
+        expect((yield* Effect.result(refresh()))._tag).toBe("Failure");
+        expect(yield* Ref.get(harness.tokens)).toEqual(
+          new Map([
+            [ENVIRONMENT_ID, original],
+            [other.environmentId, other],
+          ]),
+        );
+        expect(yield* Ref.get(harness.bootstrapCalls)).toBe(0);
+
+        yield* Ref.set(harness.session, Option.some({ accountId: "account-1" }));
+        expect((yield* refresh()).httpAuthorization.accessToken).toBe("refreshed-token");
+        expect((yield* Ref.get(harness.tokens)).get(other.environmentId)).toEqual(other);
+        expect(yield* Ref.get(harness.bootstrapCalls)).toBe(1);
+      }).pipe(Effect.provide(harness.layer));
+    }),
+  );
+
   it.effect("renews a legacy unowned token once and reuses its account-bound replacement", () =>
     Effect.gen(function* () {
       const legacy = new TokenStore.RemoteDpopAccessToken({

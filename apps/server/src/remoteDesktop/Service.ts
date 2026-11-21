@@ -1,6 +1,7 @@
 import {
   RemoteDesktopError,
   type RemoteDesktopAnswer,
+  type RemoteDesktopConnectivity,
   type RemoteDesktopLease,
   type RemoteDesktopNativeResult,
   type RemoteDesktopSessionInput,
@@ -37,6 +38,7 @@ interface Session {
   readonly renewals: Queue.Queue<void>;
   readonly renewLock: Semaphore.Semaphore;
   readonly hostFingerprint: string;
+  relayOnly: boolean;
   connectivityExpiresAt: number;
   expiresAt: number;
 }
@@ -62,6 +64,20 @@ export class Service extends Context.Service<
     ) => Effect.Effect<void, RequestFailure>;
   }
 >()("t3/remoteDesktop/Service") {}
+
+const connectivityDeadline = (config: RemoteDesktopConnectivity) =>
+  config.relayAvailable ? config.expiresAt - 10_000 : Number.POSITIVE_INFINITY;
+
+function isRelayDescription(description: string): boolean {
+  const candidates = description.split("\n").filter((line) => line.startsWith("a=candidate:"));
+  return (
+    candidates.length > 0 &&
+    candidates.every((line) => {
+      const fields = line.trimEnd().split(/ +/, 8);
+      return fields[6] === "typ" && fields[7] === "relay";
+    })
+  );
+}
 
 const make = Effect.gen(function* () {
   const native = yield* NativeChannel.NativeChannel;
@@ -160,7 +176,7 @@ const make = Effect.gen(function* () {
       return { ...reply.status, connectivity: config };
     }),
     start: Effect.fn("RemoteDesktop.start")(function* (owner, input) {
-      const authorizationExpiresAt = yield* authority.authorize(owner);
+      yield* authority.authorize(owner);
       if (!native.available) return yield* new RemoteDesktopError({ reason: "unavailable" });
       const host = yield* native.request({ type: "status" }).pipe(Effect.flatMap(nativeResult));
       if (host.type !== "status") return yield* new RemoteDesktopError({ reason: "transport" });
@@ -174,14 +190,17 @@ const make = Effect.gen(function* () {
       if (host.status.hostFingerprint !== input.hostFingerprint)
         return yield* new RemoteDesktopError({ reason: "identity_mismatch" });
       const config = yield* connectivity.get(owner.sessionId);
-      yield* authority.authorize(owner);
+      const authorizationExpiresAt = yield* authority.authorize(owner);
+      if (config.relayOnly && !isRelayDescription(input.offer))
+        return yield* new RemoteDesktopError({ reason: "transport" });
       const id = yield* random.uuidV4().pipe(Effect.orDie);
-      const now = yield* DateTime.now;
+      const now = (yield* DateTime.now).epochMilliseconds;
+      const connectivityExpiresAt = connectivityDeadline(config);
+      const expiresAt = Math.min(authorizationExpiresAt, connectivityExpiresAt, now + leaseMillis);
+      if (expiresAt <= now) return yield* new RemoteDesktopError({ reason: "expired" });
       const stopped = yield* Deferred.make<void>();
       const renewals = yield* Queue.sliding<void>(1);
       const renewLock = yield* Semaphore.make(1);
-      if (authorizationExpiresAt <= now.epochMilliseconds)
-        return yield* new RemoteDesktopError({ reason: "expired" });
       if (
         sessions.size >= 8 ||
         [...sessions.values()].filter((session) => session.owner.sessionId === owner.sessionId)
@@ -198,10 +217,9 @@ const make = Effect.gen(function* () {
         stopped,
         renewals,
         renewLock,
-        connectivityExpiresAt: config.relayAvailable
-          ? config.expiresAt - 10_000
-          : Number.POSITIVE_INFINITY,
-        expiresAt: Math.min(authorizationExpiresAt, now.epochMilliseconds + leaseMillis),
+        relayOnly: config.relayOnly,
+        connectivityExpiresAt,
+        expiresAt,
       };
       sessions.set(id, session);
       yield* watch(session);
@@ -241,6 +259,8 @@ const make = Effect.gen(function* () {
         ) {
           return yield* new RemoteDesktopError({ reason: "identity_mismatch" });
         }
+        if (config.relayOnly && !isRelayDescription(reply.answer))
+          return yield* new RemoteDesktopError({ reason: "transport" });
         return reply;
       });
       return yield* operation.pipe(
@@ -259,45 +279,51 @@ const make = Effect.gen(function* () {
           const now = (yield* DateTime.now).epochMilliseconds;
           if (session.expiresAt <= now || sessions.get(session.id) !== session)
             return yield* new RemoteDesktopError({ reason: "expired" });
-          const connectivityExpiresAt = config.relayAvailable
-            ? config.expiresAt - 10_000
-            : Number.POSITIVE_INFINITY;
+          const relayOnly = session.relayOnly || config.relayOnly;
+          if (relayOnly && (!config.relayAvailable || !isRelayDescription(input.offer)))
+            return yield* new RemoteDesktopError({ reason: "transport" });
+          const connectivityExpiresAt = connectivityDeadline(config);
           const expiresAt = Math.min(
             authorizationExpiresAt,
             connectivityExpiresAt,
             now + leaseMillis,
           );
           if (expiresAt <= now) return yield* new RemoteDesktopError({ reason: "expired" });
-          const reply = yield* native
-            .request({
-              type: "restart",
-              sessionId: session.id,
-              offer: input.offer,
-              clientNonce: session.nonce,
-              hostFingerprint: session.hostFingerprint,
-              expiresAt,
-              connectivity: config,
-            })
-            .pipe(Effect.flatMap(nativeResult));
-          const authorizationNow = yield* authority.authorize(owner);
-          const returnedAt = (yield* DateTime.now).epochMilliseconds;
-          if (sessions.get(session.id) !== session)
-            return yield* new RemoteDesktopError({ reason: "revoked" });
-          if (returnedAt >= expiresAt || authorizationNow < expiresAt)
-            return yield* new RemoteDesktopError({ reason: "expired" });
-          if (
-            reply.type !== "answer" ||
-            reply.sessionId !== session.id ||
-            reply.clientNonce !== session.nonce ||
-            reply.hostFingerprint !== session.hostFingerprint ||
-            reply.expiresAt !== expiresAt
-          )
-            return yield* new RemoteDesktopError({ reason: "identity_mismatch" });
-          session.expiresAt = expiresAt;
-          session.connectivityExpiresAt = connectivityExpiresAt;
-          yield* Queue.offer(session.renewals, undefined);
-          return reply;
-        }).pipe(Effect.onExit((exit) => (Exit.isFailure(exit) ? close(session) : Effect.void))),
+          return yield* Effect.gen(function* () {
+            const reply = yield* native
+              .request({
+                type: "restart",
+                sessionId: session.id,
+                offer: input.offer,
+                clientNonce: session.nonce,
+                hostFingerprint: session.hostFingerprint,
+                expiresAt,
+                connectivity: { ...config, relayOnly },
+              })
+              .pipe(Effect.flatMap(nativeResult));
+            const authorizationNow = yield* authority.authorize(owner);
+            const returnedAt = (yield* DateTime.now).epochMilliseconds;
+            if (sessions.get(session.id) !== session)
+              return yield* new RemoteDesktopError({ reason: "revoked" });
+            if (returnedAt >= expiresAt || authorizationNow < expiresAt)
+              return yield* new RemoteDesktopError({ reason: "expired" });
+            if (
+              reply.type !== "answer" ||
+              reply.sessionId !== session.id ||
+              reply.clientNonce !== session.nonce ||
+              reply.hostFingerprint !== session.hostFingerprint ||
+              reply.expiresAt !== expiresAt
+            )
+              return yield* new RemoteDesktopError({ reason: "identity_mismatch" });
+            if (relayOnly && !isRelayDescription(reply.answer))
+              return yield* new RemoteDesktopError({ reason: "transport" });
+            session.relayOnly = relayOnly;
+            session.expiresAt = expiresAt;
+            session.connectivityExpiresAt = connectivityExpiresAt;
+            yield* Queue.offer(session.renewals, undefined);
+            return reply;
+          }).pipe(Effect.onExit((exit) => (Exit.isFailure(exit) ? close(session) : Effect.void)));
+        }),
       );
     }),
     renew: Effect.fn("RemoteDesktop.renew")(function* (owner, input) {
@@ -319,6 +345,10 @@ const make = Effect.gen(function* () {
             session.connectivityExpiresAt,
             now.epochMilliseconds + leaseMillis,
           );
+          if (expiresAt <= now.epochMilliseconds) {
+            yield* close(session);
+            return yield* new RemoteDesktopError({ reason: "expired" });
+          }
           const reply = yield* native
             .request({ type: "renew", sessionId: session.id, expiresAt })
             .pipe(

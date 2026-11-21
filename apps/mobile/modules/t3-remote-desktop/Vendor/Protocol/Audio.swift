@@ -21,12 +21,14 @@ import Foundation
 /// The codecs by name, as the hello and the format carry them, and the host's pick.
 public enum AudioCodec {
     /// AAC-ELD (AudioToolbox's kAudioFormatMPEG4AAC_ELD): 48 kHz stereo, 480 or 512 frames a packet
-    /// (10 or 10.7 ms), 128 kbps. The only codec in this step.
+    /// (10 or 10.7 ms), 128 kbps.
     public static let aacELD = "aac-eld"
+    /// Windows Media Foundation AAC-LC: 48 kHz stereo, 1024 frames per packet.
+    public static let aacLC = "aac-lc"
     /// What this host makes, best first.
     public static let hostMakes = [aacELD]
     /// What a device that plays the Mac's sound lists in its hello, best first.
-    public static let devicePlays = [aacELD]
+    public static let devicePlays = [aacELD, aacLC]
 
     /// The codec a host sends a device: the first of the device's list (best first) that the host
     /// makes. Nil for no list (a device that plays no sound, every device before 2026-09-27) and for

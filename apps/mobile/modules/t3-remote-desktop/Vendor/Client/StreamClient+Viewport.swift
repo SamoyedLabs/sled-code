@@ -17,6 +17,7 @@ extension StreamClient {
     /// the Mac cursor back under a client-drawn one. Remembers what went out in `lastViewport`.
     /// A no-op on the wire without a connection. Main thread.
     func sendViewport(_ v: Viewport) {
+        guard viewerCapabilities.windowTextScale else { return }
         var v = v
         if v.localCursor == nil { v.localCursor = localCursorState.wanted }
         lastViewport = v

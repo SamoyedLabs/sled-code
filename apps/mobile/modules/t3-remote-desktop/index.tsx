@@ -13,9 +13,11 @@ export interface RemoteDesktopHandle {
   acceptNativeAnswer(json: string): Promise<void>;
   createNativeRestartOffer(connectivityJson: string): Promise<RemoteDesktopRestartInput>;
   closeNativeSession(): Promise<void>;
+  refreshPickerPreview?(): Promise<void>;
   recordAcceptanceEvent(json: string): Promise<void>;
 }
 interface RemoteDesktopProps extends ViewProps {
+  readonly appearance?: "light" | "dark";
   readonly ref?: Ref<RemoteDesktopHandle>;
   readonly onNativeState?: (
     event: NativeSyntheticEvent<{
@@ -23,6 +25,7 @@ interface RemoteDesktopProps extends ViewProps {
         | "connected"
         | "connecting"
         | "closed"
+        | "stopRequested"
         | "path"
         | "network"
         | "needsRestart"
@@ -35,9 +38,12 @@ interface RemoteDesktopProps extends ViewProps {
   ) => void;
 }
 
-// The native view owns reception, HEVC decoding, display and input. No frames
-// or high-frequency pointer events cross the JavaScript bridge.
+// The native view owns reception, HEVC decoding, display and input.
 export const RemoteDesktopView = requireNativeView<RemoteDesktopProps>("T3RemoteDesktop");
-export const remoteDesktopAcceptanceEnabled = requireNativeModule<{ acceptanceEnabled: boolean }>(
-  "T3RemoteDesktop",
-).acceptanceEnabled;
+const nativeModule = requireNativeModule<{
+  acceptanceEnabled: boolean;
+  getPickerPreview?(fingerprint: string): Promise<string | null>;
+}>("T3RemoteDesktop");
+export const remoteDesktopAcceptanceEnabled = nativeModule.acceptanceEnabled;
+export const getRemoteDesktopPreview = (fingerprint: string) =>
+  nativeModule.getPickerPreview?.(fingerprint) ?? Promise.resolve(null);

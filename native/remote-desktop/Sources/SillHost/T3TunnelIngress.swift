@@ -2,13 +2,39 @@ import Foundation
 import Network
 import StreamProtocol
 
+package enum T3TunnelAdmission {
+    case paired(Data)
+    case authenticatedLease(Data)
+
+    var fingerprint: Data {
+        switch self {
+        case .paired(let key), .authenticatedLease(let key): return key
+        }
+    }
+
+    func name(in snapshot: TrustSnapshot, expiresAt: Date, now: Date) -> String? {
+        guard fingerprint.count == 32, now < expiresAt,
+              snapshot.remoteAccess, snapshot.internetAccess else { return nil }
+        switch self {
+        case .paired(let key): return snapshot.paired[key]
+        case .authenticatedLease: return "Sled Connect"
+        }
+    }
+
+    func accepts(_ fingerprint: Data?, alpn: String?, in snapshot: TrustSnapshot,
+                 expiresAt: Date, now: Date) -> Bool {
+        fingerprint == self.fingerprint && alpn == RemoteTLS.sessionALPN &&
+            name(in: snapshot, expiresAt: expiresAt, now: now) != nil
+    }
+}
+
 /// A single, already-authorized T3 session's private TLS entry point. The socket
 /// stays on loopback; its transport owner forwards encrypted bytes to this port.
 /// It never advertises, pairs a device, or classifies the loopback hop as home.
 package final class T3TunnelIngress {
     private let server: StreamServer
     private let trust: TrustBox
-    private let expected: Data
+    private let admission: T3TunnelAdmission
     private let queue: DispatchQueue
     private var listener: NWListener?
     private var connection: NWConnection?
@@ -18,20 +44,24 @@ package final class T3TunnelIngress {
     private var portReply: ((UInt16?) -> Void)?
     private let ended: () -> Void
 
-    init(server: StreamServer, identity: HostIdentity, trust: TrustBox, expected: Data,
+    init(server: StreamServer, identity: HostIdentity, trust: TrustBox, admission: T3TunnelAdmission,
          expiresAt: Date, ready: @escaping (UInt16?) -> Void, ended: @escaping () -> Void) {
         self.server = server
         self.trust = trust
-        self.expected = expected
+        self.admission = admission
         queue = server.queue
         portReply = ready
         self.ended = ended
         queue.async { [self] in start(identity: identity, expiresAt: expiresAt) }
     }
 
-    private func permitted() -> Bool {
-        let snapshot = trust.snapshot
-        return snapshot.remoteAccess && snapshot.internetAccess && snapshot.paired[expected] != nil
+    private func admittedName() -> String? {
+        admission.name(in: trust.snapshot, expiresAt: leaseEndsAt, now: Date())
+    }
+
+    private func accepts(_ fingerprint: Data?, alpn: String?) -> Bool {
+        !stopped && admission.accepts(fingerprint, alpn: alpn, in: trust.snapshot,
+                          expiresAt: leaseEndsAt, now: Date())
     }
 
     private func diagnostic(_ stage: String) {
@@ -41,10 +71,10 @@ package final class T3TunnelIngress {
     }
 
     private func start(identity: HostIdentity, expiresAt: Date) {
-        guard !stopped, expected.count == 32, permitted(), setDeadline(expiresAt) else { diagnostic("authorization"); finish(); return }
+        guard !stopped, setDeadline(expiresAt), admittedName() != nil else { diagnostic("authorization"); finish(); return }
         let tls = RemoteTLS.options(identity: identity.remote.tls, role: .server, queue: queue) { [weak self] fp, alpn in
             guard let self else { return false }
-            let allowed = fp == self.expected && alpn == RemoteTLS.sessionALPN && self.permitted()
+            let allowed = self.accepts(fp, alpn: alpn)
             if !allowed { self.diagnostic("tls-refused") }
             return allowed
         }
@@ -71,7 +101,7 @@ package final class T3TunnelIngress {
     }
 
     private func accept(_ c: NWConnection) {
-        guard !stopped, connection == nil, permitted() else { c.cancel(); return }
+        guard !stopped, connection == nil, admittedName() != nil else { c.cancel(); return }
         connection = c
         // A second connection cannot race the identity check or borrow this lease.
         listener?.newConnectionHandler = { $0.cancel() }
@@ -80,15 +110,14 @@ package final class T3TunnelIngress {
             switch state {
             case .ready:
                 self.diagnostic("tls-ready")
-                guard self.permitted(), RemoteTLS.peerFingerprint(c) == self.expected,
-                      RemoteTLS.negotiatedALPN(c) == RemoteTLS.sessionALPN,
+                guard self.accepts(RemoteTLS.peerFingerprint(c), alpn: RemoteTLS.negotiatedALPN(c)),
                       self.server.remoteSessionCount < 8 else { self.finish(); return }
                 self.server.gate(c) { [weak self] hello in
-                    guard let self, !self.stopped, self.permitted(),
+                    guard let self, !self.stopped,
                           self.server.remoteSessionCount < 8,
-                          let name = self.trust.snapshot.paired[self.expected] else { c.cancel(); return }
+                          let name = self.admittedName() else { c.cancel(); return }
                     self.server.serve(c, route: .remote(origin: .internet, label: "through Sled Code",
-                        fingerprint: self.expected, name: name), hello: hello, t3Receipts: true,
+                        fingerprint: self.admission.fingerprint, name: name), hello: hello, t3Receipts: true,
                         t3Closed: { [weak self] in self?.diagnostic("stream-closed"); self?.finish() })
                 }
             case .failed, .cancelled: self.diagnostic("socket-closed"); self.finish()
@@ -112,7 +141,7 @@ package final class T3TunnelIngress {
 
     package func renew(expiresAt: Date, completion: @escaping (Bool) -> Void) {
         queue.async { [self] in
-            guard !stopped, Date() < leaseEndsAt, permitted(), setDeadline(expiresAt) else { finish(); completion(false); return }
+            guard !stopped, admittedName() != nil, setDeadline(expiresAt) else { finish(); completion(false); return }
             completion(true)
         }
     }
@@ -139,10 +168,10 @@ package final class T3TunnelIngress {
 }
 
 extension StreamCoordinator {
-    package func t3OpenTunnel(remote: RemoteAccess, fingerprint: Data, expiresAt: Date,
+    package func t3OpenTunnel(remote: RemoteAccess, admission: T3TunnelAdmission, expiresAt: Date,
                               ready: @escaping (UInt16?) -> Void, ended: @escaping () -> Void) -> T3TunnelIngress? {
         guard let identity = remote.identity else { ready(nil); return nil }
         return T3TunnelIngress(server: server, identity: identity, trust: remote.trust,
-            expected: fingerprint, expiresAt: expiresAt, ready: ready, ended: ended)
+            admission: admission, expiresAt: expiresAt, ready: ready, ended: ended)
     }
 }

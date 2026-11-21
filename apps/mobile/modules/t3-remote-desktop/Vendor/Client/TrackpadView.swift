@@ -48,7 +48,7 @@ struct Trackpad: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipShape(shape)
-        .overlay(shape.strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+        .overlay(shape.strokeBorder(Palette.edge.opacity(0.08), lineWidth: 1))
     }
 }
 
@@ -58,7 +58,7 @@ private struct DotGrid: View {
         Canvas { context, size in
             let step: CGFloat = 18
             let radius: CGFloat = 1
-            let dot = GraphicsContext.Shading.color(.white.opacity(0.07))
+            let dot = GraphicsContext.Shading.color(Palette.edge.opacity(0.07))
             var y = step / 2
             while y < size.height {
                 var x = step / 2
@@ -237,6 +237,7 @@ final class TrackpadSurface: UIView, UIGestureRecognizerDelegate {
         let twoFingerTap = UITapGestureRecognizer(target: self, action: #selector(handleTwoFingerTap))
         twoFingerTap.numberOfTapsRequired = 1
         twoFingerTap.numberOfTouchesRequired = 2
+        twoFingerTap.require(toFail: pan)
         addGestureRecognizer(twoFingerTap)
 
         // Press and hold, then drag: the left button goes down and stays down, so a window or a

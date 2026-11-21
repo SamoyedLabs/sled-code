@@ -988,6 +988,13 @@ final class InputOverlayView: UIView, UITextInput, UIGestureRecognizerDelegate {
         if !unhandled.isEmpty { super.pressesCancelled(unhandled, with: event) }
     }
 
+    func prepareForSourceChange() {
+        releaseForwardedKeys()
+        changeUnasked { composition in composition = TextComposition(); return [] }
+        latchedModifiers = []
+        for gesture in gestureRecognizers ?? [] { gesture.isEnabled = false; gesture.isEnabled = true }
+    }
+
     /// Every hardware key still down on the Mac comes up: this view no longer takes keys (the Settings
     /// panel took the keyboard, the tour showed) or is leaving the screen, and UIKit sends it no
     /// release for them.
@@ -1218,7 +1225,27 @@ final class InputOverlayProxy {
     /// A hardware keyboard attached or the last one went (HardwareKeyboardMonitor).
     func update(attached: Bool) { change(attached ? "a keyboard attached" : "the keyboard went") { $0.keyboard(attached: attached) } }
     /// What is open over the stream that takes the keyboard (StreamScreen).
+    private var screenTakers: Set<HardwareKeyboardPolicy.Taker> = []
+    private var editingDisplayName = false
+    private var keyboardBeforeDisplayName = false
+
     func update(takers: Set<HardwareKeyboardPolicy.Taker>) {
+        screenTakers = takers
+        applyTakers()
+    }
+
+    func setDisplayNameEditing(_ editing: Bool) {
+        guard editing != editingDisplayName else { return }
+        if editing { keyboardBeforeDisplayName = policy.isOwn }
+        editingDisplayName = editing
+        applyTakers()
+        if editing { setKeyboard(shown: false) }
+        else if keyboardBeforeDisplayName { setKeyboard(shown: true) }
+        if !editing { keyboardBeforeDisplayName = false }
+    }
+
+    private func applyTakers() {
+        let takers = editingDisplayName ? screenTakers.union([.displayName]) : screenTakers
         change(takers.isEmpty ? "nothing open" : takers.map(\.rawValue).sorted().joined(separator: ", ") + " open") { $0.takers(takers) }
     }
     /// Something that may move the Mac's caret is going to the Mac, from anywhere on the stream screen
@@ -1228,6 +1255,7 @@ final class InputOverlayProxy {
     /// the input view forgets what it remembers of what was typed (#138, `forgetTyped`), so a correction
     /// dictation makes later never backspaces where the caret is now.
     func caretMayHaveMoved() { view?.forgetTyped() }
+    func sourceWillChange() { view?.prepareForSourceChange() }
 
     // From the view (only the current one counts)
 

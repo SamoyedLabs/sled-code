@@ -356,15 +356,20 @@ public enum ClipboardPolicy {
     // MARK: Words
 
     public enum Copy {
+        public enum PasteKey: Sendable {
+            case command, control
+            var written: String { switch self { case .command: "⌘V"; case .control: "Ctrl+V" } }
+            var spoken: String { switch self { case .command: "Command-V"; case .control: "Control-V" } }
+        }
         /// "256 KB".
         public static var cap: String { "\(Clipboard.maxTextBytes / 1024) KB" }
 
         // The chip.
         public static func chipTitle(mac: String) -> String { "Paste on \(mac)" }
-        public static let chipSubtitle = "Then press ⌘V there."
+        public static func chipSubtitle(pasteKey: PasteKey = .command) -> String { "Then press \(pasteKey.written) there." }
         /// The chip's words for VoiceOver, one element; its Paste button and Dismiss are their own.
-        public static func chipSpoken(mac: String, device: String) -> String {
-            "Paste on \(mac). Sends the text you copied on this \(device) to \(mac)’s clipboard. Then press Command-V there."
+        public static func chipSpoken(mac: String, device: String, pasteKey: PasteKey = .command) -> String {
+            "Paste on \(mac). Sends the text you copied on this \(device) to \(mac)’s clipboard. Then press \(pasteKey.spoken) there."
         }
         public static let dismiss = "Dismiss"
         /// Told to VoiceOver when the chip first shows for a copy (found in review: it came unannounced).
@@ -373,8 +378,8 @@ public enum ClipboardPolicy {
         public static func pasteHint(mac: String, device: String) -> String {
             "Sends the text you copied on this \(device) to \(mac)’s clipboard."
         }
-        public static func sent(mac: String) -> String { "Sent to \(mac)’s clipboard. Press ⌘V there." }
-        public static func sentSpoken(mac: String) -> String { "Sent to \(mac)’s clipboard. Press Command-V there." }
+        public static func sent(mac: String, pasteKey: PasteKey = .command) -> String { "Sent to \(mac)’s clipboard. Press \(pasteKey.written) there." }
+        public static func sentSpoken(mac: String, pasteKey: PasteKey = .command) -> String { "Sent to \(mac)’s clipboard. Press \(pasteKey.spoken) there." }
         public static func tooLong(mac: String) -> String { "Too long to send: \(mac) takes up to \(cap) of text." }
         /// No receipt in time (`receiptWait`): the copy is not counted as dealt with, so the chip offers
         /// it again.
@@ -383,8 +388,8 @@ public enum ClipboardPolicy {
         // The Settings panel's This iPad group.
         public static let switchTitle = "Share Clipboard"
         public static func rowTitle(mac: String) -> String { "Paste on \(mac)" }
-        public static func footnote(on: Bool, mac: String, device: String) -> String {
-            on ? "Text you copy on \(mac) is ready to paste on this \(device). To paste on \(mac), copy text here, tap Paste, then press ⌘V there."
+        public static func footnote(on: Bool, mac: String, device: String, pasteKey: PasteKey = .command) -> String {
+            on ? "Text you copy on \(mac) is ready to paste on this \(device). To paste on \(mac), copy text here, tap Paste, then press \(pasteKey.written) there."
                : "Nothing you copy goes between this \(device) and \(mac) while this is off."
         }
 

@@ -23,6 +23,7 @@ import * as ConnectionDriver from "./driver.ts";
 import {
   type ConnectionAttemptError,
   type ConnectionTarget,
+  ConnectionBlockedError,
   ConnectionTransientError,
   type NetworkStatus,
   NO_REFUSED_ROUTES,
@@ -88,7 +89,7 @@ interface SupervisorIntent {
 type SupervisorSignal =
   | { readonly _tag: "ConnectRequested" }
   | { readonly _tag: "DisconnectRequested" }
-  | { readonly _tag: "RetryRequested" }
+  | { readonly _tag: "RetryRequested"; readonly restartRelay?: boolean }
   | { readonly _tag: "NetworkChanged"; readonly network: NetworkStatus }
   | { readonly _tag: "Wakeup"; readonly reason: ConnectionWakeups.ConnectionWakeup }
   | { readonly _tag: "BetterRouteAvailable"; readonly routeId: string };
@@ -260,6 +261,62 @@ function unexpectedFailure(target: ConnectionTarget): TracedAttemptFailure {
     attemptSpan: Option.none(),
   };
 }
+
+const RestartRelayOnRetry = Context.Reference<boolean>(
+  "@t3tools/client-runtime/connection/RestartRelayOnRetry",
+  { defaultValue: () => false },
+);
+
+export const refreshRelayAccess = Effect.fn("EnvironmentSupervisor.refreshRelayAccess")(function* <
+  A,
+  E,
+  R,
+>(refreshCredential: Effect.Effect<A, E, R>) {
+  const supervisor = yield* EnvironmentSupervisor;
+  const requireRelay = Effect.gen(function* () {
+    const state = yield* SubscriptionRef.get(supervisor.state);
+    const prepared = yield* SubscriptionRef.get(supervisor.prepared);
+    if (
+      state.phase !== "connected" ||
+      Option.isNone(prepared) ||
+      prepared.value.target._tag !== "RelayConnectionTarget" ||
+      prepared.value.httpAuthorization?._tag !== "Dpop"
+    ) {
+      return yield* new ConnectionBlockedError({
+        reason: "configuration",
+        detail: "Connect over Sled Connect before refreshing relay access.",
+      });
+    }
+    return state.generation;
+  });
+  yield* requireRelay;
+  yield* refreshCredential;
+  // Grant renewal can outlive the socket it started on.
+  const state = yield* SubscriptionRef.get(supervisor.state);
+  if (!state.desired) {
+    return yield* new ConnectionBlockedError({
+      reason: "configuration",
+      detail: "The Sled Connect connection was disabled while access was refreshed.",
+    });
+  }
+  const generation = state.generation;
+  yield* supervisor.retryNow.pipe(Effect.provideService(RestartRelayOnRetry, true));
+  yield* SubscriptionRef.changes(supervisor.state).pipe(
+    Stream.filter((state) => state.phase === "connected" && state.generation > generation),
+    Stream.runHead,
+    Effect.timeoutOrElse({
+      duration: "90 seconds",
+      orElse: () =>
+        Effect.fail(
+          new ConnectionTransientError({
+            reason: "timeout",
+            detail: "Timed out reconnecting over Sled Connect.",
+          }),
+        ),
+    }),
+  );
+  yield* requireRelay;
+});
 
 export class EnvironmentSupervisor extends Context.Service<
   EnvironmentSupervisor,
@@ -680,6 +737,10 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
   ) {
     if (next._tag === "DisconnectRequested") {
       return "end" as const;
+    }
+    if (next._tag === "RetryRequested" && next.restartRelay && isRelayLease(lease)) {
+      yield* Ref.set(preferredRouteId, Option.some(connectionRouteId(lease.prepared.target)));
+      return "reset" as const;
     }
     if (next._tag === "BetterRouteAvailable") {
       yield* Ref.set(preferredRouteId, Option.some(next.routeId));
@@ -1442,7 +1503,11 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
   );
 
   const retryNow = Ref.set(resetRetryState, true).pipe(
-    Effect.andThen(signal({ _tag: "RetryRequested" })),
+    Effect.andThen(
+      Effect.flatMap(RestartRelayOnRetry, (restartRelay) =>
+        signal({ _tag: "RetryRequested", restartRelay }),
+      ),
+    ),
     Effect.withSpan("EnvironmentSupervisor.retryNow"),
   );
 

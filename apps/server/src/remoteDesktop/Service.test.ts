@@ -35,6 +35,8 @@ const input = {
   hostFingerprint: "B".repeat(43),
   offer: "v=0\r\n",
 };
+const relayOffer = "v=0\r\na=candidate:1 1 udp 1 192.0.2.1 50000 typ relay\r\n";
+const directOffer = "v=0\r\na=candidate:1 1 udp 1 192.0.2.1 50000 typ host\r\n";
 const setup = Effect.fn("RemoteDesktopTest.setup")(function* (
   options: {
     holdStart?: boolean;
@@ -43,6 +45,9 @@ const setup = Effect.fn("RemoteDesktopTest.setup")(function* (
     disabled?: boolean;
     deniedPermissions?: boolean;
     relay?: boolean;
+    relayOnly?: boolean;
+    relayRemoved?: boolean;
+    nativeAnswer?: string;
     connectivityExpiresAt?: number;
     rotatedConnectivityExpiresAt?: number;
     wrongRestartAnswer?: boolean;
@@ -96,7 +101,7 @@ const setup = Effect.fn("RemoteDesktopTest.setup")(function* (
             if (options.holdStart) return yield* Deferred.await(answer);
             return {
               type: "answer" as const,
-              answer: "v=0\r\n",
+              answer: options.nativeAnswer ?? "v=0\r\n",
               sessionId: command.sessionId,
               clientNonce: command.clientNonce,
               expiresAt: command.expiresAt,
@@ -108,7 +113,7 @@ const setup = Effect.fn("RemoteDesktopTest.setup")(function* (
             return {
               ...command,
               type: "answer" as const,
-              answer: "v=0\r\n",
+              answer: options.nativeAnswer ?? "v=0\r\n",
               hostFingerprint: options.wrongRestartAnswer
                 ? "C".repeat(43)
                 : command.hostFingerprint,
@@ -143,8 +148,12 @@ const setup = Effect.fn("RemoteDesktopTest.setup")(function* (
                         options.connectivityExpiresAt ??
                         3_600_000)
                       : (options.connectivityExpiresAt ?? 3_600_000),
-                  relayAvailable: options.relay ?? false,
-                  relayOnly: false,
+                  relayAvailable:
+                    options.relay === true &&
+                    !(options.relayRemoved && credentialRequests.length > 1),
+                  relayOnly:
+                    options.relayOnly === true &&
+                    !(options.relayRemoved && credentialRequests.length > 1),
                 };
               }),
           }),
@@ -169,6 +178,42 @@ const setup = Effect.fn("RemoteDesktopTest.setup")(function* (
 });
 
 describe("RemoteDesktop session ownership and leases", () => {
+  it.effect("requires relay candidates on both sides of a relay-only admission", () =>
+    Effect.gen(function* () {
+      const f = yield* setup({ relay: true, relayOnly: true, nativeAnswer: relayOffer });
+      for (const offer of [input.offer, directOffer, relayOffer + directOffer.slice(5)]) {
+        expect(yield* f.service.start(owner, { ...input, offer }).pipe(Effect.flip)).toMatchObject({
+          reason: "transport",
+        });
+      }
+      expect(f.commands.some((command) => command.type === "start")).toBe(false);
+      const answer = yield* f.service.start(owner, { ...input, offer: relayOffer });
+      expect(answer.answer).toBe(relayOffer);
+      const brokenHost = yield* setup({ relay: true, relayOnly: true, nativeAnswer: directOffer });
+      expect(
+        yield* brokenHost.service.start(owner, { ...input, offer: relayOffer }).pipe(Effect.flip),
+      ).toMatchObject({ reason: "transport" });
+      expect(yield* Queue.take(brokenHost.stopped)).toBe(
+        (yield* Deferred.await(brokenHost.started)).sessionId,
+      );
+    }).pipe(Effect.scoped),
+  );
+  it.effect("keeps an active relay-only path when a restart cannot obtain TURN", () =>
+    Effect.gen(function* () {
+      const f = yield* setup({
+        relay: true,
+        relayOnly: true,
+        relayRemoved: true,
+        nativeAnswer: relayOffer,
+      });
+      const { sessionId } = yield* f.service.start(owner, { ...input, offer: relayOffer });
+      expect(
+        yield* f.service.restart(owner, { sessionId, offer: relayOffer }).pipe(Effect.flip),
+      ).toMatchObject({ reason: "transport" });
+      expect(f.commands.some((command) => command.type === "restart")).toBe(false);
+      expect(yield* f.service.renew(owner, { sessionId })).toMatchObject({ sessionId });
+    }).pipe(Effect.scoped),
+  );
   it.effect("does not restart a revoked device after slow credential issuance completes", () =>
     Effect.gen(function* () {
       const f = yield* setup({ holdRotation: true });
@@ -271,6 +316,8 @@ describe("RemoteDesktop session ownership and leases", () => {
   );
   it.effect("never renews a relayed session beyond its issued TURN credential deadline", () =>
     Effect.gen(function* () {
+      const nearExpiry = yield* setup({ relay: true, connectivityExpiresAt: 25_000 });
+      expect((yield* nearExpiry.service.start(owner, input)).expiresAt).toBe(15_000);
       const f = yield* setup({ relay: true, connectivityExpiresAt: 70_000 });
       const answer = yield* f.service.start(owner, input);
       yield* TestClock.adjust("20 seconds");

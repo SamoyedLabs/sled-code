@@ -63,6 +63,13 @@ enum KeyChord {
             + modifiersUp(modifiers)
     }
 
+    static func tapModifier(_ modifier: KeyModifiers, latched: inout KeyModifiers) -> [InputEvent] {
+        if latched.contains(modifier) { latched.remove(modifier); return [] }
+        let keys = latched.union(modifier)
+        latched = []
+        return modifiersDown(keys) + modifiersUp(keys)
+    }
+
     /// Spotlight on the Mac: exactly ⌘Space, ⌘'s own key down, Space down and up, ⌘ up.
     static let spotlight: [InputEvent] = press(0x2C, with: .command)
 

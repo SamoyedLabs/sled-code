@@ -75,8 +75,12 @@ const setup = Effect.fn("ConnectivityTest.setup")(function* (
     service: Context.get(context, Connectivity.Connectivity),
     requests,
     replace: (value: unknown) =>
-      secrets.set("remote-desktop-turn", new TextEncoder().encode(JSON.stringify(value))),
-    remove: secrets.remove("remote-desktop-turn"),
+      Connectivity.setTurnConfiguration(new TextEncoder().encode(JSON.stringify(value))).pipe(
+        Effect.provideService(ServerSecretStore.ServerSecretStore, secrets),
+      ),
+    remove: Connectivity.clearTurnConfiguration().pipe(
+      Effect.provideService(ServerSecretStore.ServerSecretStore, secrets),
+    ),
   };
 });
 
@@ -107,6 +111,21 @@ describe("remote desktop connectivity issuance", () => {
       expect(f.requests).toHaveLength(0);
     }).pipe(Effect.scoped),
   );
+  it.effect("rejects coturn configuration that cannot mint usable relay candidates", () =>
+    Effect.gen(function* () {
+      for (const urls of [["stun:stun.example.com"], ["turns:turn.example.com?transport=udp"]]) {
+        const f = yield* setup({
+          provider: "coturn",
+          sharedSecret: "test-only-shared-secret",
+          urls,
+        });
+        expect(yield* f.service.get("owner").pipe(Effect.flip)).toBeInstanceOf(
+          Connectivity.ConnectivityError,
+        );
+        expect(f.requests).toHaveLength(0);
+      }
+    }).pipe(Effect.scoped),
+  );
 
   it.effect(
     "issues owner-specific short-lived credentials, reuses them, and honors config removal and rotation",
@@ -125,6 +144,10 @@ describe("remote desktop connectivity issuance", () => {
         });
         expect(yield* f.service.get("owner")).toEqual(first);
         expect(f.requests).toHaveLength(1);
+        expect(
+          yield* f.replace({ ...cloudflare, keyId: "../../invalid" }).pipe(Effect.flip),
+        ).toBeInstanceOf(Connectivity.ConnectivityError);
+        expect(yield* f.service.get("owner")).toEqual(first);
         yield* f.service.get("other-owner");
         expect(f.requests).toHaveLength(2);
         yield* f.replace({ ...cloudflare, keyId: "rotated-key" });

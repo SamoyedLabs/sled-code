@@ -23,6 +23,7 @@ final class T3NativeSession {
     private let queue = DispatchQueue(label: "com.t3tools.remote-desktop.client")
     private let dialer: NativeDialer
     private let hostPin: Data
+    private let identity: RemoteIdentity
     private let name: String
     private let nonce = UUID().uuidString.lowercased()
     private var offerPromise: Promise?
@@ -37,20 +38,21 @@ final class T3NativeSession {
     var onPath: (([String:String]) -> Void)?
     var onConnectionLost: (() -> Void)?
     var onConnectionRestored: (() -> Void)?
+    var onPickerPreview: ((@escaping () -> Void) -> Void)?
 
     static func failure(_ message: String) -> NSError {
         NSError(domain: "T3RemoteDesktop", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
     }
 
     init(client: StreamClient, fingerprint: String, connectivity: T3IceConfiguration? = nil) throws {
-        guard let pin = Base64URL.decode(fingerprint), pin.count == 32,
-              let saved = client.savedMacs.first(where: { $0.fingerprintData == pin && $0.revoked != true && $0.newKey != true }),
-              DeviceIdentity.existing() != nil else {
-            throw Self.failure("Pair this Mac in Remote Desktop before connecting through Sled Code.")
+        guard let pin = Base64URL.decode(fingerprint), pin.count == 32 else {
+            throw Self.failure("The computer's remote desktop identity was invalid.")
         }
+        // Authenticated Sled signaling authorizes this pin and the session's client identity.
+        identity = try DeviceIdentity.loadOrCreate()
         self.client = client
         hostPin = pin
-        name = saved.name
+        name = client.savedMacs.first(where: { $0.fingerprintData == pin })?.name ?? "Computer"
         dialer = try NativeDialer(queue: queue, factory: Self.factory,
             servers: connectivity?.validatedServers() ?? [], relayOnly: connectivity?.relayOnly ?? false)
         client.t3ManagedSession = true
@@ -76,10 +78,10 @@ final class T3NativeSession {
             guard let self else { return }
             self.dialer.offer { [weak self] sdp in
                 DispatchQueue.main.async {
-                    guard let self, !self.stopped, let identity = DeviceIdentity.existing() else { return }
+                    guard let self, !self.stopped else { return }
                     let promise = self.offerPromise
                     self.offerPromise = nil
-                    promise?.resolve(["clientNonce":self.nonce, "clientFingerprint":Base64URL.encode(identity.fingerprint),
+                    promise?.resolve(["clientNonce":self.nonce, "clientFingerprint":Base64URL.encode(self.identity.fingerprint),
                         "hostFingerprint":Base64URL.encode(self.hostPin), "offer":sdp])
                 }
             }
@@ -172,7 +174,7 @@ final class T3NativeSession {
     }
 
     private func connectTLS(port: UInt16) {
-        guard !stopped, let identity = DeviceIdentity.existing() else { close(); return }
+        guard !stopped else { close(); return }
         let parameters = DeviceTLS.home(identity: identity, alpn: RemoteTLS.sessionALPN,
             pin: hostPin, peerToPeer: false, queue: client.queue,
             onPinRefused: { [weak self] in DispatchQueue.main.async { self?.close() } })
@@ -208,9 +210,16 @@ final class T3NativeSession {
         connection.start(queue: client.queue)
     }
 
+    func capturePickerPreview(_ done: @escaping () -> Void) {
+        guard let onPickerPreview else { done(); return }
+        onPickerPreview(done)
+    }
+
     func close() {
         guard !stopped else { return }
         stopped = true
+        capturePickerPreview {}
+        onPickerPreview = nil
         tlsConnection?.cancel()
         tlsConnection = nil
         client.t3Disconnect()

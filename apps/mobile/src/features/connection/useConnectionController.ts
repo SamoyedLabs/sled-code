@@ -13,7 +13,10 @@ import { useMessages } from "gt-react-native";
 import * as Option from "effect/Option";
 import { useMemo } from "react";
 
-import { environmentCatalog } from "../../connection/catalog";
+import {
+  environmentCatalog,
+  refreshRelayAccess as refreshRelayAccessCommand,
+} from "../../connection/catalog";
 import {
   connectPairingUrl as connectPairingUrlAtom,
   updateBearerConnection,
@@ -41,6 +44,8 @@ export function useConnectionController() {
   const updateBearer = useAtomCommand(updateBearerConnection, { reportFailure: false });
   const registerEnvironment = useAtomCommand(environmentCatalog.register, "environment register");
   const removeEnvironmentMutation = useAtomCommand(environmentCatalog.remove, "environment remove");
+  const retryEnvironmentMutation = useAtomCommand(environmentCatalog.retryNow, "environment retry");
+  const refreshRelayAccess = useAtomCommand(refreshRelayAccessCommand, { reportFailure: false });
   const setEnvironmentEnabledMutation = useAtomCommand(
     environmentCatalog.setEnabled,
     "environment toggle",
@@ -86,6 +91,8 @@ export function useConnectionController() {
     );
   const removeEnvironment = (environmentId: EnvironmentId) =>
     removeEnvironmentMutation(environmentId);
+  const retryEnvironment = (environmentId: EnvironmentId) =>
+    retryEnvironmentMutation(environmentId);
   const setEnvironmentEnabled = (environmentId: EnvironmentId, enabled: boolean) =>
     setEnvironmentEnabledMutation({ environmentId, enabled });
   const updateEnvironment = (
@@ -111,6 +118,8 @@ export function useConnectionController() {
     connectPairingUrl,
     connectRelayEnvironment,
     removeEnvironment,
+    retryEnvironment,
+    refreshRelayAccess,
     setEnvironmentEnabled,
     updateEnvironment,
     refreshRelayEnvironments,

@@ -62,7 +62,7 @@ struct HostSettingsPanel: View {
     /// its rows do the gestures instead.
     @State private var voiceOver = HostSettingsPanel.voiceOverRunning
 
-    private var mac: String { client.macName.isEmpty ? "the Mac" : client.macName }
+    private var mac: String { client.viewerHost == .windows ? client.viewerName : (client.macName.isEmpty ? "the Mac" : client.macName) }
     private static let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
     /// DEBUG `-SillSettingsEnd 1`: the rows start scrolled to their end, so a photo of a short
     /// screen shows the last groups (Direct Wireless, Away from home, This iPad, Take the Tour).
@@ -122,8 +122,9 @@ struct HostSettingsPanel: View {
         }
         .padding(14)
         .background(Self.shape.fill(Palette.bar))
-        .overlay(Self.shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
-        .shadow(color: .black.opacity(0.65), radius: 30, x: 0, y: 24)
+        .overlay(Self.shape.strokeBorder(Palette.edge.opacity(0.10), lineWidth: 1))
+        .compositingGroup()
+        .shadow(color: Palette.floatingShadow, radius: 12, x: 0, y: 6)
         .tint(Palette.accent)
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         // VoiceOver stays inside while it is open, the escape gesture closes it, and focus starts
@@ -164,20 +165,21 @@ struct HostSettingsPanel: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(client.macName.isEmpty ? "Mac" : client.macName)
+                Text(client.viewerName)
                     .font(.headline)
                     .foregroundStyle(Palette.text)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityFocused($headerFocused)
-                if let state = client.settings.host {
+                if client.viewerCapabilities.hostSettings, let state = client.settings.host {
                     VStack(alignment: .leading, spacing: 1) {
                         // Wraps rather than cutting the bitrate off at larger text sizes; each
                         // value keeps its unit (no-break spaces), and a wrap falls after a "·".
                         // It ends in how this device's connection reaches the Mac, the connect
                         // screen's word; "Direct" is the old "Connected directly" line.
                         Text(Self.readout(state.stream, route: client.route))
+                            .lineLimit((client.viewerHost == .windows ? 2 : 1)...)
                             .fixedSize(horizontal: false, vertical: true)
                         // Its own line: beside the numbers it never fit the panel's width, and it
                         // is what confirms the Virtual Display switch took effect.
@@ -254,147 +256,111 @@ struct HostSettingsPanel: View {
 
     @ViewBuilder private var middle: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let state = client.settings.host, let shown = client.settings.displayed {
-                if state.softwareEncoder {
-                    // Neither a restart nor a return is promised: hosts before 2026-09-25 keep the
-                    // software encoder until they relaunch, newer ones go back by themselves.
-                    Callout(text: "\(mac)’s hardware encoder is busy or not responding, so for now streams run at up to 60 fps at Standard.")
-                }
-                if let problem = client.settingsProblem {
-                    Callout(text: problem)
-                }
-                // The link cannot carry the quality (the Mac's own judgement, docs/remote-bundle-plan.md
-                // §6.7): what it recommends, with a button that picks it. From an older Mac, which
-                // judges nothing, the round-trip test away from home as before.
-                if let callout = AwayCopy.callout(link: state.link, away: state.away, mac: mac) {
-                    Callout(text: callout.text, button: callout.button.map { b in
-                        Callout.Action(title: b.title, spoken: b.spoken) { client.changeSettings(b.change) }
-                    })
-                } else if AwayCopy.showsRttCallout(away: state.away, remote: remoteRoute != nil, slowLink: client.slowLink) {
-                    Callout(text: "The picture is arriving slowly from \(mac). Choose Low quality or Standard resolution.")
-                }
-                streamRows(shown)
-                Footnote(text: streamFooter)
-                // Which quality these rows set, away from home or at home.
-                if let note = AwayCopy.footnote(state.away, mac: mac, remoteAccessOn: client.macInfo?.remoteAccess == true) {
-                    Footnote(text: note, top: 0)
-                }
-                // As in the Mac's Settings › Streaming: its own group, the Mac's name for it, and
-                // what it trades away.
-                Rows {
-                    Toggle(isOn: binding(shown.prioritizeSpeed) { HostSettingsChange(prioritizeSpeed: $0) }) {
-                        RowTitle(title: "Prioritize Encoding Speed", since: client.settings.pendingSince(.prioritizeSpeed))
+            if client.viewerInputSession.settingScope(.streaming) == .host {
+                if let state = client.settings.host, let shown = client.settings.displayed {
+                    if state.softwareEncoder {
+                        // Neither a restart nor a return is promised: hosts before 2026-09-25 keep the
+                        // software encoder until they relaunch, newer ones go back by themselves.
+                        Callout(text: "\(mac)’s hardware encoder is busy or not responding, so for now streams run at up to 60 fps at Standard.")
                     }
-                    .rowFrame()
-                }
-                Footnote(text: "Lower latency when \(mac) is busy, at a softer picture.")
-                Rows {
-                    let unavailable = !state.virtualDisplayAvailable && !shown.virtualDisplay
-                    Toggle(isOn: binding(shown.virtualDisplay) { HostSettingsChange(virtualDisplay: $0) }) {
-                        RowTitle(title: "Virtual Display", since: client.settings.pendingSince(.virtualDisplay))
+                    if let problem = client.settingsProblem {
+                        Callout(text: problem)
                     }
-                    // Off and impossible on this host: disabled, the reason under it. On, it can
-                    // always be turned off, as from the Mac's own menu.
-                    .disabled(unavailable)
-                    .accessibilityHint(state.virtualDisplayNote ?? "")
-                    .rowFrame()
-                }
-                if let note = state.virtualDisplayNote {
-                    Footnote(text: note, warning: true)
+                    // The link cannot carry the quality (the Mac's own judgement, docs/remote-bundle-plan.md
+                    // §6.7): what it recommends, with a button that picks it. From an older Mac, which
+                    // judges nothing, the round-trip test away from home as before.
+                    if let callout = AwayCopy.callout(link: state.link, away: state.away, mac: mac) {
+                        Callout(text: callout.text, button: callout.button.map { b in
+                            Callout.Action(title: b.title, spoken: b.spoken) { client.changeSettings(b.change) }
+                        })
+                    } else if AwayCopy.showsRttCallout(away: state.away, remote: remoteRoute != nil, slowLink: client.slowLink) {
+                        let resolution = client.viewerHost == .windows ? "Half" : "Standard"
+                        Callout(text: "The picture is arriving slowly from \(mac). Choose Low quality or \(resolution) resolution.")
+                    }
+                    streamRows(shown)
+                    Footnote(text: streamFooter)
+                    // Which quality these rows set, away from home or at home.
+                    if let note = AwayCopy.footnote(state.away, mac: mac, remoteAccessOn: client.macInfo?.remoteAccess == true) {
+                        Footnote(text: note, top: 0)
+                    }
+                    if client.viewerHost == .mac || client.viewerCapabilities.audio { audioRows(state, shown: shown) }
+                    if client.viewerHost == .mac {
+                        // As in the Mac's Settings › Streaming: its own group, the Mac's name for it, and
+                        // what it trades away.
+                        Rows {
+                            Toggle(isOn: binding(shown.prioritizeSpeed) { HostSettingsChange(prioritizeSpeed: $0) }) {
+                                RowTitle(title: "Prioritize Encoding Speed", since: client.settings.pendingSince(.prioritizeSpeed))
+                            }
+                            .rowFrame()
+                        }
+                        Footnote(text: "Lower latency when \(mac) is busy, at a softer picture.")
+                        Rows {
+                            let unavailable = !state.virtualDisplayAvailable && !shown.virtualDisplay
+                            Toggle(isOn: binding(shown.virtualDisplay) { HostSettingsChange(virtualDisplay: $0) }) {
+                                RowTitle(title: "Virtual Display", since: client.settings.pendingSince(.virtualDisplay))
+                            }
+                            // Off and impossible on this host: disabled, the reason under it. On, it can
+                            // always be turned off, as from the Mac's own menu.
+                            .disabled(unavailable)
+                            .accessibilityHint(state.virtualDisplayNote ?? "")
+                            .rowFrame()
+                        }
+                        if let note = state.virtualDisplayNote {
+                            Footnote(text: note, warning: true)
+                        } else {
+                            Footnote(text: "The window you pick moves onto an invisible display on \(mac) while it streams, so it keeps updating when covered.")
+                        }
+                        Footnote(text: "Applies to every device streaming from \(mac). The stream restarts for a moment.")
+                        // Direct Wireless Connection: how devices reach the Mac, not how it streams; after the
+                        // closing footer, whose "the stream restarts" is not true of it, and last, the least
+                        // changed row with the longest footer (the compact halves' 259 pt shows the rest
+                        // first). Disabled only away from home (the Mac refuses it from a remote connection):
+                        // off from a directly connected device is allowed, as on the Mac, and its consequence
+                        // is written beside it. No row for a host without it.
+                        if let direct = shown.directWireless {
+                            Rows {
+                                Toggle(isOn: binding(direct) { HostSettingsChange(directWireless: $0) }) {
+                                    RowTitle(title: "Direct Wireless Connection", since: client.settings.pendingSince(.directWireless))
+                                }
+                                // A warning about turning it off, so only while the switch shows on.
+                                .accessibilityHint(client.connectedDirectly && direct ? "Turning this off disconnects this \(device)." : "")
+                                // From afar the Mac refuses it anyway: how devices near the Mac reach it is
+                                // theirs and the Mac's to change.
+                                .disabled(remoteRoute != nil)
+                                .rowFrame()
+                            }
+                            Footnote(text: remoteRoute != nil ? "Change this on \(mac), or from a device near it." : directFooter(on: direct))
+                        }
+                        if !state.persistent {
+                            Footnote(text: "SillHost keeps these until it quits.")
+                        }
+                        awayFromHome
+                    } else {
+                        Footnote(text: "Settings last for this viewing session and follow monitor changes. Only the encoded picture changes; the physical displays stay as they are.")
+                    }
+                } else if olderMac {
+                    Label("Update Sled Code on \(mac) to change these from here.", systemImage: "arrow.down.circle")
+                        .font(.body)
+                        .foregroundStyle(Palette.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .padding(.horizontal, 4)
                 } else {
-                    Footnote(text: "The window you pick moves onto an invisible display on \(mac) while it streams, so it keeps updating when covered.")
-                }
-                Footnote(text: "Applies to every device streaming from \(mac). The stream restarts for a moment.")
-                // Send Audio (docs/audio-plan.md §7.7): after the closing footer, whose "the stream restarts"
-                // is not true of it (the sound has a stream of its own), like Direct Wireless after it. Set
-                // from here for every device, as Quality is (Noah, 2026-10-27: the plan's Q8 revised): the
-                // Mac saves it and tells every device; an older Mac that refuses it sends it back, with the
-                // warning haptic. Why no sound comes, when the Mac says, under it. A beta: a tag after its
-                // title ("Send Audio, beta" to VoiceOver) and the footnote's first word; Mute, right under it,
-                // this device's own, carries none. A Mac without sound (nil: Sill for Mac 0.5.1 and older)
-                // shows the row off and disabled, its footnote saying to update Sill there, as the panel
-                // says for what else an older Mac lacks.
-                let send = shown.sendAudio
-                Rows {
-                    Toggle(isOn: binding(send ?? false) { HostSettingsChange(sendAudio: $0) }) {
-                        HStack(spacing: 8) {
-                            Text("Send Audio").foregroundStyle(Palette.text)
-                            BetaTag()
-                            PendingSpinner(since: client.settings.pendingSince(.sendAudio))
-                        }
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small).tint(Palette.muted)
+                        Text("Loading settings…")
                     }
-                    .disabled(send == nil)
-                    .accessibilityLabel("Send Audio, beta")
-                    .accessibilityInputLabels(["Send Audio"])
-                    .accessibilityHint(send == nil ? "Update Sled Code on \(mac) to use this." : "")
-                    .rowFrame()
-                    // Mute, right under Send Audio (Noah, 2026-10-27): this device's own (`soundMuted`,
-                    // off by default, remembered, never sent), the only control of the Mac's sound on the
-                    // device since the bars' Sound button went. For every Mac with sound, Send Audio on
-                    // or off, so a device can keep itself silent before any device turns the sound on,
-                    // and the row never comes and goes with the switch above it; none for a Mac without
-                    // sound, whose Send Audio row says to update it.
-                    if client.macHasSound {
-                        RowDivider()
-                        Toggle(isOn: Binding(get: { client.soundMuted }, set: { client.setSoundMuted($0) })) {
-                            Text("Mute").foregroundStyle(Palette.text)
-                        }
-                        .accessibilityLabel("Mute sound from \(mac)")
-                        .accessibilityInputLabels(["Mute", "Mute sound from \(mac)"])
-                        .rowFrame()
-                        .id(Self.muteID)
-                    }
-                }
-                .id(Self.sendAudioID)
-                if send == true, let note = state.audioNote {
-                    Footnote(text: note, warning: true)
-                }
-                Footnote(text: Self.sendAudioFooter(send, muted: client.soundMuted, mac: mac, device: device))
-                // Direct Wireless Connection: how devices reach the Mac, not how it streams; after the
-                // closing footer, whose "the stream restarts" is not true of it, and last, the least
-                // changed row with the longest footer (the compact halves' 259 pt shows the rest
-                // first). Disabled only away from home (the Mac refuses it from a remote connection):
-                // off from a directly connected device is allowed, as on the Mac, and its consequence
-                // is written beside it. No row for a host without it.
-                if let direct = shown.directWireless {
-                    Rows {
-                        Toggle(isOn: binding(direct) { HostSettingsChange(directWireless: $0) }) {
-                            RowTitle(title: "Direct Wireless Connection", since: client.settings.pendingSince(.directWireless))
-                        }
-                        // A warning about turning it off, so only while the switch shows on.
-                        .accessibilityHint(client.connectedDirectly && direct ? "Turning this off disconnects this \(device)." : "")
-                        // From afar the Mac refuses it anyway: how devices near the Mac reach it is
-                        // theirs and the Mac's to change.
-                        .disabled(remoteRoute != nil)
-                        .rowFrame()
-                    }
-                    Footnote(text: remoteRoute != nil ? "Change this on \(mac), or from a device near it." : directFooter(on: direct))
-                }
-                if !state.persistent {
-                    Footnote(text: "SillHost keeps these until it quits.")
-                }
-                awayFromHome
-            } else if olderMac {
-                Label("Update Sled Code on \(mac) to change these from here.", systemImage: "arrow.down.circle")
-                    .font(.body)
-                    .foregroundStyle(Palette.text)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .font(.footnote)
+                    .foregroundStyle(Palette.muted)
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     .padding(.horizontal, 4)
-            } else {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small).tint(Palette.muted)
-                    Text("Loading settings…")
                 }
-                .font(.footnote)
-                .foregroundStyle(Palette.muted)
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .padding(.horizontal, 4)
+                // After everything of the Mac's, whatever state its settings are in: while they load, and
+                // for a Mac without them too. Both are this device's own: its gestures, then the tour.
             }
-            // After everything of the Mac's, whatever state its settings are in: while they load, and
-            // for a Mac without them too. Both are this device's own: its gestures, then the tour.
             thisDevice
-            tour
+            if client.viewerCapabilities.tour { tour }
+            if client.viewerHost == .windows { diagnostics }
         }
     }
 
@@ -417,13 +383,48 @@ struct HostSettingsPanel: View {
         Footnote(text: TourPolicy.takeTourFootnote(device: device))
     }
 
+    @ViewBuilder private func audioRows(_ state: HostSettingsState, shown: StreamSettings) -> some View {
+        let send = shown.sendAudio
+        Rows {
+            Toggle(isOn: binding(send ?? false) { HostSettingsChange(sendAudio: $0) }) {
+                HStack(spacing: 8) {
+                    Text("Send Audio").foregroundStyle(Palette.text)
+                    BetaTag()
+                    PendingSpinner(since: client.settings.pendingSince(.sendAudio))
+                }
+            }
+            .disabled(send == nil)
+            .accessibilityLabel("Send Audio, beta")
+            .accessibilityInputLabels(["Send Audio"])
+            .accessibilityHint(send == nil ? "Update Sled Code on \(mac) to use this." : "")
+            .rowFrame()
+            if client.macHasSound {
+                RowDivider()
+                Toggle(isOn: Binding(get: { client.soundMuted }, set: { client.setSoundMuted($0) })) {
+                    Text("Mute").foregroundStyle(Palette.text)
+                }
+                .accessibilityLabel("Mute sound from \(mac)")
+                .accessibilityInputLabels(["Mute", "Mute sound from \(mac)"])
+                .rowFrame()
+                .id(Self.muteID)
+            }
+        }
+        .id(Self.sendAudioID)
+        if send == true, let note = state.audioNote {
+            Footnote(text: note, warning: true)
+        }
+        Footnote(text: client.viewerHost == .windows
+                 ? "Shares the PC’s sound for this viewing session. Mute silences only this \(device); the PC keeps playing normally."
+                 : Self.sendAudioFooter(send, muted: client.soundMuted, mac: mac, device: device))
+    }
+
     /// Most-changed first, so the compact halves' 259 pt shows Quality, Resolution and Frame Rate
     /// before anything scrolls.
     private func streamRows(_ shown: StreamSettings) -> some View {
         Rows {
             AdaptiveRow(title: "Quality", since: client.settings.pendingSince(.bitrate)) {
                 Picker("Quality", selection: binding(shown.bitrate) { HostSettingsChange(bitrate: $0) }) {
-                    ForEach(QualityPreset.allCases) { Text($0.title).tag($0.rawValue) }
+                    ForEach(QualityPreset.allCases.filter { qualityChoices.contains($0.rawValue) }) { Text($0.title).tag($0.rawValue) }
                     if QualityPreset(rawValue: shown.bitrate) == nil {
                         // Set by hand on the Mac: shown, never offered (the Mac's menu does the same).
                         Text(QualityPreset.title(forBitrate: shown.bitrate)).tag(shown.bitrate)
@@ -435,8 +436,9 @@ struct HostSettingsPanel: View {
             RowDivider()
             AdaptiveRow(title: "Resolution", since: client.settings.pendingSince(.captureScale)) {
                 Picker("Resolution", selection: binding(shown.captureScale) { HostSettingsChange(captureScale: $0) }) {
-                    Text("Retina").tag(2.0)
-                    Text("Standard").tag(1.0)
+                    ForEach(resolutionChoices, id: \.self) { scale in
+                        Text(client.viewerHost == .windows ? (scale == 2 ? "Native" : "Half") : (scale == 2 ? "Retina" : "Standard")).tag(scale)
+                    }
                 }
                 .pickerStyle(.segmented)
                 .fixedSize()
@@ -445,14 +447,17 @@ struct HostSettingsPanel: View {
             AdaptiveRow(title: "Frame Rate", since: client.settings.pendingSince(.maxFPS)) {
                 // A Mac-held value such as 90 selects no segment, as on the Mac.
                 Picker("Frame Rate", selection: binding(shown.maxFPS) { HostSettingsChange(maxFPS: $0) }) {
-                    Text("60 fps").tag(60)
-                    Text("120 fps").tag(120)
+                    ForEach(frameRateChoices, id: \.self) { Text("\($0) fps").tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .fixedSize()
             }
         }
     }
+
+    private var qualityChoices: [Int] { client.windowsCapabilities?.streamSettings?.bitrate ?? SettingsChoices.bitrate }
+    private var resolutionChoices: [Double] { client.windowsCapabilities?.streamSettings?.captureScale ?? SettingsChoices.captureScale }
+    private var frameRateChoices: [Int] { client.windowsCapabilities?.streamSettings?.maxFPS ?? SettingsChoices.maxFPS }
 
     /// Shows the value the panel displays; moving the control sends that one field. Nothing else
     /// ever sends (not `onChange(of:)`, not a state arriving).
@@ -541,7 +546,23 @@ struct HostSettingsPanel: View {
             .padding(.bottom, 6)
             .accessibilityAddTraits(.isHeader)
             .id(Self.gesturesGroupID)
-        if offersLargerPicture {
+        if client.viewerHost == .windows {
+            Rows {
+                AdaptiveRow(title: "View", since: nil) {
+                    Picker("View", selection: $client.windowsFollowCursor) {
+                        Text("Manual").tag(false)
+                        Text("Follow Cursor").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .fixedSize()
+                }
+            }
+            Footnote(text: "Fills the picture pane and follows the pointer near its edges. Pinch to adjust zoom; pan with two fingers to explore. Following resumes when the pointer moves again. Fit shows the whole monitor and turns following off.")
+            Footnote(text: client.viewerInputSession.standaloneWinTap
+                     ? "Tap Win to open Raycast; tap other keys to press once. Touch and hold a modifier to apply it to the next key or click."
+                     : "Tap a key to press it once. Touch and hold Ctrl, Alt, Win, or Shift to apply it to the next key or click.")
+        }
+        if client.viewerCapabilities.windowTextScale, offersLargerPicture {
             Rows {
                 Toggle(isOn: $largerPicture) {
                     Text("Larger Picture").foregroundStyle(Palette.text)
@@ -551,7 +572,7 @@ struct HostSettingsPanel: View {
             Footnote(text: Self.largerPictureFooter)
         }
         // The clipboard (docs/clipboard-plan.md): only while the Mac says it shares it.
-        if ClipboardPolicy.hostTakes(client.hostClipboard) {
+        if client.viewerCapabilities.clipboard, ClipboardPolicy.hostTakes(client.hostClipboard) {
             Rows {
                 Toggle(isOn: $clipboardOn) {
                     Text(ClipboardPolicy.Copy.switchTitle).foregroundStyle(Palette.text)
@@ -568,31 +589,56 @@ struct HostSettingsPanel: View {
                     .padding(.bottom, -6)
                     .accessibilityHidden(true)      // announced as it came
             }
-            Footnote(text: ClipboardPolicy.Copy.footnote(on: clipboardOn, mac: mac, device: device))
+            Footnote(text: ClipboardPolicy.Copy.footnote(on: clipboardOn, mac: mac, device: device, pasteKey: client.clipboardPasteKey))
         }
-        Rows {
-            Toggle(isOn: $reverseScroll) {
-                Text("Reverse Scrolling").foregroundStyle(Palette.text)
+        if client.viewerInputSession.settingScope(.reverseScrolling) == .device {
+            Rows {
+                Toggle(isOn: $reverseScroll) {
+                    Text("Reverse Scrolling").foregroundStyle(Palette.text)
+                }
+                .rowFrame()
             }
-            .rowFrame()
+            .id(Self.reverseScrollRowID)
+            Footnote(text: Self.reverseScrollFooter(device: device))
         }
-        .id(Self.reverseScrollRowID)
-        Footnote(text: Self.reverseScrollFooter(device: device))
-        Rows {
-            Toggle(isOn: $gesturesOn) {
-                Text("Three-Finger Gestures").foregroundStyle(Palette.text)
-            }
-            .rowFrame()
-            if gesturesOn, macTakesGestures {
-                ForEach(Self.gestureRows, id: \.gesture) { row in
-                    RowDivider()
-                    GestureRow(symbol: row.symbol, gesture: row.gesture, action: row.action, does: row.does) {
-                        _ = client.sendGesture($0, fingers: 3)
+        if client.viewerCapabilities.gestures {
+            Rows {
+                Toggle(isOn: $gesturesOn) {
+                    Text("Three-Finger Gestures").foregroundStyle(Palette.text)
+                }
+                .rowFrame()
+                if gesturesOn, macTakesGestures {
+                    ForEach(Self.gestureRows, id: \.gesture) { row in
+                        RowDivider()
+                        GestureRow(symbol: row.symbol, gesture: row.gesture, action: row.action, does: row.does) {
+                            _ = client.sendGesture($0, fingers: 3)
+                        }
                     }
                 }
             }
+            Footnote(text: gesturesFooter)
         }
-        Footnote(text: gesturesFooter)
+    }
+
+    @ViewBuilder private var diagnostics: some View {
+        Text("Diagnostics")
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(Palette.muted)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .accessibilityAddTraits(.isHeader)
+        Rows {
+            Text(client.viewerDiagnostics)
+                .font(.footnote.monospacedDigit())
+                .foregroundStyle(Palette.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .rowFrame()
+            RowDivider()
+            Text(client.windowsInputReady ? "Monitor input ready" : "Waiting for a displayed monitor frame")
+                .foregroundStyle(Palette.text)
+                .rowFrame()
+        }
+        Footnote(text: "Pinch to zoom and use two fingers to pan. Fit resets this device's view. These controls keep the monitor's resolution, scaling and arrangement unchanged.")
     }
 
     /// Under Send Audio's switch and the Mute row below it (docs/audio-plan.md §7.7): on, that every
@@ -676,7 +722,12 @@ struct HostSettingsPanel: View {
     /// own (see `header`). A no-break space before each "·" keeps it with the value before it, so a
     /// wrap at larger text never starts a line with one.
     static func readout(_ stream: RunningStream?, route: DiscoveryPolicy.Method? = nil) -> String {
-        let values = stream.map { ["\($0.width)×\($0.height)", "\($0.fps)\u{00A0}fps", "\($0.mbps)\u{00A0}Mbps"] } ?? ["Not streaming"]
+        let values = stream.map { s in
+            var values = ["\(s.width)×\(s.height)", "\(s.fps)\u{00A0}fps" + (s.targetBitrate == nil ? "" : " ceiling"),
+                          "\(s.targetBitrate.map(QualityPreset.mbps) ?? String(s.mbps))\u{00A0}Mbps"]
+            if let fps = s.deliveredFPS { values.append("\(fps)\u{00A0}received fps") }
+            return values
+        } ?? ["Not streaming"]
         return (values + [route?.word].compactMap { $0 }).joined(separator: "\u{00A0}· ")
     }
 
@@ -695,7 +746,9 @@ struct HostSettingsPanel: View {
             link = ", connected \(remote.phrase)" + (rttMs.map { ", \($0) millisecond round trip" } ?? "")
         }
         guard let s = stream else { return "Not streaming" + link }
-        return "Streaming \(s.width) by \(s.height), \(s.fps) frames per second, \(s.mbps) megabits per second"
+        return "Streaming \(s.width) by \(s.height), \(s.fps) frames per second" + (s.targetBitrate == nil ? "" : " ceiling")
+            + ", \(s.targetBitrate.map(QualityPreset.mbps) ?? String(s.mbps)) megabits per second"
+            + (s.deliveredFPS.map { ", \($0) received frames per second" } ?? "")
             + (s.onVirtualDisplay ? ", on the virtual display" : "") + link
     }
 
@@ -728,6 +781,9 @@ struct HostSettingsPanel: View {
     /// nothing for it, which is worth saying on a 60 Hz device; away from home this device asks
     /// for 60 fps.
     private var streamFooter: String {
+        if client.viewerHost == .windows {
+            return "Quality is per 60 fps: 30 fps uses half the target bitrate. Frame Rate is a ceiling; received fps depends on desktop changes, encoding and the connection. Native encodes the monitor’s pixels; Half downsizes the picture on the GPU."
+        }
         _ = powerState
         var text = "Quality is per 60 fps; a 120 fps stream gets twice as much. " + QualityPreset.fastLinkNote
         let away = client.awayCapsFrameRate
@@ -897,7 +953,7 @@ private struct ClipboardPasteRow: View {
 /// A hairline between rows, inset like the system's.
 private struct RowDivider: View {
     var body: some View {
-        Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5).padding(.leading, 14)
+        Rectangle().fill(Palette.edge.opacity(0.08)).frame(height: 0.5).padding(.leading, 14)
     }
 }
 
