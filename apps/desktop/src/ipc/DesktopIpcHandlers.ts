@@ -7,6 +7,11 @@ import {
 } from "../remote-desktop/RemoteDesktopSettingsIpc.ts";
 
 import { receiveProviderAuthCallback, cancelProviderAuthCallback } from "./methods/providerAuth.ts";
+import {
+  appleSpeechAvailable,
+  appleSpeechPrepare,
+  appleSpeechTranscribe,
+} from "./methods/appleSpeech.ts";
 import * as DesktopIpc from "./DesktopIpc.ts";
 import { installNotificationBadge } from "./methods/notificationBadge.ts";
 import { getClientSettings, setClientSettings } from "./methods/clientSettings.ts";
@@ -169,6 +174,9 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(cancelProviderAuthCallback);
   yield* ipc.handle(openSystemSettings);
   yield* ipc.handle(checkSystemPermission);
+  yield* ipc.handle(appleSpeechAvailable);
+  yield* ipc.handle(appleSpeechPrepare);
+  yield* ipc.handle(appleSpeechTranscribe);
   yield* ipc.handle(pasteAsText);
   yield* ipc.handle(revealWindow);
   yield* ipc.handle(syncHtmlFullscreen);
