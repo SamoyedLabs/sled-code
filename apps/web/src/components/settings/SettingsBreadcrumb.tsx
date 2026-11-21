@@ -6,6 +6,8 @@ import {
   WorkspaceBreadcrumbSeparator,
 } from "../WorkspaceBreadcrumb";
 import { SETTINGS_SECTION_LABELS } from "./settingsSearch";
+import { useLocation } from "@tanstack/react-router";
+import { BOT_HOST_SETTINGS, botHostSettingsSection } from "./unifiedBotSettings";
 
 const SETTINGS_LABEL = msg("Settings");
 
@@ -21,9 +23,14 @@ function settingsBreadcrumbLabel(pathname: string): string | null {
 }
 
 export function SettingsBreadcrumb({ pathname }: { pathname: string }) {
+  const hash = useLocation({ select: (location) => location.hash });
   const gt = useGT();
   const m = useMessages();
   const sectionLabel = settingsBreadcrumbLabel(pathname);
+  const botSection =
+    pathname === "/settings/bots"
+      ? BOT_HOST_SETTINGS.find((item) => item.id === botHostSettingsSection(hash))
+      : undefined;
 
   return (
     <WorkspaceBreadcrumb ariaLabel={gt("Settings breadcrumb")}>
@@ -33,9 +40,17 @@ export function SettingsBreadcrumb({ pathname }: { pathname: string }) {
           <WorkspaceBreadcrumbSeparator />
         </>
       ) : null}
-      <WorkspaceBreadcrumbItem current className="truncate">
+      <WorkspaceBreadcrumbItem current={!botSection} className="truncate">
         {m(sectionLabel ?? SETTINGS_LABEL)}
       </WorkspaceBreadcrumbItem>
+      {botSection && (
+        <>
+          <WorkspaceBreadcrumbSeparator />
+          <WorkspaceBreadcrumbItem current className="truncate">
+            {botSection.navLabel}
+          </WorkspaceBreadcrumbItem>
+        </>
+      )}
     </WorkspaceBreadcrumb>
   );
 }

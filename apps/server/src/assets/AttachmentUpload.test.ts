@@ -7,7 +7,12 @@ import * as NodePath from "node:path";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
-import { ChatAttachmentId } from "@t3tools/contracts";
+import {
+  AttachmentUploadRequest,
+  ChatAttachmentId,
+  OPENBOT_MAX_FILE_BYTES,
+  PROVIDER_SEND_TURN_MAX_FILE_BYTES,
+} from "@t3tools/contracts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -60,8 +65,42 @@ const LegacyAttachmentUploadClaims = Schema.Struct({
 const encodeLegacyAttachmentUploadClaims = Schema.encodeEffect(
   Schema.fromJsonString(LegacyAttachmentUploadClaims),
 );
+const decodeUploadRequest = Schema.decodeUnknownOption(AttachmentUploadRequest);
 
 describe("AttachmentUpload", () => {
+  it.effect("streams a 100 MiB Bots file with a signed size limit", () =>
+    Effect.gen(function* () {
+      const file = { type: "file", name: "fixture.bin", mimeType: "application/octet-stream" };
+      const largeUpload = {
+        ...file,
+        purpose: "openbot",
+        sizeBytes: OPENBOT_MAX_FILE_BYTES,
+      };
+      expect(
+        decodeUploadRequest({ ...file, sizeBytes: PROVIDER_SEND_TURN_MAX_FILE_BYTES })._tag,
+      ).toBe("Some");
+      expect(
+        decodeUploadRequest({ ...file, sizeBytes: PROVIDER_SEND_TURN_MAX_FILE_BYTES + 1 })._tag,
+      ).toBe("None");
+      expect(
+        decodeUploadRequest({ ...largeUpload, sizeBytes: OPENBOT_MAX_FILE_BYTES + 1 })._tag,
+      ).toBe("None");
+      const upload = decodeUploadRequest(largeUpload);
+      if (upload._tag !== "Some") throw new Error("Missing Bots upload scope");
+      const issued = yield* issueAttachmentUploadUrl(upload.value);
+      const token = issued.relativeUrl.slice(`${ATTACHMENT_UPLOAD_ROUTE_PREFIX}/`.length);
+      const claims = yield* validateAttachmentUploadToken(token);
+      expect(claims?.sizeBytes).toBe(OPENBOT_MAX_FILE_BYTES);
+      if (!claims) throw new Error("Missing signed upload claims");
+      const part = new Uint8Array(1024 * 1024);
+      const body = Stream.fromIterable(
+        Array.from({ length: OPENBOT_MAX_FILE_BYTES / part.length }, () => part),
+      );
+      expect(yield* storeAttachmentUpload(claims, body)).toEqual({ ok: true });
+      yield* deletePendingAttachment(issued.attachmentId);
+    }).pipe(Effect.provide(layerTest)),
+  );
+
   it.effect.each([false, true])(
     "persists and replays immutable uploads (hard links unsupported: %s)",
     (unsupported) =>

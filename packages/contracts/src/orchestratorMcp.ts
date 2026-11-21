@@ -489,6 +489,18 @@ export const OrchestratorMcpThreadDetail = Schema.Struct({
   runCount: NonNegativeInt,
   itemCount: NonNegativeInt,
   pendingRequestCount: NonNegativeInt,
+  pendingRequestIds: Schema.optional(Schema.Array(RuntimeRequestId)),
+  pendingRequestKinds: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        requestId: RuntimeRequestId,
+        kind: Schema.Union([
+          ProviderRequestKind,
+          Schema.Literals(["user_input", "dynamic_tool_call", "auth_refresh"]),
+        ]),
+      }),
+    ),
+  ),
   archived: Schema.Boolean,
   settled: Schema.Boolean,
   settledAt: Schema.NullOr(IsoDateTime),

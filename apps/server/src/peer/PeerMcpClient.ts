@@ -44,6 +44,8 @@ export class PeerMcpClient extends Context.Service<
     /** Calls `tool` on the peer and decodes its structured result with `success`. */
     readonly call: <S extends Schema.Decoder<unknown>>(input: {
       readonly environmentId: EnvironmentId;
+      /** An existing assignment must keep using the same link grant across retries. */
+      readonly expectedLinkedAt?: string;
       readonly tool: string;
       readonly arguments: Record<string, unknown>;
       readonly limits: PeerCallLimits;
@@ -106,6 +108,9 @@ const responseJson = (contentType: string | undefined, text: string) =>
         .map((line) => line.slice("data:".length).trim())
         .join("")
     : text;
+
+const GRANT_CHANGED_MESSAGE =
+  "The linked environment grant changed. This assignment needs reconciliation before using the replacement link.";
 
 const make = Effect.gen(function* () {
   const links = yield* PeerLinks.PeerLinks;
@@ -194,6 +199,15 @@ const make = Effect.gen(function* () {
       const resolved = yield* links
         .resolve(input.environmentId)
         .pipe(Effect.mapError(fromLinkError));
+      if (
+        input.expectedLinkedAt !== undefined &&
+        DateTime.formatIso(resolved.link.linkedAt) !== input.expectedLinkedAt
+      ) {
+        return yield* new OrchestratorMcpFailure({
+          code: "capability_denied",
+          message: GRANT_CHANGED_MESSAGE,
+        });
+      }
       const limitHeader = {
         [McpInvocationContext.MODE_LIMIT_HEADER]: `${input.limits.runtimeMode}/${input.limits.interactionMode}`,
       };
@@ -310,7 +324,9 @@ const make = Effect.gen(function* () {
     (effect, input) =>
       effect.pipe(
         Effect.tapError((error) =>
-          links.recordOutcome(input.environmentId, { error: error.message }),
+          error._tag === "OrchestratorMcpFailure" && error.message === GRANT_CHANGED_MESSAGE
+            ? Effect.void
+            : links.recordOutcome(input.environmentId, { error: error.message }),
         ),
         // A refusal is still an answer: the link works, so only this call fails.
         Effect.tap(() => links.recordOutcome(input.environmentId, { error: null })),

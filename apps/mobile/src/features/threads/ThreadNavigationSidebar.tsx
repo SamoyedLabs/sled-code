@@ -1,3 +1,4 @@
+import { useNavigation } from "@react-navigation/native";
 import { useGT, useMessages } from "gt-react-native";
 import { useActiveNewTask } from "../../state/active-new-task";
 import { ThreadUndoNotice } from "../home/ThreadUndoNotice";
@@ -327,6 +328,7 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
     }
   };
   // Destructure callback props; capturing all props would invalidate these row-closing handlers on unrelated changes.
+  const navigation = useNavigation();
   const { onSelectThread, onOpenThreadPullRequests } = props;
   // A row listed for a message match opens the thread at that message, by
   // tap or by shortcut.
@@ -642,6 +644,16 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
                 scrollEventThrottle={16}
                 showsVerticalScrollIndicator={false}
                 style={styles.threadList}
+                ListHeaderComponent={
+                  <View className="px-4 py-2">
+                    <Button
+                      label={gt("Bots")}
+                      tone="secondary"
+                      size="compact"
+                      onPress={() => navigation.navigate("Bots")}
+                    />
+                  </View>
+                }
                 ListEmptyComponent={listEmpty}
               />
             </GestureDetector>

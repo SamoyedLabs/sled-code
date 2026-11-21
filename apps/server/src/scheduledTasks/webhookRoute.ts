@@ -1,3 +1,4 @@
+import * as Openbot from "../openbot/Integration.ts";
 import { EnvironmentHttpApi } from "@t3tools/contracts";
 import * as ByteSize from "effect/ByteSize";
 import * as Effect from "effect/Effect";
@@ -81,6 +82,32 @@ export const layer = HttpApiBuilder.group(
       const headers: Record<string, string> = {};
       for (const [name, value] of Object.entries(request.headers)) {
         if (typeof value === "string") headers[name.toLowerCase()] = value;
+      }
+      if (params.hookId.startsWith("bot.")) {
+        if (request.method !== "POST")
+          return json(405, { error: "method_not_allowed" }, "method_not_allowed", {
+            allow: "POST",
+          });
+        if (body.value.byteLength > 65536)
+          return json(413, { error: "body_too_large" }, "body_too_large");
+        const host = yield* Effect.serviceOption(Openbot.Integration);
+        if (Option.isNone(host))
+          return json(503, { error: "host_unavailable" }, "host_unavailable");
+        const result = yield* host.value
+          .receiveConnectWebhook({
+            hookId: params.hookId,
+            token: params.token,
+            body: body.value,
+            timestamp: headers["x-openbot-timestamp"] ?? "",
+            deliveryId: headers["x-openbot-delivery-id"] ?? "",
+            signature: headers["x-openbot-signature"] ?? "",
+          })
+          .pipe(Effect.orElseSucceed(() => ({ status: 503 })));
+        return json(
+          result.status,
+          result.status < 300 ? { status: "accepted" } : { error: "webhook_refused" },
+          result.status < 300 ? "accepted" : "refused",
+        );
       }
       const queryIndex = request.url.indexOf("?");
       // The relay's delivery id and receive time count only with its signed

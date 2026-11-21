@@ -74,7 +74,9 @@ export function SidebarUpdateCapsule({
   local,
   icon,
   onRestart,
+  compact = false,
 }: {
+  readonly compact?: boolean;
   readonly run: UpdateEverythingRun;
   readonly local: UpdateRunLocalState;
   readonly icon: ReactNode;
@@ -105,7 +107,10 @@ export function SidebarUpdateCapsule({
     <Popover>
       <div
         className={cn(
-          "relative ml-auto flex h-8 w-8 shrink-0 items-center rounded-full bg-sidebar-control-surface text-sidebar-foreground @min-[12rem]/sidebar-update:w-full",
+          "relative flex items-center bg-sidebar-control-surface text-sidebar-foreground",
+          compact
+            ? "size-10 justify-center rounded-lg"
+            : "ml-auto h-8 w-8 shrink-0 rounded-full @min-[12rem]/sidebar-update:w-full",
           view.tone === "slow" && "ring-1 ring-warning/40 ring-inset",
           view.tone === "failed" && "ring-1 ring-destructive/40 ring-inset",
         )}
@@ -121,13 +126,21 @@ export function SidebarUpdateCapsule({
             />
           }
         />
-        <span className="pointer-events-none relative hidden min-w-0 flex-1 truncate pl-3 text-xs @min-[12rem]/sidebar-update:block">
+        <span
+          className={
+            compact
+              ? "sr-only"
+              : "pointer-events-none relative hidden min-w-0 flex-1 truncate pl-3 text-xs @min-[12rem]/sidebar-update:block"
+          }
+        >
           <span className={cn(view.tone === "failed" && "text-destructive")}>{view.label}</span>
           {view.slow ? (
             <span className="text-warning tabular-nums"> {view.slow.elapsed}</span>
           ) : null}
         </span>
-        {view.action !== null ? (
+        {compact ? (
+          <span className="pointer-events-none">{icon}</span>
+        ) : view.action !== null ? (
           <button
             type="button"
             className="relative hidden shrink-0 cursor-pointer pr-3 pl-1.5 text-xs underline decoration-muted-foreground/60 underline-offset-3 hover:decoration-current @min-[12rem]/sidebar-update:block"
@@ -149,6 +162,11 @@ export function SidebarUpdateCapsule({
       </div>
       <PopoverPopup side="top" align="end" padding="compact" width="sm">
         <div className="flex flex-col gap-1 text-xs">
+          {compact && view.action !== null ? (
+            <Button size="xs" variant="outline" onClick={runAction}>
+              {actionLabel}
+            </Button>
+          ) : null}
           {run.localVersion !== null ? (
             <div className="flex items-center justify-between gap-3">
               <span>

@@ -1,0 +1,74 @@
+.openbot-react .tasks-page {
+  flex: 1;
+  min-width: 0;
+}
+.openbot-react :where(.tasks-page .ui-button, .tasks-page .ui-icon-button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 6px;
+  padding: 6px;
+  font-size: 12px;
+}
+.openbot-react .tasks-page :where(.ui-button, .ui-icon-button):hover {
+  background: var(--openbot-bg-control-hover);
+}
+.openbot-react .tasks-page :where(.ui-button, .ui-icon-button):focus-visible,
+.openbot-react .tasks-page select:focus-visible {
+  outline: 2px solid var(--openbot-text-muted);
+  outline-offset: 2px;
+}
+.openbot-react .tasks-page :where(.ui-button, .ui-icon-button):disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.openbot-react .tasks-page-agent {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.openbot-react .tasks-page-agent select {
+  border: 0;
+  background: transparent;
+  max-width: 180px;
+  color: inherit;
+  font-size: 12px;
+}
+.openbot-react .tasks-page .composer {
+  padding: 12px;
+  border: 1px solid var(--openbot-border-default);
+  border-radius: 16px;
+  background: var(--openbot-bg-surface);
+}
+.openbot-react .tasks-page .composer-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 10px;
+}
+.openbot-react .tasks-page .tasks-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.openbot-react .tasks-page .file-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px;
+  border-bottom: 1px solid var(--openbot-border-default);
+}
+.openbot-react .tasks-page .file-preview-header h2 {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.openbot-react .tasks-page-permission {
+  color: var(--openbot-text-muted);
+  font-size: 12px;
+}

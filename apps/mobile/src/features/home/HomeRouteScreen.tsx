@@ -1,3 +1,4 @@
+import { BotsEdgeGesture } from "../bots/BotsEdgeGesture";
 import { uuidv4 } from "../../lib/uuid";
 import { ThreadUndoNotice } from "./ThreadUndoNotice";
 import { use } from "react";
@@ -43,6 +44,14 @@ import { WorkspaceListHeader } from "../layout/workspace/WorkspaceListHeader";
 import { buildHomeListFilterMenuItems, homeListFilterEnvironments } from "./home-list-filter-menu";
 
 export function HomeRouteScreen() {
+  return (
+    <BotsEdgeGesture routeName="Home">
+      <HomeRouteContent />
+    </BotsEdgeGesture>
+  );
+}
+
+function HomeRouteContent() {
   const gt = useGT();
   const m = useMessages();
   const nativePrimaryColumn = use(NativePrimaryColumnContext);

@@ -1,0 +1,17 @@
+// Sled maintained extension for the pinned Openbot 0.60.0 release. Upstream notices apply.
+// Requests name a reviewed host-side source. Creation identity belongs to the host journal, not
+// marketplace download statistics. A settled or interrupted operation is never executed again.
+import { adminRoute, fields, identifier, string, nullable, oneOf, list, empty, type OptionalRouteCodec } from "./admin-wire";
+export const AGENT_ADOPTION_CAPABILITY = "agent-adoption-v1";
+export const AGENT_ADOPTION_ROUTES = {
+  install: "/v1/admin/agents/adoption/install",
+  status: "/v1/admin/agents/adoption/status",
+  list: "/v1/admin/agents/adoption/list",
+} as const;
+const status = fields({ operationId: identifier, kind: oneOf("template", "marketplace"), sourceId: identifier,
+  state: oneOf("pending", "complete", "failed", "interrupted"), agentId: nullable(identifier), name: nullable(string(256)) });
+export const AGENT_ADOPTION_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
+  [AGENT_ADOPTION_ROUTES.install, adminRoute(fields({ operationId: identifier, kind: oneOf("template", "marketplace"), sourceId: identifier, timezone: string(255), expectedRevision: string(128) }, { agentId: identifier }), status)],
+  [AGENT_ADOPTION_ROUTES.status, adminRoute(fields({ operationId: identifier }), nullable(status))],
+  [AGENT_ADOPTION_ROUTES.list, adminRoute(empty, list(status, 100))],
+]);

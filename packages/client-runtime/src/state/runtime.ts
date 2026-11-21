@@ -744,6 +744,16 @@ export function environmentSessionGenerationAtom<R, ER>(
   return family(environmentId);
 }
 
+function environmentRpcPermissionGuard<R, ER>(
+  runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
+  registry: AtomRegistry.AtomRegistry,
+) {
+  return {
+    authorize: (id: EnvironmentIdType, method: string, payload: unknown) =>
+      createCommandPermissions(runtime, method).authorize(registry, id, payload),
+  };
+}
+
 export function createEnvironmentQueryAtomFamily<R, ER, Input, A, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
   options: EnvironmentQueryAtomOptions<
@@ -811,16 +821,23 @@ export function createEnvironmentQueryAtomFamily<R, ER, Input, A, E>(
               return Option.isSome(session)
                 ? runInEnvironment(
                     target.environmentId,
-                    options
-                      .execute(
-                        target.input,
-                        emit,
-                        Option.flatMap(
-                          get.self<AsyncResult.AsyncResult<A, unknown>>(),
-                          AsyncResult.value,
+                    Effect.flatMap(AtomRegistry.AtomRegistry, (registry) =>
+                      options
+                        .execute(
+                          target.input,
+                          emit,
+                          Option.flatMap(
+                            get.self<AsyncResult.AsyncResult<A, unknown>>(),
+                            AsyncResult.value,
+                          ),
+                        )
+                        .pipe(
+                          Effect.provideService(
+                            RpcPermissionGuard,
+                            environmentRpcPermissionGuard(runtime, registry),
+                          ),
                         ),
-                      )
-                      .pipe(pendingOnceSessionReplaced(session.value)),
+                    ).pipe(pendingOnceSessionReplaced(session.value)),
                   )
                 : Effect.never;
             case "connecting":
@@ -1169,10 +1186,7 @@ export function createEnvironmentRpcCommand<
             options.execute?.(input, registry, environmentId) ?? requestGuarded(options.tag, input)
           );
         }),
-        Effect.provideService(RpcPermissionGuard, {
-          authorize: (id, method, payload) =>
-            createCommandPermissions(runtime, method).authorize(registry, id, payload),
-        }),
+        Effect.provideService(RpcPermissionGuard, environmentRpcPermissionGuard(runtime, registry)),
         Effect.tap(
           (result) => options.onSuccess?.(target, registry, result, started) ?? Effect.void,
         ),

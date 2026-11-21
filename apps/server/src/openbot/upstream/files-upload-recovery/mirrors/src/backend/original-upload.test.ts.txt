@@ -1,0 +1,106 @@
+import { createHash } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { expect, it } from "vitest";
+import { MailboxStore } from "./mailbox-store";
+import { OpenBotDatabase } from "./openbot-database";
+import { runCauseEffect } from "./effect-boundary";
+
+it("atomically recovers one retained original draft after response loss/reopen and isolates sessions", async () => {
+  const root = await mkdtemp(join(tmpdir(), "original-upload-"));
+  let db = new OpenBotDatabase(root);
+  const bytes = Buffer.from("owned source bytes");
+  const input = { operationId: "original-operation", principal: "session-a", environmentId: "env-a", hostId: "host-a", agentId: "chief", threadId: "thread-a", taskId: null, name: "original.txt", mimeType: "text/plain", size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
+  try {
+    let mailbox = new MailboxStore(root, join(root, "shared"), db);
+    await runCauseEffect(mailbox.initialize());
+    expect(mailbox.originalUploadStatus(input, () => {})).toBeNull();
+    let calls = 0;
+    await expect(runCauseEffect(mailbox.prepareOriginalUpload(input, bytes, () => { if (++calls === 3) throw new Error("revoked during preparation"); }))).rejects.toThrow("revoked during preparation");
+    expect(mailbox.originalUploadStatus(input, () => {})).toBeNull();
+    const [first, duplicate] = await Promise.all([runCauseEffect(mailbox.prepareOriginalUpload(input, bytes, () => {})), runCauseEffect(mailbox.prepareOriginalUpload(input, bytes, () => {}))]);
+    expect(duplicate).toEqual(first);
+    await expect(runCauseEffect(mailbox.discardDraft(first.attachment.id))).rejects.toThrow("Original draft owner differs");
+    await expect(runCauseEffect(mailbox.enqueue({sender:{kind:"user"},recipientAgentIds:[input.agentId],text:"forbidden",draftIds:[first.attachment.id]}))).rejects.toThrow("Original draft owner differs");
+    expect(() => mailbox.assertOriginalUploadDraftOwner([first.attachment.id])).toThrow("Original draft owner differs");
+    const owner = { principal: input.principal, environmentId: input.environmentId, hostId: input.hostId, agentId: input.agentId, threadId: input.threadId, taskId: input.taskId };
+    expect(() => mailbox.assertOriginalUploadDraftOwner([first.attachment.id], { ...owner, principal: "session-b" })).toThrow();
+    expect(() => mailbox.assertOriginalUploadDraftOwner([first.attachment.id], owner)).not.toThrow();
+    const cancelledBeforeArrival = { ...input, operationId: "delayed-operation" };
+    expect((await runCauseEffect(mailbox.cancelOriginalUpload(cancelledBeforeArrival, () => {})))?.state).toBe("released");
+    expect((await runCauseEffect(mailbox.prepareOriginalUpload(cancelledBeforeArrival, bytes, () => {}))).state).toBe("released");
+    // Discard the transport response; reopen the real SQLite store before looking up the operation.
+    db.close(); db = new OpenBotDatabase(root);
+    mailbox = new MailboxStore(root, join(root, "shared"), db);
+    await runCauseEffect(mailbox.initialize());
+    expect(mailbox.originalUploadStatus(input, () => {})).toEqual(first);
+    expect(await runCauseEffect(mailbox.prepareOriginalUpload(input, bytes, () => {}))).toEqual(first);
+    for (const changed of [{ principal: "session-b" }, { hostId: "host-b" }, { environmentId: "env-b" }, { agentId: "other" }, { threadId: "thread-b" }, { taskId: "task-b" }, { sha256: "a".repeat(64) }]) {
+      expect(() => mailbox.originalUploadStatus({ ...input, ...changed }, () => {})).toThrow();
+    }
+    expect(() => mailbox.originalUploadStatus(input, () => { throw new Error("expired session"); })).toThrow("expired session");
+    await expect(runCauseEffect(mailbox.prepareOriginalUpload(input, Buffer.from("changed"), () => {}))).rejects.toThrow();
+    const cancelled = await runCauseEffect(mailbox.cancelOriginalUpload(input, () => {}));
+    expect(cancelled?.state).toBe("released");
+    db.close(); db = new OpenBotDatabase(root);
+    mailbox = new MailboxStore(root, join(root, "shared"), db);
+    await runCauseEffect(mailbox.initialize());
+    expect(await runCauseEffect(mailbox.prepareOriginalUpload(input, bytes, () => {}))).toEqual(cancelled);
+    expect(() => mailbox.originalUploadStatus(input, () => { throw new Error("revoked"); })).toThrow();
+    const sendUpload = await runCauseEffect(mailbox.prepareOriginalUpload({ ...input, operationId: "send-operation" }, bytes, () => {}));
+    const send = { sender: { kind: "user" as const }, recipientAgentIds: [input.agentId], text: "explicit send", draftIds: [sendUpload.attachment.id], originalUploadOwner: owner, idempotencyKey: "owned-send", idempotencyAuthorityKey: "owned-send-v2-fingerprint" };
+    const sent = await runCauseEffect(mailbox.enqueue(send));
+    db.close(); db = new OpenBotDatabase(root); mailbox = new MailboxStore(root, join(root, "shared"), db);
+    await runCauseEffect(mailbox.initialize());
+    expect(await runCauseEffect(mailbox.enqueue(send))).toEqual(sent);
+    await expect(runCauseEffect(mailbox.enqueue({ ...send, originalUploadOwner: { ...owner, principal: "session-b" } }))).rejects.toThrow("Original draft owner differs");
+  } finally { db.close(); await rm(root, { recursive: true, force: true }); }
+});
+
+it("recovers the signed HTTP operation after the accepted response socket is lost", async () => {
+  const { createServer } = await import("node:http");
+  const { routeSledFilesUpload } = await import("../main/team-api/route-sled-files-upload");
+  const { signFilesPrincipalBinding } = await import("../main/team-api/files-principal-binding");
+  const root = await mkdtemp(join(tmpdir(), "original-upload-http-"));
+  let db = new OpenBotDatabase(root);
+  let mailbox = new MailboxStore(root, join(root, "shared"), db);
+  await runCauseEffect(mailbox.initialize());
+  const secret = "owned-test-secret", hostId = "host", environmentId = "environment";
+  const bytes = Buffer.from("fixture payload");
+  const identity = { operationId: "http-original", hostId, environmentId, agentId: "agent", threadId: "original-thread", taskId: null, name: "file.txt", mimeType: "text/plain", size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
+  let lose = true;
+  let currentThread = identity.threadId;
+  const server = createServer(async (request, response) => {
+    try {
+      await routeSledFilesUpload({ request, response, method: request.method!, url: new URL(request.url!, "http://fixture"), protocol: 9, capabilities: new Set(["sled-files-upload-recovery-v1"]), member: {} as never, token: "fixture", sessionId: "upstream-shared-member-session", sessionExpiresAt: "2099-01-01", agentLevel: () => "manage", json: (_status, value) => {
+        if (lose) { lose = false; response.destroy(); return "handled"; }
+        response.setHeader("content-type", "application/json"); response.end(JSON.stringify(value)); return "handled";
+      }, empty: () => { response.end(); return "handled"; } }, mailbox, { secret, hostId, environmentId, validate: owned => { if (owned.threadId !== currentThread) throw new Error("original thread changed"); } });
+    } catch { response.writeHead(403).end(); }
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("missing test address");
+  const invoke = (action: string, principal = "sled-session-a", changed = {}) => {
+    const path = `/v1/sled/files/${action}`;
+    const body = JSON.stringify({ ...identity, ...changed, ...(action === "upload" ? { dataBase64: bytes.toString("base64") } : {}) });
+    const token = signFilesPrincipalBinding(secret, { principal, hostId, method: "POST", path, bodySha256: createHash("sha256").update(body).digest("hex") }, Date.now());
+    return fetch(`http://127.0.0.1:${address.port}${path}`, { method: "POST", headers: { "x-sled-files-principal": token }, body });
+  };
+  try {
+    await expect(invoke("upload")).rejects.toThrow();
+    db.close(); db = new OpenBotDatabase(root); mailbox = new MailboxStore(root, join(root, "shared"), db);
+    await runCauseEffect(mailbox.initialize());
+    const recovered = await (await invoke("upload-status")).json();
+    expect(recovered.state).toBe("ready");
+    expect(await (await invoke("upload")).json()).toEqual(recovered);
+    expect((await invoke("upload-status", "sled-session-b")).status).toBe(403);
+    expect((await invoke("upload-status", "sled-session-a", { hostId: "changed" })).status).toBe(403);
+    currentThread = "changed";
+    expect((await invoke("upload-status")).status).toBe(403);
+  } finally {
+    server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
+    db.close(); await rm(root, { recursive: true, force: true });
+  }
+});

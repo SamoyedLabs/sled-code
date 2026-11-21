@@ -1,0 +1,313 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Effect } from "effect";
+import { describe, expect, it, vi } from "vitest";
+import type { ConversationSnapshot } from "@openbot/contracts/ipc";
+import type { AgentClient } from "../agent-client";
+import { AgentApiKeys } from "../agent-api-keys";
+import { AttentionRegistry, type SurfacedUiBlock } from "./attention-registry";
+import type { VaultItems } from "../vault-items";
+import { VaultService } from "../../main/vault-service";
+import { VaultStore } from "../../main/vault-store";
+import { apiKeyFormSpec, vaultRequestFormSpec } from "./prompts";
+
+const commit = async () => ({ release: async () => {} });
+const target = {
+  agentId: "agent-a",
+  threadId: "public",
+  turnId: "turn",
+  messageId: "question-prompt:turn:req",
+  blockId: "block",
+  requestId: "req",
+};
+function fixture(apiKeys: AgentApiKeys, vaultItems?: VaultItems, block?: SurfacedUiBlock) {
+  const output: unknown[] = [];
+  const snapshot: ConversationSnapshot = {
+    agentId: "agent-a",
+    threadId: "public",
+    activeTurnId: "turn",
+    revision: 0,
+    messages: [],
+  };
+  const client: AgentClient = {
+    provider: "codex",
+    running: true,
+    start() {},
+    stop: () => Effect.void,
+    request: () => Effect.die("Unexpected fixture request"),
+    notify() {},
+    respondError() {},
+    on() {
+      return this;
+    },
+    once() {
+      return this;
+    },
+    off() {
+      return this;
+    },
+    respond: (_id: unknown, value: unknown) => output.push(value),
+  };
+  const registry = new AttentionRegistry({
+    conversation: {
+      agentForThread: () => "agent-a",
+      publicThreadId: () => "public",
+      ensureSnapshot: () => snapshot,
+      emitConversation: () => output.push(structuredClone(snapshot)),
+    },
+    browser: {
+      listTabs: () => [],
+      beginTakeover: () => Effect.void,
+      endTakeover: () => {},
+    },
+    hostedSites: { prepareApproval: () => Effect.succeed(null), resolveApproval: () => Effect.void },
+    routines: { markNeedsAttention: () => {}, markRunningForTurn: () => {} },
+    emit: (event: unknown) => output.push(event),
+    emitError: (...args: unknown[]) => output.push(args),
+    emitRuntimeSnapshot: () => {},
+    apiKeys,
+    vaultItems,
+  });
+  const spec = apiKeyFormSpec({ name: "SYNTHETIC_KEY", title: "Key" });
+  if (!spec) throw new Error("Invalid synthetic fixture");
+  const surface = () =>
+    registry.surfaceUiBlock(
+      client,
+      {
+        id: "req",
+        method: "item/tool/call",
+        params: { threadId: "private", turnId: "turn" },
+      },
+      block ?? { blockId: "block", spec, apiKey: { name: "SYNTHETIC_KEY" } },
+    );
+  surface();
+  return { registry, output, client, surface };
+}
+describe("dedicated registry API key response", () => {
+  it("saves only in the original agent key store and never exposes the canary in events or prompt history", async () => {
+    const root = await mkdtemp(join(tmpdir(), "privileged-registry-"));
+    try {
+      const { registry, output } = fixture(new AgentApiKeys(root));
+      const authorize = () => {};
+      const context = registry.privilegedContext(target, "principal", authorize);
+      const input = {
+        target,
+        nonce: context.nonce,
+        consent: true as const,
+        response: {
+          actionId: "submit",
+          values: { key: "synthetic-secret-canary" },
+        },
+      };
+      expect(
+        await Effect.runPromise(
+          registry.respondPrivileged(input, "principal", { privileged: true }, authorize, commit),
+        ),
+      ).toEqual({ nonce: context.nonce, status: "answered" });
+      expect(await readFile(join(root, "agent-a/SYNTHETIC_KEY"), "utf8")).toBe("synthetic-secret-canary");
+      expect(JSON.stringify(output)).not.toContain("synthetic-secret-canary");
+      expect(
+        (
+          await Effect.runPromiseExit(
+            registry.respondPrivileged(input, "principal", { privileged: true }, authorize, commit),
+          )
+        )._tag,
+      ).toBe("Failure");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("checks live authority at the actual file replacement and refuses wrong principal or replaced pending", async () => {
+    const root = await mkdtemp(join(tmpdir(), "privileged-registry-"));
+    try {
+      const { registry, surface, output } = fixture(new AgentApiKeys(root));
+      let checks = 0;
+      const authorize = () => {
+        if (++checks >= 4) throw new Error("synthetic-secret-canary");
+      };
+      const context = registry.privilegedContext(target, "principal", authorize);
+      const input = {
+        target,
+        nonce: context.nonce,
+        consent: true as const,
+        response: {
+          actionId: "submit",
+          values: { key: "synthetic-secret-canary" },
+        },
+      };
+      expect(
+        (
+          await Effect.runPromiseExit(
+            registry.respondPrivileged(input, "other", { privileged: true }, () => {}, commit),
+          )
+        )._tag,
+      ).toBe("Failure");
+      const result = await Effect.runPromise(
+        registry.respondPrivileged(input, "principal", { privileged: true }, authorize, commit),
+      );
+      expect(result.status).toBe("unknown");
+      await expect(readFile(join(root, "agent-a/SYNTHETIC_KEY"))).rejects.toThrow();
+      expect(JSON.stringify(output)).not.toContain("synthetic-secret-canary");
+      surface();
+      expect(
+        (
+          await Effect.runPromiseExit(
+            registry.respondPrivileged(input, "principal", { privileged: true }, () => {}, commit),
+          )
+        )._tag,
+      ).toBe("Failure");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("does not resurrect an interrupted callback after a real save crosses an asynchronous barrier", async () => {
+    const root = await mkdtemp(join(tmpdir(), "privileged-registry-"));
+    try {
+      const keys = new AgentApiKeys(root);
+      const original = keys.save.bind(keys);
+      let signal!: () => void;
+      let release!: () => void;
+      const saved = new Promise<void>((resolve) => {
+        signal = resolve;
+      });
+      const barrier = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.spyOn(keys, "save").mockImplementation((...args) =>
+        Effect.gen(function* () {
+          const result = yield* original(...args);
+          signal();
+          yield* Effect.promise(() => barrier);
+          return result;
+        }),
+      );
+      const { registry, client, output } = fixture(keys);
+      const context = registry.privilegedContext(target, "principal", () => {});
+      const input = {
+        target,
+        nonce: context.nonce,
+        consent: true as const,
+        response: {
+          actionId: "submit",
+          values: { key: "synthetic-barrier-canary" },
+        },
+      };
+      const pending = Effect.runPromise(
+        registry.respondPrivileged(input, "principal", { privileged: true }, () => {}, commit),
+      );
+      await saved;
+      expect(
+        (
+          await Effect.runPromiseExit(
+            registry.respondPrivileged(input, "principal", { privileged: true }, () => {}, commit),
+          )
+        )._tag,
+      ).toBe("Failure");
+      registry.cancelRequest(client, "req");
+      release();
+      expect((await pending).status).toBe("interrupted");
+      expect(registry.privilegedResult(target, context.nonce, "principal", () => {}).status).toBe("interrupted");
+      expect(JSON.stringify(output)).not.toContain("synthetic-barrier-canary");
+      expect(await readFile(join(root, "agent-a/SYNTHETIC_KEY"), "utf8")).toBe("synthetic-barrier-canary");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed when the live commit bridge revokes authority during its asynchronous check", async () => {
+    const root = await mkdtemp(join(tmpdir(), "privileged-registry-"));
+    try {
+      const { registry } = fixture(new AgentApiKeys(root));
+      const context = registry.privilegedContext(target, "principal", () => {});
+      let entered!: () => void;
+      let release!: () => void;
+      let authorized = true;
+      const arrived = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const barrier = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const acquire = async () => {
+        entered();
+        await barrier;
+        if (!authorized) throw new Error("Unavailable");
+        return { release: async () => {} };
+      };
+      const input = {
+        target,
+        nonce: context.nonce,
+        consent: true as const,
+        response: {
+          actionId: "submit",
+          values: { key: "synthetic-live-canary" },
+        },
+      };
+      const result = Effect.runPromise(
+        registry.respondPrivileged(input, "principal", { privileged: true }, () => {}, acquire),
+      );
+      await arrived;
+      authorized = false;
+      release();
+      expect((await result).status).toBe("unknown");
+      await expect(readFile(join(root, "agent-a/SYNTHETIC_KEY"))).rejects.toThrow();
+      expect(
+        (
+          await Effect.runPromiseExit(
+            registry.respondPrivileged(input, "principal", { privileged: true }, () => {}, commit),
+          )
+        )._tag,
+      ).toBe("Failure");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("routes the released Vault request through addEntered without creating an agent API key", async () => {
+    const root = await mkdtemp(join(tmpdir(), "privileged-vault-"));
+    try {
+      const vault = new VaultService({
+        store: new VaultStore(join(root, "vault.json"), {
+          encrypt: (value) => Buffer.from(value).reverse(),
+          decrypt: (value) => Buffer.from(value).reverse().toString("utf8"),
+        }),
+        canPersist: () => true,
+      });
+      await Effect.runPromise(vault.load());
+      const spec = vaultRequestFormSpec({ kind: "login", title: "Save login" });
+      if (typeof spec === "string") throw new Error(spec);
+      const { registry, output } = fixture(new AgentApiKeys(root), vault.items, {
+        blockId: "block",
+        spec,
+        vault: { kind: "login" },
+      });
+      const context = registry.privilegedContext(target, "principal", () => {});
+      const input = {
+        target,
+        nonce: context.nonce,
+        consent: true as const,
+        response: {
+          actionId: "submit",
+          values: { website: "https://example.com", username: "synthetic-user", password: "synthetic-vault-canary" },
+        },
+      };
+      expect(
+        (
+          await Effect.runPromise(
+            registry.respondPrivileged(input, "principal", { privileged: true }, () => {}, commit),
+          )
+        ).status,
+      ).toBe("answered");
+      const items = vault.state().items;
+      expect(items).toHaveLength(1);
+      expect(items[0]?.kind).toBe("login");
+      if (!items[0]) throw new Error("Missing saved fixture");
+      expect(vault.reveal({ id: items[0].id, field: "password" })).toBe("synthetic-vault-canary");
+      expect(JSON.stringify(output)).not.toContain("synthetic-vault-canary");
+      expect(registry.privilegedResult(target, context.nonce, "principal", () => {}).status).toBe("answered");
+      await expect(readFile(join(root, "agent-a/SYNTHETIC_KEY"))).rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});

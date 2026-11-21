@@ -1,0 +1,39 @@
+/* React adapters for source SidebarAgentSection/SidebarSectionHeader; row/folder geometry lives in openbot-shell-source.css. */
+.openbot-react .ob-sidebar-avatar {
+  width: 46px;
+  height: 46px;
+}
+.openbot-react .sidebar-pinned-avatar .ob-sidebar-avatar {
+  width: 56px;
+  height: 56px;
+}
+.openbot-react .ob-sidebar-avatar > svg {
+  width: 128%;
+  height: 128%;
+}
+.openbot-react .ob-sidebar-notice {
+  padding: 8px 12px;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  overflow-wrap: anywhere;
+}
+.openbot-react .ob-sidebar-editor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px;
+}
+.openbot-react .ob-sidebar-editor input {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+.openbot-react .ob-sidebar-editor button {
+  padding: 3px 8px;
+  border-radius: var(--openbot-radius-sm);
+  background: var(--openbot-bg-control);
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-sm);
+}
+.openbot-react .ob-sidebar-editor button:disabled {
+  opacity: 0.45;
+}

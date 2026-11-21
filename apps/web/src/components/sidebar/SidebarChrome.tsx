@@ -1,4 +1,10 @@
-import { ArrowLeftIcon, ArrowRightIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
+import {
+  BotIcon,
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  ChartNoAxesColumnIcon,
+  SettingsIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { T, useGT, useMessages } from "gt-react";
 import { memo } from "react";
@@ -70,7 +76,16 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
         isElectron && "drag-region",
       )}
     >
-      {backdropVariant ? <SidebarStageBackdrop variant={backdropVariant} /> : null}
+      {backdropVariant ? (
+        <div
+          className="pointer-events-none absolute top-0 right-0 h-20"
+          style={{ left: "calc(0px - var(--workspace-mode-rail-width, 0px))" }}
+        >
+          {/* At 80px tall, the 96-unit artwork scales by 5/6. Shift its 64-unit
+              major grid line to the 51.5px center of the 52px rail divider. */}
+          <SidebarStageBackdrop variant={backdropVariant} gridOffset={-2.2} />
+        </div>
+      ) : null}
       <div className="relative top-[calc(var(--workspace-controls-top)-env(safe-area-inset-top))] z-10 ml-[calc(var(--workspace-controls-left)+1px-env(safe-area-inset-left))] flex shrink-0 items-center md:hidden">
         <SidebarTrigger
           variant={backdropVariant ? "media-navigation" : "ghost"}
@@ -288,34 +303,48 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
         </SidebarMenuItem>
       ) : (
         <>
-          <SidebarUtilityItem
-            icon={<SettingsIcon />}
-            label={gt("Settings")}
-            onClick={handleSettingsClick}
-          />
-          {pullRequestsSupported ? (
+          {isMobile && (
+            <SidebarUtilityItem
+              icon={<BotIcon />}
+              label={gt("Bots")}
+              onClick={() => {
+                closeMobileSidebar();
+                void navigate({ to: "/bots" });
+              }}
+            />
+          )}
+          {isMobile && (
+            <SidebarUtilityItem
+              icon={<SettingsIcon />}
+              label={gt("Settings")}
+              onClick={handleSettingsClick}
+            />
+          )}
+          {isMobile && pullRequestsSupported ? (
             <SidebarUtilityItem
               icon={<PullRequestGlyph.pullRequest />}
               label={gt("Pull requests")}
               onClick={handlePullRequestsClick}
             />
           ) : null}
-          {issuesSupported ? (
+          {isMobile && issuesSupported ? (
             <SidebarUtilityItem
               icon={<IssueGlyph.issue />}
               label={gt("Issues", { $context: "sidebar link to the list of issues" })}
               onClick={handleIssuesClick}
             />
           ) : null}
-          <SidebarUtilityItem
-            icon={<ChartNoAxesColumnIcon />}
-            label={gt("Usage")}
-            onClick={handleUsageClick}
-          />
+          {isMobile && (
+            <SidebarUtilityItem
+              icon={<ChartNoAxesColumnIcon />}
+              label={gt("Usage")}
+              onClick={handleUsageClick}
+            />
+          )}
         </>
       )}
       <SidebarThreadUndoNotice />
-      <SidebarUpdatePill />
+      {isMobile && <SidebarUpdatePill />}
     </SidebarMenu>
   );
 });

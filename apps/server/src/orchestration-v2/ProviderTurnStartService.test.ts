@@ -2336,6 +2336,7 @@ effectIt.effect.each([
 
       yield* harness.start;
 
+      // Context delivery preserves the thread's permission mode, including on retries.
       expect(harness.open).toHaveBeenCalledWith(
         expect.objectContaining({ runtimePolicy: expect.objectContaining({ runtimeMode }) }),
       );

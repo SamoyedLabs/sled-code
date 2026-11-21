@@ -29,6 +29,7 @@ import {
   parseWslRuntimeArchiveMembers,
   readWorkspaceConfig,
   createBuildConfig,
+  stageOpenbotBundle,
   DESKTOP_FILE_EXCLUSIONS,
   InvalidMacPasskeyRpDomainError,
   InvalidMacPasskeyPublishableKeyError,
@@ -2016,4 +2017,183 @@ it.effect.skipIf(!symlinksSupported)("preserves relative links when replacing di
     assert.equal(yield* fs.readLink(path.join(output, app, "Current")), "New.plist");
     assert.equal(yield* fs.readFileString(path.join(output, app, "Current")), "rebuilt-app");
   }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+);
+
+it.effect(
+  "stages only the accepted background OpenBot bundle and retains its license/native files",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "sled-openbot-bundle-" });
+      const source = path.join(root, "source", "OpenBot.app");
+      const output = path.join(root, "output");
+      yield* fs.makeDirectory(path.join(source, "Contents", "Resources"), { recursive: true });
+      yield* fs.makeDirectory(path.join(source, "Contents", "MacOS"), { recursive: true });
+      yield* fs.writeFileString(
+        path.join(source, "Contents", "Resources", "app.asar"),
+        "accepted-code",
+      );
+      yield* fs.writeFileString(
+        path.join(source, "Contents", "Resources", "LICENSE"),
+        "owned license fixture",
+      );
+      yield* fs.writeFileString(
+        path.join(source, "Contents", "MacOS", "OpenBot"),
+        "owned executable fixture",
+      );
+      yield* fs.symlink("Contents", path.join(source, "Current"));
+      yield* fs.writeFileString(
+        path.join(source, "Contents", "Info.plist"),
+        '<?xml version="1.0"?><plist version="1.0"><dict><key>LSUIElement</key><true/></dict></plist>',
+      );
+      const expected = NodeCrypto.createHash("sha256").update("accepted-code").digest("hex");
+      const failure = yield* Effect.flip(stageOpenbotBundle(source, output, "0".repeat(64)));
+      assert.instanceOf(failure, BundleNotSelfContainedError);
+      assert.isFalse(yield* fs.exists(path.join(output, "OpenBot.app")));
+      yield* stageOpenbotBundle(source, output, expected);
+      assert.equal(yield* fs.readLink(path.join(output, "OpenBot.app", "Current")), "Contents");
+      assert.equal(
+        yield* fs.readFileString(
+          path.join(output, "OpenBot.app", "Contents", "Resources", "LICENSE"),
+        ),
+        "owned license fixture",
+      );
+      assert.equal(
+        JSON.parse(yield* fs.readFileString(path.join(output, "runtime-manifest.json"))).asarSha256,
+        expected,
+      );
+      yield* fs.writeFileString(
+        path.join(source, "Contents", "Info.plist"),
+        '<?xml version="1.0"?><plist version="1.0"><dict><key>LSUIElement</key><false/></dict></plist>',
+      );
+      assert.instanceOf(
+        yield* Effect.flip(
+          stageOpenbotBundle(source, path.join(root, "foreground-refused"), expected),
+        ),
+        BundleNotSelfContainedError,
+      );
+    }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+);
+
+it.effect(
+  "ad-hoc signs a private unsigned macOS app instead of retaining Electron's stale resource seal",
+  () =>
+    Effect.gen(function* () {
+      const config = yield* createBuildConfig(
+        "mac",
+        "dir",
+        "0.1.6-preview.bots.1",
+        false,
+        false,
+        undefined,
+        undefined,
+      );
+      assert.deepInclude(config.mac, { identity: "-", hardenedRuntime: false, notarize: false });
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          NodeServices.layer,
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                T3CODE_DESKTOP_PRIVATE_BUILD: "true",
+                T3CODE_DESKTOP_PRIVATE_HOME: "/private/sled-owned-dev-test",
+                SLED_MAC_DISTRIBUTION: "private-development",
+              },
+            }),
+          ),
+        ),
+      ),
+    ),
+);
+
+it.effect("pins a private development certificate and refuses silent unsigned fallback", () =>
+  Effect.gen(function* () {
+    const config = yield* createBuildConfig(
+      "mac",
+      "dir",
+      "0.1.6-preview.bots.5",
+      false,
+      false,
+      undefined,
+      undefined,
+    );
+    assert.deepInclude(config.mac, {
+      identity: "A".repeat(40),
+      timestamp: "none",
+      hardenedRuntime: false,
+      type: "development",
+      notarize: false,
+    });
+    assert.equal(config.forceCodeSigning, true);
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        NodeServices.layer,
+        ConfigProvider.layer(
+          ConfigProvider.fromEnv({
+            env: {
+              T3CODE_DESKTOP_PRIVATE_BUILD: "true",
+              T3CODE_DESKTOP_PRIVATE_HOME: "/private/persistent-signing",
+              T3CODE_DESKTOP_PRIVATE_SIGNING_IDENTITY: "A".repeat(40),
+            },
+          }),
+        ),
+      ),
+    ),
+  ),
+);
+it.effect("does not apply the local private certificate to ordinary distribution builds", () =>
+  Effect.gen(function* () {
+    const config = yield* createBuildConfig(
+      "mac",
+      "dir",
+      "0.1.6-preview.bots.5",
+      false,
+      false,
+      undefined,
+      undefined,
+    );
+    const mac = config.mac as Record<string, unknown>;
+    assert.isUndefined(mac.identity);
+    assert.isUndefined(mac.timestamp);
+    assert.isUndefined(config.forceCodeSigning);
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        NodeServices.layer,
+        ConfigProvider.layer(
+          ConfigProvider.fromEnv({
+            env: {
+              T3CODE_DESKTOP_PRIVATE_SIGNING_IDENTITY: "A".repeat(40),
+            },
+          }),
+        ),
+      ),
+    ),
+  ),
+);
+it.effect("rejects an invalid explicitly pinned private signing certificate", () =>
+  Effect.gen(function* () {
+    const result = yield* Effect.exit(
+      createBuildConfig("mac", "dir", "0.1.6-preview.bots.5", false, false, undefined, undefined),
+    );
+    assert.equal(result._tag, "Failure");
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        NodeServices.layer,
+        ConfigProvider.layer(
+          ConfigProvider.fromEnv({
+            env: {
+              T3CODE_DESKTOP_PRIVATE_BUILD: "true",
+              T3CODE_DESKTOP_PRIVATE_HOME: "/private/persistent-signing",
+              T3CODE_DESKTOP_PRIVATE_SIGNING_IDENTITY: " ",
+            },
+          }),
+        ),
+      ),
+    ),
+  ),
 );

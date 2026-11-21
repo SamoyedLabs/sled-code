@@ -31,6 +31,7 @@ import {
   projectTurnItemForDetail,
   projectDomainEventForWire,
   projectStoredEventForWire,
+  threadStreamEventItem,
 } from "./WireProjection.ts";
 import { threadShellFromProjection } from "./ProjectionStore.ts";
 import { MAX_TOOL_OUTPUT_IMAGES, toolOutputImages } from "@t3tools/shared/toolOutput";
@@ -175,6 +176,12 @@ describe("orchestration V2 wire projection", () => {
       summary: '"'.repeat(159) + "…",
       truncated: true,
     });
+    const unicode = projectTurnItemForWire({
+      ...base,
+      input: "x".repeat(158) + "😀" + "y".repeat(20_000),
+    });
+    const encoded = JSON.stringify(unicode);
+    expect(encoded).not.toContain("\\ud83d");
 
     const boundary = projectTurnItemForWire({
       ...base,
@@ -184,6 +191,25 @@ describe("orchestration V2 wire projection", () => {
       summary: '{"text":"' + "a".repeat(149) + "…",
       truncated: true,
     });
+  });
+
+  it("shares the projection and stream wrapper for repeated subscribers to one stored event", () => {
+    const source: OrchestrationV2StoredEvent = {
+      sequence: 1,
+      commandId: null,
+      event: {
+        id: EventId.make("shared-tool"),
+        type: "turn-item.updated",
+        threadId: base.threadId,
+        occurredAt: base.updatedAt,
+        payload: { ...base, output: { content: [{ type: "text", text: "PRIVATE_BODY" }] } },
+      },
+    };
+    const projected = projectStoredEventForWire(source);
+    expect(projected).toEqual({ ...source, event: projectDomainEventForWire(source.event) });
+    expect(projectStoredEventForWire(source)).toBe(projected);
+    expect(threadStreamEventItem(projected)).toBe(threadStreamEventItem(projected));
+    expect(source.event.payload).toHaveProperty("output");
   });
 
   it("truncates detail at a UTF-8 boundary without changing the source", () => {

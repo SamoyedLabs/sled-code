@@ -3,7 +3,7 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import {
   ATTACHMENT_UPLOAD_URL_TTL_MS,
-  type AttachmentCreateUploadUrlInput,
+  type AttachmentUploadRequest,
   AttachmentUploadSigningKeyError,
 } from "@t3tools/contracts";
 import { isSvgAttachment } from "@t3tools/shared/image";
@@ -65,7 +65,7 @@ function decodeClaims(encodedPayload: string): AttachmentUploadClaims | null {
 }
 
 export const issueAttachmentUploadUrl = Effect.fn("AttachmentUpload.issueUrl")(function* (
-  input: AttachmentCreateUploadUrlInput,
+  input: AttachmentUploadRequest,
 ) {
   const config = yield* ServerConfig.ServerConfig;
   const nowMs = yield* Clock.currentTimeMillis;

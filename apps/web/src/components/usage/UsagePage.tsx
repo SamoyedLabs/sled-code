@@ -11,7 +11,7 @@ import {
 } from "@t3tools/contracts";
 import { CircleAlertIcon, ChevronDownIcon, InfoIcon, SlidersHorizontalIcon } from "lucide-react";
 import { T, useGT, useLocale, useMessages, Var } from "gt-react";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Cause from "effect/Cause";
@@ -174,7 +174,20 @@ function UsageModelDialogHost({
   );
 }
 
-export function UsagePage() {
+function UsageSurface({ embedded, children }: { embedded: boolean; children: ReactNode }) {
+  const gt = useGT();
+  return embedded ? <>{children}</> : <AppRouteModal label={gt("Usage")}>{children}</AppRouteModal>;
+}
+
+export function UsagePage({
+  embedded = false,
+  surface,
+  onSurfaceChange,
+}: {
+  embedded?: boolean;
+  surface?: "threads" | "limits";
+  onSurfaceChange?: (surface: "threads" | "limits") => void;
+} = {}) {
   const [preferences, setPreferences] = useState(readUsagePagePreferences);
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const hour12 = usePrimarySettings((settings) => resolveHour12(settings.timestampFormat));
@@ -199,7 +212,18 @@ export function UsagePage() {
       preferences.windowDays === 1 ? "hour" : "day",
     ),
   }));
-  const metric = preferences.metric;
+  const metric =
+    surface === "limits"
+      ? "limits"
+      : surface === "threads" && preferences.metric === "limits"
+        ? "cost"
+        : preferences.metric;
+  const metricOptions =
+    surface === "limits"
+      ? METRIC_OPTIONS.filter((option) => option.value === "limits")
+      : surface === "threads"
+        ? METRIC_OPTIONS.filter((option) => option.value !== "limits")
+        : METRIC_OPTIONS;
   const showingLimits = metric === "limits";
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [limitsNow, setLimitsNow] = useState(() => Date.now());
@@ -249,6 +273,9 @@ export function UsagePage() {
     });
   };
   const selectMetric = (nextMetric: UsageMetric) => {
+    if (!metricOptions.some((option) => option.value === nextMetric)) {
+      onSurfaceChange?.(nextMetric === "limits" ? "limits" : "threads");
+    }
     if (nextMetric === "limits") setLimitsNow(Date.now());
     updatePreferences({ metric: nextMetric });
   };
@@ -374,7 +401,13 @@ export function UsagePage() {
       <WorkspaceBreadcrumb ariaLabel={gt("Usage breadcrumb")} className="min-w-0">
         <WorkspaceBreadcrumbItem>
           <h1>
-            <T>Usage</T>
+            {surface === "threads" ? (
+              gt("Thread activity")
+            ) : surface === "limits" ? (
+              gt("Provider limits")
+            ) : (
+              <T>Usage</T>
+            )}
           </h1>
         </WorkspaceBreadcrumbItem>
         <WorkspaceBreadcrumbSeparator />
@@ -434,7 +467,7 @@ export function UsagePage() {
             if (isUsageMetric(value)) selectMetric(value);
           }}
         >
-          {METRIC_OPTIONS.map((option) => (
+          {metricOptions.map((option) => (
             <Toggle key={option.value} value={option.value} title={shortcutTitle(option)}>
               {m(option.label)}
             </Toggle>
@@ -490,7 +523,7 @@ export function UsagePage() {
             <SelectValue>{metricOptionLabel && m(metricOptionLabel)}</SelectValue>
           </SelectTrigger>
           <SelectPopup align="end" alignItemWithTrigger={false}>
-            {METRIC_OPTIONS.map((option) => (
+            {metricOptions.map((option) => (
               <SelectItem key={option.value} value={option.value} title={shortcutTitle(option)}>
                 {m(option.label)}
               </SelectItem>
@@ -512,11 +545,11 @@ export function UsagePage() {
   );
 
   return (
-    <AppRouteModal label={gt("Usage")}>
+    <UsageSurface embedded={embedded}>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="@container/usage-header flex min-h-12 shrink-0 items-center gap-1 border-b ps-5 pe-2">
           {topbarContent}
-          <AppRouteModalClose />
+          {!embedded && <AppRouteModalClose />}
         </header>
 
         <ScrollArea className="min-h-0 flex-1">
@@ -597,7 +630,7 @@ export function UsagePage() {
           }}
         />
       ) : null}
-    </AppRouteModal>
+    </UsageSurface>
   );
 }
 

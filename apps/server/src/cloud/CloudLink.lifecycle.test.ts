@@ -2,6 +2,7 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -12,10 +13,19 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import { HttpClient, HttpClientResponse, HttpServer, type HttpClientRequest } from "effect/http";
-import { RELAY_LINK_PROOF_TYP, signRelayJwt, verifyRelayJwt } from "@t3tools/shared/relayJwt";
+import {
+  RELAY_LINK_PROOF_TYP,
+  RELAY_MINT_REQUEST_TYP,
+  signRelayJwt,
+  verifyRelayJwt,
+} from "@t3tools/shared/relayJwt";
 import * as NetAddress from "effect/net/NetAddress";
 
-import { EnvironmentId } from "@t3tools/contracts";
+import {
+  AuthAdministrativeClientScopes,
+  AuthStandardClientScopes,
+  EnvironmentId,
+} from "@t3tools/contracts";
 import * as EnvironmentKeys from "./environmentKeys.ts";
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
@@ -40,6 +50,7 @@ import {
   CLOUD_ENDPOINT_RUNTIME_CONFIG,
   CLOUD_LINK_REVOKED,
   CLOUD_LINKED_USER_ID,
+  CLOUD_MINT_PUBLIC_KEY,
   decodeRuntimeConfig,
   RELAY_ENVIRONMENT_CREDENTIAL_SECRET,
   RELAY_ISSUER_SECRET,
@@ -68,6 +79,8 @@ const storeFailure = (tag: "AlreadyExists" | "PermissionDenied") =>
 const unusedSecretStoreOperation = () => Effect.die("unused secret-store operation");
 
 const idleAwarenessRelay = AgentAwarenessRelay.AgentAwarenessRelay.of({
+  botTransportStatus: Effect.succeed("configuration-required"),
+  publishBot: () => Effect.succeed("configuration-required"),
   publishThread: () => Effect.void,
   drain: Effect.void,
   requestCatchUp: () => Effect.void,
@@ -127,8 +140,10 @@ describe("releaseManagedTunnelOnShutdown", () => {
           values.set(name, value);
         }),
       create: (name, value) =>
-        Effect.sync(() => {
+        Effect.suspend(() => {
+          if (values.has(name)) return Effect.fail(storeFailure("AlreadyExists"));
           values.set(name, value);
+          return Effect.void;
         }),
       getOrCreateRandom: unusedSecretStoreOperation,
       remove: (name) =>
@@ -140,6 +155,8 @@ describe("releaseManagedTunnelOnShutdown", () => {
   }
 
   interface ReleaseHarness {
+    readonly createPairingLink?: EnvironmentAuth.EnvironmentAuth["Service"]["createPairingLink"];
+    readonly issueConnectCredential?: EnvironmentAuth.EnvironmentAuth["Service"]["issueConnectCredential"];
     readonly store: ServerSecretStore.ServerSecretStore["Service"];
     readonly applyConfigCalls: Array<unknown>;
     readonly requests: Array<HttpClientRequest.HttpClientRequest>;
@@ -230,7 +247,10 @@ describe("releaseManagedTunnelOnShutdown", () => {
         ),
         Effect.provideService(
           EnvironmentAuth.EnvironmentAuth,
-          EnvironmentAuth.EnvironmentAuth.of({} as EnvironmentAuth.EnvironmentAuth["Service"]),
+          EnvironmentAuth.EnvironmentAuth.of({
+            createPairingLink: harness.createPairingLink ?? unusedSecretStoreOperation,
+            issueConnectCredential: harness.issueConnectCredential ?? unusedSecretStoreOperation,
+          } as EnvironmentAuth.EnvironmentAuth["Service"]),
         ),
         Effect.provideService(
           CliTokenManager.CloudCliTokenManager,
@@ -268,6 +288,87 @@ describe("releaseManagedTunnelOnShutdown", () => {
         ]),
         Effect.scoped,
       );
+
+  it.effect("grants desktop operation only after validating the owner mint proof", () => {
+    const { store } = makeMemorySecretStore([
+      [CLOUD_LINKED_USER_ID, "owner"],
+      [RELAY_ISSUER_SECRET, "https://relay.example.test"],
+    ]);
+    const grants: Array<
+      Parameters<EnvironmentAuth.EnvironmentAuth["Service"]["issueConnectCredential"]>[0]
+    > = [];
+
+    return Effect.gen(function* () {
+      const link = yield* CloudLink.CloudLink;
+      const keys = yield* EnvironmentKeys.getOrCreateEnvironmentKeyPairFromSecretStore(store);
+      yield* store.set(CLOUD_MINT_PUBLIC_KEY, new TextEncoder().encode(keys.publicKey));
+      const now = yield* DateTime.now;
+      const iat = Math.floor(now.epochMilliseconds / 1_000);
+      const claims = {
+        iss: "https://relay.example.test",
+        aud: "t3-env:env_123",
+        sub: "owner",
+        jti: "mint-jti",
+        iat,
+        exp: iat + 60,
+        environmentId: "env_123",
+        clientProofKeyThumbprint: "client-key",
+        cnf: { jkt: "client-key" },
+        nonce: "mint-nonce",
+        scope: ["environment:connect"],
+      };
+
+      for (const overrides of [
+        { sub: "other-account" },
+        { aud: "t3-env:other-environment" },
+        { environmentId: "other-environment" },
+        { cnf: { jkt: "other-client-key" } },
+      ]) {
+        const proof = yield* signRelayJwt({
+          privateKey: keys.privateKey,
+          typ: RELAY_MINT_REQUEST_TYP,
+          payload: { ...claims, ...overrides },
+        });
+        const error = yield* link.mintCredential({ proof }).pipe(Effect.flip);
+        expect(error._tag).toBe("CloudLinkProofRejectedError");
+      }
+      expect(grants).toEqual([]);
+
+      const proof = yield* signRelayJwt({
+        privateKey: keys.privateKey,
+        typ: RELAY_MINT_REQUEST_TYP,
+        payload: claims,
+      });
+      yield* link.mintCredential({ proof });
+      const replay = yield* link.mintCredential({ proof }).pipe(Effect.flip);
+      expect(replay._tag).toBe("CloudLinkProofReplayedError");
+      expect(grants).toHaveLength(1);
+      expect(grants[0]).toMatchObject({
+        proofKeyThumbprint: "client-key",
+        requireApproval: false,
+      });
+      expect(AuthAdministrativeClientScopes).toContain("desktop:operate");
+      expect(AuthStandardClientScopes).not.toContain("desktop:operate");
+    }).pipe(
+      provideReleaseHarness({
+        store,
+        applyConfigCalls: [],
+        requests: [],
+        issueConnectCredential: (input) =>
+          Effect.map(DateTime.now, (now) => {
+            grants.push(input);
+            return {
+              id: "test-link",
+              credential: "test-credential",
+              scopes: AuthAdministrativeClientScopes,
+              subject: "test",
+              createdAt: now,
+              expiresAt: DateTime.add(now, { minutes: 2 }),
+            };
+          }),
+      }),
+    );
+  });
 
   it.effect.each([
     { direction: "ahead", skewSeconds: 600 },

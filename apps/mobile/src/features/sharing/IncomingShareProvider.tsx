@@ -146,7 +146,7 @@ async function removeReplayedPayloadFiles(payloads: ReadonlyArray<SharePayload>)
 }
 
 // Share the queue across remounts so lifecycle notifications cannot ingest one handoff twice.
-const incomingShareInbox = new IncomingShareInbox({
+export const incomingShareInbox = new IncomingShareInbox({
   loadDrafts: loadIncomingShareDrafts,
   writeDraft: writeIncomingShareDraft,
   removeDraft: removeIncomingShareDraft,
@@ -214,7 +214,7 @@ let snapshot: IncomingShareSnapshot = { drafts: [], isLoading: true };
 const snapshotListeners = new Set<() => void>();
 let presentation = EMPTY_INCOMING_SHARE_PRESENTATION_STATE;
 
-function publish(drafts: ReadonlyArray<IncomingShareDraft>) {
+export function publishIncomingShares(drafts: ReadonlyArray<IncomingShareDraft>) {
   snapshot = { drafts, isLoading: false };
   for (const listener of snapshotListeners) listener();
   presentPendingIncomingShare();
@@ -250,18 +250,15 @@ function reportRefreshFailure(cause: unknown) {
 const refreshIncomingShares = coalescedRun(async () => {
   const enabled = receiveSharingEnabled();
   try {
-    publish(await incomingShareInbox.refresh({ ingestNative: enabled }));
+    publishIncomingShares(await incomingShareInbox.refresh({ ingestNative: enabled }));
   } catch (cause) {
     const persisted = await incomingShareInbox.refresh({ ingestNative: false }).catch(() => null);
-    publish(persisted ?? snapshot.drafts);
+    publishIncomingShares(persisted ?? snapshot.drafts);
     reportRefreshFailure(cause);
   }
 });
 
-/**
- * Opens the oldest pending share as a new-task draft unless the user already
- * dismissed it. Runs whenever the inbox or the root navigation state changes.
- */
+/** Offers a destination before either consumer reserves the oldest pending share. */
 export function presentPendingIncomingShare(): void {
   if (!rootNavigationRef.isReady()) return;
   const state = rootNavigationRef.getRootState();
@@ -272,11 +269,26 @@ export function presentPendingIncomingShare(): void {
   });
   presentation = transition.state;
   if (!transition.shareIdToPresent) return;
-  rootNavigationRef.dispatch(
-    selectWorkspaceDetail({
-      name: "Thread",
-      params: { draft: { incomingShareId: transition.shareIdToPresent } },
-    }),
+  const shareId = transition.shareIdToPresent;
+  const pending = snapshot.drafts.find((share) => share.id === shareId);
+  if (pending?.botTransfer) return;
+  Dialog.alert(
+    m(msg("Where should this shared content go?")),
+    m(msg("Choose a project draft or open a bot conversation. Nothing is sent automatically.")),
+    [
+      { text: m(msg("Later")), style: "cancel" },
+      {
+        text: m(msg("Project draft")),
+        onPress: () =>
+          rootNavigationRef.dispatch(
+            selectWorkspaceDetail({
+              name: "Thread",
+              params: { draft: { incomingShareId: shareId } },
+            }),
+          ),
+      },
+      { text: m(msg("Bot conversation")), onPress: () => rootNavigationRef.navigate("Bots") },
+    ],
   );
 }
 
@@ -289,18 +301,18 @@ export function startIncomingShareInbox(): () => void {
 }
 
 async function consumeShare(shareId: string) {
-  publish(await incomingShareInbox.consume(shareId));
+  publishIncomingShares(await incomingShareInbox.consume(shareId));
 }
 
 async function reserveShare(shareId: string, destination: IncomingShareDestination) {
-  publish(await incomingShareInbox.reserve(shareId, destination));
+  publishIncomingShares(await incomingShareInbox.reserve(shareId, destination));
 }
 
 async function releaseShareReservation(
   shareId: string,
   expectedDestination: IncomingShareDestination,
 ) {
-  publish(await incomingShareInbox.releaseReservation(shareId, expectedDestination));
+  publishIncomingShares(await incomingShareInbox.releaseReservation(shareId, expectedDestination));
 }
 
 /** Moves shares into new-task drafts; see makeIncomingShareImports. */

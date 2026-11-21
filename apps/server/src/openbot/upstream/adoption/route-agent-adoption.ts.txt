@@ -1,0 +1,39 @@
+import { AGENT_ADOPTION_CAPABILITY, AGENT_ADOPTION_ROUTES } from "@openbot/contracts/team-protocol/agent-adoption-v1";
+import { runCauseEffect } from "../../backend/effect-boundary";
+import { requireString } from "../ipc/validation";
+import type { TeamApiAdmin } from "./dependencies";
+import { HttpError } from "./http-error";
+import { readJson, requireAdmin, requireVisibleBodyAgent } from "./request-helpers";
+import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
+export async function routeAgentAdoption(context: TeamApiRequestContext, admin: Pick<TeamApiAdmin, "adoption"> | undefined, newAgentHidden: () => boolean, hiddenAgentIds: ReadonlySet<string>): Promise<RouteOutcome> {
+  const { method, url, capabilities, member, request, json } = context;
+  if (method !== "POST" || !Object.values(AGENT_ADOPTION_ROUTES).some(path => path === url.pathname)) return "unmatched";
+  requireAdmin(member);
+  if (!capabilities.has(AGENT_ADOPTION_CAPABILITY) || !admin?.adoption) throw new HttpError(400, "Agent adoption unsupported.");
+  const body = await readJson(request);
+  try {
+    if (url.pathname === AGENT_ADOPTION_ROUTES.list) {
+      const history = await runCauseEffect(admin.adoption.list(member.id));
+      return json(200, history.filter(item => !item.agentId || !hiddenAgentIds.has(item.agentId)));
+    }
+    const operationId = requireString(body.operationId, "operationId");
+    if (url.pathname === AGENT_ADOPTION_ROUTES.status) {
+      const result = await runCauseEffect(admin.adoption.status(member.id, operationId));
+      if (result?.agentId) requireVisibleBodyAgent({ agentId: result.agentId }, hiddenAgentIds);
+      return json(200, result);
+    }
+    if (body.agentId !== undefined) requireVisibleBodyAgent(body, hiddenAgentIds);
+    if (body.agentId === undefined && newAgentHidden()) throw new HttpError(403, "The new agent provider is not visible.");
+    if (body.kind !== "template" && body.kind !== "marketplace") throw new HttpError(400, "Invalid adoption source.");
+    const result = await runCauseEffect(admin.adoption.install(member.id, {
+      operationId, kind: body.kind, sourceId: requireString(body.sourceId, "sourceId"),
+      timezone: requireString(body.timezone, "timezone"), expectedRevision: requireString(body.expectedRevision, "expectedRevision"),
+      ...(body.agentId === undefined ? {} : { agentId: requireString(body.agentId, "agentId") }),
+    }));
+    if (result.agentId) requireVisibleBodyAgent({ agentId: result.agentId }, hiddenAgentIds);
+    return json(200, result);
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    throw new HttpError(409, "Agent adoption unavailable. Check the original operation status before creating another request.");
+  }
+}

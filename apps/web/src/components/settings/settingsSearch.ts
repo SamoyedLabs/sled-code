@@ -1,3 +1,4 @@
+import { BOT_HOST_SETTINGS } from "./unifiedBotSettings";
 import { HOSTED_APP_CHANNEL } from "~/branding";
 import { isElectron, isSecretsFeatureEnabled } from "~/env";
 import { isMacPlatform, isWindowsPlatform, normalizeSearchText } from "~/lib/utils";
@@ -16,6 +17,7 @@ import { writeLocalStorageValue } from "../../hooks/useLocalStorage";
 import type { MessageResolver } from "../../i18n/messages";
 import { commandLabel } from "./KeybindingsSettings.logic";
 import type { ResolvedSettingsScope } from "./settingsScope";
+import { m as i18nMessage } from "../../i18n/messages";
 
 export type SettingsPath =
   | "/settings/projects"
@@ -27,6 +29,7 @@ export type SettingsPath =
   | "/settings/diffs"
   | "/settings/keybindings"
   | "/settings/snap-shot"
+  | "/settings/bots"
   | "/settings/providers"
   | "/settings/threads"
   | "/settings/browser"
@@ -102,6 +105,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/diffs": msg("Diffs & pull requests"),
   "/settings/keybindings": msg("Keybindings"),
   "/settings/snap-shot": msg("SnapShots"),
+  "/settings/bots": msg("Bots"),
   "/settings/providers": msg("Providers"),
   "/settings/threads": msg("Threads"),
   "/settings/browser": msg("Browser"),
@@ -150,6 +154,7 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
   {
     heading: msg("Agents"),
     paths: [
+      "/settings/bots",
       "/settings/providers",
       "/settings/threads",
       "/settings/browser",
@@ -240,6 +245,20 @@ const SOURCE_CONTROL_HOST_TERMS = sourceControlClients.definitions
   .join(" ");
 
 export const SETTINGS_SEARCH_ITEMS = [
+  ...BOT_HOST_SETTINGS.map((item) => ({
+    id: `bot-host-${item.id}`,
+    title: item.label,
+    to: "/settings/bots" as const,
+    scope: "environment" as const,
+    searchTerms: ["bots", "openbot", item.id],
+  })),
+  {
+    id: "bots",
+    title: i18nMessage(msg("Bots")),
+    to: "/settings/bots",
+    scope: "environment",
+    searchTerms: ["openbot persistent teammates tasks memory routines"],
+  },
   {
     id: "storage-worktree-keep-when",
     targetId: "storage-worktrees",
@@ -1495,6 +1514,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/diffs": null,
   "/settings/snap-shot": null,
   "/settings/keybindings": null,
+  "/settings/bots": null,
   "/settings/providers": null,
   "/settings/threads": null,
   "/settings/browser": null,

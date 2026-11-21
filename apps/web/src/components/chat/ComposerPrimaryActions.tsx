@@ -20,8 +20,9 @@ import type { MessageResolver } from "~/i18n/messages";
 import { formatContextWindowTokens } from "~/lib/contextWindow";
 import { cn, isMacPlatform } from "~/lib/utils";
 import { useShortcutModifierState } from "../../shortcutModifierState";
-import { StageBackdropButtonArt, useSidebarStageBackdropVariant } from "../SidebarStageBackdrop";
+import { useSidebarStageBackdropVariant } from "../SidebarStageBackdrop";
 import { Button } from "../ui/button";
+import { ComposerSendIcon, ComposerSubmitButton } from "./ComposerSubmitButton";
 import { Spinner } from "../ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
@@ -431,14 +432,9 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
         : submitLabel);
 
   const sendButton = (
-    <button
+    <ComposerSubmitButton
       type={showResume ? "button" : "submit"}
-      className={cn(
-        "relative isolate flex h-9 w-9 items-center justify-center overflow-hidden rounded-full shadow-xs transition-all duration-150 enabled:cursor-pointer enabled:inset-shadow-control-highlight hover:scale-105 active:inset-shadow-control-pressed active:shadow-none disabled:pointer-events-none disabled:shadow-none disabled:hover:scale-100 sm:h-8 sm:w-8 [&_svg]:pointer-events-none",
-        stageBackdropVariant
-          ? "bg-transparent text-white enabled:shadow-black/24 enabled:hover:brightness-110 disabled:opacity-64"
-          : "bg-message-action text-message-action-foreground enabled:shadow-message-action/24 hover:bg-message-action-hover disabled:bg-foreground/12 disabled:text-muted-foreground",
-      )}
+      backdropVariant={stageBackdropVariant}
       {...pointerFocusProps}
       onClick={(event) => {
         if (stopPhase === "landed") {
@@ -456,11 +452,6 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       }
       aria-label={submitStatus ?? submitLabel}
     >
-      {stageBackdropVariant ? (
-        <span className="pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
-          <StageBackdropButtonArt variant={stageBackdropVariant} />
-        </span>
-      ) : null}
       {isSendBusy ? (
         <Spinner size="sm" aria-hidden="true" />
       ) : showResume ? (
@@ -472,17 +463,9 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       ) : isRunning ? (
         <CornerUpRightIcon className="size-4" aria-hidden="true" />
       ) : (
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <path
-            d="M7 11.5V2.5M7 2.5L3 6.5M7 2.5L11 6.5"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <ComposerSendIcon />
       )}
-    </button>
+    </ComposerSubmitButton>
   );
 
   const submit = (

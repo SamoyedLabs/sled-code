@@ -73,6 +73,7 @@ export interface MarkdownLinkCustomization {
 export interface SelectableMarkdownTextProps {
   readonly markdown: string;
   readonly textStyle: NativeMarkdownTextStyle;
+  readonly selectable?: boolean;
   readonly skills?: ReadonlyArray<SelectableMarkdownSkill>;
   readonly models?: ReadonlyArray<SelectableMarkdownModel>;
   readonly preserveSoftBreaks?: boolean;

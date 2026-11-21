@@ -1,0 +1,68 @@
+{
+  "base": "/Users/cope/.t3/planning/.scratch/sled-openbot/assets/cos-maintenance/.openbot-build/source",
+  "patchSha256": "cd9dd40a54e24da018f842e2ac53b5423c280335afc80d36cbe59d623f14ff10",
+  "forwardVerified": true,
+  "reverseVerified": true,
+  "files": [
+    {
+      "path": "src/backend/agent/attention-registry.ts",
+      "before": "321e9c8b3fe4cb14aa944c71dbac609c271c7be0dc38c2a8b8f40d62d09b8a2f",
+      "final": "7ecc256fb8f7a59b81bee18183cabf4f0bdfc481edf7534f9f05dc66682be496"
+    },
+    {
+      "path": "src/backend/agent-api-keys.ts",
+      "before": "84baead4c563fad3a635e930f64334f2aef29a996ae0fdf3e162f2038cdaa78a",
+      "final": "902c7b270c7036ae40a1cd86f08afe7bc281e77c0655e125b0fa1a1a7b8e5cc1"
+    },
+    {
+      "path": "src/backend/atomic-json-file.ts",
+      "before": "27c8f5b8ebf1f78557d7cb889c81e90dadceac4758a646acd709370098f670cc",
+      "final": "3f1e915e3e45fb1513217edf495e03c86a5c76259dbada6fbbaed87f6ba364f3"
+    },
+    {
+      "path": "src/backend/vault-items.ts",
+      "before": "dc929bf20b7fa30026b35b318e9ff9d950c901a49e6e1b6a2e51fc5ab7a59acf",
+      "final": "4e7582a175a73efddd03de205bbcfe5b72f48e360c3b5aa28be7fa51c193cb9a"
+    },
+    {
+      "path": "src/main/vault-store.ts",
+      "before": "6031b2e87fae6ccfa93e22a658297ba01c118041e633fc92d8b56616cccf1e1f",
+      "final": "4cbdd3c301f344c72869c11adf62d4d388efb6defc779bd7bfc3c73721db0bce"
+    },
+    {
+      "path": "src/main/vault-service.ts",
+      "before": "665e6943921c3fb78645b0dbf79e91a874c5568fec585586a8e9a2f6b17e3136",
+      "final": "34adb8952af3e9be77cd0a32a30a3739f0b078672d0046a74b38dfcbc75c5078"
+    },
+    {
+      "path": "src/backend/agent-service.ts",
+      "before": "6f9acdf0c15389b1b8e9151704805852a847aaf0f7a2fd90890cc29daa793885",
+      "final": "7ebe7c6d0054ab21eb86cd8189cfab91fccac61602b901cd4cc62aa5d2809695"
+    },
+    {
+      "path": "src/backend/agent/privileged-response.test.ts",
+      "before": null,
+      "final": "454651e3d62634d002635c3b7e0d115c448094dcf719afa384ae262194577a4b"
+    },
+    {
+      "path": "src/main/vault-service.test.ts",
+      "before": "80822b28c14c81207f44f0d2ba86c2648d1d5f4c9dbaadf263f983d77eb4bf67",
+      "final": "92b04c10eb457f8b7e043c47458f8a9b0396b5251adcbdbcfd4f4d18ba1e4356"
+    },
+    {
+      "path": "src/main/team-api/route-sled-privileged-responses.ts",
+      "before": null,
+      "final": "9e17dd2c3a84bf9205810a2a06516b3f1e393de428b68977edde7df62e35d1aa"
+    },
+    {
+      "path": "src/main/team-api/privileged-response-binding.ts",
+      "before": null,
+      "final": "9c20178db0436da7a16c2ff535f14f874b023d01ed8968e673fc734b8fdfa1bc"
+    },
+    {
+      "path": "packages/contracts/src/team-protocol/sled-privileged-responses-v1.ts",
+      "before": null,
+      "final": "b0d54b73d6eed82b3dce46440eb4722c7a233d1656feaeae5c233b5111fe3779"
+    }
+  ]
+}

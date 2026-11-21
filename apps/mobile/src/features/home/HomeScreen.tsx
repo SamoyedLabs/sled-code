@@ -1,3 +1,4 @@
+import { BotsEdgeGestureContext } from "../bots/BotsEdgeGesture";
 import { useGT, useMessages } from "gt-react-native";
 
 import { useContentTopInset } from "../../components/ui/useBarInset";
@@ -213,7 +214,8 @@ export function HomeScreen(props: HomeScreenProps) {
   const fullSwipeWidth = primaryColumn && columnMetrics ? columnMetrics.width - 20 : undefined;
   const queuedThreadKeys = useQueuedThreadKeys();
   const openSwipeableRef = useRef<SwipeableMethods | null>(null);
-  const homeScrollGesture = useNativeGesture();
+  const botsEdgeGesture = use(BotsEdgeGestureContext);
+  const homeScrollGesture = useNativeGesture({ requireToFail: botsEdgeGesture });
   const insets = useSafeAreaInsets();
   const contentTopInset = useContentTopInset();
   const emptyTopInset = useWorkspaceListEmptyTopInset();

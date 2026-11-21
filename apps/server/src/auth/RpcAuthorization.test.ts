@@ -4,7 +4,10 @@ import {
   AuthFilesystemReadScope,
   AuthProvidersManageScope,
   AuthSettingsWriteScope,
+  AuthDesktopOperateScope,
+  AuthPreviewOperateScope,
   AuthAccessWriteScope,
+  clientRpcRequiredScopes,
   DEFAULT_SERVER_SETTINGS,
   EnvironmentId,
   ProviderDriverKind,
@@ -25,12 +28,14 @@ import {
   RunId,
   WS_METHODS,
   WsRpcGroup,
+  OpenbotHostWriteInput,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as RpcTest from "effect/rpc/RpcTest";
+import * as Schema from "effect/Schema";
 
 import {
   RPC_REQUIRED_SCOPES,
@@ -40,8 +45,278 @@ import {
 import * as RpcAuthorization from "./RpcAuthorization.ts";
 
 describe("RPC authorization scopes", () => {
+  it("allows ordinary host-bound conversation commands with execution permission alone", () => {
+    expect(
+      clientRpcRequiredScopes(WS_METHODS.openbotWriteToHost, {
+        hostId: "host",
+        request: { operation: "conversation.markUnread", agentId: "bot" },
+      }),
+    ).toEqual([AuthOrchestrationOperateScope]);
+    const decode = Schema.decodeUnknownSync(OpenbotHostWriteInput);
+    expect(() =>
+      decode({ hostId: "host", request: { operation: "provider.runtimes.check" } }),
+    ).toThrow();
+    expect(() =>
+      decode({ hostId: "", request: { operation: "conversation.markUnread", agentId: "bot" } }),
+    ).toThrow();
+  });
   it("declares exactly one scope for every RPC in the server group", () => {
     expect(new Set(Object.keys(RPC_REQUIRED_SCOPES))).toEqual(new Set(WsRpcGroup.requests.keys()));
+  });
+
+  it("separates bot observation from starting and stopping its host", () => {
+    for (const method of [
+      WS_METHODS.openbotStatus,
+      WS_METHODS.openbotContinuityStatus,
+      WS_METHODS.openbotListAgents,
+      WS_METHODS.openbotRead,
+      WS_METHODS.openbotReadToHost,
+      WS_METHODS.openbotAttention,
+      WS_METHODS.openbotSubscribeChanges,
+      WS_METHODS.openbotFilesListWorkspace,
+      WS_METHODS.openbotFilesSearch,
+      WS_METHODS.openbotFilesListDrafts,
+      WS_METHODS.openbotCodingPolicyGet,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationReadScope);
+    }
+    expect(requiredScopeForRpcMethod(WS_METHODS.openbotWrite)).toBe(AuthOrchestrationOperateScope);
+    for (const method of [
+      WS_METHODS.openbotMaintenanceStatus,
+      WS_METHODS.openbotMaintenanceCommand,
+      WS_METHODS.openbotUpstreamInstall,
+      WS_METHODS.openbotRuntimeActivate,
+      WS_METHODS.openbotRuntimeRollback,
+    ])
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthEnvironmentMaintainScope);
+    for (const method of [
+      WS_METHODS.openbotStart,
+      WS_METHODS.openbotStop,
+      WS_METHODS.openbotAdmin,
+      WS_METHODS.openbotAdminToHost,
+      WS_METHODS.openbotAttentionRespond,
+      WS_METHODS.openbotUpstreamStatus,
+      WS_METHODS.openbotUpstreamCheck,
+      WS_METHODS.openbotUpstreamStage,
+      WS_METHODS.openbotCodingPolicyEnable,
+      WS_METHODS.openbotCodingPolicyDisable,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthSettingsWriteScope);
+    }
+  });
+
+  it("requires access administration and every scope delegated to bots", () => {
+    expect(clientRpcRequiredScopes(WS_METHODS.openbotSledToolsDisconnect, {})).toEqual([
+      AuthAccessWriteScope,
+      AuthSettingsWriteScope,
+    ]);
+    expect(
+      clientRpcRequiredScopes(WS_METHODS.openbotSledToolsConnect, { access: "read-only" }),
+    ).toEqual([AuthAccessWriteScope, AuthSettingsWriteScope, AuthOrchestrationReadScope]);
+    expect(
+      clientRpcRequiredScopes(WS_METHODS.openbotSledToolsConnect, { access: "full-access" }),
+    ).toEqual([
+      AuthAccessWriteScope,
+      AuthSettingsWriteScope,
+      AuthOrchestrationReadScope,
+      AuthOrchestrationOperateScope,
+      AuthSourceControlWriteScope,
+    ]);
+  });
+
+  it("requires both file access and bot authority when transferring attachments", () => {
+    expect(
+      clientRpcRequiredScopes(WS_METHODS.attachmentsCreateUploadUrl, { purpose: "openbot" }),
+    ).toEqual([AuthOrchestrationOperateScope, AuthFilesystemReadScope]);
+    expect(
+      clientRpcRequiredScopes(WS_METHODS.attachmentsCreateUploadUrl, { type: "file" }),
+    ).toEqual([]);
+    expect(clientRpcRequiredScopes(WS_METHODS.openbotFilesMaterialize, {})).toEqual([
+      AuthFilesystemReadScope,
+      AuthOrchestrationReadScope,
+    ]);
+    for (const method of [
+      WS_METHODS.openbotFilesUploadDraft,
+      WS_METHODS.openbotFilesOriginalUpload,
+      WS_METHODS.openbotFilesRecoverUpload,
+      WS_METHODS.openbotFilesCancelUpload,
+    ]) {
+      expect(clientRpcRequiredScopes(method, {})).toEqual([
+        AuthOrchestrationOperateScope,
+        AuthFilesystemReadScope,
+      ]);
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
+    }
+    expect(requiredScopeForRpcMethod(WS_METHODS.openbotFilesSendDraft)).toBe(
+      AuthOrchestrationOperateScope,
+    );
+    expect(requiredScopeForRpcMethod(WS_METHODS.openbotFilesDiscardDraft)).toBe(
+      AuthOrchestrationOperateScope,
+    );
+  });
+  it("requires file read for Library thumbnails and administrative write for Library deletion", () => {
+    expect(
+      clientRpcRequiredScopes(WS_METHODS.openbotReadToHost, {
+        request: { operation: "library.files.preview", fileId: "synthetic" },
+      }),
+    ).toEqual([AuthOrchestrationReadScope, AuthFilesystemReadScope]);
+    expect(
+      clientRpcRequiredScopes(WS_METHODS.openbotAdminToHost, {
+        request: { operation: "library.files.delete", fileId: "synthetic" },
+      }),
+    ).toEqual([AuthSettingsWriteScope, AuthOrchestrationOperateScope, AuthFilesystemReadScope]);
+  });
+
+  it("requires settings and execution authority for bot coding policy changes", () => {
+    for (const method of [
+      WS_METHODS.openbotCodingPolicyEnable,
+      WS_METHODS.openbotCodingPolicyDisable,
+    ])
+      expect(clientRpcRequiredScopes(method, {})).toEqual([
+        AuthSettingsWriteScope,
+        AuthOrchestrationOperateScope,
+      ]);
+  });
+  it("requires the matching authority for private bot browser and computer supervision", () => {
+    expect(
+      clientRpcRequiredScopes(WS_METHODS.openbotBrowserViewCommand, { operation: "open" }),
+    ).toEqual([AuthSettingsWriteScope, AuthPreviewOperateScope]);
+    expect(requiredScopeForRpcMethod(WS_METHODS.openbotComputerViewCommand)).toBe(
+      AuthDesktopOperateScope,
+    );
+    for (const operation of ["open", "close"])
+      expect(
+        clientRpcRequiredScopes(WS_METHODS.openbotComputerViewCommand, {
+          operation,
+          hostId: "host",
+          id: "view",
+        }),
+      ).toEqual([AuthDesktopOperateScope]);
+    for (const method of [WS_METHODS.openbotRead, WS_METHODS.openbotReadToHost]) {
+      const payload = (operation: string) =>
+        method === WS_METHODS.openbotReadToHost
+          ? { hostId: "host", request: { operation } }
+          : { operation };
+      expect(clientRpcRequiredScopes(method, payload("tables.list"))).toEqual([
+        AuthSettingsWriteScope,
+        AuthOrchestrationReadScope,
+      ]);
+      expect(clientRpcRequiredScopes(method, payload("sites.list"))).toEqual([
+        AuthOrchestrationReadScope,
+      ]);
+    }
+    for (const method of [WS_METHODS.openbotAdmin, WS_METHODS.openbotAdminToHost]) {
+      for (const operation of ["tables.delete", "sites.delete"])
+        expect(
+          clientRpcRequiredScopes(
+            method,
+            method === WS_METHODS.openbotAdminToHost
+              ? { hostId: "host", request: { operation } }
+              : { operation },
+          ),
+        ).toEqual([
+          AuthSettingsWriteScope,
+          AuthOrchestrationReadScope,
+          AuthOrchestrationOperateScope,
+        ]);
+      const request = { operation: "browser.display" };
+      expect(
+        clientRpcRequiredScopes(
+          method,
+          method === WS_METHODS.openbotAdminToHost ? { hostId: "host", request } : request,
+        ),
+      ).toEqual([AuthSettingsWriteScope, AuthPreviewOperateScope]);
+      for (const operation of ["computer.setup", "computer.display"]) {
+        const request = { operation, displayId: "display" };
+        expect(
+          clientRpcRequiredScopes(
+            method,
+            method === WS_METHODS.openbotAdminToHost ? { hostId: "host", request } : request,
+          ),
+        ).toEqual([AuthDesktopOperateScope]);
+      }
+    }
+  });
+
+  it("requires provider management for bot provider administration and operate access for starting bots", () => {
+    for (const method of [WS_METHODS.openbotAdmin, WS_METHODS.openbotAdminToHost]) {
+      const payload = (request: unknown) =>
+        method === WS_METHODS.openbotAdminToHost ? { hostId: "fixture-host", request } : request;
+      expect(
+        clientRpcRequiredScopes(method, payload({ operation: "provider.runtimes.check" })),
+      ).toEqual([AuthSettingsWriteScope, AuthProvidersManageScope]);
+      expect(clientRpcRequiredScopes(method, payload({ operation: "agent.create" }))).toEqual([
+        AuthSettingsWriteScope,
+        AuthOrchestrationOperateScope,
+      ]);
+      for (const operation of [
+        "vault.onepassword.status",
+        "vault.onepassword.connect",
+        "vault.onepassword.disconnect",
+        "vault.bitwarden.connect",
+        "vault.bitwarden.disconnect",
+        "workflow.startRun",
+        "workflow.runStep",
+        "workflow.stopRun",
+        "workflow.stopStep",
+        "workflow.retryStep",
+        "workflow.decide",
+        "events.save",
+        "events.delete",
+        "events.test",
+        "events.sendTest",
+        "routineFlow.connect",
+        "routineFlow.updateLink",
+        "routineFlow.disconnect",
+        "conversation.send",
+        "conversation.markRead",
+        "conversation.react",
+        "thread.branch",
+        "thread.delete",
+        "queue.edit",
+        "queue.steer",
+        "queue.reorder",
+        "task.send",
+        "channel.send",
+        "channel.routine.test",
+        "channel.routine.create",
+        "channel.routine.update",
+        "channel.routine.delete",
+        "routine.create",
+        "routine.update",
+        "routine.delete",
+        "channel.stop",
+        "channel.resume",
+        "channel.reassign",
+        "channel.cancel",
+        "channel.archive",
+        "channel.delete",
+        "channel.save",
+      ]) {
+        expect(clientRpcRequiredScopes(method, payload({ operation }))).toEqual([
+          AuthSettingsWriteScope,
+          AuthOrchestrationOperateScope,
+        ]);
+      }
+      expect(clientRpcRequiredScopes(method, payload({ operation: "memory.create" }))).toEqual([
+        AuthSettingsWriteScope,
+      ]);
+      for (const operation of [
+        "events.status",
+        "events.list",
+        "events.rotateSecret",
+        "vault.list",
+        "vault.save",
+        "vault.delete",
+        "vault.reset",
+        "vault.reveal",
+        "vault.import",
+        "vault.bitwarden.status",
+      ])
+        expect(clientRpcRequiredScopes(method, payload({ operation }))).toEqual([
+          AuthSettingsWriteScope,
+        ]);
+    }
   });
 
   it("keeps webhook delivery logs, which hold request bodies, behind operate scope", () => {
@@ -95,6 +370,53 @@ describe("RPC authorization scopes", () => {
     }
   });
 });
+
+it.effect.each([AuthOrchestrationReadScope, AuthOrchestrationOperateScope])(
+  "guards ordinary host writes with operate permission while retaining admin settings protection (%s)",
+  (scope) =>
+    Effect.gen(function* () {
+      const tested = [WS_METHODS.openbotWriteToHost, WS_METHODS.openbotAdminToHost] as const;
+      const group = WsRpcGroup.omit(
+        ...[...WsRpcGroup.requests.keys()].filter(
+          (tag): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, (typeof tested)[number]> =>
+            !(tested as ReadonlyArray<string>).includes(tag),
+        ),
+      );
+      const handled: string[] = [];
+      const client = yield* RpcTest.makeClient(group).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            group.toLayerHandler(WS_METHODS.openbotWriteToHost, (input) =>
+              Effect.sync(() => {
+                handled.push(`${input.hostId}:${input.request.operation}`);
+                return null;
+              }),
+            ),
+            group.toLayerHandler(WS_METHODS.openbotAdminToHost, () =>
+              Effect.die("admin handler must stay protected"),
+            ),
+            RpcAuthorization.layer([scope]),
+          ),
+        ),
+      );
+      const input = {
+        hostId: "chosen-host",
+        request: { operation: "conversation.markUnread" as const, agentId: "bot" },
+      };
+      if (scope === AuthOrchestrationOperateScope) {
+        expect(yield* client[WS_METHODS.openbotWriteToHost](input)).toBe(null);
+        expect(handled).toEqual(["chosen-host:conversation.markUnread"]);
+      } else {
+        expect(yield* client[WS_METHODS.openbotWriteToHost](input).pipe(Effect.flip)).toMatchObject(
+          { requiredPermission: AuthOrchestrationOperateScope },
+        );
+        expect(handled).toEqual([]);
+      }
+      expect(yield* client[WS_METHODS.openbotAdminToHost](input).pipe(Effect.flip)).toMatchObject({
+        requiredPermission: AuthSettingsWriteScope,
+      });
+    }).pipe(Effect.scoped),
+);
 
 it("requires operate permission for host retry while preserving read-only listing", () => {
   expect(requiredScopeForDeviceList({})).toBe(AuthOrchestrationReadScope);
@@ -697,6 +1019,7 @@ it.effect("separates host file URLs from readable attachment URLs", () =>
       { _tag: "workspace-file", threadId: ThreadId.make("thread"), path: "file.txt" },
       { _tag: "media-file", threadId: ThreadId.make("thread"), path: "/repo/image.png" },
       { _tag: "draft-workspace-file", cwd: "/repo", path: "file.txt" },
+      { _tag: "bot-library-image", hostId: "host", fileId: "private-file" },
       { _tag: "native-app-icon", app: { _tag: "app-path", path: "/private/Secret.app" } },
     ] as const) {
       expect(
@@ -823,4 +1146,170 @@ it.effect("requires provider management to send /logout through chat", () =>
       "manager",
     ]);
   }).pipe(Effect.scoped),
+);
+
+it("requires provider management for every exact released registry operation on local and host RPCs", () => {
+  for (const method of [
+    WS_METHODS.openbotRead,
+    WS_METHODS.openbotReadToHost,
+    WS_METHODS.openbotAdmin,
+    WS_METHODS.openbotAdminToHost,
+  ]) {
+    const read = method === WS_METHODS.openbotRead || method === WS_METHODS.openbotReadToHost;
+    const toHost =
+      method === WS_METHODS.openbotReadToHost || method === WS_METHODS.openbotAdminToHost;
+    for (const operation of read
+      ? ["registry.search", "registry.status", "registry.installed"]
+      : ["registry.install", "registry.cancel", "registry.remove"]) {
+      const request = { operation, query: "", registryId: "demo", customAgentId: "demo" };
+      expect(
+        clientRpcRequiredScopes(method, toHost ? { hostId: "host", request } : request),
+      ).toEqual([AuthSettingsWriteScope, AuthProvidersManageScope]);
+    }
+  }
+});
+
+it("uses settings authority for listing review and keeps provider authority for private template operations on local and pinned host ports", () => {
+  for (const method of [
+    WS_METHODS.openbotRead,
+    WS_METHODS.openbotReadToHost,
+    WS_METHODS.openbotAdmin,
+    WS_METHODS.openbotAdminToHost,
+  ]) {
+    const read = method === WS_METHODS.openbotRead || method === WS_METHODS.openbotReadToHost;
+    const pinned =
+      method === WS_METHODS.openbotReadToHost || method === WS_METHODS.openbotAdminToHost;
+    for (const operation of read
+      ? ["templates.preview", "templates.detail", "templates.listing"]
+      : [
+          "templates.install",
+          "templates.installMarketplace",
+          "templates.updateMarketplace",
+          "templates.publish",
+          "templates.unpublish",
+        ]) {
+      const request = {
+        operation,
+        agentId: "agent",
+        templateId: "template",
+        listingId: "listing",
+        expectedUpdatedAt: "revision",
+        receiptId: "receipt",
+        timezone: "UTC",
+      };
+      expect(
+        clientRpcRequiredScopes(method, pinned ? { hostId: "host", request } : request),
+      ).toEqual(
+        read
+          ? operation === "templates.listing"
+            ? [AuthSettingsWriteScope]
+            : [AuthSettingsWriteScope, AuthProvidersManageScope]
+          : [AuthSettingsWriteScope, AuthProvidersManageScope, AuthOrchestrationOperateScope],
+      );
+    }
+  }
+});
+
+it.effect(
+  "enforces template review and mutation grants before local or pinned host handlers run",
+  () =>
+    Effect.gen(function* () {
+      const tested = [
+        WS_METHODS.openbotRead,
+        WS_METHODS.openbotReadToHost,
+        WS_METHODS.openbotAdmin,
+        WS_METHODS.openbotAdminToHost,
+      ] as const;
+      const group = WsRpcGroup.omit(
+        ...[...WsRpcGroup.requests.keys()].filter(
+          (tag): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, (typeof tested)[number]> =>
+            !(tested as ReadonlyArray<string>).includes(tag),
+        ),
+      );
+      for (const grants of [
+        {
+          scopes: [AuthSettingsWriteScope],
+          missingRead: AuthProvidersManageScope,
+          missingAdmin: AuthProvidersManageScope,
+        },
+        {
+          scopes: [AuthSettingsWriteScope, AuthProvidersManageScope],
+          missingRead: null,
+          missingAdmin: AuthOrchestrationOperateScope,
+        },
+        {
+          scopes: [AuthProvidersManageScope, AuthOrchestrationOperateScope],
+          missingRead: AuthSettingsWriteScope,
+          missingAdmin: AuthSettingsWriteScope,
+        },
+        {
+          scopes: [AuthSettingsWriteScope, AuthProvidersManageScope, AuthOrchestrationOperateScope],
+          missingRead: null,
+          missingAdmin: null,
+        },
+      ] as const) {
+        const handled: string[] = [];
+        const client = yield* RpcTest.makeClient(group).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              group.toLayerHandler(WS_METHODS.openbotRead, () =>
+                Effect.sync(() => {
+                  handled.push("read");
+                  return null;
+                }),
+              ),
+              group.toLayerHandler(WS_METHODS.openbotReadToHost, () =>
+                Effect.sync(() => {
+                  handled.push("read.host");
+                  return null;
+                }),
+              ),
+              group.toLayerHandler(WS_METHODS.openbotAdmin, () =>
+                Effect.sync(() => {
+                  handled.push("admin");
+                  return null;
+                }),
+              ),
+              group.toLayerHandler(WS_METHODS.openbotAdminToHost, () =>
+                Effect.sync(() => {
+                  handled.push("admin.host");
+                  return null;
+                }),
+              ),
+              RpcAuthorization.layer(grants.scopes),
+            ),
+          ),
+        );
+        const read = { operation: "templates.preview", agentId: "agent" } as const;
+        for (const effect of [
+          client[WS_METHODS.openbotRead](read),
+          client[WS_METHODS.openbotReadToHost]({ hostId: "host", request: read }),
+        ]) {
+          const result = yield* effect.pipe(Effect.result);
+          if (grants.missingRead)
+            expect(result).toMatchObject({
+              _tag: "Failure",
+              failure: { requiredPermission: grants.missingRead },
+            });
+          else expect(result).toMatchObject({ _tag: "Success", success: null });
+        }
+        const publish = { operation: "templates.publish", agentId: "agent" } as const;
+        for (const effect of [
+          client[WS_METHODS.openbotAdmin](publish),
+          client[WS_METHODS.openbotAdminToHost]({ hostId: "host", request: publish }),
+        ]) {
+          const result = yield* effect.pipe(Effect.result);
+          if (grants.missingAdmin)
+            expect(result).toMatchObject({
+              _tag: "Failure",
+              failure: { requiredPermission: grants.missingAdmin },
+            });
+          else expect(result).toMatchObject({ _tag: "Success", success: null });
+        }
+        expect(handled).toEqual([
+          ...(grants.missingRead ? [] : ["read", "read.host"]),
+          ...(grants.missingAdmin ? [] : ["admin", "admin.host"]),
+        ]);
+      }
+    }).pipe(Effect.scoped),
 );

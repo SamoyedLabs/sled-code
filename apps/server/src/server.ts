@@ -1,3 +1,32 @@
+import * as OpenbotConnectWebhookRouting from "./openbot/ConnectWebhookRouting.ts";
+import * as OpenbotCompatibilityPackaging from "./openbot/CompatibilityPackaging.ts";
+import * as OpenbotArchiveUploads from "./openbot/ArchiveUploads.ts";
+import * as OpenbotChannelCoding from "./openbot/ChannelCoding.ts";
+import * as OpenbotChannelCodingHttp from "./openbot/ChannelCodingHttp.ts";
+import * as OpenbotChannelOrigins from "./openbot/ChannelCodingOrigins.ts";
+import * as OpenbotChannelLedger from "./openbot/ChannelCodingLedger.ts";
+import * as OpenbotChannelGrants from "./openbot/ChannelCodingGrants.ts";
+import * as OpenbotChannelEvents from "./openbot/ChannelCodingEvents.ts";
+import * as OpenbotContinuity from "./openbot/Continuity.ts";
+import * as OpenbotCompatibilityRunner from "./openbot/CompatibilityRunner.ts";
+import * as OpenbotCompatibilityEvidence from "./openbot/CompatibilityEvidence.ts";
+import * as OpenbotProfileRecovery from "./openbot/ProfileRecovery.ts";
+import * as OpenbotCommandReceipts from "./orchestration-v2/CommandReceiptStore.ts";
+import * as OpenbotComputerGateway from "./openbot/ComputerViewGateway.ts";
+import * as OpenbotComputerHost from "./openbot/ComputerViewHost.ts";
+import * as OpenbotComputerHttp from "./openbot/ComputerViewHttp.ts";
+import * as OpenbotSledTools from "./openbot/SledTools.ts";
+import * as OpenbotUpstream from "./openbot/UpstreamRuntime.ts";
+import * as OpenbotCodingDelivery from "./openbot/CodingDelivery.ts";
+import * as OpenbotRemoteCoding from "./openbot/RemoteCoding.ts";
+import * as OpenbotRuntimeInstallation from "./openbot/RuntimeInstallation.ts";
+import * as OpenbotPrivileged from "./openbot/PrivilegedResponses.ts";
+import * as OpenbotFiles from "./openbot/Files.ts";
+import * as OpenbotMaintenance from "./openbot/Maintenance.ts";
+import * as OpenbotBrowserGateway from "./openbot/BrowserViewGateway.ts";
+import * as OpenbotBrowserHttp from "./openbot/browserViewHttp.ts";
+import * as OpenbotCodingPolicy from "./openbot/CodingPolicy.ts";
+import * as Openbot from "./openbot/Integration.ts";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import type { RelayManagedEndpointRuntimeConfig } from "@t3tools/contracts/relay";
 import * as Random from "effect/Random";
@@ -620,6 +649,8 @@ const layerScheduledTaskWebhookOrigin = Layer.effect(
   }),
 );
 
+const layerPeerConnectivity = PeerMcpClient.layer.pipe(Layer.provideMerge(PeerLinks.layer));
+
 const layerOrchestrationV2Runtime = RuntimeLayer.layerProduction.pipe(
   Layer.provide(UsageLimitSources.layerResetFallback),
   Layer.provide(layerScheduledTaskWebhookOrigin),
@@ -744,6 +775,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   Layer.effectDiscard(ProjectSettingsOverrideSweep.sweep),
 ).pipe(
   Layer.provideMerge(layerOrchestrationApplication),
+  Layer.provideMerge(layerPeerConnectivity),
   Layer.provideMerge(RuntimeLayer.layerEventInfrastructure),
   Layer.provideMerge(Layer.merge(ProjectStore.layer, ThreadSearch.layer)),
   Layer.provideMerge(SecretCheck.layer),
@@ -852,6 +884,34 @@ const layerCommandReadiness = HttpRouter.middleware(
 );
 
 const layerMakeRoutes = Layer.mergeAll(
+  Layer.effectDiscard(
+    Effect.gen(function* () {
+      const continuity = yield* OpenbotContinuity.Continuity;
+      yield* continuity.start;
+      const channelCoding = yield* OpenbotChannelCoding.ChannelCoding;
+      yield* channelCoding.start;
+    }),
+  ),
+  Layer.effectDiscard(
+    Effect.gen(function* () {
+      const integration = yield* Openbot.Integration;
+      const tools = yield* OpenbotSledTools.SledTools;
+      yield* integration.readyChanges.pipe(
+        Stream.runForEach(() =>
+          tools.reconcile.pipe(
+            Effect.catch(() => Effect.logWarning("Openbot Sled tools cleanup remains pending")),
+          ),
+        ),
+        Effect.forkScoped,
+      );
+    }),
+  ),
+  Layer.effectDiscard(
+    OpenbotCodingDelivery.CodingDelivery.pipe(Effect.flatMap((delivery) => delivery.start)),
+  ),
+  Layer.effectDiscard(
+    OpenbotRemoteCoding.RemoteCoding.pipe(Effect.flatMap((remote) => remote.start)),
+  ),
   Layer.mergeAll(
     HttpApiBuilder.layer(EnvironmentHttpApi).pipe(
       Layer.provide(AuthHttp.layer),
@@ -869,10 +929,14 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerOtlpTracesProxyRoute,
     ServerHttp.layerAssetRoute,
     ServerHttp.layerAttachmentUploadRoute,
+    OpenbotArchiveUploads.routeLayer,
     GuestHttp.layer,
     LinkThreadHttp.layer,
     DeviceHubProxy.layer,
     ServerBrowserStream.routeLayer,
+    OpenbotComputerHttp.routeLayer,
+    OpenbotBrowserHttp.routeLayer,
+    OpenbotChannelCodingHttp.routeLayer,
     PreviewTunnel.routeLayer,
     ServerHttp.layerStaticAndDevRoute,
     Ws.layer,
@@ -887,54 +951,152 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.effectDiscard(
     RemoteDelegation.RemoteDelegation.pipe(Effect.flatMap((remote) => remote.start())),
   ),
-).pipe(
-  Layer.provide(
-    PullRequestReviewGuideService.layer.pipe(Layer.provide(PullRequestReviewGuides.layer)),
-  ),
-  // delegate_task to a linked environment, from /mcp and the follower above.
-  Layer.provide(RemoteDelegation.layer.pipe(Layer.provide(ProjectionStoreV2.layer))),
-  // Links agents ask for: shown in a thread from /mcp, answered over WebSocket.
-  Layer.provide(PeerLinkRequests.layer),
-  // Share the service so HTTP/WS clients single-flight reads and invalidate each other's cached patches.
-  Layer.provide(layerPullRequestService),
-  Layer.provide(layerThreadIssueService),
-  Layer.provide(layerIssueService),
-  // The same activity instance RunExecutionService reports to, by layer memoization.
-  Layer.provide(
-    ServerBrowser.layer.pipe(
-      Layer.provide(Layer.merge(DesktopBrowserChannel.layer, PreviewAgentActivity.layer)),
+)
+  .pipe(
+    Layer.provide(
+      PullRequestReviewGuideService.layer.pipe(Layer.provide(PullRequestReviewGuides.layer)),
     ),
-  ),
-  Layer.provide(PreviewBrowser.layer),
-  Layer.provide(
-    RemoteDesktop.layer.pipe(
-      Layer.provide(RemoteDesktopNative.layer),
-      Layer.provide(RemoteDesktopAuthority.layer),
-      Layer.provide(RemoteDesktopConnectivity.layer.pipe(Layer.provide(ServerSecretStore.layer))),
+    // delegate_task to a linked environment, from /mcp and the follower above.
+    Layer.provide(RemoteDelegation.layer.pipe(Layer.provide(ProjectionStoreV2.layer))),
+    // Links agents ask for: shown in a thread from /mcp, answered over WebSocket.
+    Layer.provide(PeerLinkRequests.layer),
+    // Share the service so HTTP/WS clients single-flight reads and invalidate each other's cached patches.
+    Layer.provide(layerPullRequestService),
+    Layer.provide(layerThreadIssueService),
+    Layer.provide(layerIssueService),
+    // The same activity instance RunExecutionService reports to, by layer memoization.
+    Layer.provide(
+      ServerBrowser.layer.pipe(
+        Layer.provide(Layer.merge(DesktopBrowserChannel.layer, PreviewAgentActivity.layer)),
+      ),
     ),
-  ),
-  // Links to other environments, shared by clients (WebSocket) and agents (/mcp).
-  Layer.provide(
-    Layer.mergeAll(PeerForwarding.layer, PeerThreadRelay.layer, PeerClientPairing.layer).pipe(
-      Layer.provideMerge(PeerMcpClient.layer),
-      Layer.provideMerge(PeerLinks.layer),
+    Layer.provide(OpenbotCodingDelivery.layer.pipe(Layer.provide(ProjectionStoreV2.layer))),
+    Layer.provide(OpenbotFiles.layer),
+    Layer.provide(OpenbotPrivileged.layer),
+    Layer.provide(OpenbotArchiveUploads.layer),
+    Layer.provide(
+      OpenbotChannelCoding.layer.pipe(
+        Layer.provide(ProjectionStoreV2.layer),
+        Layer.provide(OpenbotCommandReceipts.layer),
+      ),
     ),
-  ),
-  Layer.provide(
-    SpeechService.layer.pipe(
-      Layer.provide(layerServerSettings),
-      Layer.provide(SpeechModelStore.layer),
+    Layer.provide(OpenbotContinuity.layer),
+    Layer.provide(OpenbotChannelGrants.layer),
+    Layer.provide(OpenbotChannelLedger.layer),
+    Layer.provide(OpenbotChannelOrigins.layer),
+    Layer.provide(OpenbotChannelEvents.layer),
+  )
+  .pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        OpenbotCodingPolicy.layer,
+        OpenbotMaintenance.layer,
+        OpenbotComputerGateway.layer.pipe(Layer.provide(OpenbotComputerHost.layer)),
+        OpenbotBrowserGateway.layer,
+      ),
     ),
-  ),
-  Layer.provide(CloudSpeech.layer.pipe(Layer.provide(SecretResolver.layer))),
-  Layer.provide(layerServerSettings),
-  Layer.provide(PreviewAutomationBroker.layer),
-  Layer.provide(ServerSelfUpdate.layer.pipe(Layer.provide(layerDesktopAppUpdate))),
-  Layer.provide(layerCommandReadiness),
-  Layer.provide(ServerHttp.layerBrowserApiCors),
-  Layer.provide(ServerHttp.layerHttpCompression),
-  Layer.provide(ServerHttp.layerUnloggedSignedRequests),
-);
+    Layer.provide(
+      Layer.unwrap(
+        ServerConfig.ServerConfig.pipe(
+          Effect.map((config) =>
+            OpenbotCompatibilityRunner.layer.pipe(
+              Layer.provide(
+                Layer.unwrap(
+                  HostProcess.Environment.pipe(
+                    Effect.map((environment) =>
+                      OpenbotCompatibilityPackaging.layer({
+                        baseArchive:
+                          environment.T3CODE_OPENBOT_PACKAGING_BASE_ARCHIVE ??
+                          `${config.stateDir}/openbot/upstream/artifacts/v0.60.0/7537c3f3d7364bef996eb458837d203cd1835dbbf52a9355da815e219dbb31f7/OpenBot-0.60.0-arm64.zip`,
+                        asarCli:
+                          environment.T3CODE_OPENBOT_PACKAGING_ASAR_CLI ??
+                          `${config.stateDir}/openbot/packaging-tools/node_modules/@electron/asar/bin/asar.js`,
+                        outputDirectory: `${config.stateDir}/openbot/compatibility-packages`,
+                      }),
+                    ),
+                  ),
+                ),
+              ),
+              Layer.provide(
+                Layer.succeed(OpenbotCompatibilityRunner.CompatibilityBuildTools, {
+                  bun: "bun",
+                  managedBunRoot: `${config.stateDir}/openbot/profile/provider-runtimes/bun`,
+                }),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+    Layer.provide(OpenbotCompatibilityEvidence.layer),
+    Layer.provide(OpenbotCompatibilityRunner.layerUnconfiguredChecks),
+    Layer.provide(
+      Layer.unwrap(
+        ServerConfig.ServerConfig.pipe(
+          Effect.map((config) => OpenbotProfileRecovery.layer({ stateDirectory: config.stateDir })),
+        ),
+      ),
+    ),
+  )
+  .pipe(
+    Layer.provide(OpenbotSledTools.layer.pipe(Layer.provide(ServerSecretStore.layer))),
+    Layer.provide(
+      Layer.unwrap(
+        ServerConfig.ServerConfig.pipe(
+          Effect.map((config) => OpenbotUpstream.layer({ stateDirectory: config.stateDir })),
+        ),
+      ),
+    ),
+    Layer.provide(
+      Openbot.layer.pipe(
+        Layer.provide(
+          OpenbotConnectWebhookRouting.layer.pipe(
+            Layer.provide(layerScheduledTaskWebhookOrigin),
+            Layer.provide(ServerSecretStore.layer),
+          ),
+        ),
+        Layer.provide(ServerSecretStore.layer),
+      ),
+    ),
+    Layer.provide(
+      Layer.unwrap(
+        ServerConfig.ServerConfig.pipe(
+          Effect.map((config) =>
+            OpenbotRuntimeInstallation.layer({ stateDirectory: config.stateDir }),
+          ),
+        ),
+      ),
+    ),
+    Layer.provide(PreviewBrowser.layer),
+    Layer.provide(
+      RemoteDesktop.layer.pipe(
+        Layer.provide(RemoteDesktopNative.layer),
+        Layer.provide(RemoteDesktopAuthority.layer),
+        Layer.provide(RemoteDesktopConnectivity.layer.pipe(Layer.provide(ServerSecretStore.layer))),
+      ),
+    ),
+    // Links to other environments, shared by clients (WebSocket) and agents (/mcp).
+    Layer.provide(
+      Layer.mergeAll(PeerForwarding.layer, PeerThreadRelay.layer, PeerClientPairing.layer).pipe(
+        Layer.provideMerge(PeerMcpClient.layer),
+        Layer.provideMerge(PeerLinks.layer),
+      ),
+    ),
+    Layer.provide(
+      SpeechService.layer.pipe(
+        Layer.provide(layerServerSettings),
+        Layer.provide(SpeechModelStore.layer),
+      ),
+    ),
+    Layer.provide(CloudSpeech.layer.pipe(Layer.provide(SecretResolver.layer))),
+    Layer.provide(layerServerSettings),
+    Layer.provide(PreviewAutomationBroker.layer),
+    Layer.provide(ServerSelfUpdate.layer.pipe(Layer.provide(layerDesktopAppUpdate))),
+    Layer.provide(layerCommandReadiness),
+    Layer.provide(ServerHttp.layerBrowserApiCors),
+    Layer.provide(ServerHttp.layerHttpCompression),
+    Layer.provide(ServerHttp.layerUnloggedSignedRequests),
+  );
 
 const layerMakeServer = Layer.unwrap(
   Effect.gen(function* () {

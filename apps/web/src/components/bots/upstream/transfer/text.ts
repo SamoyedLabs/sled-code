@@ -1,0 +1,98 @@
+import { m } from "../../../../i18n/messages";
+import { msg } from "gt-react";
+const messages: Record<string, string | { one: string; other: string }> = {
+  "settings.transfer.title": "Move this server to another computer",
+  "settings.transfer.lede":
+    "Your agents, their skills, routines, memories, and files go into one file.",
+  "settings.transfer.flow.label": "How a transfer works",
+  "settings.transfer.flow.export": "Export from the old server",
+  "settings.transfer.flow.copy": "Copy the .zip file",
+  "settings.transfer.flow.import": "Import into the new server",
+  "settings.transfer.old.title": "Export from this server",
+  "settings.transfer.old.text": "Save its agents and server settings to a file.",
+  "settings.transfer.new.title": "Import into this server",
+  "settings.transfer.new.text": "Add the agents and server settings from a file.",
+  "settings.transfer.notMoved":
+    "API keys, sign-ins, connectors, app preferences, and chat history are not moved. Set them up again on the new server.",
+  "settings.transfer.back": "Back",
+  "settings.transfer.loading": "Reading your agents…",
+  "settings.transfer.summary.label": "What the file contains",
+  "settings.transfer.count.files": "{size} of files",
+  "settings.transfer.count.noFiles": "No files",
+  "settings.transfer.count.settings": "Server settings",
+  "settings.transfer.count.noSettings": "No server settings",
+  "settings.transfer.includeAgent": "Include {name}",
+  "settings.transfer.export.title": "Export this server",
+  "settings.transfer.export.files": "Include workspace files",
+  "settings.transfer.export.filesDescription": m(
+    msg("Files your agents made, and the Shared folder. Turn off for a small file."),
+  ),
+  "settings.transfer.export.settings": "Include server settings",
+  "settings.transfer.export.settingsDescription": m(
+    msg("MCP servers, custom model providers, sidebar sections, and routine flows."),
+  ),
+  "settings.transfer.export.chooseAgents": "Choose agents ({selected} of {total})",
+  "settings.transfer.export.hideAgents": "Hide agents",
+  "settings.transfer.export.agentsLabel": m(msg("Agents to export")),
+  "settings.transfer.export.save": "Save export file…",
+  "settings.transfer.export.saving": "Exporting…",
+  "settings.transfer.export.failed": "The export did not finish",
+  "settings.transfer.export.saved": "Export ready",
+  "settings.transfer.export.step1": "Copy the file to the computer of the new server",
+  "settings.transfer.export.step1Note": "Use a USB drive, AirDrop, or a cloud folder.",
+  "settings.transfer.export.step2": "Open Server settings > Transfer of the new server",
+  "settings.transfer.export.step2Note":
+    "Choose “Import into this server” and the file. You see what is in it before anything changes.",
+  "settings.transfer.export.show": "Download again",
+  "settings.transfer.export.again": "Export again",
+  "settings.transfer.import.title": "Import into this server",
+  "settings.transfer.import.lede":
+    "Choose the file you exported from the other server. It ends in .zip.",
+  "settings.transfer.import.choose": "Choose file…",
+  "settings.transfer.import.reading": "Reading the file…",
+  "settings.transfer.import.openFailed": "The file could not be opened",
+  "settings.transfer.import.contains": "This file contains",
+  "settings.transfer.import.source": "OpenBot {version} · exported {date}",
+  "settings.transfer.import.sourceNoDate": "OpenBot {version}",
+  "settings.transfer.import.warnings": "Before the import starts",
+  "settings.transfer.import.agentsLabel": m(msg("Agents in the file")),
+  "settings.transfer.import.nameExists": "Name already used",
+  "settings.transfer.import.settings": "Import server settings",
+  "settings.transfer.import.settingsDescription": m(
+    msg(
+      "Adds the MCP servers, custom model providers, and sidebar sections that this server does not have.",
+    ),
+  ),
+  "settings.transfer.import.submit": {
+    one: "Import {count} agent",
+    other: "Import {count} agents",
+  },
+  "settings.transfer.import.submitSettings": "Import server settings",
+  "settings.transfer.import.importing": "Importing…",
+  "settings.transfer.import.failed": "The import did not finish",
+  "settings.transfer.result.imported": {
+    one: "{count} agent imported",
+    other: "{count} agents imported",
+  },
+  "settings.transfer.result.next": "Imported agents use the approval rules of this server.",
+  "settings.transfer.result.signIn": "Sign in again",
+  "settings.transfer.result.signInText": m(
+    msg("These providers were signed in on the other server and are not signed in here."),
+  ),
+  "settings.transfer.result.signInButton": "Sign in to {provider}",
+  "settings.transfer.result.notImported": "Not imported",
+  "settings.transfer.result.warnings": "Check these",
+  "import.count.agent": { one: "{count} agent", other: "{count} agents" },
+  "import.count.channel": { one: "{count} channel", other: "{count} channels" },
+  "import.count.skill": { one: "{count} skill", other: "{count} skills" },
+  "import.count.routine": { one: "{count} routine", other: "{count} routines" },
+  "import.count.memory": { one: "{count} memory", other: "{count} memories" },
+  "import.count.file": { one: "{count} file", other: "{count} files" },
+  "common.cancel": "Cancel",
+  "common.done": "Done",
+};
+export function t(key: string, values?: Record<string, string | number>): string {
+  const entry = messages[key] ?? key;
+  const text = typeof entry === "string" ? entry : values?.count === 1 ? entry.one : entry.other;
+  return text.replace(/\{(\w+)\}/g, (_, name: string) => String(values?.[name] ?? `{${name}}`));
+}

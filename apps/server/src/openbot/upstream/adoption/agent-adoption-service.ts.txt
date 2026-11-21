@@ -1,0 +1,124 @@
+// Sled maintained extension for Openbot 0.60.0. Upstream license and notices apply.
+import { createHash, randomUUID } from "node:crypto";
+import { isDynamicRecord } from "@openbot/contracts/runtime-values";
+import { isUuidV4 } from "@openbot/contracts/validation";
+import { Effect, Result, Schema, Semaphore } from "effect";
+import type { OpenBotDatabase } from "../backend/openbot-database";
+import type { AgentTemplateService } from "./agent-template-service";
+import type { AgentMarketplaceService } from "./agent-marketplace-service";
+
+export interface AgentAdoptionInput {
+  operationId: string;
+  kind: "template" | "marketplace";
+  sourceId: string;
+  timezone: string;
+  expectedRevision: string;
+  agentId?: string;
+}
+export interface AgentAdoptionStatus {
+  operationId: string;
+  kind: "template" | "marketplace";
+  sourceId: string;
+  state: "pending" | "complete" | "failed" | "interrupted";
+  agentId: string | null;
+  name: string | null;
+}
+export class AgentAdoptionFailure extends Schema.TaggedError<AgentAdoptionFailure>()("AgentAdoptionFailure", {
+  cause: Schema.Unknown,
+}) {}
+interface Row {
+  operationId: string; internalId: string; kind: "template" | "marketplace"; sourceId: string;
+  hash: string; state: AgentAdoptionStatus["state"]; agentId: string | null; name: string | null;
+}
+function row(value: unknown): Row {
+  if (!isDynamicRecord(value) || typeof value.operationId !== "string" || typeof value.internalId !== "string" ||
+    (value.kind !== "template" && value.kind !== "marketplace") || typeof value.sourceId !== "string" ||
+    typeof value.hash !== "string" || !["pending", "complete", "failed", "interrupted"].includes(String(value.state)) ||
+    (value.agentId !== null && typeof value.agentId !== "string") || (value.name !== null && typeof value.name !== "string"))
+    throw new Error("Invalid adoption journal.");
+  const state = value.state;
+  if (state !== "pending" && state !== "complete" && state !== "failed" && state !== "interrupted") throw new Error("Invalid adoption state.");
+  return { operationId: value.operationId, internalId: value.internalId, kind: value.kind, sourceId: value.sourceId,
+    hash: value.hash, state, agentId: value.agentId, name: value.name };
+}
+function project(value: Row): AgentAdoptionStatus {
+  return { operationId: value.operationId, kind: value.kind, sourceId: value.sourceId,
+    state: value.state, agentId: value.agentId, name: value.name };
+}
+const step = <A>(run: () => A) => Effect.try({ try: run, catch: cause => new AgentAdoptionFailure({ cause }) });
+/** Construct only AFTER AgentStore.initialize recovered all profile creation markers. */
+export class AgentAdoptionService {
+  readonly #queue = Semaphore.makeUnsafe(1);
+  constructor(
+    private readonly database: OpenBotDatabase,
+    private readonly templates: Pick<AgentTemplateService, "install">,
+    private readonly marketplace: Pick<AgentMarketplaceService, "install">,
+  ) {
+    database.connection.exec(`CREATE TABLE IF NOT EXISTS agent_adoption_operations (
+      memberId TEXT NOT NULL, operationId TEXT NOT NULL, internalId TEXT NOT NULL UNIQUE,
+      kind TEXT NOT NULL, sourceId TEXT NOT NULL, hash TEXT NOT NULL, state TEXT NOT NULL,
+      agentId TEXT, name TEXT, PRIMARY KEY(memberId, operationId))`);
+    // Additive upgrade for task-owned extension journals created before reviewed updates existed.
+    const columns = database.connection.prepare("PRAGMA table_info(agent_adoption_operations)").all();
+    if (!columns.some(value => isDynamicRecord(value) && value.name === "targetAgentId"))
+      database.connection.exec("ALTER TABLE agent_adoption_operations ADD COLUMN targetAgentId TEXT");
+    // No in-flight workflow survives a process restart. Store recovery already retained and identified every
+    // partially configured agent. Never rerun an interrupted request implicitly.
+    database.connection.prepare("UPDATE agent_adoption_operations SET state = 'interrupted' WHERE state = 'pending'").run();
+  }
+  #find(memberId: string, operationId: string): Row | null {
+    const value = this.database.connection.prepare("SELECT * FROM agent_adoption_operations WHERE memberId = ? AND operationId = ?").get(memberId, operationId);
+    return value === undefined ? null : row(value);
+  }
+  status(memberId: string, operationId: string) {
+    return step(() => { const value = this.#find(memberId, operationId); return value ? project(value) : null; });
+  }
+  list(memberId: string) {
+    return step(() => this.database.connection.prepare("SELECT * FROM agent_adoption_operations WHERE memberId = ? ORDER BY rowid DESC LIMIT 100").all(memberId).map(value => project(row(value))));
+  }
+  install(memberId: string, input: AgentAdoptionInput) {
+    return this.#queue.withPermit(this.#install(memberId, input));
+  }
+  readonly #install = Effect.fn("AgentAdoptionService.install")(function* (this: AgentAdoptionService, memberId: string, input: AgentAdoptionInput) {
+    if (!isUuidV4(input.operationId) || !memberId || !input.sourceId || !input.expectedRevision || input.sourceId.length > 128 || input.expectedRevision.length > 128)
+      return yield* new AgentAdoptionFailure({ cause: new Error("Invalid adoption request.") });
+    if (input.agentId !== undefined && (input.kind !== "marketplace" || !input.agentId || input.agentId.length > 128))
+      return yield* new AgentAdoptionFailure({ cause: new Error("Invalid adoption target.") });
+    yield* step(() => new Intl.DateTimeFormat("en", { timeZone: input.timezone }).format(0));
+    const hash = createHash("sha256").update(JSON.stringify([input.kind, input.sourceId, input.timezone, input.expectedRevision, ...(input.agentId === undefined ? [] : [input.agentId])])).digest("hex");
+    const previous = yield* step(() => this.#find(memberId, input.operationId));
+    if (previous) {
+      if (previous.hash !== hash) return yield* new AgentAdoptionFailure({ cause: new Error("Adoption identity conflicts with its original request.") });
+      return project(previous);
+    }
+    if (input.agentId !== undefined && !this.database.listAgents().some(agent => agent.id === input.agentId && agent.marketplaceSource?.listingId === input.sourceId))
+      return yield* new AgentAdoptionFailure({ cause: new Error("The installed agent does not belong to this listing.") });
+    const internalId = randomUUID();
+    yield* step(() => this.database.connection.prepare("INSERT INTO agent_adoption_operations (memberId, operationId, internalId, kind, sourceId, hash, state, targetAgentId, agentId) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)").run(memberId, input.operationId, internalId, input.kind, input.sourceId, hash, input.agentId ?? null, input.agentId ?? null));
+    // Forward the server-created identity to the actual producer, not to marketplace statistics.
+    const outcome = yield* Effect.result(input.kind === "template"
+      ? this.templates.install({ templateId: input.sourceId, timezone: input.timezone, expectedUpdatedAt: input.expectedRevision }, internalId).pipe(Effect.mapError(cause => new AgentAdoptionFailure({ cause })))
+      : this.marketplace.install({ listingId: input.sourceId, timezone: input.timezone, receiptId: internalId, ...(input.agentId === undefined ? {} : { agentId: input.agentId }) }, internalId, input.expectedRevision).pipe(Effect.mapError(cause => new AgentAdoptionFailure({ cause }))));
+    if (Result.isFailure(outcome)) {
+      yield* step(() => {
+        const reserved = this.#find(memberId, input.operationId);
+        const retained = this.database.listAgents().find(agent => agent.id === reserved?.agentId);
+        this.database.connection.prepare("UPDATE agent_adoption_operations SET state = 'failed', agentId = ?, name = ? WHERE memberId = ? AND operationId = ? AND state = 'pending'").run(retained?.id ?? null, retained?.name ?? null, memberId, input.operationId);
+      });
+      const failed = yield* step(() => this.#find(memberId, input.operationId));
+      if (!failed) return yield* new AgentAdoptionFailure({ cause: new Error("Adoption journal missing.") });
+      return project(failed);
+    }
+    const { agent } = outcome.success;
+    if (input.agentId !== undefined && agent.id !== input.agentId)
+      return yield* new AgentAdoptionFailure({ cause: new Error("Adoption producer returned a different destination.") });
+    // This receipt and journal settlement commit in ONE SQLite transaction. The pre-creation
+    // marker reconciles to this receipt, or retains the exact partially configured agent.
+    yield* step(() => this.database.dispatch(`agent-adoption:${internalId}`, [{ aggregateType: "agent-adoptions", aggregateId: internalId, eventType: "agent-adoption.completed", payload: { agentId: agent.id } }], () => {
+      if (!this.database.listAgents().some(value => value.id === agent.id)) throw new Error("Adoption agent missing.");
+      this.database.connection.prepare("UPDATE agent_adoption_operations SET state = 'complete', agentId = ?, name = ? WHERE memberId = ? AND operationId = ? AND state = 'pending'").run(agent.id, agent.name, memberId, input.operationId);
+      return { kind: "agent-adoption-v1", agent: { id: agent.id, name: agent.name } };
+    }));
+    return { operationId: input.operationId, kind: input.kind, sourceId: input.sourceId, state: "complete" as const, agentId: agent.id, name: agent.name };
+  }, Effect.uninterruptible);
+}

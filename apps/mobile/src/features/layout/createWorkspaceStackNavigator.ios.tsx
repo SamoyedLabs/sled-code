@@ -555,6 +555,9 @@ function WorkspaceStackView(props: ViewProps & { readonly nativeColumns: boolean
   const baseRoute = { key: `${props.state.key}:workspace`, name: "Workspace" };
   const visibleRoute = projection.detail.at(-1) ?? primaryRoute;
   const workspacePage = !workspaceUsesColumns(workspace.state.selectedTab, workspace.settingsOpen);
+  const botsCoverWorkspace = projection.overlays.some(
+    (route) => route.name === "Bots" || route.name === "BotNotification",
+  );
   const baseDescriptor: Descriptor = {
     ...primaryDescriptor,
     navigation: props.descriptors[visibleRoute.key]!.navigation,
@@ -562,55 +565,62 @@ function WorkspaceStackView(props: ViewProps & { readonly nativeColumns: boolean
     route: visibleRoute,
     options: { headerShown: false },
     render: () => (
-      <WorkspaceNativeTabs
-        tabsInSidebarColumn={props.nativeColumns && !workspacePage && deviceType === "pad"}
-        hidden={
-          projection.detail.length > 0 &&
-          !primaryVisible &&
-          !layout.usesSplitView &&
-          (metrics?.verticalBarEdge ?? "none") === "none"
-        }
+      <View
+        className="flex-1"
+        accessibilityElementsHidden={botsCoverWorkspace}
+        importantForAccessibility={botsCoverWorkspace ? "no-hide-descendants" : "auto"}
       >
-        {(slotWorkspace, headerOnly) => {
-          // A tab not shown yet renders the page opening it shows, under the key it opens with,
-          // so that page is already on screen in the tab when it's selected.
-          const tab = slotWorkspace.settingsOpen ? "settings" : slotWorkspace.state.selectedTab;
-          const page = headerOnly
-            ? (workspaceTabPage(props.state, tab, currentWorkspaceSelections(), {
-                columns: workspaceTabColumns(Platform.OS, tab, layout.usesSplitView),
-                check: workspaceSelectionCheck,
-                seedPullRequest: withKnownPullRequestSummary,
-              }) as Route | undefined)
-            : undefined;
-          const detail = headerOnly ? (page ? [page] : []) : projection.detail;
-          const slotDescriptors =
-            page && !descriptors[page.key]
-              ? { ...descriptors, [page.key]: props.describe(page, true) }
-              : descriptors;
-          return props.nativeColumns &&
-            workspaceUsesColumns(slotWorkspace.state.selectedTab, slotWorkspace.settingsOpen) ? (
-            <WorkspaceColumns
-              {...props}
-              descriptors={slotDescriptors}
-              primary={primaryRoute}
-              detail={detail}
-            />
-          ) : (
-            <V5CardStackView
-              {...props}
-              onRootVisibilityChange={setPrimaryVisible}
-              onNativePopChange={setNativelyPoppingWorkspaceRoute}
-              descriptors={slotDescriptors}
-              state={{
-                ...props.state,
-                routes: [primaryRoute, ...detail],
-                index: detail.length,
-                preloadedRoutes: [],
-              }}
-            />
-          );
-        }}
-      </WorkspaceNativeTabs>
+        <WorkspaceNativeTabs
+          tabsInSidebarColumn={props.nativeColumns && !workspacePage && deviceType === "pad"}
+          hidden={
+            !workspacePage &&
+            projection.detail.length > 0 &&
+            !primaryVisible &&
+            !layout.usesSplitView &&
+            (metrics?.verticalBarEdge ?? "none") === "none"
+          }
+        >
+          {(slotWorkspace, headerOnly) => {
+            // A tab not shown yet renders the page opening it shows, under the key it opens with,
+            // so that page is already on screen in the tab when it's selected.
+            const tab = slotWorkspace.settingsOpen ? "settings" : slotWorkspace.state.selectedTab;
+            const page = headerOnly
+              ? (workspaceTabPage(props.state, tab, currentWorkspaceSelections(), {
+                  columns: workspaceTabColumns(Platform.OS, tab, layout.usesSplitView),
+                  check: workspaceSelectionCheck,
+                  seedPullRequest: withKnownPullRequestSummary,
+                }) as Route | undefined)
+              : undefined;
+            const detail = headerOnly ? (page ? [page] : []) : projection.detail;
+            const slotDescriptors =
+              page && !descriptors[page.key]
+                ? { ...descriptors, [page.key]: props.describe(page, true) }
+                : descriptors;
+            return props.nativeColumns &&
+              workspaceUsesColumns(slotWorkspace.state.selectedTab, slotWorkspace.settingsOpen) ? (
+              <WorkspaceColumns
+                {...props}
+                descriptors={slotDescriptors}
+                primary={primaryRoute}
+                detail={detail}
+              />
+            ) : (
+              <V5CardStackView
+                {...props}
+                onRootVisibilityChange={setPrimaryVisible}
+                onNativePopChange={setNativelyPoppingWorkspaceRoute}
+                descriptors={slotDescriptors}
+                state={{
+                  ...props.state,
+                  routes: [primaryRoute, ...detail],
+                  index: detail.length,
+                  preloadedRoutes: [],
+                }}
+              />
+            );
+          }}
+        </WorkspaceNativeTabs>
+      </View>
     ),
   };
   const overlays = partitionStackPresentations(projection.overlays, (route) => {

@@ -8,7 +8,7 @@ export interface CommandPaletteLinkedThreads {
 }
 
 export interface CommandPaletteOpenDetail {
-  readonly open?: "add-project" | "new-thread-in";
+  readonly open?: "add-project" | "new-thread-in" | "new-bot-chat";
   readonly query?: string;
   readonly linkedThreads?: CommandPaletteLinkedThreads;
 }
@@ -17,7 +17,9 @@ export function openCommandPalette(detail: CommandPaletteOpenDetail = {}): void 
   // With no palette on screen (e.g. /pair) the request is dropped; kept in the
   // store, it would pop a stale palette once the app shell mounts.
   if (!isCommandPaletteMounted()) return;
-  if (detail.open === "new-thread-in") {
+  if (detail.open === "new-bot-chat") {
+    dispatchCommandPalette({ _tag: "OpenNewBotChat" });
+  } else if (detail.open === "new-thread-in") {
     dispatchCommandPalette({ _tag: "OpenNewThreadIn" });
   } else if (detail.open === "add-project") {
     dispatchCommandPalette({ _tag: "OpenAddProject" });

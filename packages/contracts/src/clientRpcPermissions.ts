@@ -1,4 +1,9 @@
+import { settingsRequiredScopes } from "./openbotSettings.ts";
+import { templateRequiredScopes } from "./openbotTemplates.ts";
+import { catalogRequiredScopes } from "./openbotCatalog.ts";
 import * as Schema from "effect/Schema";
+import { OpenbotSledToolsConnectInput } from "./openbotSledTools.ts";
+import { mcpClientScopes } from "./auth.ts";
 import { GitPreparePullRequestThreadInput, GitRunStackedActionInput } from "./git.ts";
 import {
   AuthAccessWriteScope,
@@ -9,6 +14,8 @@ import {
   AuthDesktopOperateScope,
   AuthProvidersManageScope,
   AuthSettingsWriteScope,
+  AuthFilesystemReadScope,
+  AuthFilesystemWriteScope,
   AuthSourceControlWriteScope,
   AuthTerminalOperateScope,
   type AuthEnvironmentScope,
@@ -18,6 +25,45 @@ import { WS_METHODS } from "./rpc.ts";
 
 /** Incremental client enforcement; the server still authorizes every request. */
 export const CLIENT_GUARDED_RPC_SCOPES = {
+  [WS_METHODS.openbotComputerViewCommand]: AuthDesktopOperateScope,
+  [WS_METHODS.openbotLiveVoiceCommand]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotBrowserViewCommand]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotAttentionRespond]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotContinuityCommand]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotMaintenanceCommand]: AuthEnvironmentMaintainScope,
+  [WS_METHODS.openbotUpstreamCheck]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotUpstreamStage]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotUpstreamInstall]: AuthEnvironmentMaintainScope,
+  [WS_METHODS.openbotRuntimeActivate]: AuthEnvironmentMaintainScope,
+  [WS_METHODS.openbotRuntimeRollback]: AuthEnvironmentMaintainScope,
+  [WS_METHODS.openbotImportExecute]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotNewTaskStart]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotInstanceTransfer]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotArchiveUpload]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotFilesMaterialize]: AuthFilesystemReadScope,
+  [WS_METHODS.openbotPrivilegedExecute]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotQueueAttachmentContext]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotQueueAttachmentSave]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotQueueAttachmentResult]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotFilesOriginalUpload]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotFilesRecoverUpload]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotFilesCancelUpload]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotFilesUploadDraft]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotFilesSendDraft]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotFilesDiscardDraft]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotCodingPolicyEnable]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotCodingPolicyDisable]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotWrite]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotWriteToHost]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotAdmin]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotAdminToHost]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotCodingLaunch]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotCodingSend]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotCodingCancel]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotSledToolsConnect]: AuthAccessWriteScope,
+  [WS_METHODS.openbotSledToolsDisconnect]: AuthAccessWriteScope,
+  [WS_METHODS.openbotStart]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotStop]: AuthSettingsWriteScope,
   [WS_METHODS.remoteDesktopStatus]: AuthDesktopOperateScope,
   [WS_METHODS.remoteDesktopStart]: AuthDesktopOperateScope,
   [WS_METHODS.remoteDesktopRenew]: AuthDesktopOperateScope,
@@ -99,6 +145,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 
+const decodeSledToolsConnect = Schema.decodeUnknownSync(OpenbotSledToolsConnectInput);
 const decodePrepareThread = Schema.decodeUnknownSync(GitPreparePullRequestThreadInput);
 const decodeStackedAction = Schema.decodeUnknownSync(GitRunStackedActionInput);
 
@@ -106,6 +153,184 @@ export function clientRpcRequiredScopes(
   method: string,
   input: unknown,
 ): readonly AuthEnvironmentScope[] {
+  if (
+    method === WS_METHODS.attachmentsCreateUploadUrl &&
+    typeof input === "object" &&
+    input !== null &&
+    "purpose" in input &&
+    input.purpose === "openbot"
+  )
+    return [AuthOrchestrationOperateScope, AuthFilesystemReadScope];
+  if (
+    method === WS_METHODS.assetsCreateUrl &&
+    typeof input === "object" &&
+    input !== null &&
+    "resource" in input &&
+    typeof input.resource === "object" &&
+    input.resource !== null &&
+    "_tag" in input.resource &&
+    input.resource._tag === "bot-library-image"
+  )
+    return [AuthOrchestrationReadScope, AuthFilesystemReadScope];
+  if (method === WS_METHODS.openbotRead || method === WS_METHODS.openbotReadToHost) {
+    const request =
+      method === WS_METHODS.openbotReadToHost &&
+      typeof input === "object" &&
+      input !== null &&
+      "request" in input
+        ? input.request
+        : input;
+    if (typeof request === "object" && request !== null && "operation" in request) {
+      const settingsScopes = settingsRequiredScopes(request.operation, "read");
+      if (settingsScopes) return settingsScopes;
+      const templateScopes = templateRequiredScopes(request.operation, "read");
+      if (templateScopes) return templateScopes;
+      const catalogScopes = catalogRequiredScopes(request.operation, "read");
+      if (catalogScopes) return catalogScopes;
+      if (request.operation === "tables.list")
+        return [AuthSettingsWriteScope, AuthOrchestrationReadScope];
+      if (request.operation === "sites.list") return [AuthOrchestrationReadScope];
+      if (
+        request.operation === "library.folders.read" ||
+        request.operation === "library.files.list" ||
+        request.operation === "library.files.preview"
+      )
+        return [AuthOrchestrationReadScope, AuthFilesystemReadScope];
+      if (
+        request.operation === "conversation.pins.list" ||
+        request.operation === "conversation.pins.readThread"
+      )
+        return [AuthOrchestrationReadScope, AuthOrchestrationOperateScope];
+    }
+  }
+  if (method === WS_METHODS.openbotComputerViewCommand) return [AuthDesktopOperateScope];
+  if (method === WS_METHODS.openbotBrowserViewCommand)
+    return [AuthSettingsWriteScope, AuthPreviewOperateScope];
+  if (
+    method === WS_METHODS.openbotCodingPolicyEnable ||
+    method === WS_METHODS.openbotCodingPolicyDisable
+  )
+    return [AuthSettingsWriteScope, AuthOrchestrationOperateScope];
+  if (method === WS_METHODS.openbotPrivilegedExecute)
+    return [AuthSettingsWriteScope, AuthOrchestrationOperateScope];
+  if (method === WS_METHODS.openbotArchiveUpload)
+    return [AuthSettingsWriteScope, AuthFilesystemWriteScope, AuthOrchestrationOperateScope];
+  if (method === WS_METHODS.openbotImportExecute)
+    return [AuthSettingsWriteScope, AuthFilesystemReadScope, AuthOrchestrationOperateScope];
+  if (method === WS_METHODS.openbotFilesMaterialize) {
+    if (
+      typeof input === "object" &&
+      input !== null &&
+      "source" in input &&
+      typeof input.source === "object" &&
+      input.source !== null &&
+      "kind" in input.source &&
+      (input.source.kind === "local-skill" || input.source.kind === "stored")
+    )
+      return [AuthFilesystemReadScope, AuthSettingsWriteScope, AuthProvidersManageScope];
+    return [AuthFilesystemReadScope, AuthOrchestrationReadScope];
+  }
+  if (
+    [
+      WS_METHODS.openbotQueueAttachmentContext,
+      WS_METHODS.openbotQueueAttachmentSave,
+      WS_METHODS.openbotQueueAttachmentResult,
+    ].some((value) => value === method)
+  )
+    return [AuthOrchestrationOperateScope, AuthFilesystemReadScope];
+  if (
+    method === WS_METHODS.openbotFilesUploadDraft ||
+    method === WS_METHODS.openbotFilesOriginalUpload ||
+    method === WS_METHODS.openbotFilesRecoverUpload ||
+    method === WS_METHODS.openbotFilesCancelUpload
+  )
+    return [AuthOrchestrationOperateScope, AuthFilesystemReadScope];
+  if (method === WS_METHODS.openbotAdmin || method === WS_METHODS.openbotAdminToHost) {
+    const request =
+      method === WS_METHODS.openbotAdminToHost &&
+      typeof input === "object" &&
+      input !== null &&
+      "request" in input
+        ? input.request
+        : input;
+    // Inspect metadata without decoding credential values into validation errors.
+    if (
+      typeof request === "object" &&
+      request !== null &&
+      "operation" in request &&
+      typeof request.operation === "string"
+    ) {
+      const settingsScopes = settingsRequiredScopes(request.operation, "admin");
+      if (settingsScopes) return settingsScopes;
+      const templateScopes = templateRequiredScopes(request.operation, "admin");
+      if (templateScopes) return templateScopes;
+      const catalogScopes = catalogRequiredScopes(request.operation, "admin");
+      if (catalogScopes) return catalogScopes;
+      if (request.operation === "library.files.delete")
+        return [AuthSettingsWriteScope, AuthOrchestrationOperateScope, AuthFilesystemReadScope];
+      if (request.operation === "library.folders.change")
+        return [AuthOrchestrationOperateScope, AuthFilesystemReadScope];
+      if (request.operation === "tables.delete" || request.operation === "sites.delete")
+        return [AuthSettingsWriteScope, AuthOrchestrationReadScope, AuthOrchestrationOperateScope];
+      if (request.operation === "computer.setup" || request.operation === "computer.display")
+        return [AuthDesktopOperateScope];
+      if (request.operation.startsWith("provider."))
+        return [AuthSettingsWriteScope, AuthProvidersManageScope];
+      if (request.operation.startsWith("browser."))
+        return [AuthSettingsWriteScope, AuthPreviewOperateScope];
+      if (
+        request.operation.startsWith("vault.onepassword.") ||
+        request.operation === "vault.bitwarden.connect" ||
+        request.operation === "vault.bitwarden.disconnect" ||
+        request.operation.startsWith("conversation.") ||
+        request.operation.startsWith("queue.") ||
+        request.operation.startsWith("thread.") ||
+        request.operation.startsWith("task.") ||
+        request.operation === "events.save" ||
+        request.operation === "events.delete" ||
+        request.operation === "events.test" ||
+        request.operation === "events.sendTest" ||
+        request.operation.startsWith("routineFlow.") ||
+        request.operation === "agent.create" ||
+        request.operation === "workflow.startRun" ||
+        request.operation === "workflow.runStep" ||
+        request.operation === "workflow.stopRun" ||
+        request.operation === "workflow.stopStep" ||
+        request.operation === "workflow.retryStep" ||
+        request.operation === "workflow.decide" ||
+        request.operation === "channel.routine.test" ||
+        request.operation === "channel.routine.create" ||
+        request.operation === "channel.routine.update" ||
+        request.operation === "channel.routine.delete" ||
+        request.operation.startsWith("routine.") ||
+        request.operation === "channel.grants" ||
+        request.operation === "channel.send" ||
+        request.operation === "channel.stop" ||
+        request.operation === "channel.resume" ||
+        request.operation === "channel.reassign" ||
+        request.operation === "channel.cancel" ||
+        request.operation === "channel.archive" ||
+        request.operation === "channel.delete" ||
+        request.operation === "channel.message.delete" ||
+        request.operation === "channel.save"
+      )
+        return [AuthSettingsWriteScope, AuthOrchestrationOperateScope];
+    }
+    return [AuthSettingsWriteScope];
+  }
+  if (
+    method === WS_METHODS.openbotSledToolsConnect ||
+    method === WS_METHODS.openbotSledToolsDisconnect
+  )
+    return [
+      ...new Set([
+        AuthAccessWriteScope,
+        AuthSettingsWriteScope,
+        ...(method === WS_METHODS.openbotSledToolsConnect && input !== undefined
+          ? mcpClientScopes(decodeSledToolsConnect(input).access)
+          : []),
+      ]),
+    ];
   if (method === WS_METHODS.gitPreparePullRequestThread && input !== undefined) {
     const payload = decodePrepareThread(input);
     if (payload.mode === "worktree" && payload.threadId !== undefined)

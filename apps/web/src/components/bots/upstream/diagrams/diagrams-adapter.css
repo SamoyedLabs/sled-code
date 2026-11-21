@@ -1,0 +1,91 @@
+/* React adapter sizing; diagram geometry and presentation remain the pinned source styles. */
+.openbot-react {
+  .diagram-view {
+    height: 100%;
+    flex: 1;
+    min-height: 0;
+  }
+  .diagram-view-actions .ui-button {
+    padding: 4px;
+  }
+  .diagram-view-actions .ui-button > svg {
+    width: 16px;
+    height: 16px;
+  }
+  .diagram-node-avatar {
+    display: grid;
+    flex: none;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+  }
+  .diagram-node-select.ui-button {
+    touch-action: none;
+  }
+  .routine-connection-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: var(--openbot-text-sm);
+  }
+  .diagram-inspector-task {
+    min-height: 80px;
+    width: 100%;
+  }
+  .diagram-board-status {
+    max-width: calc(100% - 100px);
+  }
+}
+.openbot-react {
+  .diagram-chat-composer textarea {
+    width: 100%;
+    min-height: 44px;
+    max-height: 120px;
+    resize: none;
+    border: 0;
+    background: transparent;
+    padding: 8px;
+    color: var(--openbot-text-primary);
+    font: inherit;
+    outline: 0;
+  }
+  .diagram-chat-bubble {
+    display: flex;
+    padding: 4px 0;
+  }
+  .diagram-chat-bubble[data-author="user"] {
+    justify-content: flex-end;
+  }
+  .diagram-chat-bubble .ui-bubble-content {
+    max-width: 100%;
+    padding: 8px 10px;
+    border-radius: var(--openbot-radius-lg);
+    background: var(--openbot-bg-control);
+  }
+  .diagram-chat-bubble[data-author="user"] .ui-bubble-content {
+    background: var(--openbot-accent-soft);
+  }
+  .diagram-chat-header .ui-button svg {
+    width: 16px;
+    height: 16px;
+  }
+  .diagram-chat-composer .ui-button svg {
+    width: 18px;
+    height: 18px;
+  }
+  .diagram-board-delete-edge {
+    position: absolute;
+    top: 48px;
+    left: 16px;
+    z-index: 2;
+  }
+  .diagram-inspector-output {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .diagram-webhook-url {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}

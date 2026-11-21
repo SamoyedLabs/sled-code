@@ -1,0 +1,16 @@
+.preview-stream-word {
+  animation: preview-stream-word-in 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes preview-stream-word-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .preview-stream-word {
+    animation: none;
+  }
+}

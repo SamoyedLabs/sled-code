@@ -9,6 +9,7 @@ import { CodeAppearanceSection } from "./appearance/sections/CodeAppearanceSecti
 import { TerminalAppearanceSection } from "./appearance/sections/TerminalAppearanceSection";
 import { TextAppearanceSection } from "./appearance/sections/TextAppearanceSection";
 import { ThemeAppearanceSection } from "./appearance/sections/ThemeAppearanceSection";
+import { BotChatAppearanceSection } from "./appearance/sections/BotChatAppearanceSection";
 import { ToolCallsAppearanceSection } from "./appearance/sections/ToolCallsAppearanceSection";
 
 export function SettingsAppearanceRouteScreen() {
@@ -27,6 +28,7 @@ export function SettingsAppearanceRouteScreen() {
         }}
       >
         <ThemeAppearanceSection />
+        {Platform.OS === "ios" ? <BotChatAppearanceSection /> : null}
         {Platform.OS === "android" ? <AndroidNavigationAppearanceSection /> : null}
         <TextAppearanceSection />
         <TerminalAppearanceSection />

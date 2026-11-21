@@ -1,0 +1,80 @@
+import { createHash } from "node:crypto";
+import { runCauseEffect } from "../../backend/effect-boundary";
+import type { AgentService } from "../../backend/agent-service";
+import type { QueueAttachmentAcquireCommit, QueueAttachmentEdit } from "../../backend/mailbox-store";
+import { verifyQueueAttachmentsBinding } from "./queue-attachments-binding";
+import { HttpError } from "./http-error";
+import type { TeamApiRequestContext, RouteOutcome } from "./request-context";
+import { readBinary, requireAgentLevel, memberSender } from "./request-helpers";
+import {
+  decodeQueueAttachmentContext,
+  decodeQueueAttachmentEdit,
+} from "../../../packages/contracts/src/team-protocol/sled-queue-attachments-v1";
+export async function routeSledQueueAttachments(
+  context: TeamApiRequestContext,
+  agents: Pick<AgentService, "queueAttachmentContext" | "queueAttachmentResult" | "saveQueueAttachments">,
+  trusted: {
+    secret: string;
+    hostId: string;
+    environmentId: string;
+    acquireCommit: QueueAttachmentAcquireCommit;
+    validate: (principal: string, target: { agentId: string; threadId: string; taskId: string | null }) => void;
+  },
+): Promise<RouteOutcome> {
+  const path = context.url.pathname;
+  if (
+    context.method !== "POST" ||
+    !["context", "save", "result"].some((a) => path === `/v1/sled/queue-attachments/${a}`)
+  )
+    return "unmatched";
+  if (context.url.search || !context.capabilities.has("sled-queue-attachments-v1"))
+    throw new HttpError(400, "Queue attachments unavailable");
+  const raw = await readBinary(context.request, 160000);
+  const token = context.request.headers["x-sled-queue-attachments"];
+  if (typeof token !== "string") throw new HttpError(403, "Queue attachments unavailable");
+  const principal = verifyQueueAttachmentsBinding(
+    trusted.secret,
+    token,
+    { hostId: trusted.hostId, method: "POST", path, bodySha256: createHash("sha256").update(raw).digest("hex") },
+    Date.now(),
+  );
+  const value = JSON.parse(Buffer.from(raw).toString("utf8"));
+  const body = path.endsWith("/context") ? decodeQueueAttachmentContext(value) : decodeQueueAttachmentEdit(value);
+  if (body.hostId !== trusted.hostId || body.environmentId !== trusted.environmentId)
+    throw new HttpError(403, "Queue attachments unavailable");
+  const validate = () => {
+    requireAgentLevel(context, body.agentId, "chat");
+    trusted.validate(principal, body);
+  };
+  validate();
+  if (path.endsWith("/context"))
+    return context.json(200, agents.queueAttachmentContext({ ...decodeQueueAttachmentContext(value), principal }));
+  const edit = decodeQueueAttachmentEdit(value);
+  const input: QueueAttachmentEdit = {
+    ...edit,
+    principal,
+    uploads: edit.uploads.map((u) => ({
+      draftId: u.draftId,
+      identity: {
+        operationId: u.identity.operationId,
+        principal,
+        environmentId: body.environmentId,
+        hostId: u.identity.hostId,
+        agentId: u.identity.agentId,
+        threadId: u.identity.threadId,
+        taskId: u.identity.taskId,
+        name: u.identity.name,
+        mimeType: u.identity.mimeType,
+        size: u.identity.size,
+        sha256: u.identity.sha256,
+      },
+    })),
+  };
+  if (path.endsWith("/result")) return context.json(200, agents.queueAttachmentResult(input, validate));
+  return context.json(
+    200,
+    await runCauseEffect(
+      agents.saveQueueAttachments(input, validate, trusted.acquireCommit, memberSender(context.member)),
+    ),
+  );
+}

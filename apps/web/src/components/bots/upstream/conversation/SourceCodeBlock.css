@@ -1,0 +1,241 @@
+.openbot-react {
+  .message-code-block {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--openbot-border);
+    border-radius: var(--openbot-radius-md);
+    background: var(--openbot-bg-control);
+  }
+
+  .message-code-header {
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--openbot-space-2);
+    border-bottom: 1px solid var(--openbot-border);
+    background: var(--openbot-bg-control);
+    padding-block: 4px;
+    padding-inline: 10px 6px;
+  }
+
+  .message-code-heading {
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .message-code-filename {
+    overflow: hidden;
+    color: var(--openbot-text-primary);
+    font-family: var(--openbot-font-mono);
+    font-size: var(--openbot-text-sm);
+    font-weight: var(--openbot-weight-medium);
+    line-height: var(--openbot-leading-sm);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .message-code-language {
+    flex: none;
+    border-radius: var(--openbot-radius-pill);
+    background: var(--openbot-border);
+    padding: 1px 6px;
+    color: var(--openbot-text-readable);
+    font-size: var(--openbot-text-sm);
+    font-weight: var(--openbot-weight-medium);
+    line-height: 16px;
+  }
+
+  .message-code-language:only-child {
+    font-family: var(--openbot-font-mono);
+  }
+
+  :where(.ui-button).message-code-copy {
+    position: relative;
+    height: 26px;
+    flex: none;
+    gap: var(--openbot-space-1);
+    border-radius: var(--openbot-radius-sm);
+    padding-inline: 7px;
+    color: var(--openbot-text-muted);
+    font-size: var(--openbot-text-sm);
+    line-height: 16px;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    :where(.ui-button).message-code-copy:hover:not(:disabled) {
+      background: var(--openbot-bg-control-active);
+      box-shadow: 0 0 0 1px var(--openbot-border-strong);
+      color: var(--openbot-text-primary);
+    }
+  }
+
+  :where(.ui-button).message-code-copy:active:not(:disabled) {
+    transform: scale(0.96);
+  }
+
+  :where(.ui-button).message-code-copy::after {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    content: "";
+  }
+
+  .message-code-copy-icons {
+    position: relative;
+    width: var(--openbot-icon-xs);
+    height: var(--openbot-icon-xs);
+    display: grid;
+    place-items: center;
+  }
+
+  .message-code-copy-icons > span {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    opacity: 0;
+    filter: blur(4px);
+    scale: 0.25;
+    transition:
+      opacity var(--openbot-duration-slow) var(--openbot-ease-out),
+      filter var(--openbot-duration-slow) var(--openbot-ease-out),
+      scale var(--openbot-duration-slow) var(--openbot-ease-out);
+  }
+
+  .message-code-copy-icons > span[data-visible="true"] {
+    opacity: 1;
+    filter: blur(0);
+    scale: 1;
+  }
+
+  .message-code-copy-icons svg {
+    width: var(--openbot-icon-xs);
+    height: var(--openbot-icon-xs);
+    display: block;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: var(--openbot-icon-stroke);
+  }
+
+  .message-code-scroll {
+    width: 100%;
+    max-height: 420px;
+    overflow: auto;
+    margin: 0;
+    background: var(--openbot-bg-sidebar);
+    padding-block: 8px 10px;
+    color: var(--openbot-text-secondary);
+    font-family: var(--openbot-font-mono);
+    font-size: var(--openbot-text-sm);
+    font-variant-numeric: tabular-nums;
+    line-height: 19px;
+    /* Only the inline axis: Chromium stops a vertical wheel at a contained block even when the block
+     cannot scroll, so the chat would not scroll under the pointer. */
+    overscroll-behavior-x: contain;
+    tab-size: 2;
+  }
+
+  .message-code-scroll:focus-visible {
+    outline: 2px solid var(--openbot-border-focus);
+    outline-offset: -2px;
+  }
+
+  .message-code-scroll > code {
+    min-width: 100%;
+    display: block;
+    font: inherit;
+  }
+
+  .message-code-line {
+    min-height: 19px;
+    display: flex;
+  }
+
+  .message-code-line-number {
+    width: 40px;
+    flex: none;
+    padding-inline-end: 8px;
+    color: var(--openbot-text-dim);
+    font-size: var(--openbot-text-sm);
+    text-align: end;
+    user-select: none;
+  }
+
+  .message-code-line-source {
+    min-width: 0;
+    padding-inline-end: 12px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .message-code-caret {
+    width: 2px;
+    height: 13px;
+    display: inline-block;
+    margin-inline-start: 2px;
+    border-radius: var(--openbot-radius-pill);
+    background: var(--openbot-accent);
+    transform: translateY(2px);
+  }
+
+  [data-code-token="cmnt"] {
+    color: var(--openbot-text-dim);
+    font-style: italic;
+  }
+
+  [data-code-token="kwd"],
+  [data-code-token="section"] {
+    color: var(--openbot-accent-text);
+  }
+
+  [data-code-token="str"],
+  [data-code-token="insert"] {
+    color: var(--openbot-success);
+  }
+
+  [data-code-token="num"],
+  [data-code-token="bool"],
+  [data-code-token="class"] {
+    color: var(--openbot-warning);
+  }
+
+  [data-code-token="func"],
+  [data-code-token="type"] {
+    color: var(--openbot-text-primary);
+  }
+
+  [data-code-token="oper"],
+  [data-code-token="esc"] {
+    color: var(--openbot-text-muted);
+  }
+
+  [data-code-token="err"],
+  [data-code-token="deleted"] {
+    color: var(--openbot-danger);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .message-code-copy-icons > span {
+      transition: none;
+    }
+  }
+
+  .message-code-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .message-code-copy {
+    display: inline-flex;
+    align-items: center;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+}

@@ -12,7 +12,7 @@ function NewThreadLinkRoute() {
   const parsed = parseNewThreadLink(search, resolve);
   if (!parsed.ok) {
     return (
-      <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
+      <SidebarInset className="h-[var(--workspace-shell-height,100dvh)] min-h-0 overflow-hidden overscroll-y-none">
         <Empty className="flex-1">
           <EmptyHeader className="max-w-md">
             <EmptyTitle>

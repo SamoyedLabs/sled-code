@@ -38,6 +38,7 @@ import {
   selectCliRuntimeExternalDependencies,
 } from "./lib/cli-external-packages.ts";
 import { loadRepoEnv } from "./lib/public-config.ts";
+import * as ConfigProvider from "effect/ConfigProvider";
 import { selectDesktopRuntimeExternalDependencies } from "./lib/desktop-external-packages.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
 import { resolveTaggedSourceVersion } from "./lib/tagged-source-version.ts";
@@ -2191,6 +2192,68 @@ const hasNativeLoaderMarkers = Effect.fn("hasNativeLoaderMarkers")(function* (pa
   }).some((dependency) => dependency.startsWith("node-gyp-build"));
 });
 
+/** Stage the exact accepted engine, preserving native dependencies, licenses and local framework links. */
+export const stageOpenbotBundle = Effect.fn("stageOpenbotBundle")(function* (
+  source: string,
+  destination: string,
+  expectedAsarSha256: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  if (!path.isAbsolute(source) || !/^[a-f0-9]{64}$/.test(expectedAsarSha256))
+    return yield* new BundleNotSelfContainedError({
+      exitCode: -1,
+      output: "An absolute OpenBot.app path and accepted ASAR SHA256 are required.",
+    });
+  const relative = "Contents/Resources/app.asar";
+  const actual = NodeCrypto.createHash("sha256")
+    .update(yield* fs.readFile(path.join(source, relative)))
+    .digest("hex");
+  if (actual !== expectedAsarSha256)
+    return yield* new BundleNotSelfContainedError({
+      exitCode: -1,
+      output: "Bundled OpenBot ASAR does not match the accepted runtime identity.",
+    });
+  const plistText = yield* fs.readFileString(path.join(source, "Contents/Info.plist"));
+  const plist = yield* Effect.try({
+    try: () => Plist.parse(plistText),
+    catch: () =>
+      new BundleNotSelfContainedError({
+        exitCode: -1,
+        output: "Bundled OpenBot Info.plist is invalid.",
+      }),
+  });
+  if (
+    typeof plist !== "object" ||
+    plist === null ||
+    !("LSUIElement" in plist) ||
+    (plist.LSUIElement !== true && plist.LSUIElement !== 1)
+  )
+    return yield* new BundleNotSelfContainedError({
+      exitCode: -1,
+      output:
+        "The managed engine must be a background app, leaving Sled as the visible application.",
+    });
+  if (!(yield* fs.exists(path.join(source, "Contents/MacOS/OpenBot"))))
+    return yield* new BundleNotSelfContainedError({
+      exitCode: -1,
+      output: "Bundled OpenBot executable is missing.",
+    });
+  yield* fs.makeDirectory(destination, { recursive: true });
+  const staged = path.join(destination, "OpenBot.app");
+  yield* stageRemoteDesktopBundle(source, staged);
+  const copied = NodeCrypto.createHash("sha256")
+    .update(yield* fs.readFile(path.join(staged, relative)))
+    .digest("hex");
+  if (copied !== expectedAsarSha256)
+    return yield* new BundleNotSelfContainedError({
+      exitCode: -1,
+      output: "OpenBot changed during bundle staging.",
+    });
+  const manifest = yield* encodeJsonString({ version: 1, asarSha256: copied, backgroundApp: true });
+  yield* fs.writeFileString(path.join(destination, "runtime-manifest.json"), manifest + "\n");
+});
+
 export const copyDirectoryPreservingSymlinks = Effect.fn("copyDirectoryPreservingSymlinks")(
   function* (source: string, destination: string) {
     const fs = yield* FileSystem.FileSystem;
@@ -2796,7 +2859,13 @@ export function resolveDesktopWebAssetBrand(version: string): WebAssetBrand {
   return resolveWebAssetBrandForChannel(resolveDesktopUpdateChannel(version));
 }
 
-export function resolveDesktopBuildIconAssets(_appVersion?: string): DesktopBuildIconAssets {
+export function resolveDesktopBuildIconAssets(development = false): DesktopBuildIconAssets {
+  if (development)
+    return {
+      macIconPng: "apps/desktop/branding/sled-icon-dev.png",
+      linuxIconPng: "apps/desktop/branding/sled-icon-dev.png",
+      windowsIconIco: "apps/desktop/branding/sled-icon-dev.ico",
+    };
   return {
     macIconPng: "apps/desktop/branding/sled-icon.png",
     linuxIconPng: "apps/desktop/branding/sled-icon.png",
@@ -2840,13 +2909,20 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     | undefined,
   wslRuntimeBundled = false,
   arch?: typeof BuildArch.Type,
+  bundledOpenbot = false,
 ) {
   const buildConfig: Record<string, unknown> = {
     afterPack: (yield* Path.Path).join(yield* RepoRoot, "scripts/prepare-server-compile-cache.cjs"),
     appId: (yield* Config.Boolean("T3CODE_DESKTOP_PRIVATE_BUILD").pipe(Config.withDefault(false)))
-      ? "com.t3tools.t3code.remote-dev"
+      ? yield* Config.String("T3CODE_DESKTOP_PRIVATE_APP_ID").pipe(
+          Config.withDefault("com.t3tools.t3code.remote-dev"),
+        )
       : DESKTOP_APP_ID,
-    productName: resolveDesktopProductName(version),
+    productName: (yield* Config.Boolean("T3CODE_DESKTOP_PRIVATE_BUILD").pipe(
+      Config.withDefault(false),
+    ))
+      ? yield* Config.String("T3CODE_DESKTOP_PRIVATE_NAME").pipe(Config.withDefault("Sled Code"))
+      : resolveDesktopProductName(version),
     artifactName: "T3-Code-${version}-${arch}.${ext}",
     electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],
     files: [
@@ -2866,6 +2942,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       : { asarUnpack: ["**/node_modules/@transcribe-cpp/**/*.{dylib,so,so.*}"] }),
     extraResources: [
       ...DESKTOP_EXTRA_RESOURCES,
+      ...(bundledOpenbot ? [{ from: "apps/desktop/prod-resources/openbot", to: "openbot" }] : []),
       ...(platform === "mac"
         ? [
             { from: "apps/desktop/prod-resources/remote-desktop", to: "remote-desktop" },
@@ -2897,6 +2974,13 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
             ),
           }),
           {
+            displayName:
+              typeof buildConfig.productName === "string" ? buildConfig.productName : undefined,
+            stageLabel: (yield* Config.Boolean("T3CODE_DESKTOP_DEV_BRANDING").pipe(
+              Config.withDefault(false),
+            ))
+              ? "Dev"
+              : undefined,
             automaticUpdates: yield* Config.Boolean("SLED_DESKTOP_AUTO_UPDATE").pipe(
               Config.withDefault(false),
             ),
@@ -2929,6 +3013,17 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   if (platform === "mac") {
     const path = yield* Path.Path;
     const repoRoot = yield* RepoRoot;
+    const privateSigningIdentity =
+      privateLaunch && !signed
+        ? yield* Config.String("T3CODE_DESKTOP_PRIVATE_SIGNING_IDENTITY").pipe(Config.option)
+        : Option.none<string>();
+    if (Option.isSome(privateSigningIdentity)) {
+      if (!/^[a-f0-9]{40}$/i.test(privateSigningIdentity.value.trim()))
+        return yield* Effect.die(
+          new Error("Private macOS signing requires a certificate SHA-1 fingerprint."),
+        );
+      buildConfig.forceCodeSigning = true;
+    }
     const privateIdentity =
       privateLaunch &&
       (yield* Config.String("SLED_MAC_DISTRIBUTION").pipe(
@@ -2939,6 +3034,14 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     if (privateIdentity && privateIdentity !== "-") buildConfig.forceCodeSigning = true;
     buildConfig.mac = {
       target: target === "dmg" ? [target, "zip"] : [target],
+      // Private unsigned builds still need a fresh resource seal after Electron is repackaged.
+      ...(privateLaunch && !signed
+        ? {
+            identity: Option.getOrElse(privateSigningIdentity, () => "-").trim(),
+            ...(Option.isSome(privateSigningIdentity) ? { timestamp: "none" } : {}),
+            hardenedRuntime: false,
+          }
+        : {}),
       ...(privateLaunch &&
       (yield* Config.String("SLED_MAC_DISTRIBUTION").pipe(
         Config.withDefault("private-development"),
@@ -3822,7 +3925,10 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
 
   const appVersion =
     options.version ?? resolveTaggedSourceVersion(repoRoot, serverPackageJson.version);
-  const iconAssets = resolveDesktopBuildIconAssets(appVersion);
+  const developmentBrand = yield* Config.Boolean("T3CODE_DESKTOP_DEV_BRANDING").pipe(
+    Config.withDefault(false),
+  );
+  const iconAssets = resolveDesktopBuildIconAssets(developmentBrand);
   const commitHash = yield* resolveGitCommitHash(repoRoot);
   const mkdir = options.keepStage ? fs.makeTempDirectory : fs.makeTempDirectoryScoped;
   const stageRoot = yield* mkdir({
@@ -3909,7 +4015,7 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     });
   }
 
-  const webAssetBrand = resolveDesktopWebAssetBrand(appVersion);
+  const webAssetBrand = developmentBrand ? "development" : resolveDesktopWebAssetBrand(appVersion);
   yield* applyWebBrandAssets(webAssetBrand, "apps/server/dist/client");
   yield* Effect.log(`[desktop-artifact] Applied ${webAssetBrand} web client branding.`);
   yield* validateBundledClientAssets(path.dirname(bundledClientEntry));
@@ -3988,6 +4094,21 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
   // electron-builder is filtering out stageResourcesDir directory in the AppImage for production
   const stageProdResourcesDir = path.join(stageAppDir, "apps/desktop/prod-resources");
   yield* fs.copy(stageResourcesDir, stageProdResourcesDir);
+  const openbotBundle = yield* Config.String("T3CODE_DESKTOP_OPENBOT_BUNDLE").pipe(Config.option);
+  const bundledOpenbot = Option.isSome(openbotBundle);
+  if (Option.isSome(openbotBundle)) {
+    if (options.platform !== "mac")
+      return yield* new BundleNotSelfContainedError({
+        exitCode: -1,
+        output: "Bundled OpenBot currently requires a macOS .app build.",
+      });
+    const expectedAsarSha256 = yield* Config.String("T3CODE_DESKTOP_OPENBOT_ASAR_SHA256");
+    yield* stageOpenbotBundle(
+      openbotBundle.value,
+      path.join(stageProdResourcesDir, "openbot"),
+      expectedAsarSha256,
+    );
+  }
   if (options.platform === "mac") {
     yield* runCommand(
       ChildProcess.make(
@@ -4096,6 +4217,7 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
         : undefined,
       bundlesWslRuntime({ platform: options.platform, runtimeArchivePath: options.wslRuntime }),
       options.arch,
+      bundledOpenbot,
     ),
     dependencies: stageDependencies,
     devDependencies: {
@@ -4461,7 +4583,20 @@ const cliRuntimeLayer = Layer.mergeAll(Logger.layer([Logger.consolePretty()]), N
 if (import.meta.main) {
   Command.run(buildDesktopArtifactCli, { version: "0.0.0" }).pipe(
     Effect.scoped,
-    Effect.provide(cliRuntimeLayer),
+    Effect.provide(
+      Layer.mergeAll(
+        cliRuntimeLayer,
+        ConfigProvider.layer(
+          ConfigProvider.fromEnv({
+            env: Object.fromEntries(
+              Object.entries(loadRepoEnv()).filter(
+                (entry): entry is [string, string] => entry[1] !== undefined,
+              ),
+            ),
+          }),
+        ),
+      ),
+    ),
     NodeRuntime.runMain,
   );
 }

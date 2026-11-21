@@ -1,0 +1,311 @@
+import { createHash } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { expect, it, vi } from "vitest";
+import { MailboxStore } from "./mailbox-store";
+const acquire = async () => ({ assertCommit() {}, async release() {} });
+const copyGate = vi.hoisted(() => ({ after: async (_destination: string) => {} }));
+vi.mock("node:fs/promises", async (original) => {
+  const actual = await original<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    copyFile: async (...args: Parameters<typeof actual.copyFile>) => {
+      await actual.copyFile(...args);
+      await copyGate.after(String(args[1]));
+    },
+  };
+});
+import { OpenBotDatabase } from "./openbot-database";
+import { runCauseEffect as run } from "./effect-boundary";
+
+it("refuses legacy queue consumption of original owned drafts", async () => {
+  const root = await mkdtemp(join(tmpdir(), "queue-owned-"));
+  const db = new OpenBotDatabase(root);
+  try {
+    const m = new MailboxStore(root, join(root, "shared"), db);
+    await run(m.initialize());
+    const bytes = Buffer.from("fixture");
+    const identity = {
+      operationId: "upload",
+      principal: "session",
+      environmentId: "env",
+      hostId: "host",
+      agentId: "agent",
+      threadId: "thread",
+      taskId: null,
+      name: "file.txt",
+      mimeType: "text/plain",
+      size: bytes.length,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+    };
+    const draft = await run(m.prepareOriginalUpload(identity, bytes, () => {}));
+    const queued = await run(m.enqueue({ sender: { kind: "user" }, recipientAgentIds: ["agent"], text: "original" }));
+    const delivery = queued.deliveries[0]!.id;
+    m.beginQueueEdit("agent", delivery, "edit");
+    await expect(
+      run(m.updateQueuedMessage("agent", delivery, "changed", [], [draft.attachment.id], "edit")),
+    ).rejects.toThrow("Original draft owner differs");
+    expect(m.getDelivery(delivery)?.delivery.text).toBe("original");
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("commits receipt with consumed drafts, reopens once, and refuses changed identities and late races", async () => {
+  const root = await mkdtemp(join(tmpdir(), "queue-receipt-"));
+  let db = new OpenBotDatabase(root);
+  try {
+    let m = new MailboxStore(root, join(root, "shared"), db);
+    await run(m.initialize());
+    const bytes = Buffer.from("exact bytes");
+    const identity = {
+      operationId: "upload",
+      principal: "session",
+      environmentId: "env",
+      hostId: "host",
+      agentId: "agent",
+      threadId: "thread",
+      taskId: null,
+      name: "new.txt",
+      mimeType: "text/plain",
+      size: bytes.length,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+    };
+    const draft = await run(m.prepareOriginalUpload(identity, bytes, () => {}));
+    const queued = await run(m.enqueue({ sender: { kind: "user" }, recipientAgentIds: ["agent"], text: "original" }));
+    const deliveryId = queued.deliveries[0]!.id;
+    m.beginQueueEdit("agent", deliveryId, "edit");
+    const input = {
+      principal: identity.principal,
+      environmentId: "env",
+      hostId: "host",
+      agentId: "agent",
+      threadId: "thread",
+      taskId: null,
+      deliveryId,
+      editId: "edit",
+      expectedRevision: m.queueAttachmentRevision("agent", deliveryId),
+      text: "edited",
+      keepAttachmentIds: [],
+      uploads: [{ identity, draftId: draft.attachment.id }],
+    };
+    input.expectedRevision = m.queueAttachmentContext(input).expectedRevision;
+    await expect(
+      run(m.saveQueueAttachments({ ...input, expectedRevision: "0".repeat(64) }, () => {}, acquire)),
+    ).rejects.toThrow("Queue revision changed");
+    await expect(run(m.saveQueueAttachments({ ...input, principal: "other" }, () => {}, acquire))).rejects.toThrow();
+    let release!: () => void;
+    let copied!: () => void;
+    const barrier = new Promise<void>((r) => (release = r)),
+      entered = new Promise<void>((r) => (copied = r));
+    copyGate.after = async () => {
+      copied();
+      await barrier;
+    };
+    let valid = true;
+    const saving = run(
+      m.saveQueueAttachments(
+        input,
+        () => {
+          if (!valid) throw new Error("reassigned");
+        },
+        acquire,
+      ),
+    );
+    await entered;
+    expect(() => m.cancelNow("agent", deliveryId)).toThrow();
+    await expect(run(m.saveQueueAttachments(input, () => {}, acquire))).rejects.toThrow();
+    valid = false;
+    release();
+    await expect(saving).rejects.toThrow("reassigned");
+    copyGate.after = async () => {};
+    expect(m.getDelivery(deliveryId)?.delivery.text).toBe("original");
+    expect(m.originalUploadStatus(identity, () => {})?.state).toBe("ready");
+    expect(m.queueAttachmentResult(input, () => {})).toBeNull();
+    await expect(run(m.saveQueueAttachments(input, () => {}, acquire))).rejects.toThrow("uncertain");
+    m.finishQueueEdit("agent", deliveryId, "edit");
+    m.beginQueueEdit("agent", deliveryId, "edit2");
+    input.editId = "edit2";
+    input.expectedRevision = m.queueAttachmentContext(input).expectedRevision;
+    const receipt = await run(m.saveQueueAttachments(input, () => {}, acquire));
+    expect(receipt.attachments).toHaveLength(1);
+    expect(m.originalUploadStatus(identity, () => {})?.state).toBe("released");
+    db.close();
+    db = new OpenBotDatabase(root);
+    m = new MailboxStore(root, join(root, "shared"), db);
+    await run(m.initialize());
+    expect(m.queueAttachmentResult(input, () => {})).toEqual(receipt);
+    expect(await run(m.saveQueueAttachments(input, () => {}, acquire))).toEqual(receipt);
+    expect(m.getDelivery(deliveryId)?.delivery.attachments).toHaveLength(1);
+    for (const changed of [
+      { principal: "other" },
+      { environmentId: "other" },
+      { threadId: "other" },
+      { text: "other" },
+      { expectedRevision: "0".repeat(64) },
+    ])
+      expect(() => m.queueAttachmentResult({ ...input, ...changed }, () => {})).toThrow();
+    expect(() =>
+      m.queueAttachmentResult(input, () => {
+        throw new Error("revoked");
+      }),
+    ).toThrow("revoked");
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it.each(["revision", "cancel-upload", "expired-permit", "lost-release", "changed-copy"] as const)(
+  "refuses or recovers the exact final transaction after %s",
+  async (race) => {
+    const root = await mkdtemp(join(tmpdir(), "queue-final-"));
+    let db = new OpenBotDatabase(root);
+    try {
+      let m = new MailboxStore(root, join(root, "shared"), db);
+      await run(m.initialize());
+      const bytes = Buffer.from("owned");
+      const identity = {
+        operationId: "upload",
+        principal: "session",
+        environmentId: "env",
+        hostId: "host",
+        agentId: "agent",
+        threadId: "thread",
+        taskId: null,
+        name: "new.txt",
+        mimeType: "text/plain",
+        size: bytes.length,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+      };
+      const draft = await run(m.prepareOriginalUpload(identity, bytes, () => {}));
+      const queued = await run(m.enqueue({ sender: { kind: "user" }, recipientAgentIds: ["agent"], text: "original" }));
+
+      const deliveryId = queued.deliveries[0]!.id;
+      m.beginQueueEdit("agent", deliveryId, "edit");
+      const input = {
+        principal: "session",
+        environmentId: "env",
+        hostId: "host",
+        agentId: "agent",
+        threadId: "thread",
+        taskId: null,
+        deliveryId,
+        editId: "edit",
+        expectedRevision: m.queueAttachmentRevision("agent", deliveryId),
+        text: "changed",
+        keepAttachmentIds: [],
+        uploads: [{ identity, draftId: draft.attachment.id }],
+      };
+      input.expectedRevision = m.queueAttachmentContext(input).expectedRevision;
+      let reached!: () => void, release!: () => void;
+      const entered = new Promise<void>((r) => (reached = r)),
+        barrier = new Promise<void>((r) => (release = r));
+      let finished = false;
+      if (race === "changed-copy")
+        copyGate.after = async (destination) => {
+          await writeFile(destination, "tampered");
+          reached();
+        };
+      const saving = run(
+        m.saveQueueAttachments(
+          input,
+          () => {},
+          async () => {
+            reached();
+            await barrier;
+            return {
+              assertCommit() {
+                if (race === "expired-permit") throw new Error("expired");
+              },
+              async release() {
+                finished = true;
+                if (race === "lost-release") throw new Error("lost release");
+              },
+            };
+          },
+        ),
+      );
+      await entered;
+      if (race === "revision") await run(m.markSteerFallback(deliveryId, "steer-failed"));
+      if (race === "cancel-upload") await run(m.cancelOriginalUpload(identity, () => {}));
+      release();
+      await expect(saving).rejects.toThrow();
+      expect(finished).toBe(race !== "changed-copy");
+      copyGate.after = async () => {};
+      if (race === "lost-release") {
+        db.close();
+        db = new OpenBotDatabase(root);
+        m = new MailboxStore(root, join(root, "shared"), db);
+        await run(m.initialize());
+        expect(m.queueAttachmentResult(input, () => {})?.messageId).toBe(queued.messageId);
+        expect(m.getDelivery(deliveryId)?.delivery.attachments).toHaveLength(1);
+      } else {
+        expect(m.getDelivery(deliveryId)?.delivery.text).toBe("original");
+        expect(m.queueAttachmentResult(input, () => {})).toBeNull();
+        expect(m.originalUploadStatus(identity, () => {})?.state).toBe(race === "cancel-upload" ? "released" : "ready");
+        await expect(run(m.saveQueueAttachments(input, () => {}, acquire))).rejects.toThrow();
+      }
+    } finally {
+      db.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+it("acquires the actual existing task queue item with owner-bound authoritative content", async () => {
+  const root = await mkdtemp(join(tmpdir(), "queue-task-"));
+  const db = new OpenBotDatabase(root);
+  try {
+    const m = new MailboxStore(root, join(root, "shared"), db);
+    await run(m.initialize());
+    const queued = await run(
+      m.enqueue({ sender: { kind: "user" }, recipientAgentIds: ["agent"], taskId: "task", text: "actual task text" }),
+    );
+    const scope = {
+      principal: "session",
+      environmentId: "env",
+      hostId: "host",
+      agentId: "agent",
+      threadId: "task-thread",
+      taskId: "task",
+      deliveryId: queued.deliveries[0]!.id,
+      editId: "task-edit",
+    };
+    const first = m.queueAttachmentContext(scope);
+    expect(first.text).toBe("actual task text");
+    expect(m.queueAttachmentContext(scope)).toEqual(first);
+    expect(() => m.queueAttachmentContext({ ...scope, principal: "other" })).toThrow("owner differs");
+    expect(() => m.queueAttachmentContext({ ...scope, taskId: null })).toThrow("target differs");
+    const bytes = Buffer.from("task file");
+    const identity = {
+      ...scope,
+      operationId: "task-upload",
+      name: "task.txt",
+      mimeType: "text/plain",
+      size: bytes.length,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+    };
+    const uploaded = await run(m.prepareOriginalUpload(identity, bytes, () => {}));
+    const receipt = await run(
+      m.saveQueueAttachments(
+        {
+          ...scope,
+          expectedRevision: first.expectedRevision,
+          text: "task edit",
+          keepAttachmentIds: [],
+          uploads: [{ identity, draftId: uploaded.attachment.id }],
+        },
+        () => {},
+        acquire,
+      ),
+    );
+    expect(receipt.messageId).toBe(queued.messageId);
+    expect(m.getDelivery(scope.deliveryId)?.delivery.text).toBe("task edit");
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});

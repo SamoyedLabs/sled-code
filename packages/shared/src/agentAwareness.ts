@@ -208,3 +208,57 @@ function headlineForPhase(phase: AgentAwarenessPhase): string {
       return "Update delayed";
   }
 }
+
+export interface BotNotificationTarget {
+  readonly kind: "bot";
+  readonly environmentId: string;
+  readonly hostId: string;
+  readonly agentId: string;
+  readonly taskId?: string | undefined;
+  readonly channelId?: string | undefined;
+  readonly routineId?: string | undefined;
+  readonly routineRunId?: string | undefined;
+}
+
+export function botNotificationDeepLink(target: BotNotificationTarget): string | null {
+  if (
+    (target.taskId !== undefined && target.routineId !== undefined) ||
+    (target.routineRunId !== undefined && target.routineId === undefined)
+  )
+    return null;
+  const ids = [target.environmentId, target.hostId, target.agentId];
+  if (target.taskId !== undefined) ids.push(target.taskId);
+  if (target.channelId !== undefined) ids.push(target.channelId);
+  if (target.routineId !== undefined) ids.push(target.routineId);
+  if (target.routineRunId !== undefined) ids.push(target.routineRunId);
+  if (ids.some((id) => id.length === 0 || id.length > 512)) return null;
+  try {
+    return `/bots/${encodeURIComponent(target.environmentId)}/${encodeURIComponent(target.hostId)}/${encodeURIComponent(target.agentId)}${target.taskId === undefined ? "" : `/tasks/${encodeURIComponent(target.taskId)}`}${target.routineId === undefined ? "" : `/routines/${encodeURIComponent(target.routineId)}${target.routineRunId === undefined ? "" : `/runs/${encodeURIComponent(target.routineRunId)}`}`}${target.channelId === undefined ? "" : `/channels/${encodeURIComponent(target.channelId)}`}`;
+  } catch {
+    return null;
+  }
+}
+
+export function parseBotNotificationDeepLink(value: string): BotNotificationTarget | null {
+  if (value.trim() !== value || value.includes("?") || value.includes("#")) return null;
+  const match =
+    /^\/bots\/([^/]+)\/([^/]+)\/([^/]+)(?:\/tasks\/([^/]+))?(?:\/routines\/([^/]+)(?:\/runs\/([^/]+))?)?(?:\/channels\/([^/]+))?$/.exec(
+      value,
+    );
+  if (!match) return null;
+  try {
+    const target: BotNotificationTarget = {
+      kind: "bot",
+      environmentId: decodeURIComponent(match[1] ?? ""),
+      hostId: decodeURIComponent(match[2] ?? ""),
+      agentId: decodeURIComponent(match[3] ?? ""),
+      ...(match[4] === undefined ? {} : { taskId: decodeURIComponent(match[4]) }),
+      ...(match[5] === undefined ? {} : { routineId: decodeURIComponent(match[5]) }),
+      ...(match[6] === undefined ? {} : { routineRunId: decodeURIComponent(match[6]) }),
+      ...(match[7] === undefined ? {} : { channelId: decodeURIComponent(match[7]) }),
+    };
+    return botNotificationDeepLink(target) === null ? null : target;
+  } catch {
+    return null;
+  }
+}

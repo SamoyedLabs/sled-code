@@ -1,5 +1,5 @@
+import { BotsEdgeGestureContext } from "../bots/BotsEdgeGesture";
 import { msg, useMessages } from "gt-react-native";
-
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { Menu } from "../../components/ui/Menu";
 import type { MenuAction } from "@react-native-menu/menu";
@@ -258,6 +258,7 @@ interface ThreadSwipeableProps {
 const COLLAPSED_ROW_STYLE = { height: 0, overflow: "hidden" } as const;
 
 export function ThreadSwipeable(props: ThreadSwipeableProps) {
+  const botsEdgeGesture = use(BotsEdgeGestureContext);
   const m = useMessages();
   const swipeableRef = useRef<SwipeableMethods | null>(null);
   const hasSecondaryAction = props.secondaryAction !== null;
@@ -569,6 +570,7 @@ export function ThreadSwipeable(props: ThreadSwipeableProps) {
             // Only iPad trackpad pans need rows to swipe while the list scrolls; on Android touch it
             // lets a diagonal swipe scroll the list, which the scroll gate turns into a closed row.
             simultaneousWith={Platform.OS === "ios" ? props.simultaneousWith : undefined}
+            requireToFail={botsEdgeGesture}
           >
             {
               /* oxlint-disable react/refs -- The render callback receives a close/open handler; only invoking that handler accesses the ref. */

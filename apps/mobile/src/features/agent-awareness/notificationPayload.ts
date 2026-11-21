@@ -1,3 +1,8 @@
+import {
+  botNotificationDeepLink,
+  parseBotNotificationDeepLink,
+} from "@t3tools/shared/agentAwareness";
+
 function dataFromNotificationResponse(response: unknown): Record<string, unknown> | null {
   if (typeof response !== "object" || response === null) {
     return null;
@@ -74,6 +79,8 @@ function normalizeThreadDeepLink(value: string): string | null {
 }
 
 export function threadDeepLinkOnScreen(pathname: string): string | null {
+  const botTarget = parseBotNotificationDeepLink(pathname);
+  if (botTarget) return botNotificationDeepLink(botTarget);
   const match = /^\/threads\/([^/]+)\/([^/]+)(?:\/|$)/.exec(pathname);
   if (!match?.[1] || !match[2]) {
     return null;
@@ -85,12 +92,32 @@ export function extractAgentNotificationDeepLink(response: unknown): string | nu
   const data = dataFromNotificationResponse(response);
   const deepLink = data?.deepLink;
   if (typeof deepLink === "string") {
-    const normalizedDeepLink = normalizeThreadDeepLink(deepLink);
+    const botTarget = parseBotNotificationDeepLink(deepLink);
+    const normalizedDeepLink = botTarget
+      ? botNotificationDeepLink(botTarget)
+      : normalizeThreadDeepLink(deepLink);
     if (normalizedDeepLink) {
       return normalizedDeepLink;
     }
   }
 
+  if (
+    data?.kind === "bot" &&
+    typeof data.environmentId === "string" &&
+    typeof data.hostId === "string" &&
+    typeof data.agentId === "string"
+  ) {
+    return botNotificationDeepLink({
+      kind: "bot",
+      environmentId: data.environmentId,
+      hostId: data.hostId,
+      agentId: data.agentId,
+      ...(typeof data.taskId === "string" ? { taskId: data.taskId } : {}),
+      ...(typeof data.channelId === "string" ? { channelId: data.channelId } : {}),
+      ...(typeof data.routineId === "string" ? { routineId: data.routineId } : {}),
+      ...(typeof data.routineRunId === "string" ? { routineRunId: data.routineRunId } : {}),
+    });
+  }
   const environmentId = data?.environmentId;
   const threadId = data?.threadId;
   if (typeof environmentId === "string" && typeof threadId === "string") {

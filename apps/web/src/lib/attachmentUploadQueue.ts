@@ -245,12 +245,13 @@ const uploadJob = Effect.fn("WebAttachmentUploads.upload")(function* (job: Uploa
     }
   }
 
-  const mimeType =
+  const imageMimeType =
     job.image.type === "file"
-      ? job.image.mimeType.toLowerCase()
+      ? undefined
       : PROVIDER_SEND_TURN_SUPPORTED_IMAGE_MIME_TYPES.find(
           (supportedMimeType) => supportedMimeType === job.image.mimeType.toLowerCase(),
         );
+  const mimeType = job.image.type === "file" ? job.image.mimeType.toLowerCase() : imageMimeType;
   if (!mimeType) return yield* failUpload(job, msg("Unsupported image type"));
   const file = job.image.file;
   if (!file) return yield* failUpload(job, msg("Original file is no longer available"));
@@ -264,12 +265,19 @@ const uploadJob = Effect.fn("WebAttachmentUploads.upload")(function* (job: Uploa
     createUploadUrl: attachmentEnvironment.createUploadUrl,
     remove: attachmentEnvironment.remove,
     environmentId: job.environmentId,
-    upload: {
-      ...(job.image.type === "file" ? { type: "file" as const } : {}),
-      name: job.image.name,
-      mimeType,
-      sizeBytes: file.size,
-    },
+    upload:
+      job.image.type === "file"
+        ? {
+            type: "file" as const,
+            name: job.image.name,
+            mimeType,
+            sizeBytes: file.size,
+          }
+        : {
+            name: job.image.name,
+            mimeType: imageMimeType!,
+            sizeBytes: file.size,
+          },
     resolveUploadUrl: (relativeUrl) => {
       if (!canOperate(job.environmentId)) return null;
       const connection = readPreparedConnection(job.environmentId);

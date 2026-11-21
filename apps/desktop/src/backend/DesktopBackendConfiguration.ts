@@ -533,6 +533,7 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       readonly resourceMonitorPath: Option.Option<string>;
       readonly cliPath: Option.Option<string>;
       readonly shellEnvironmentPrepared: boolean;
+      readonly bundledOpenbotExecutable?: string | undefined;
       readonly desktopAppUpdate: boolean;
     },
   ): Effect.fn.Return<
@@ -589,6 +590,9 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
           ? NodePath.resolve(process.resourcesPath, "../..")
           : undefined,
         T3_REMOTE_GUI_INSTANCE: guiInstance,
+        ...(input.bundledOpenbotExecutable
+          ? { T3CODE_BUNDLED_OPENBOT_EXECUTABLE: input.bundledOpenbotExecutable }
+          : {}),
         [DESKTOP_HOST_SCOPE_ENV]: input.hostScope,
       },
       extendEnv: true,
@@ -863,11 +867,28 @@ export const make = Effect.gen(function* () {
       Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment),
     );
     const shellEnvironmentPrepared = yield* shellEnvironment.installIntoProcess;
+    const bundledCandidate =
+      environment.isPackaged && environment.platform === "darwin"
+        ? environment.path.join(
+            environment.resourcesPath,
+            "openbot",
+            "OpenBot.app",
+            "Contents",
+            "MacOS",
+            "OpenBot",
+          )
+        : undefined;
+    const bundledOpenbotExecutable =
+      bundledCandidate &&
+      (yield* fileSystem.exists(bundledCandidate).pipe(Effect.orElseSucceed(() => false)))
+        ? bundledCandidate
+        : undefined;
     return yield* resolvePrimaryStartConfig({
       ...shared,
       resourceMonitorPath,
       cliPath,
       shellEnvironmentPrepared,
+      bundledOpenbotExecutable,
       desktopAppUpdate: yield* Ref.get(desktopState.canInstallUpdates),
     }).pipe(
       Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment),

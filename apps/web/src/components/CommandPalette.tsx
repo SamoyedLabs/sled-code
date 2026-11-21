@@ -1,3 +1,8 @@
+/* oxlint-disable shadcn/no-unknown-classes -- The unified palette preserves source-scoped OpenBot search presentation. */
+import { useBotCommandPaletteGroups } from "./CommandPaletteBotItems";
+import { useWorkspaceBotsMode } from "./WorkspaceModeHeader";
+import "./unified-command-palette.css";
+import { trackCommandPaletteFilters } from "./commandPaletteMotion";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { decodeMsg, msg, T, useGT, useMessages, Var } from "gt-react";
 import { m, type MessageResolver } from "../i18n/messages";
@@ -313,6 +318,11 @@ function openIntentView(
         addonIcon: <SquarePenIcon className={ADDON_ICON_CLASS} />,
         groups: [{ value: NEW_THREAD_IN_GROUP, label: resolve(msg("Projects")), items: [] }],
       };
+    case "new-bot-chat":
+      return {
+        addonIcon: <SquarePenIcon className={ADDON_ICON_CLASS} />,
+        groups: [{ value: "bot-create", label: m(msg("New conversation")), items: [] }],
+      };
     case "change-theme":
       return {
         addonIcon: <PaletteIcon className={ADDON_ICON_CLASS} />,
@@ -328,6 +338,7 @@ const NEW_THREAD_NO_PROJECT_VALUE = "new-thread-in:no-project";
 
 export function CommandPalette({ children }: { children: ReactNode }) {
   useCommandPaletteMount();
+  const workspaceMode = useWorkspaceBotsMode() ? "bots" : "threads";
   const state = useCommandPaletteStore();
   const setOpen = (open: boolean) => dispatchCommandPalette({ _tag: "SetOpen", open });
   const openChildSearch = (mode: "files" | "content", context: CommandPaletteReturnContext) =>
@@ -352,6 +363,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
           {children}
         </div>
         <CommandPaletteDialog
+          workspaceMode={workspaceMode}
           mode={state.mode}
           session={state.session}
           openIntent={state.openIntent}
@@ -365,6 +377,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
 }
 
 function CommandPaletteDialog(props: {
+  readonly workspaceMode: "bots" | "threads";
   readonly mode: SearchOverlayMode;
   readonly session: number;
   readonly openIntent: CommandPaletteOpenIntent | null;
@@ -412,6 +425,7 @@ function CommandPaletteDialog(props: {
       ) : (
         <OpenCommandPaletteDialog
           key={props.session}
+          workspaceMode={props.workspaceMode}
           openIntent={props.openIntent}
           setOpen={props.setOpen}
           openChildSearch={props.openChildSearch}
@@ -423,6 +437,7 @@ function CommandPaletteDialog(props: {
 }
 
 function OpenCommandPaletteDialog(props: {
+  readonly workspaceMode: "bots" | "threads";
   readonly openIntent: CommandPaletteOpenIntent | null;
   readonly setOpen: (open: boolean) => void;
   readonly openChildSearch: (
@@ -1751,6 +1766,25 @@ function OpenCommandPaletteDialog(props: {
 
   actionItems.push({
     kind: "action",
+    value: "action:bots",
+    searchTerms: [
+      "bots",
+      "openbot",
+      "persistent",
+      "conversations",
+      "approvals",
+      "channels",
+      "workflows",
+    ],
+    title: gt("Open bot workspace"),
+    icon: <MonitorIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/bots" });
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
     value: "action:usage",
     searchTerms: ["usage", "use", "tokens", "cost", "spend", "limits", "stats", "analytics"],
     title: gt("Open usage"),
@@ -1844,7 +1878,31 @@ function OpenCommandPaletteDialog(props: {
     });
   }
 
-  const rootGroups = buildRootGroups({ actionItems, recentThreadItems }, messages);
+  const [workspaceFilter, setWorkspaceFilter] = useState<"all" | "bots" | "threads" | "commands">(
+    props.workspaceMode,
+  );
+  const botCreationView = currentView?.groups[0]?.value === "bot-create";
+  const includeBots = workspaceFilter === "all" || workspaceFilter === "bots" || botCreationView;
+  const botGroups = useBotCommandPaletteGroups(
+    !currentView && !isActionsOnly && includeBots ? deferredQuery : "",
+    includeBots,
+  );
+  const rootGroups = [
+    ...buildRootGroups(
+      {
+        actionItems:
+          workspaceFilter === "bots"
+            ? []
+            : actionItems.filter(
+                (item) => workspaceFilter !== "threads" || item.value !== "action:bots",
+              ),
+        recentThreadItems:
+          workspaceFilter === "bots" || workspaceFilter === "commands" ? [] : recentThreadItems,
+      },
+      messages,
+    ),
+    ...(includeBots ? botGroups : []),
+  ];
   // Every setting goes to the palette's own matcher, so settings get the same
   // word starts and typo tolerance as threads.
   const settingsSearchItems: CommandPaletteActionItem[] = settingsForThisPlatform(
@@ -1900,7 +1958,21 @@ function OpenCommandPaletteDialog(props: {
               ? changeThemeItem.groups
               : currentView?.groups[0]?.value === "appearance"
                 ? changeAppearanceItem.groups
-                : (currentView?.groups ?? rootGroups);
+                : botCreationView
+                  ? [
+                      {
+                        value: "bot-create",
+                        label: gt("New conversation"),
+                        items: botGroups
+                          .flatMap((group) => group.items)
+                          .filter(
+                            (item) =>
+                              item.value === "bot-action:manage" ||
+                              item.value === "bot-action:new-group",
+                          ),
+                      },
+                    ]
+                  : (currentView?.groups ?? rootGroups);
 
   const isLinkedThreadSearch =
     linkedThreadSearch?.linkedThreads !== undefined && deferredQuery === linkedThreadSearch.query;
@@ -1913,36 +1985,49 @@ function OpenCommandPaletteDialog(props: {
         ? {
             allOptions: {
               rootGroups,
-              nestedItems: buildNestedSearchItems(actionItems, deferredQuery),
+              nestedItems:
+                workspaceFilter === "bots"
+                  ? []
+                  : buildNestedSearchItems(actionItems, deferredQuery),
             },
           }
         : {}),
-      projectSearchItems: projectSearchItems,
-      settingsSearchItems,
+      projectSearchItems:
+        workspaceFilter === "bots" || workspaceFilter === "commands" ? [] : projectSearchItems,
+      settingsSearchItems:
+        workspaceFilter === "bots"
+          ? []
+          : settingsSearchItems.filter(
+              (item) => workspaceFilter !== "threads" || !item.value.startsWith("setting:bot"),
+            ),
       threadSearchItems:
-        isLinkedThreadSearch && linkedThreadSearch?.linkedThreads
-          ? buildLinkedThreadActionItems(
-              {
-                ...linkedThreadSearch.linkedThreads,
-                threads: visibleLinkedThreads(
-                  linkedThreadSearch.linkedThreads.threads,
-                  linkedThreadSearch.linkedThreads.environmentId,
-                  linkedThreadRefs,
-                  hiddenKeys,
-                  hidingAnywhere,
-                ),
-                query: linkedThreadSearch.query,
-                icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
-                runThread: async (thread) => {
-                  await navigate({
-                    to: "/$environmentId/$threadId",
-                    params: buildThreadRouteParams(scopeThreadRef(thread.environmentId, thread.id)),
-                  });
+        workspaceFilter === "bots" || workspaceFilter === "commands"
+          ? []
+          : isLinkedThreadSearch && linkedThreadSearch?.linkedThreads
+            ? buildLinkedThreadActionItems(
+                {
+                  ...linkedThreadSearch.linkedThreads,
+                  threads: visibleLinkedThreads(
+                    linkedThreadSearch.linkedThreads.threads,
+                    linkedThreadSearch.linkedThreads.environmentId,
+                    linkedThreadRefs,
+                    hiddenKeys,
+                    hidingAnywhere,
+                  ),
+                  query: linkedThreadSearch.query,
+                  icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
+                  runThread: async (thread) => {
+                    await navigate({
+                      to: "/$environmentId/$threadId",
+                      params: buildThreadRouteParams(
+                        scopeThreadRef(thread.environmentId, thread.id),
+                      ),
+                    });
+                  },
                 },
-              },
-              messages,
-            )
-          : allThreadItems,
+                messages,
+              )
+            : allThreadItems,
       threadMessageItems: isLinkedThreadSearch ? [] : threadMessageItems,
       now: searchNow,
     },
@@ -2584,7 +2669,11 @@ function OpenCommandPaletteDialog(props: {
     newProjectFlow !== null
       ? gt("Project name")
       : (remoteProjectInputPlaceholder(addProjectCloneFlow, messages) ??
-        getCommandPaletteInputPlaceholder(paletteMode, messages));
+        (paletteMode === "root" && workspaceFilter === "bots"
+          ? gt("Search bots, messages, and commands...")
+          : paletteMode === "root" && workspaceFilter === "threads"
+            ? gt("Search threads, projects, and commands...")
+            : getCommandPaletteInputPlaceholder(paletteMode, messages)));
   const isSubmenu = paletteMode === "submenu" || paletteMode === "submenu-browse";
   const hasHighlightedBrowseItem = highlightedItemValue?.startsWith("browse:") ?? false;
   const canWriteSourceControl = useEnvironmentScope(
@@ -3080,6 +3169,36 @@ function OpenCommandPaletteDialog(props: {
       footerActionLabel={footerActionLabel}
       footerTrailing={footerTrailing}
       inputAccessory={inputAccessory}
+      filters={
+        !currentView && !isBrowsing && !newProjectFlow && !addProjectCloneFlow ? (
+          <nav
+            aria-label={gt("Search scope")}
+            className="command-palette-filters"
+            ref={trackCommandPaletteFilters}
+          >
+            <span aria-hidden="true" className="command-palette-filter-pill" />
+            {(
+              [
+                ["all", "All"],
+                ["bots", "Bots"],
+                ["threads", "Threads"],
+                ["commands", "Commands"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={workspaceFilter === id}
+                className="rounded-md px-3 py-1 text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-pressed:bg-accent aria-pressed:text-foreground"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => setWorkspaceFilter(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+        ) : null
+      }
       inputProps={{
         className: hasHighlightedNewProjectItem
           ? "*:data-[slot=autocomplete-input]:pe-38!"
@@ -3159,6 +3278,12 @@ function OpenCommandPaletteDialog(props: {
         </div>
       ) : null}
       <CommandPaletteVirtualizedResults
+        motionKey={JSON.stringify([
+          viewStack.length,
+          currentView?.groups.map((group) => group.value),
+          query,
+          workspaceFilter,
+        ])}
         rows={resultRows.rows}
         listRef={resultListRef}
         highlightedItemValue={highlightedItemValue}

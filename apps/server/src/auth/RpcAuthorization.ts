@@ -43,6 +43,27 @@ type WsRpcMethod = RpcGroup.Rpcs<typeof WsRpcGroup>["_tag"];
 
 export const RPC_REQUIRED_SCOPES = {
   ...CLIENT_GUARDED_RPC_SCOPES,
+  [WS_METHODS.openbotPrivilegedScope]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotFilesContext]: AuthOrchestrationReadScope,
+  [WS_METHODS.openbotNewTaskStart]: AuthOrchestrationOperateScope,
+  [WS_METHODS.openbotInstanceTransfer]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotImportContext]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotContinuityStatus]: AuthOrchestrationReadScope,
+  [WS_METHODS.openbotMaintenanceStatus]: AuthEnvironmentMaintainScope,
+  [WS_METHODS.openbotRead]: AuthOrchestrationReadScope,
+  [WS_METHODS.openbotReadToHost]: AuthOrchestrationReadScope,
+  [WS_METHODS.openbotFilesListWorkspace]: AuthOrchestrationReadScope,
+  [WS_METHODS.openbotFilesSearch]: AuthOrchestrationReadScope,
+  [WS_METHODS.openbotFilesListDrafts]: AuthOrchestrationReadScope,
+  [WS_METHODS.openbotCodingPolicyGet]: AuthOrchestrationReadScope,
+  [WS_METHODS.openbotAttention]: AuthOrchestrationReadScope,
+  [WS_METHODS.openbotSubscribeChanges]: AuthOrchestrationReadScope,
+  [WS_METHODS.openbotUpstreamStatus]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotCodingGet]: AuthOrchestrationReadScope,
+  [WS_METHODS.openbotCodingList]: AuthOrchestrationReadScope,
+  [WS_METHODS.openbotSledToolsStatus]: AuthSettingsWriteScope,
+  [WS_METHODS.openbotStatus]: AuthOrchestrationReadScope,
+  [WS_METHODS.openbotListAgents]: AuthOrchestrationReadScope,
   [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: AuthOrchestrationOperateScope,
   [ORCHESTRATION_V2_WS_METHODS.getWorkflowScript]: AuthOrchestrationReadScope,
   [ORCHESTRATION_V2_WS_METHODS.getNativeChildWork]: AuthOrchestrationReadScope,
@@ -311,6 +332,8 @@ const requiredScopesForRpcCall = (
   }
   if (method === WS_METHODS.assetsCreateUrl) {
     const { resource } = decodeAssetCreateUrlInput(payload);
+    if (resource._tag === "bot-library-image")
+      return [AuthOrchestrationReadScope, AuthFilesystemReadScope];
     return [
       resource._tag === "workspace-file" ||
       resource._tag === "media-file" ||
@@ -333,6 +356,8 @@ const requiredScopesForRpcCall = (
   if (method === WS_METHODS.projectsMutate) {
     return requiredScopesForProjectMutation(decodeProjectMutation(payload));
   }
+  if (method === WS_METHODS.openbotPrivilegedScope)
+    return [AuthSettingsWriteScope, AuthOrchestrationOperateScope];
   const guarded = clientRpcRequiredScopes(method, payload);
   const scopes = guarded.length > 0 ? guarded : [requiredScopeForRpcMethod(method)];
   return sendsProviderSignOutPrompt(method, payload)

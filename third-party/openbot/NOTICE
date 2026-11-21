@@ -1,0 +1,12 @@
+OpenBot browser view protocol
+Copyright 2026 Synthetify Labs spółka z ograniczoną odpowiedzialnością
+
+This product includes software developed by Synthetify Labs spółka z ograniczoną odpowiedzialnością.
+For a commercial license, contact licenses@openbot.run.
+
+packages/contracts/src/openbotBrowserWire.ts is adapted from
+nightly-labs/openbot packages/contracts/src/team-protocol/browser-view-v1.ts,
+commit 0c7753fa622c38419939cd230657f40e5883d098 (v0.60.0).
+The adaptation replaces upstream imports with local primitive validators.
+Upstream's public license is preserved in LICENSE beside this notice;
+commercial permissions are governed by the separate commercial agreement.

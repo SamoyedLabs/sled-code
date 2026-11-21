@@ -45,14 +45,39 @@ if (
   process.stdout.on("error", ignoreOutputError);
   process.stderr.on("error", ignoreOutputError);
 
+  const command = process.argv[2];
+  // Guard sockets before either dispatch path can load outbound-capable modules.
+  const { ignoreMacosTypeOfServiceEinval } = await import("./outboundHttp.ts");
+  ignoreMacosTypeOfServiceEinval();
+
   // The launcher owns shutdown until its child exits, so it bypasses the Effect CLI runtime.
   // A service unit passes nothing, or on Windows the launcher's own flags; help and anything
   // else go through the full CLI.
   const launcher =
-    process.argv[2] === "__service-launcher" ? await import("./cli/serviceLauncher.ts") : undefined;
+    command === "__service-launcher" ? await import("./cli/serviceLauncher.ts") : undefined;
   const launcherOptions = launcher?.parseServiceLauncherArgs(process.argv.slice(3));
   if (launcher !== undefined && launcherOptions !== undefined) {
     await launcher.runServiceLauncherCli(launcherOptions);
+  } else if (command === "__openbot-privileged-owner") {
+    const { runPrivilegedOwner } = await import("./openbot/PrivilegedOwnerWorker.ts");
+    await runPrivilegedOwner();
+  } else if (command === "__document-text") {
+    const { extractDocumentText } = await import("./provider/documentTextWorker.ts");
+    try {
+      process.stdout.write(await extractDocumentText(process.argv[3]!, process.argv[4]!));
+    } catch (error) {
+      if (error instanceof Error && "code" in error && /^E[A-Z0-9]+$/.test(String(error.code))) {
+        throw error;
+      }
+      // Exit 2 identifies document rejections; OS and process failures remain retryable.
+      process.exitCode = 2;
+    }
+  } else if (command === "__managed-chatgpt-token") {
+    const { runManagedChatGptTokenCli } = await import("./cli/managedChatGptToken.ts");
+    await runManagedChatGptTokenCli(process.argv.slice(3));
+  } else if (command === "acp-mcp-bridge" || command === "acp-mcp-call") {
+    const { runAcpMcpCliFastPath } = await import("./mcp/AcpMcpStdioBridge.ts");
+    await runAcpMcpCliFastPath(command, process.argv.slice(3));
   } else {
     const { runCliCommand } = await loadCliMain();
     await runCliCommand();

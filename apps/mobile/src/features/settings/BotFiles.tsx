@@ -1,0 +1,715 @@
+import { useAtomValue } from "@effect/atom-react";
+import type { EnvironmentId, OpenbotAgentFileSource, OpenbotFileTarget } from "@t3tools/contracts";
+import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
+import { channelPage, channelList, taskViews } from "@t3tools/client-runtime/openbot/presentation";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { useRef, useState } from "react";
+import { View } from "react-native";
+import { FilePreviewModal, type FilePreviewSource } from "../../components/ui/FilePreviewModal";
+import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
+import { Menu } from "../../components/ui/Menu";
+import { ControlPill } from "../../components/ui/ControlPill";
+import { downloadAndShareAttachment } from "../../lib/attachmentDownload";
+import { refreshAssetUrl } from "../../state/assets";
+import { openbot } from "../../state/openbot";
+import { useEnvironmentQuery } from "../../state/query";
+import { useAtomCommand } from "../../state/use-atom-command";
+import { useBotFileUpload } from "./useBotFileUpload";
+import { T, Var, useGT } from "gt-react-native";
+
+type Props = { environmentId: EnvironmentId; hostId: string; agentId: string };
+export function BotFiles(props: Props) {
+  const gt = useGT();
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <View className="gap-3">
+      <Button
+        label={expanded ? gt("Close files") : gt("Files")}
+        size="compact"
+        onPress={() => setExpanded(!expanded)}
+      />
+      {expanded && (
+        <FilesPanel key={`${props.environmentId}:${props.hostId}:${props.agentId}`} {...props} />
+      )}
+    </View>
+  );
+}
+export function BotFilesWorkspace(props: Props) {
+  return <FilesPanel key={JSON.stringify(props)} {...props} />;
+}
+function FilesPanel({ environmentId, hostId, agentId }: Props) {
+  const gt = useGT();
+  const scope = { hostId, agentId };
+  const [path, setPath] = useState(".");
+  const [visible, setVisible] = useState(25);
+  const [visibleSearch, setVisibleSearch] = useState(25);
+  const [query, setQuery] = useState("");
+  const [submitted, setSubmitted] = useState<string | null>(null);
+  const [cursors, setCursors] = useState<string[]>([]);
+  const [text, setText] = useState("");
+  const [channelBefore, setChannelBefore] = useState<number | undefined>(undefined);
+  const [target, setTarget] = useState<OpenbotFileTarget>({ kind: "main" });
+  const [preview, setPreview] = useState<FilePreviewSource | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const lock = useRef(false);
+  const workspace = useEnvironmentQuery(
+    openbot.fileWorkspace({ environmentId, input: { ...scope, path } }),
+  );
+  const search = useEnvironmentQuery(
+    submitted === null
+      ? null
+      : openbot.fileSearch({
+          environmentId,
+          input: {
+            hostId,
+            query: submitted,
+            ...(target.kind === "task" ? { agentId, taskId: target.taskId } : {}),
+            ...(cursors.at(-1) ? { cursor: cursors.at(-1)! } : {}),
+          },
+        }),
+  );
+  const drafts = useEnvironmentQuery(openbot.fileDrafts({ environmentId, input: scope }));
+  const taskQuery = useEnvironmentQuery(
+    openbot.readFromHost({
+      environmentId,
+      input: { hostId, request: { operation: "task.list", agentId } },
+    }),
+  );
+  const channelQuery = useEnvironmentQuery(
+    openbot.readFromHost({
+      environmentId,
+      input: { hostId, request: { operation: "channel.list" } },
+    }),
+  );
+  const channelFilesQuery = useEnvironmentQuery(
+    target.kind === "channel"
+      ? openbot.readFromHost({
+          environmentId,
+          input: {
+            hostId,
+            request: {
+              operation: "channel.read",
+              channelId: target.channelId,
+              ...(channelBefore === undefined ? {} : { beforeSequence: channelBefore }),
+            },
+          },
+        })
+      : null,
+  );
+  const channelFiles = channelPage(channelFilesQuery.data);
+  const channels = channelList(channelQuery.data)?.filter(
+    (channel) => !channel.archived && channel.members.some((member) => member.agentId === agentId),
+  );
+  const tasks = taskViews(taskQuery.data);
+  const targetClosed =
+    target.kind === "task" &&
+    tasks?.some((task) => task.id === target.taskId && task.state === "closed") === true;
+  const targetValue =
+    target.kind === "channel"
+      ? `channel:${target.channelId}`
+      : target.kind === "task"
+        ? `task:${target.taskId}`
+        : target.kind;
+  const targetLabel =
+    target.kind === "main"
+      ? "Main conversation"
+      : target.kind === "new-task"
+        ? "New task"
+        : target.kind === "channel"
+          ? (channels?.find((channel) => channel.id === target.channelId)?.name ?? target.channelId)
+          : (tasks?.find((task) => task.id === target.taskId)?.title ?? target.taskId);
+  const selectTarget = (value: string) => {
+    if (value === "main" || value === "new-task") setTarget({ kind: value });
+    else if (value.startsWith("channel:")) {
+      const channelId = value.slice("channel:".length);
+      if (!channels?.some((channel) => channel.id === channelId)) return;
+      setTarget({ kind: "channel", channelId });
+    } else {
+      const taskId = value.slice("task:".length);
+      if (!value.startsWith("task:") || !tasks?.some((task) => task.id === taskId)) return;
+      setTarget({ kind: "task", taskId });
+    }
+    setSubmitted(null);
+    setCursors([]);
+    setChannelBefore(undefined);
+  };
+  const canRead = useAtomValue(openbot.fileMaterialize.permissionAtom(environmentId));
+  const fileUpload = useBotFileUpload(environmentId, hostId);
+  const canUpload = fileUpload.canUpload;
+  const canSend = useAtomValue(openbot.fileSendDraft.permissionAtom(environmentId));
+  const materialize = useAtomCommand(openbot.fileMaterialize, { reportFailure: false });
+  const send = useAtomCommand(openbot.fileSendDraft, { reportFailure: false });
+  const discard = useAtomCommand(openbot.fileDiscardDraft, { reportFailure: false });
+  const act = async (action: () => Promise<void>) => {
+    if (lock.current) return;
+    lock.current = true;
+    setBusy(true);
+    setError(null);
+    const result = await settlePromise(action);
+    if (result._tag === "Failure") {
+      const cause = squashAtomCommandFailure(result);
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : gt("Could not transfer this file. Refresh and try again."),
+      );
+    }
+    lock.current = false;
+    setBusy(false);
+    drafts.refresh();
+    taskQuery.refresh();
+  };
+  const open = (source: OpenbotAgentFileSource, sourceAgentId: string, save: boolean) =>
+    act(async () => {
+      const result = await materialize({
+        environmentId,
+        input: { hostId, agentId: sourceAgentId, source },
+      });
+      if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+      const file = result.value;
+      const resource = {
+        _tag: "attachment" as const,
+        attachmentId: file.attachmentId,
+        fileName: file.name,
+        mimeType: file.mimeType,
+        disposition: "inline" as const,
+      };
+      if (!save) {
+        setPreview({
+          environmentId,
+          resource,
+          name: file.name,
+          mimeType: file.mimeType,
+          kind: file.mimeType.startsWith("image/")
+            ? "image"
+            : file.mimeType === "application/pdf"
+              ? "pdf"
+              : "document",
+        });
+        return;
+      }
+      const signal = new AbortController().signal;
+      const url = await refreshAssetUrl(
+        environmentId,
+        { ...resource, disposition: "attachment" },
+        signal,
+      );
+      if (!url) throw new Error("Reconnect to this environment and try again.");
+      await downloadAndShareAttachment({
+        url,
+        attachment: { name: file.name, mimeType: file.mimeType },
+        signal,
+      });
+    });
+  const pick = () =>
+    act(async () => {
+      await fileUpload.pick(agentId, "files");
+    });
+  return (
+    <View className="gap-4 rounded-xl bg-grouped-card p-3">
+      <Text className="font-t3-medium">
+        <T>Workspace files</T>
+      </Text>
+      <Text selectable textRole="footnote" className="text-foreground-muted">
+        {workspace.data?.path ?? path}
+      </Text>
+      <View className="flex-row flex-wrap gap-2">
+        <Button
+          label={gt("Refresh files")}
+          size="compact"
+          disabled={busy}
+          onPress={() => {
+            workspace.refresh();
+            taskQuery.refresh();
+            search.refresh();
+            drafts.refresh();
+          }}
+        />
+        {workspace.data?.parentPath && (
+          <Button
+            label={gt("Parent folder")}
+            size="compact"
+            disabled={busy}
+            onPress={() => {
+              setPath(workspace.data!.parentPath!);
+              setVisible(25);
+            }}
+          />
+        )}
+      </View>
+      {workspace.isPending && !workspace.data && (
+        <Text accessibilityLiveRegion="polite">
+          <T>Loading files…</T>
+        </Text>
+      )}
+      {workspace.data?.entries.length === 0 && (
+        <Text className="text-foreground-muted">
+          <T>No files in this folder.</T>
+        </Text>
+      )}
+      {workspace.data?.entries.slice(0, visible).map((entry) => (
+        <View key={entry.path} className="gap-2 border-b border-border py-2">
+          <Text selectable>{entry.name}</Text>
+          {entry.kind === "file" && (
+            <Text textRole="footnote" className="text-foreground-muted">
+              {formatAttachmentSize(entry.size)}
+            </Text>
+          )}
+          <View className="flex-row flex-wrap gap-2">
+            {entry.kind === "directory" ? (
+              <Button
+                label={gt("Open folder")}
+                size="compact"
+                disabled={busy}
+                onPress={() => {
+                  setPath(entry.path);
+                  setVisible(25);
+                }}
+              />
+            ) : (
+              <>
+                <Button
+                  label={gt("Preview")}
+                  accessibilityLabel={gt("Preview {name}", { name: entry.name })}
+                  size="compact"
+                  disabled={busy || !canRead}
+                  onPress={() => void open({ kind: "workspace", path: entry.path }, agentId, false)}
+                />
+                <Button
+                  label={gt("Save or share")}
+                  accessibilityLabel={gt("Save or share {name}", { name: entry.name })}
+                  size="compact"
+                  disabled={busy || !canRead}
+                  onPress={() => void open({ kind: "workspace", path: entry.path }, agentId, true)}
+                />
+              </>
+            )}
+          </View>
+        </View>
+      ))}
+      {(workspace.data?.entries.length ?? 0) > visible && (
+        <Button
+          label={gt("Show more files")}
+          size="compact"
+          onPress={() => setVisible(visible + 25)}
+        />
+      )}
+      {workspace.data?.truncated && (
+        <Text textRole="footnote" className="text-foreground-muted">
+          <T>This engine returned the first 500 entries. Open a subfolder to narrow the list.</T>
+        </Text>
+      )}
+      <View className="gap-2">
+        <Text>
+          <T>Conversation for files</T>
+        </Text>
+        <Menu
+          title={gt("Conversation for files")}
+          accessibilityLabel={gt("Choose conversation for files")}
+          actions={[
+            { id: "main", title: gt("Main conversation") },
+            { id: "new-task", title: gt("Start a new task") },
+            ...(channels ?? []).map((channel) => ({
+              id: `channel:${channel.id}`,
+              title: gt("Channel: {name}", { name: channel.name }),
+            })),
+            ...(tasks?.map((task) => ({
+              id: `task:${task.id}`,
+              title: (task.title || task.id) + (task.state === "closed" ? " (closed)" : ""),
+            })) ?? []),
+          ].map((choice) => ({
+            ...choice,
+            state: choice.id === targetValue ? ("on" as const) : undefined,
+            attributes: { disabled: busy },
+          }))}
+          onPressAction={({ nativeEvent }) => {
+            if (!busy) selectTarget(nativeEvent.event);
+          }}
+        >
+          <ControlPill label={targetLabel} disabled={busy} variant="pill" />
+        </Menu>
+      </View>
+      <Text className="font-t3-medium">
+        {target.kind === "task"
+          ? gt("Search files in this task")
+          : gt("Search files across main bot conversations")}
+      </Text>
+      <AppTextInput
+        accessibilityLabel={gt("Conversation file name")}
+        value={query}
+        maxLength={255}
+        onChangeText={setQuery}
+        placeholder={gt("File name")}
+        className="min-h-12 rounded-xl bg-subtle p-3"
+        returnKeyType="search"
+        onSubmitEditing={() => {
+          setSubmitted(query);
+          setCursors([]);
+          setVisibleSearch(25);
+        }}
+      />
+      <Button
+        label={gt("Search")}
+        size="compact"
+        disabled={busy}
+        onPress={() => {
+          setSubmitted(query);
+          setCursors([]);
+          setVisibleSearch(25);
+        }}
+      />
+      {target.kind === "channel" && (
+        <View className="gap-2" accessibilityLabel={gt("Channel message files")}>
+          <Text>
+            <T>Recent channel attachments</T>
+          </Text>
+          {channelFiles?.messages.flatMap((message) =>
+            (message.message.attachments ?? []).map((attachment) => (
+              <Button
+                key={`${message.id}:${attachment.id}`}
+                disabled={busy || !canRead}
+                label={gt("Save or share {name}", { name: attachment.name })}
+                onPress={() =>
+                  void open(
+                    {
+                      kind: "attachment",
+                      channelId: channelFiles.channel.id,
+                      ...(channelBefore === undefined ? {} : { beforeSequence: channelBefore }),
+                      messageId: message.id,
+                      attachmentId: attachment.id,
+                    },
+                    agentId,
+                    true,
+                  )
+                }
+              />
+            )),
+          )}
+          <Button
+            disabled={busy || channelFiles?.olderCursor == null}
+            label={gt("Older channel files")}
+            onPress={() => setChannelBefore(channelFiles?.olderCursor ?? undefined)}
+          />
+          <Button
+            disabled={busy || channelBefore === undefined}
+            label={gt("Latest channel files")}
+            onPress={() => setChannelBefore(undefined)}
+          />
+        </View>
+      )}
+      {search.isPending && submitted !== null && (
+        <Text accessibilityLiveRegion="polite">
+          <T>Searching files…</T>
+        </Text>
+      )}
+      {search.data?.results.length === 0 && (
+        <Text className="text-foreground-muted">
+          <T>No matching conversation files.</T>
+        </Text>
+      )}
+      {search.data?.results.slice(0, visibleSearch).map((hit) => (
+        <View
+          key={`${hit.agentId}:${hit.messageId}:${hit.attachment.id}`}
+          className="gap-2 border-b border-border py-2"
+        >
+          <Text selectable>{hit.attachment.name}</Text>
+          <Text textRole="footnote" className="text-foreground-muted">
+            {hit.agentId} · {formatAttachmentSize(hit.attachment.size)}
+          </Text>
+          <View className="flex-row flex-wrap gap-2">
+            <Button
+              label={gt("Preview")}
+              size="compact"
+              disabled={busy || !canRead}
+              onPress={() =>
+                void open(
+                  {
+                    kind: "attachment",
+                    attachmentId: hit.attachment.id,
+                    messageId: hit.messageId,
+                    ...(hit.taskId ? { taskId: hit.taskId } : {}),
+                  },
+                  hit.agentId,
+                  false,
+                )
+              }
+            />
+            <Button
+              label={gt("Save or share")}
+              size="compact"
+              disabled={busy || !canRead}
+              onPress={() =>
+                void open(
+                  {
+                    kind: "attachment",
+                    attachmentId: hit.attachment.id,
+                    messageId: hit.messageId,
+                    ...(hit.taskId ? { taskId: hit.taskId } : {}),
+                  },
+                  hit.agentId,
+                  true,
+                )
+              }
+            />
+          </View>
+        </View>
+      ))}
+      {(search.data?.results.length ?? 0) > visibleSearch && (
+        <Button
+          label={gt("Show more results")}
+          size="compact"
+          onPress={() => setVisibleSearch(visibleSearch + 25)}
+        />
+      )}
+      <View className="flex-row flex-wrap gap-2">
+        {cursors.length > 0 && (
+          <Button
+            label={gt("Previous results")}
+            size="compact"
+            onPress={() => {
+              setCursors(cursors.slice(0, -1));
+              setVisibleSearch(25);
+            }}
+          />
+        )}
+        {search.data?.nextCursor && (
+          <Button
+            label={gt("Next results")}
+            size="compact"
+            onPress={() => {
+              setCursors([...cursors, search.data!.nextCursor!]);
+              setVisibleSearch(25);
+            }}
+          />
+        )}
+      </View>
+      <Text className="font-t3-medium">
+        <T>Send a file to this bot</T>
+      </Text>
+      <Text textRole="footnote" className="text-foreground-muted">
+        <T>
+          Send files to <Var>{targetLabel}</Var>.<Var> </Var>
+          <Var>
+            {target.kind === "task"
+              ? gt("Task file search covers the latest conversation snapshot.")
+              : gt("Choose an existing task or start a new one above.")}
+          </Var>
+        </T>
+      </Text>
+      {targetClosed && (
+        <Text textRole="footnote" className="text-foreground-muted">
+          <T>Reopen this task from its task controls before sending another file.</T>
+        </Text>
+      )}
+      <Button
+        label={gt("Choose file")}
+        size="compact"
+        disabled={busy || !canUpload}
+        onPress={() => void pick()}
+      />
+      <AppTextInput
+        accessibilityLabel={gt("Message to send with a file")}
+        placeholder={gt("Tell the bot what to do with this file")}
+        value={text}
+        onChangeText={setText}
+        multiline
+        textAlignVertical="top"
+        maxLength={100_000}
+        editable={!busy}
+        className="min-h-24 rounded-xl bg-subtle p-3"
+      />
+      {drafts.data?.map((draft) => (
+        <View key={draft.attachment.id} className="gap-2 border-t border-border py-2">
+          <Text selectable>{draft.attachment.name}</Text>
+          <Text textRole="footnote" className="text-foreground-muted">
+            {formatAttachmentSize(draft.attachment.size)} · {draft.state}
+          </Text>
+          {draft.state === "sending" && (
+            <Text textRole="footnote" className="text-foreground-muted">
+              {draft.target?.kind === "new-task"
+                ? gt(
+                    "Creation could not be confirmed. Check task conversations before starting another task.",
+                  )
+                : gt(
+                    "Delivery was not confirmed. Retry sends the same file and original message using its saved receipt.",
+                  )}
+            </Text>
+          )}
+          {draft.state === "reconciliation-required" && (
+            <Text textRole="footnote" className="text-foreground-muted">
+              <T>
+                Check the target conversation before sending again. Delivery could not be safely
+                confirmed.
+              </T>
+            </Text>
+          )}
+          {draft.state === "sent" && (
+            <Text textRole="footnote" className="text-foreground-muted">
+              {draft.target?.kind === "channel"
+                ? gt("Delivered to channel {channelId}.", { channelId: draft.target.channelId })
+                : draft.taskId
+                  ? gt("Delivered to task {taskId}.", { taskId: draft.taskId })
+                  : gt("Delivered to the main conversation.")}
+            </Text>
+          )}
+          {draft.state === "sent" &&
+            draft.conversationMessageId &&
+            draft.committedAttachments === null && (
+              <Button
+                label={gt("Refresh sent file")}
+                size="compact"
+                disabled={busy || !canSend}
+                onPress={() =>
+                  void act(async () => {
+                    const result = await send({
+                      environmentId,
+                      input: {
+                        ...scope,
+                        attachmentId: draft.attachment.id,
+                        text: draft.sendText ?? "",
+                        target: draft.target ?? { kind: "main" },
+                      },
+                    });
+                    if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+                  })
+                }
+              />
+            )}
+          {draft.state === "sent" &&
+            draft.conversationMessageId &&
+            draft.committedAttachments?.map((file) => (
+              <View key={file.id} className="gap-2">
+                <Text selectable>{file.name}</Text>
+                <View className="flex-row flex-wrap gap-2">
+                  <Button
+                    label={gt("Preview sent file")}
+                    size="compact"
+                    disabled={busy || !canRead}
+                    onPress={() =>
+                      void open(
+                        {
+                          kind: "attachment",
+                          attachmentId: file.id,
+                          messageId: draft.conversationMessageId!,
+                          ...(draft.taskId ? { taskId: draft.taskId } : {}),
+                        },
+                        agentId,
+                        false,
+                      )
+                    }
+                  />
+                  <Button
+                    label={gt("Save sent file")}
+                    size="compact"
+                    disabled={busy || !canRead}
+                    onPress={() =>
+                      void open(
+                        {
+                          kind: "attachment",
+                          attachmentId: file.id,
+                          messageId: draft.conversationMessageId!,
+                          ...(draft.taskId ? { taskId: draft.taskId } : {}),
+                        },
+                        agentId,
+                        true,
+                      )
+                    }
+                  />
+                </View>
+              </View>
+            ))}
+          {draft.state === "sent" && !draft.conversationMessageId && (
+            <Text textRole="footnote" className="text-foreground-muted">
+              <T>File details are available through conversation file search.</T>
+            </Text>
+          )}
+          {draft.state === "sent" && draft.taskId && (
+            <Button
+              label={gt("Task files")}
+              size="compact"
+              disabled={busy}
+              onPress={() => {
+                selectTarget(`task:${draft.taskId}`);
+                setQuery(draft.attachment.name);
+                setSubmitted(draft.attachment.name);
+              }}
+            />
+          )}
+          {(draft.state === "ready" || draft.state === "sending") && (
+            <View className="flex-row flex-wrap gap-2">
+              <Button
+                label={
+                  draft.state === "sending"
+                    ? draft.target?.kind === "new-task"
+                      ? gt("Review delivery")
+                      : gt("Retry delivery")
+                    : target.kind === "new-task"
+                      ? gt("Start task with file")
+                      : gt("Send file")
+                }
+                size="compact"
+                disabled={busy || !canSend || (draft.state === "ready" && targetClosed)}
+                onPress={() =>
+                  void act(async () => {
+                    const result = await send({
+                      environmentId,
+                      input: {
+                        ...scope,
+                        attachmentId: draft.attachment.id,
+                        text: draft.sendText ?? text,
+                        target: draft.target ?? target,
+                      },
+                    });
+                    if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+                  })
+                }
+              />
+              {draft.state === "ready" && (
+                <Button
+                  label={gt("Discard draft")}
+                  size="compact"
+                  tone="danger"
+                  disabled={busy || !canSend || (draft.state === "ready" && targetClosed)}
+                  onPress={() =>
+                    void act(async () => {
+                      const result = await discard({
+                        environmentId,
+                        input: { ...scope, attachmentId: draft.attachment.id },
+                      });
+                      if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+                    })
+                  }
+                />
+              )}
+            </View>
+          )}
+        </View>
+      ))}
+      {busy && (
+        <Text accessibilityLiveRegion="polite" className="text-foreground-muted">
+          <T>Transferring file…</T>
+        </Text>
+      )}
+      {(error || workspace.error || search.error || drafts.error || taskQuery.error) && (
+        <Text accessibilityRole="alert" className="text-danger">
+          {error ?? workspace.error ?? search.error ?? drafts.error ?? taskQuery.error}
+        </Text>
+      )}
+      {!canRead && (
+        <Text textRole="footnote" className="text-foreground-muted">
+          <T>File read permission is required to preview or download bot files.</T>
+        </Text>
+      )}
+      <FilePreviewModal
+        source={preview}
+        onRequestClose={() => setPreview(null)}
+        onOpenError={() => {
+          setError(gt("Could not preview this file. Try saving it instead."));
+          setPreview(null);
+        }}
+      />
+    </View>
+  );
+}

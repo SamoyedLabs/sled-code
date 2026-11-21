@@ -1,0 +1,345 @@
+@import "./openbot-tokens.css";
+@import "./openbot-shell-source.css";
+
+/* React composition adapters. Geometry and colors are the source desktop variables. */
+.openbot-react.ob-shell {
+  --left-header-height: 38px;
+  --sidebar-drag-x: 0px;
+  --sidebar-drag-y: 0px;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 6px 6px 0;
+  background: var(--openbot-bg-canvas);
+  color: var(--openbot-text-primary);
+  font-family: var(--openbot-font-sans);
+  font-size: var(--openbot-text-lg);
+  line-height: var(--openbot-leading-lg);
+}
+.openbot-react .window-rail {
+  flex: 0 0 52px;
+}
+.openbot-react .window-rail .ob-rail-top {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.openbot-react .window-rail .ob-rail-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.openbot-react .ob-sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  flex-shrink: 0;
+}
+.openbot-react .sidebar-topbar {
+  border-bottom: 0;
+}
+.openbot-react .sidebar-server-name {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+.openbot-react .sidebar-server-name-label {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.openbot-react .ob-server-mark {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--openbot-accent-soft);
+}
+.openbot-react .ob-server-mark svg {
+  width: 13px;
+  height: 13px;
+}
+.openbot-react .ob-sidebar-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--openbot-border-strong);
+  border-radius: var(--openbot-radius-card) 0 0 var(--openbot-radius-card);
+  background: var(--openbot-bg-sidebar);
+}
+.openbot-react .agent-list {
+  padding-bottom: 10px;
+}
+.openbot-react .agent-row {
+  cursor: pointer;
+}
+.openbot-react .agent-row:focus-visible {
+  outline: none;
+  box-shadow: var(--openbot-focus-ring);
+}
+.openbot-react .ob-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  text-align: start;
+  cursor: pointer;
+}
+.openbot-react .ob-section-heading svg {
+  width: 12px;
+  height: 12px;
+  transform: rotate(-90deg);
+  transition: transform var(--openbot-duration-normal) var(--openbot-ease-out);
+}
+.openbot-react .ob-section-heading[aria-expanded="true"] svg {
+  transform: rotate(0);
+}
+.openbot-react .sidebar-section-collapse {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--openbot-duration-normal) var(--openbot-ease-out);
+}
+.openbot-react .sidebar-section-collapse[data-collapsed] {
+  grid-template-rows: 0fr;
+}
+.openbot-react .sidebar-section-body {
+  min-height: 0;
+  overflow: hidden;
+}
+.openbot-react .ob-sidebar-resize {
+  position: absolute;
+  z-index: 20;
+  top: 38px;
+  right: -3px;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+.openbot-react .ob-sidebar-resize:hover,
+.openbot-react .ob-sidebar-resize:focus-visible {
+  background: var(--openbot-accent-soft);
+}
+.openbot-react .ob-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.openbot-react .ob-content-card {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--openbot-border-strong);
+  border-left: 0;
+  border-radius: 0 var(--openbot-radius-card) var(--openbot-radius-card) 0;
+  overflow: hidden;
+  background: var(--openbot-bg-canvas);
+}
+.openbot-react .ob-content-card[data-group] {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.openbot-react .conversation-title {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  max-width: 260px;
+  height: 28px;
+  border-radius: var(--openbot-radius-sm);
+  padding: 4px 8px;
+  background: transparent;
+  font-size: var(--openbot-text-lg);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.openbot-react .conversation-title h1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+  font-weight: var(--openbot-weight-medium);
+}
+.openbot-react .ob-header-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.openbot-react .ob-model-choice {
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--openbot-text-muted);
+  cursor: pointer;
+  font-size: var(--openbot-text-md);
+  padding: 4px;
+}
+.openbot-react .ob-model-choice:hover {
+  color: var(--openbot-text-primary);
+}
+.openbot-react .ob-model-choice svg {
+  height: 14px;
+  width: 14px;
+}
+.openbot-react .ob-model-choice span {
+  text-transform: capitalize;
+}
+.openbot-react .ob-workspace-conversation {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.openbot-react .ob-conversation-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+.openbot-react .ob-tools-pane {
+  width: var(--side-panel-width, 380px);
+  flex: 0 0 auto;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--openbot-border);
+  background: var(--openbot-bg-sidebar);
+}
+.openbot-react .ob-tools-header {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  border-bottom: 1px solid var(--openbot-border);
+  padding: 6px 8px;
+}
+.openbot-react .ob-tools-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+}
+.openbot-react .ob-tools-scroll {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+.openbot-react .ui-sliding-tabs-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.openbot-react .ui-sliding-tabs-trigger svg {
+  width: 14px;
+  height: 14px;
+}
+.openbot-react .sidebar-view-switch .ui-sliding-tabs {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+@media (prefers-reduced-motion: reduce) {
+  .openbot-react *,
+  .openbot-react *::before,
+  .openbot-react *::after {
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
+  }
+}
+@media (max-width: 800px) {
+  .openbot-react .ob-tools-pane {
+    width: 100%;
+    min-width: 0;
+  }
+  .openbot-react .ob-workspace-conversation:has(.ob-tools-pane) > .ob-conversation-main {
+    display: none;
+  }
+}
+
+.openbot-react .sidebar-icon-button > svg,
+.openbot-react .header-panel-toggle > svg {
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
+}
+.openbot-react .sidebar-icon-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* AgentAvatar wrapper geometry from OpenBot app-shell.css, 2540-2558. */
+.openbot-react .agent-avatar {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: var(--openbot-radius-pill);
+  color: currentColor;
+  overflow: visible;
+}
+.openbot-react .agent-avatar > svg {
+  display: block;
+  width: 128%;
+  height: 128%;
+  overflow: visible;
+  translate: var(--agent-avatar-optical-offset-x, 0) var(--agent-avatar-optical-offset, 0);
+}
+
+.openbot-react .ob-content-card[data-full-page] {
+  border-left: 1px solid var(--openbot-border-strong);
+  border-radius: var(--openbot-radius-card);
+}
+.openbot-react button.search-field {
+  width: 100%;
+  cursor: text;
+}
+
+.openbot-react .ob-content.conversation-panel {
+  position: relative;
+}
+.openbot-react .conversation-panel[data-side-panel-header] > .conversation-header {
+  padding-inline-end: calc(var(--side-panel-width, 380px) + 8px);
+}
+.openbot-react .ob-source-tool {
+  position: relative;
+  min-width: 0;
+  padding: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+.openbot-react .agent-avatar > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.openbot-react .conversation-panel[data-panel-maximized] {
+  --side-panel-width: 100%;
+}
+.openbot-react .conversation-panel[data-panel-maximized] > .conversation-header {
+  visibility: hidden;
+}

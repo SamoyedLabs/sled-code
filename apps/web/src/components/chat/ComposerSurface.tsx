@@ -82,4 +82,14 @@ function ContextStrip({ className, ...props }: ComponentProps<"div">) {
   );
 }
 
-export const ComposerSurface = { Shell, Host, Main, ContextStrip };
+function Footer({ className, ...props }: ComponentProps<"div">) {
+  return (
+    <div
+      data-chat-composer-footer="true"
+      className={cn("flex min-w-0 flex-nowrap items-center overflow-visible px-2 pb-2", className)}
+      {...props}
+    />
+  );
+}
+
+export const ComposerSurface = { Shell, Host, Main, ContextStrip, Footer };

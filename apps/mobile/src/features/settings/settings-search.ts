@@ -28,6 +28,16 @@ const SETTINGS_SEARCH_TERMS = {
     msg("live activity", { $context: "settings search keyword" }),
     msg("agent activity", { $context: "settings search keyword" }),
   ],
+  SettingsBotQuickActions: ["home screen", "app icon", "launcher", "bot shortcuts"],
+  SettingsAppLock: ["privacy", "pin", "passcode", "face id", "touch id", "biometrics"],
+  SettingsBotMotion: [
+    "animations",
+    "reduce motion",
+    "bot faces",
+    "text reveal",
+    "search transitions",
+  ],
+  SettingsBotHaptics: ["vibration", "reply feedback", "touch feedback"],
   SettingsAppearance: [
     msg("theme", { $context: "settings search keyword" }),
     msg("dark mode", { $context: "settings search keyword" }),
@@ -86,6 +96,7 @@ const SETTINGS_SEARCH_TERMS = {
     msg("checkouts", { $context: "settings search keyword" }),
     msg("delete project", { $context: "settings search keyword" }),
   ],
+  SettingsBots: ["openbot", "persistent", "teammates", "tasks", "memory", "routines"],
   SettingsOrganization: [
     msg("language", { $context: "settings search keyword" }),
     msg("locale", { $context: "settings search keyword" }),
@@ -146,6 +157,8 @@ const SETTINGS_SEARCH_TERMS = {
     msg("clone into host folders", { $context: "settings search keyword" }),
     "ghq",
   ],
+  SettingsBotVoice: ["read aloud", "reply voice", "supertonic", "speech"],
+  SettingsBotConversations: ["swipe", "pull up", "chat info", "photo quality", "media", "browser"],
   SettingsWorktrees: [
     msg("worktree", { $context: "settings search keyword" }),
     msg("branch naming", { $context: "settings search keyword" }),

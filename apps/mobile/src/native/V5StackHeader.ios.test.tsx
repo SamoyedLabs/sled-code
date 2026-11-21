@@ -4,7 +4,10 @@ import { createRoot } from "react-dom/client";
 import type { StackHeaderConfigProps } from "react-native-screens";
 import { expect, it, vi } from "vite-plus/test";
 
-const bridge = vi.hoisted(() => ({ ios: undefined as StackHeaderConfigProps["ios"] }));
+const bridge = vi.hoisted(() => ({
+  ios: undefined as StackHeaderConfigProps["ios"],
+  backButtonHidden: undefined as boolean | undefined,
+}));
 
 vi.mock("react-native", () => ({ StyleSheet: { flatten: (style: unknown) => style } }));
 vi.mock("react-native-keyboard-controller", () => ({
@@ -20,8 +23,9 @@ vi.mock("./native-layout-metrics", () => ({
 }));
 vi.mock("react-native-screens", () => ({
   Stack: {
-    HeaderConfig: ({ ios }: StackHeaderConfigProps) => {
+    HeaderConfig: ({ ios, backButtonHidden }: StackHeaderConfigProps) => {
       bridge.ios = ios;
+      bridge.backButtonHidden = backButtonHidden;
       return null;
     },
   },
@@ -74,3 +78,26 @@ it.each(["leadingItems", "trailingItems", "toolbarItems"] as const)(
     }
   },
 );
+
+it("keeps Back actionable when Code reserves the edge gesture, and retains native Back on nested screens", () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const root = createRoot(document.createElement("div"));
+  const onBack = vi.fn();
+  try {
+    act(() =>
+      root.render(<V5StackHeader canGoBack onBack={onBack} options={{ gestureEnabled: false }} />),
+    );
+    expect(bridge.backButtonHidden).toBe(true);
+    const back = bridge.ios?.leadingItems?.find((item) => item.id === "explicit-back");
+    if (!back || back.type !== "item" || !("onPress" in back))
+      throw new Error("Missing explicit Back action");
+    back.onPress?.();
+    expect(onBack).toHaveBeenCalledOnce();
+    act(() => root.render(<V5StackHeader canGoBack onBack={onBack} options={{}} />));
+    expect(bridge.backButtonHidden).toBe(false);
+    expect(bridge.ios?.leadingItems).toEqual([]);
+  } finally {
+    act(() => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});

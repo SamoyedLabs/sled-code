@@ -612,10 +612,11 @@ const make = Effect.gen(function* () {
     }).pipe(Effect.asVoid);
 
   const emitRemoved = (sessionId: AuthSessionId) =>
-    PubSub.publish(changesPubSub, {
-      type: "clientRemoved",
-      sessionId,
-    }).pipe(Effect.asVoid);
+    authSessions.awaitPrivilegedDrain({ sessionId }).pipe(
+      Effect.mapError((cause) => new SessionCredentialVerificationError({ sessionId, cause })),
+      Effect.flatMap(() => PubSub.publish(changesPubSub, { type: "clientRemoved", sessionId })),
+      Effect.asVoid,
+    );
 
   const loadActiveSession = Effect.fn("SessionStore.loadActiveSession")(function* (
     sessionId: AuthSessionId,
@@ -706,6 +707,21 @@ const make = Effect.gen(function* () {
       Effect.withSpan("SessionStore.markDisconnected"),
     );
 
+  const drainMatching = Effect.fn("SessionStore.drainMatching")(function* (
+    matches: (row: AuthSessions.AuthSessionRecord) => boolean,
+  ) {
+    const now = yield* DateTime.now;
+    const connected = yield* Ref.get(connectedSessionsRef);
+    const rows = yield* authSessions.listActive({
+      now,
+      connectedSessionIds: Array.from(connected.keys()),
+    });
+    yield* Effect.forEach(
+      rows.filter(matches),
+      (row) => authSessions.awaitPrivilegedDrain({ sessionId: row.sessionId }),
+      { concurrency: "unbounded", discard: true },
+    );
+  });
   const encodeClaims = Schema.encodeEffect(Schema.fromJsonString(SessionClaims));
   const signClaims = Effect.fnUntraced(function* (claims: SessionClaims) {
     const encodedPayload = yield* encodeClaims(claims).pipe(
@@ -772,6 +788,15 @@ const make = Effect.gen(function* () {
         expiresAt: sessionExpiresAt,
         ...(claims.jkt ? { proofKeyThumbprint: claims.jkt } : {}),
       } satisfies AuthSessions.CreateAuthSessionInput;
+      if (input?.replaceSessionId !== undefined || input?.replaceActiveForSubjectAndMethod) {
+        yield* drainMatching(
+          (row) =>
+            row.method === sessionRecord.method &&
+            (input.replaceSessionId !== undefined
+              ? row.sessionId === input.replaceSessionId
+              : row.subject === sessionRecord.subject),
+        ).pipe(Effect.mapError((cause) => new SessionCredentialIssueError({ sessionId, cause })));
+      }
       const replacedSessionIds = yield* (
         input?.replaceSessionId !== undefined || input?.replaceActiveForSubjectAndMethod
           ? authSessions.createReplacingActive({
@@ -1184,6 +1209,9 @@ const make = Effect.gen(function* () {
   const revoke: SessionStore["Service"]["revoke"] = Effect.fn("SessionStore.revoke")(
     function* (sessionId) {
       const revokedAt = yield* DateTime.now;
+      yield* authSessions
+        .awaitPrivilegedDrain({ sessionId })
+        .pipe(Effect.mapError((cause) => new SessionRevocationError({ sessionId, cause })));
       const revoked = yield* authSessions
         .revoke({
           sessionId,
@@ -1227,6 +1255,11 @@ const make = Effect.gen(function* () {
     "SessionStore.revokeAllExcept",
   )(function* (sessionId) {
     const revokedAt = yield* DateTime.now;
+    yield* drainMatching((row) => row.sessionId !== sessionId).pipe(
+      Effect.mapError(
+        (cause) => new OtherSessionsRevocationError({ currentSessionId: sessionId, cause }),
+      ),
+    );
     const revokedSessionIds = yield* authSessions
       .revokeAllExcept({
         currentSessionId: sessionId,
@@ -1319,6 +1352,14 @@ const make = Effect.gen(function* () {
             current = latest.value;
             continue;
           }
+          yield* authSessions
+            .awaitPrivilegedDrain({ sessionId: current.sessionId })
+            .pipe(
+              Effect.mapError(
+                (cause) =>
+                  new SessionCredentialVerificationError({ sessionId: current.sessionId, cause }),
+              ),
+            );
           const successorId =
             renewalKey === undefined ? undefined : latestSessionByProofKey.get(renewalKey);
           if (successorId === undefined || successorId === current.sessionId) return;

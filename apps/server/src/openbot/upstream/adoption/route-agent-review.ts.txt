@@ -1,0 +1,89 @@
+import { isDynamicRecord } from "@openbot/contracts/runtime-values";
+import {
+  AGENT_REVIEW_CAPABILITY,
+  AGENT_REVIEW_ROUTES,
+  AGENT_REVIEW_CODECS,
+} from "@openbot/contracts/team-protocol/agent-review-v1";
+import { redactText } from "@openbot/logging";
+import { runCauseEffect } from "../../backend/effect-boundary";
+import type { TeamApiAdmin } from "./dependencies";
+import { HttpError } from "./http-error";
+import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
+import { readJson, requireAdmin, requireVisibleBodyAgent } from "./request-helpers";
+import { requireString } from "../ipc/validation";
+export async function routeAgentReview(
+  context: TeamApiRequestContext,
+  admin: TeamApiAdmin | undefined,
+  hiddenAgentIds: ReadonlySet<string>,
+): Promise<RouteOutcome> {
+  const { method, url, capabilities, member, request, json } = context;
+  if (
+    method !== "POST" ||
+    (url.pathname !== AGENT_REVIEW_ROUTES.template &&
+      url.pathname !== AGENT_REVIEW_ROUTES.marketplace &&
+      url.pathname !== AGENT_REVIEW_ROUTES.publication)
+  )
+    return "unmatched";
+  requireAdmin(member);
+  if (
+    !capabilities.has(AGENT_REVIEW_CAPABILITY) ||
+    !admin?.agentTemplates?.get ||
+    !admin.marketplaceAgents?.getListing ||
+    !admin.agentTemplates?.publicationStatus
+  )
+    throw new HttpError(400, "Agent review unsupported.");
+  const body = await readJson(request);
+  try {
+    if (url.pathname === AGENT_REVIEW_ROUTES.publication) {
+      requireVisibleBodyAgent(body, hiddenAgentIds);
+      const publication = await runCauseEffect(admin.agentTemplates.publicationStatus(requireString(body.agentId, "agentId")));
+      const codec = AGENT_REVIEW_CODECS.get(url.pathname);
+      if (!codec) throw new HttpError(400, "Agent review unsupported.");
+      const response = codec.response(200, { publication });
+      if (!isDynamicRecord(response)) throw new Error("Invalid review response.");
+      return json(200, response);
+    }
+    const marketplace = url.pathname === AGENT_REVIEW_ROUTES.marketplace;
+    const detail = marketplace
+      ? await runCauseEffect(
+          admin.marketplaceAgents.getListing(requireString(body.listingId, "listingId")),
+        )
+      : await runCauseEffect(
+          admin.agentTemplates.get(requireString(body.templateId, "templateId")),
+        );
+    const projected = {
+      id: detail.id,
+      name: redactText(detail.name),
+      title: redactText(detail.title),
+      description: redactText(detail.description),
+      creatorName: redactText(detail.creatorName),
+      updatedAt: detail.updatedAt,
+      versionId: "versionId" in detail ? detail.versionId : null,
+      version: "version" in detail ? detail.version : null,
+      pending: "pending" in detail && detail.pending === true,
+      skills: detail.skills.map((skill) =>
+        "kind" in skill && skill.kind === "embedded"
+          ? {
+              kind: "embedded",
+              slug: skill.slug,
+              name: redactText(skill.name),
+              markdown: redactText(skill.markdown),
+            }
+          : { ...skill, kind: "marketplace", name: redactText(skill.name) },
+      ),
+      routines: detail.routines.map((routine) => ({
+        name: redactText(routine.name),
+        instruction: redactText(routine.instruction),
+        active: routine.active,
+        schedule: routine.schedule,
+      })),
+    };
+    const codec = AGENT_REVIEW_CODECS.get(url.pathname);
+    if (!codec) throw new HttpError(400, "Agent review unsupported.");
+    const response = codec.response(200, projected);
+    if (!isDynamicRecord(response)) throw new Error("Invalid review response.");
+    return json(200, response);
+  } catch {
+    throw new HttpError(409, "Agent review unavailable. Check host account and source revision.");
+  }
+}

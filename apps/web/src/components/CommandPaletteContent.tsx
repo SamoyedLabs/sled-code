@@ -1,3 +1,4 @@
+/* oxlint-disable shadcn/no-unknown-classes -- The unified palette control row uses source-scoped OpenBot search geometry. */
 import { T } from "gt-react";
 import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
 import { type ComponentProps, type ReactNode, type RefObject } from "react";
@@ -41,6 +42,7 @@ function restorePendingSelection(
 
 type CommandPaletteContentProps = Omit<ComponentProps<typeof Command>, "children"> & {
   readonly children: ReactNode;
+  readonly filters?: ReactNode;
   readonly escapeLabel?: ReactNode;
   readonly footerActionLabel?: ReactNode;
   readonly footerTrailing?: ReactNode;
@@ -54,6 +56,7 @@ type CommandPaletteContentProps = Omit<ComponentProps<typeof Command>, "children
 
 export function CommandPaletteContent({
   children,
+  filters,
   escapeLabel,
   footerActionLabel,
   footerTrailing,
@@ -68,17 +71,20 @@ export function CommandPaletteContent({
   return (
     <div className="contents" data-testid={testId}>
       <Command {...commandProps}>
-        <div className="relative">
-          <CommandInput
-            autoFocus={false}
-            {...inputProps}
-            ref={(input) => {
-              if (!input) return;
-              restorePendingSelection(input, pendingSelectionRef);
-              claimFocusInOpenDialog(input);
-            }}
-          />
-          {inputAccessory}
+        <div className="command-palette-control">
+          <div className="relative min-w-0 flex-1">
+            <CommandInput
+              autoFocus={false}
+              {...inputProps}
+              ref={(input) => {
+                if (!input) return;
+                restorePendingSelection(input, pendingSelectionRef);
+                claimFocusInOpenDialog(input);
+              }}
+            />
+            {inputAccessory}
+          </div>
+          {filters}
         </div>
         <CommandPanel
           className={

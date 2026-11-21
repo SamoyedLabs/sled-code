@@ -1,3 +1,4 @@
+import { BotsEdgeGesture } from "../bots/BotsEdgeGesture";
 import * as Dialog from "../../components/ui/Dialog";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import { useRememberThreadProject } from "./useRememberThreadProject";
@@ -238,6 +239,14 @@ function UnavailableThreadDraftRedirect(props: { readonly environmentId: Environ
 }
 
 export function ThreadRouteScreen(props: ThreadRouteScreenProps) {
+  return (
+    <BotsEdgeGesture routeName="Thread">
+      <ThreadRouteWithState {...props} />
+    </BotsEdgeGesture>
+  );
+}
+
+function ThreadRouteWithState(props: ThreadRouteScreenProps) {
   return (
     <ThreadScreenHost>
       {props.route.params?.draft ? (

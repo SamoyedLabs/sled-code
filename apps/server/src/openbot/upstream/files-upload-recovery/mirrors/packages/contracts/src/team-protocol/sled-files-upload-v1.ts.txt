@@ -1,0 +1,20 @@
+import { fields, identifier, nullable, string, count, oneOf, type OptionalRouteCodec } from "./admin-wire";
+import { isDynamicRecord } from "../runtime-values";
+const identityFields = { operationId: identifier, environmentId: identifier, hostId: identifier, agentId: identifier, threadId: identifier, taskId: nullable(identifier), name: string(1024), mimeType: string(255), size: count, sha256: string(64) };
+export interface OriginalUploadBody { operationId: string; environmentId: string; hostId: string; agentId: string; threadId: string; taskId: string | null; name: string; mimeType: string; size: number; sha256: string; dataBase64?: string }
+export function decodeOriginalUpload(value: unknown, upload: boolean): OriginalUploadBody {
+  const shape = upload ? { ...identityFields, dataBase64: string(139810136) } : identityFields;
+  if (!isDynamicRecord(value) || Object.keys(value).some(key => !Object.hasOwn(shape, key))) throw new Error("Invalid original upload keys");
+  const decoded = fields(shape)(value) as unknown as OriginalUploadBody;
+  if (!/^[a-f0-9]{64}$/.test(decoded.sha256) || decoded.size > 104857600 ||
+      (upload && (decoded.dataBase64!.length !== 4 * Math.ceil(decoded.size / 3) || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(decoded.dataBase64!)))) throw new Error("Invalid original upload bytes");
+  return decoded;
+}
+const attachment = fields({ id: identifier, name: string(1024), size: count, kind: oneOf("image", "file"), mimeType: string(255), previewKind: oneOf("image", "pdf", "text", "none") });
+export const SLED_FILES_UPLOAD_CAPABILITY = "sled-files-upload-recovery-v1";
+export const SLED_FILES_UPLOAD_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map(
+  ["upload", "upload-status", "upload-cancel"].map(action => [`/v1/sled/files/${action}`, {
+    request: value => ({ ...decodeOriginalUpload(value, action === "upload") }),
+    response: (_status, value) => nullable(fields({ state: oneOf("ready", "released"), attachment }))(value),
+  }]),
+);

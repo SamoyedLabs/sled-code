@@ -1,3 +1,5 @@
+import { OpenbotToolkit } from "./toolkits/openbot/tools.ts";
+import * as OpenbotHandlers from "./toolkits/openbot/handlers.ts";
 import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -1325,6 +1327,8 @@ export const layerPreviewToolkit = Layer.mergeAll(
   layerPreviewSnapshotRegistration,
 );
 
+export const layerOpenbotToolkit = toolkitRegistration(OpenbotToolkit, OpenbotHandlers.layer);
+
 export const layerOrchestratorToolkit = toolkitRegistration(
   OrchestratorToolkit,
   OrchestratorHandlers.layer,
@@ -1413,6 +1417,7 @@ export const layerMcpTransport = <RA, RE, RR>(registrations: Layer.Layer<RA, RE,
 
 /** Every tool the T3 MCP server advertises. AgentContextBudget.test.ts measures this set. */
 export const layerTools = Layer.mergeAll(
+  layerOpenbotToolkit,
   layerPreviewToolkit,
   layerOrchestratorToolkit,
   layerThreadToolkit,

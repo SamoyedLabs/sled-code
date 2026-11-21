@@ -230,6 +230,7 @@ const ANDROID_ICON_BY_SF_SYMBOL = {
   internaldrive: IconDatabase,
   iphone: IconDeviceMobile,
   keyboard: IconKeyboard,
+  lock: IconLock,
   laptopcomputer: IconDeviceLaptop,
   link: IconLink,
   "list.number": IconListNumbers,

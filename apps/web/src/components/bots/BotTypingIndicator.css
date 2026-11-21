@@ -1,0 +1,40 @@
+.bot-typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 1.625em;
+  vertical-align: top;
+}
+.bot-typing-dot {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.4;
+  animation: bot-typing-pulse 900ms ease-in-out infinite;
+}
+.bot-typing-dot:nth-child(2) {
+  animation-delay: 150ms;
+}
+.bot-typing-dot:nth-child(3) {
+  animation-delay: 300ms;
+}
+@keyframes bot-typing-pulse {
+  0%,
+  60%,
+  100% {
+    opacity: 0.4;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 0.85;
+    transform: translateY(-3px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bot-typing-dot {
+    animation: none;
+    opacity: 0.65;
+  }
+}

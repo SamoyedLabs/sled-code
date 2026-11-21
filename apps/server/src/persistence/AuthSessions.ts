@@ -111,6 +111,9 @@ export type SetAuthSessionLastConnectedAtInput = typeof SetAuthSessionLastConnec
 export class AuthSessionRepository extends Context.Service<
   AuthSessionRepository,
   {
+    readonly awaitPrivilegedDrain: (
+      input: GetAuthSessionByIdInput,
+    ) => Effect.Effect<void, AuthSessionRepositoryError>;
     readonly create: (
       input: CreateAuthSessionInput,
     ) => Effect.Effect<void, AuthSessionRepositoryError>;
@@ -429,25 +432,32 @@ export const make = Effect.gen(function* () {
   const createReplacingActive: AuthSessionRepository["Service"]["createReplacingActive"] = (
     input,
   ) =>
-    sql
-      .withTransaction(
-        revokeActiveSessionsForReplacement(input).pipe(
-          Effect.flatMap((revokedRows) =>
-            createSessionRow(input.session).pipe(
-              Effect.as(revokedRows.map((row) => row.sessionId)),
+    sql`INSERT OR IGNORE INTO privileged_commit_closed(principal)
+      SELECT session_id FROM auth_sessions WHERE ${
+        input.replaceSessionId === undefined
+          ? sql`subject = ${input.session.subject}`
+          : sql`session_id = ${input.replaceSessionId}`
+      }
+      AND method = ${input.session.method} AND revoked_at IS NULL`.pipe(
+      Effect.flatMap(() =>
+        sql.withTransaction(
+          revokeActiveSessionsForReplacement(input).pipe(
+            Effect.flatMap((revokedRows) =>
+              createSessionRow(input.session).pipe(
+                Effect.as(revokedRows.map((row) => row.sessionId)),
+              ),
             ),
           ),
         ),
-      )
-      .pipe(
-        Effect.mapError(
-          toPersistenceSqlOrDecodeError(
-            "AuthSessionRepository.createReplacingActive:query",
-            "AuthSessionRepository.createReplacingActive:encodeRequest",
-            { sessionId: input.session.sessionId },
-          ),
+      ),
+      Effect.mapError(
+        toPersistenceSqlOrDecodeError(
+          "AuthSessionRepository.createReplacingActive:query",
+          "AuthSessionRepository.createReplacingActive:encodeRequest",
+          { sessionId: input.session.sessionId },
         ),
-      );
+      ),
+    );
 
   const createIfAbsent: AuthSessionRepository["Service"]["createIfAbsent"] = (input) =>
     createSessionRowIfAbsent(input).pipe(
@@ -514,7 +524,8 @@ export const make = Effect.gen(function* () {
     );
 
   const revoke: AuthSessionRepository["Service"]["revoke"] = (input) =>
-    revokeSessionRows(input).pipe(
+    sql`INSERT OR IGNORE INTO privileged_commit_closed(principal) VALUES (${input.sessionId})`.pipe(
+      Effect.flatMap(() => revokeSessionRows(input)),
       Effect.mapError(
         toPersistenceSqlOrDecodeError(
           "AuthSessionRepository.revoke:query",
@@ -538,7 +549,10 @@ export const make = Effect.gen(function* () {
     );
 
   const revokeAllExcept: AuthSessionRepository["Service"]["revokeAllExcept"] = (input) =>
-    revokeOtherSessionRows(input).pipe(
+    sql`INSERT OR IGNORE INTO privileged_commit_closed(principal)
+      SELECT session_id FROM auth_sessions WHERE session_id <> ${input.currentSessionId}
+      AND revoked_at IS NULL`.pipe(
+      Effect.flatMap(() => revokeOtherSessionRows(input)),
       Effect.mapError(
         toPersistenceSqlOrDecodeError(
           "AuthSessionRepository.revokeAllExcept:query",
@@ -559,6 +573,24 @@ export const make = Effect.gen(function* () {
         ),
       ),
     );
+
+  const awaitPrivilegedDrain = Effect.fn("AuthSessionRepository.awaitPrivilegedDrain")(
+    function* (input: GetAuthSessionByIdInput) {
+      yield* sql`INSERT OR IGNORE INTO privileged_commit_closed(principal) VALUES (${input.sessionId})`;
+      while (
+        (yield* sql`SELECT permit FROM privileged_commit_grants WHERE principal=${input.sessionId} AND state='outstanding' LIMIT 1`)
+          .length
+      ) {
+        yield* Effect.sleep("25 millis");
+      }
+    },
+    Effect.mapError(
+      toPersistenceSqlOrDecodeError(
+        "AuthSessionRepository.awaitPrivilegedDrain:query",
+        "AuthSessionRepository.awaitPrivilegedDrain:decode",
+      ),
+    ),
+  );
 
   const getProofKeyThumbprint: AuthSessionRepository["Service"]["getProofKeyThumbprint"] = (
     input,
@@ -587,6 +619,7 @@ export const make = Effect.gen(function* () {
     );
 
   return {
+    awaitPrivilegedDrain,
     create,
     createReplacingActive,
     createIfAbsent,

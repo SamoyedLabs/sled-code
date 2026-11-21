@@ -226,7 +226,7 @@ export function ThreadRouteView({
 
   return (
     <SidebarInset
-      className="h-svh min-h-0 overflow-hidden overscroll-y-none md:h-dvh"
+      className="h-[var(--workspace-shell-height,100dvh)] min-h-0 overflow-hidden overscroll-y-none"
       inert={background}
     >
       <BackgroundThreadContext value={background}>

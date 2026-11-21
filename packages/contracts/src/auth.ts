@@ -179,6 +179,7 @@ export const AuthStandardClientScopes = [
 export const AuthAdministrativeClientScopes = [
   ...AuthStandardClientScopes,
   AuthRelayConfigureScope,
+  AuthDesktopOperateScope,
 ] as const;
 
 export const AuthTokenExchangeGrantType =

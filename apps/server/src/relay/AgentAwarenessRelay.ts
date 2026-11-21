@@ -1,3 +1,4 @@
+import type { OpenbotNotification } from "@t3tools/contracts/openbot-continuity";
 import type { AgentAwarenessThread } from "../orchestration-v2/ProjectionStore.ts";
 import {
   isListedThreadLineage,
@@ -58,6 +59,20 @@ import { forkParked } from "../serverActivation.ts";
 export class AgentAwarenessRelay extends Context.Service<
   AgentAwarenessRelay,
   {
+    readonly botTransportStatus: Effect.Effect<
+      "configured" | "configuration-required" | "unsupported"
+    >;
+    readonly publishBot: (input: {
+      readonly notification: OpenbotNotification;
+      readonly recipientUserId: string;
+    }) => Effect.Effect<
+      | "delivered"
+      | "configuration-required"
+      | "unsupported"
+      | "recipient-revoked"
+      | "no-device"
+      | "retry"
+    >;
     readonly publishThread: (threadId: ThreadId) => Effect.Effect<void>;
     readonly drain: Effect.Effect<void>;
     readonly requestCatchUp: () => Effect.Effect<void>;
@@ -472,6 +487,53 @@ export const make = Effect.gen(function* () {
       baseUrl: relayConfig.url,
       transformClient: relayEnvironmentClient(relayConfig.environmentCredential),
     }).pipe(Effect.provide(FetchHttpClient.layer));
+
+  let botUnsupported = false;
+  const botTransportStatus = Effect.gen(function* () {
+    if (botUnsupported) return "unsupported" as const;
+    if (!(yield* readPublishAgentActivityEnabled) || (yield* readRelayConfig) === null)
+      return "configuration-required" as const;
+    return "configured" as const;
+  }).pipe(Effect.orElseSucceed(() => "configuration-required" as const));
+  const publishBot = Effect.fn("AgentAwarenessRelay.publishBot")(
+    function* (input: {
+      readonly notification: OpenbotNotification;
+      readonly recipientUserId: string;
+    }) {
+      const config = yield* readRelayConfig;
+      if (config === null || !(yield* readPublishAgentActivityEnabled))
+        return "configuration-required" as const;
+      const environmentId = yield* serverEnvironment.getEnvironmentId;
+      if (input.notification.target.environmentId !== environmentId)
+        return "recipient-revoked" as const;
+      const now = yield* DateTime.now;
+      const proof = yield* signingKey.sign({
+        typ: "t3-bot-attention+jwt",
+        payload: {
+          iss: `t3-env:${environmentId}`,
+          aud: normalizeRelayIssuer(config.issuer),
+          sub: environmentId,
+          jti: yield* random.uuidV4(),
+          iat: Math.floor(now.epochMilliseconds / 1000),
+          exp: Math.floor(now.epochMilliseconds / 1000) + 300,
+          notification: input.notification,
+          recipientUserId: input.recipientUserId,
+        },
+      });
+      const client = yield* makeRelayClient(config);
+      return (yield* client.server.publishBotAttention({
+        params: { environmentId },
+        payload: { ...input, proof },
+      })).outcome;
+    },
+    Effect.catchCause((cause) => {
+      if (Cause.pretty(cause).includes("404")) {
+        botUnsupported = true;
+        return Effect.succeed("unsupported" as const);
+      }
+      return Effect.succeed("retry" as const);
+    }),
+  );
 
   let cachedRelayClient: Effect.Success<ReturnType<typeof makeRelayClient>> | undefined;
   let publishedRelayConfig: NonNullable<Effect.Success<typeof readRelayConfig>> | undefined;
@@ -995,6 +1057,8 @@ export const make = Effect.gen(function* () {
   );
 
   return AgentAwarenessRelay.of({
+    botTransportStatus,
+    publishBot,
     publishThread,
     drain: worker.drain,
     requestCatchUp: Effect.fn("AgentAwarenessRelay.requestCatchUp")(function () {

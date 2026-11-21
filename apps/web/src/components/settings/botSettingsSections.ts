@@ -1,0 +1,118 @@
+import {
+  BellIcon,
+  BlocksIcon,
+  BrainIcon,
+  CpuIcon,
+  FolderIcon,
+  HardDriveIcon,
+  MessageSquareIcon,
+  Settings2Icon,
+  ShieldIcon,
+  WorkflowIcon,
+} from "lucide-react";
+import { m } from "../../i18n/messages";
+import { msg } from "gt-react";
+
+export const botSettingsSections = [
+  {
+    id: "general",
+    label: m(msg("General")),
+    icon: Settings2Icon,
+    description: m(msg("Choose how this bot works and responds.")),
+    forms: [
+      "agent-host-settings",
+      "agent-task-limit",
+      "agent-new-chat",
+      "agent-plan-card",
+      "host-timezone",
+    ],
+    advanced: [],
+  },
+  {
+    id: "models",
+    label: m(msg("Models")),
+    icon: CpuIcon,
+    description: m(msg("Model performance, provider settings, and fallback choices.")),
+    forms: ["agent-fast-mode", "prompt-cache-ttl"],
+    advanced: ["backups", "session", "fast-models"],
+  },
+  {
+    id: "memory",
+    label: m(msg("Memory")),
+    icon: BrainIcon,
+    description: m(msg("Control what bots retain between conversations.")),
+    forms: ["agent-memory-limit", "memory-review"],
+    advanced: ["memories"],
+  },
+  {
+    id: "notifications",
+    label: m(msg("Notifications")),
+    icon: BellIcon,
+    description: m(msg("Choose which activity needs your attention.")),
+    forms: [],
+    advanced: ["notifications"],
+  },
+  {
+    id: "workspace",
+    label: m(msg("Workspace")),
+    icon: FolderIcon,
+    description: m(msg("Organize chats and choose the folders available to this bot.")),
+    forms: [],
+    advanced: ["folders", "sidebar-folders", "pins", "hidden"],
+  },
+  {
+    id: "conversation",
+    label: m(msg("Conversation")),
+    icon: MessageSquareIcon,
+    description: m(msg("Manage context and conversation read states.")),
+    forms: [],
+    advanced: ["context", "side-question", "conversation-reads"],
+  },
+  {
+    id: "skills",
+    label: m(msg("Skills")),
+    icon: BlocksIcon,
+    description: m(msg("Browse, review, and manage the skills available on this host.")),
+    forms: [],
+    advanced: ["installed-skills", "catalog"],
+  },
+  {
+    id: "routines",
+    label: m(msg("Routines & workflows")),
+    icon: WorkflowIcon,
+    description: m(msg("Manage routine delivery and connected workflow events.")),
+    forms: [],
+    advanced: ["routine-results", "workflows-github"],
+  },
+  {
+    id: "access",
+    label: m(msg("Access")),
+    icon: ShieldIcon,
+    description: m(msg("Manage roles and access on the connected bot host.")),
+    forms: [],
+    advanced: ["access", "discord"],
+  },
+  {
+    id: "storage",
+    label: m(msg("Storage")),
+    icon: HardDriveIcon,
+    description: m(msg("Review disk space and stored conversation files.")),
+    forms: [],
+    advanced: ["storage"],
+  },
+] as const;
+
+export const botSettingDescriptions: Readonly<Record<string, string>> = {
+  computerUse: "Let this bot use the host computer to complete tasks.",
+  allowAutomation: "Allow this bot to run local automation tools.",
+  busyMessageMode: "Queue new messages or use them to guide work already in progress.",
+  fastMode: "Use the provider’s fast service tier when the selected model supports it.",
+  taskLimit: "Limit how many tasks this bot can work on at the same time.",
+  allowNewChat: "Let this bot start a fresh conversation when needed.",
+  quickAcknowledgement: "Show a short plan before the bot begins longer work.",
+  limit: "The maximum number of saved memories for each bot on this host.",
+  interval: "Review saved memories after this many completed turns. Choose 0 to turn reviews off.",
+  ttl: "Request a longer cache duration for repeated prompt content.",
+  timezone:
+    "Used by routines that follow the host default. Leave blank to use this computer’s time zone.",
+};

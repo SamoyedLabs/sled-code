@@ -24,9 +24,10 @@ import {
   Table2Icon,
 } from "lucide-react";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { m, type MessageResolver } from "~/i18n/messages";
 
+import { useStableCallback } from "~/hooks/useStableCallback";
 import { useAssetUrlRefresh } from "~/assets/assetUrls";
 import ChatMarkdown from "~/components/ChatMarkdown";
 import { maskMarkdownFrontmatter } from "@t3tools/shared/markdownFrontmatter";
@@ -97,6 +98,13 @@ function renderedToggleLabel(
   return rendered ? resolve(msg("Show HTML source")) : resolve(msg("Show rendered page"));
 }
 
+export type AttachmentPreviewHeaderActions = {
+  source: null | { pressed: boolean; label: string; toggle: () => void };
+  wrap: null | { pressed: boolean; toggle: () => void };
+  copy: null | { copied: boolean; run: () => void };
+  download: null | { saving: boolean; run: () => void };
+};
+
 export function AttachmentFilePreview(props: {
   name: string;
   mimeType: string;
@@ -108,6 +116,12 @@ export function AttachmentFilePreview(props: {
         environmentId: EnvironmentId;
         resource: Extract<AssetResource, { _tag: "media-file" | "draft-workspace-file" }>;
       };
+  renderHeader?: (actions: AttachmentPreviewHeaderActions) => ReactNode;
+  renderTextPreview?: (content: {
+    text: string;
+    renderedMarkdown: boolean;
+    wordWrap: boolean;
+  }) => ReactNode;
   htmlRender?: boolean;
   threadRef?: ScopedThreadRef;
   origin?: string;
@@ -152,10 +166,12 @@ export function AttachmentFilePreview(props: {
       ? resource
       : { ...resource, disposition: "attachment" as const }
     : null;
-  const refresh = useAssetUrlRefresh(
+  const refreshAsset = useAssetUrlRefresh(
     props.file ? null : (props.asset?.environmentId ?? null),
     props.file ? null : resource,
   );
+  const refresh = useStableCallback(refreshAsset);
+  const authorizationIdentity = JSON.stringify([props.asset?.environmentId ?? null, resource]);
   const prepareDownload = useAssetUrlRefresh(props.asset?.environmentId ?? null, downloadResource);
   const [saving, setSaving] = useState(false);
   const [localUrl, setLocalUrl] = useState<string | null>(null);
@@ -196,8 +212,8 @@ export function AttachmentFilePreview(props: {
     return () => {
       cancelled = true;
     };
-    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Retry must reauthorize the remote file.
-  }, [props.file, refresh, revision]);
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Retry or a changed resource must reauthorize; callback allocation must not restart a completed read.
+  }, [props.file, refresh, revision, authorizationIdentity]);
   const url = props.file ? localUrl : remoteUrl;
   const streamsText =
     kind === "text" &&
@@ -308,7 +324,13 @@ export function AttachmentFilePreview(props: {
   ) : !url || (needsText && !content) ? (
     <FileSurfaceLoading />
   ) : needsText && content ? (
-    delimiter && rendered ? (
+    props.renderTextPreview && (kind === "text" || kind === "markdown") && !delimiter ? (
+      props.renderTextPreview({
+        text: content.text,
+        renderedMarkdown: kind === "markdown" && rendered,
+        wordWrap,
+      })
+    ) : delimiter && rendered ? (
       <DelimitedTablePreview name={props.name} text={content.text} delimiter={delimiter} />
     ) : kind === "mermaid" && rendered ? (
       <Suspense fallback={<FileSurfaceLoading />}>
@@ -407,107 +429,129 @@ export function AttachmentFilePreview(props: {
     </div>
   );
 
+  const copyPreview = useStableCallback(() => {
+    if (content) {
+      void copyToClipboard(content.text, undefined);
+      return;
+    }
+    const copy = copyContents.current;
+    if (!copy) {
+      toastManager.add({
+        type: "error",
+        title: gt("Could not copy file"),
+        description: gt("Wait for the file to finish loading before copying."),
+      });
+      return;
+    }
+    void copy()
+      .then((text) => copyToClipboard(text, undefined))
+      .catch((cause: unknown) =>
+        toastManager.add({
+          type: "error",
+          title: gt("Could not copy file"),
+          description: cause instanceof Error ? cause.message : gt("Try again."),
+        }),
+      );
+  });
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <div className={cn(FILE_SURFACE_SUBHEADER_CLASS)} data-surface-subheader>
-        <div className="flex min-w-0 flex-1 items-center text-xs">
-          <span className="shrink-0 px-0.5 text-muted-foreground">
-            {props.origin ?? gt("Attachment")}
-          </span>
-          <ChevronRightIcon className="mx-1 size-3.5 shrink-0 text-muted-foreground/60" />
-          <span aria-current="page" className="min-w-0 truncate px-0.5 font-medium text-foreground">
-            {props.name}
-          </span>
-          {props.sizeBytes > 0 ? (
-            <span className="ml-2 shrink-0 text-muted-foreground">
-              {formatAttachmentSize(props.sizeBytes, messages)}
+      {props.renderHeader ? (
+        props.renderHeader({
+          source: renderedMode
+            ? {
+                pressed: !rendered,
+                label: renderedToggleLabel(renderedMode, rendered, messages),
+                toggle: () => setRendered((value) => !value),
+              }
+            : null,
+          wrap: showsRawText
+            ? { pressed: wordWrap, toggle: () => setWordWrapOverride(!wordWrap) }
+            : null,
+          copy: content || streamsText ? { copied: isCopied, run: copyPreview } : null,
+          download: url ? { saving, run: save } : null,
+        })
+      ) : (
+        <div className={cn(FILE_SURFACE_SUBHEADER_CLASS)} data-surface-subheader>
+          <div className="flex min-w-0 flex-1 items-center text-xs">
+            <span className="shrink-0 px-0.5 text-muted-foreground">
+              {props.origin ?? gt("Attachment")}
             </span>
+            <ChevronRightIcon className="mx-1 size-3.5 shrink-0 text-muted-foreground/60" />
+            <span
+              aria-current="page"
+              className="min-w-0 truncate px-0.5 font-medium text-foreground"
+            >
+              {props.name}
+            </span>
+            {props.sizeBytes > 0 ? (
+              <span className="ml-2 shrink-0 text-muted-foreground">
+                {formatAttachmentSize(props.sizeBytes, messages)}
+              </span>
+            ) : null}
+          </div>
+          {renderedMode ? (
+            <FileSurfaceAction
+              label={renderedToggleLabel(renderedMode, rendered, messages)}
+              pressed={rendered}
+              onPress={() => setRendered((value) => !value)}
+            >
+              {rendered ? (
+                <Code2Icon className="size-3.5" />
+              ) : renderedMode === "table" ? (
+                <Table2Icon className="size-3.5" />
+              ) : (
+                <EyeIcon className="size-3.5" />
+              )}
+            </FileSurfaceAction>
+          ) : null}
+          {showsRawText ? (
+            <FileSurfaceAction
+              label={wordWrap ? gt("Disable word wrap") : gt("Enable word wrap")}
+              pressed={wordWrap}
+              onPress={() => setWordWrapOverride(!wordWrap)}
+            >
+              <WrapTextIcon className="size-3.5" />
+            </FileSurfaceAction>
+          ) : null}
+          {content || streamsText ? (
+            <FileSurfaceAction
+              label={
+                isCopied
+                  ? gt("Copied")
+                  : content?.truncated
+                    ? gt("Copy preview")
+                    : gt("Copy contents")
+              }
+              onPress={copyPreview}
+            >
+              {isCopied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+            </FileSurfaceAction>
+          ) : null}
+          {url ? (
+            <FileSurfaceAction
+              label={saving ? gt("Preparing file…") : gt("Save file")}
+              disabled={saving}
+              onPress={save}
+            >
+              <DownloadIcon className="size-3.5" />
+            </FileSurfaceAction>
+          ) : null}
+          {props.onRemove ? (
+            <FileSurfaceAction label={gt("Remove from draft")} onPress={props.onRemove}>
+              <Trash2Icon className="size-3.5" />
+            </FileSurfaceAction>
+          ) : null}
+          {props.onClose ? (
+            <FileSurfaceAction
+              label={gt("Close", { $context: "button, closes the file preview" })}
+              onPress={props.onClose}
+            >
+              <XIcon className="size-3.5" />
+            </FileSurfaceAction>
           ) : null}
         </div>
-        {renderedMode ? (
-          <FileSurfaceAction
-            label={renderedToggleLabel(renderedMode, rendered, messages)}
-            pressed={rendered}
-            onPress={() => setRendered((value) => !value)}
-          >
-            {rendered ? (
-              <Code2Icon className="size-3.5" />
-            ) : renderedMode === "table" ? (
-              <Table2Icon className="size-3.5" />
-            ) : (
-              <EyeIcon className="size-3.5" />
-            )}
-          </FileSurfaceAction>
-        ) : null}
-        {showsRawText ? (
-          <FileSurfaceAction
-            label={wordWrap ? gt("Disable word wrap") : gt("Enable word wrap")}
-            pressed={wordWrap}
-            onPress={() => setWordWrapOverride(!wordWrap)}
-          >
-            <WrapTextIcon className="size-3.5" />
-          </FileSurfaceAction>
-        ) : null}
-        {content || streamsText ? (
-          <FileSurfaceAction
-            label={
-              isCopied
-                ? gt("Copied")
-                : content?.truncated
-                  ? gt("Copy preview")
-                  : gt("Copy contents")
-            }
-            onPress={() => {
-              if (content) {
-                void copyToClipboard(content.text, undefined);
-                return;
-              }
-              const copy = copyContents.current;
-              if (!copy) {
-                toastManager.add({
-                  type: "error",
-                  title: gt("Could not copy file"),
-                  description: gt("Wait for the file to finish loading before copying."),
-                });
-                return;
-              }
-              void copy()
-                .then((text) => copyToClipboard(text, undefined))
-                .catch((cause: unknown) =>
-                  toastManager.add({
-                    type: "error",
-                    title: gt("Could not copy file"),
-                    description: thrownErrorMessage(cause, m) ?? gt("Try again."),
-                  }),
-                );
-            }}
-          >
-            {isCopied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
-          </FileSurfaceAction>
-        ) : null}
-        {url ? (
-          <FileSurfaceAction
-            label={saving ? gt("Preparing file…") : gt("Save file")}
-            disabled={saving}
-            onPress={save}
-          >
-            <DownloadIcon className="size-3.5" />
-          </FileSurfaceAction>
-        ) : null}
-        {props.onRemove ? (
-          <FileSurfaceAction label={gt("Remove from draft")} onPress={props.onRemove}>
-            <Trash2Icon className="size-3.5" />
-          </FileSurfaceAction>
-        ) : null}
-        {props.onClose ? (
-          <FileSurfaceAction
-            label={gt("Close", { $context: "button, closes the file preview" })}
-            onPress={props.onClose}
-          >
-            <XIcon className="size-3.5" />
-          </FileSurfaceAction>
-        ) : null}
-      </div>
+      )}
       {content?.truncated ? (
         <FileSurfaceNotice>
           {props.sizeBytes > 0

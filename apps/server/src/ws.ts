@@ -1,4 +1,22 @@
-import { OrchestrationDispatchCommandError } from "@t3tools/contracts";
+import * as OpenbotChannelCoding from "./openbot/ChannelCoding.ts";
+import * as OpenbotChannelGrants from "./openbot/ChannelCodingGrants.ts";
+import * as OpenbotContinuity from "./openbot/Continuity.ts";
+import * as OpenbotComputerGateway from "./openbot/ComputerViewGateway.ts";
+import * as OpenbotMaintenance from "./openbot/Maintenance.ts";
+import * as OpenbotBrowserGateway from "./openbot/BrowserViewGateway.ts";
+import * as OpenbotSledTools from "./openbot/SledTools.ts";
+import * as OpenbotUpstream from "./openbot/UpstreamRuntime.ts";
+import * as OpenbotCoding from "./openbot/CodingBridge.ts";
+import * as OpenbotDelivery from "./openbot/CodingDelivery.ts";
+import * as Openbot from "./openbot/Integration.ts";
+import { READ_ROSTER_PINS, SET_ROSTER_PINS, rosterPins } from "./openbot/RosterPins.ts";
+import {
+  type OpenbotAdminRequest,
+  type OpenbotReadRequest,
+  OrchestrationDispatchCommandError,
+  OpenbotError,
+  OpenbotFilesError,
+} from "@t3tools/contracts";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- A synchronous digest inside the pure provider mapping.
 import * as NodeCrypto from "node:crypto";
 import * as HostProcess from "@t3tools/shared/HostProcess";
@@ -9,6 +27,11 @@ import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
 import * as PeerClientPairing from "./peer/PeerClientPairing.ts";
 import * as PeerLinkRequests from "./peer/PeerLinkRequests.ts";
 import * as PeerLinks from "./peer/PeerLinks.ts";
+import * as OpenbotRemoteCoding from "./openbot/RemoteCoding.ts";
+import * as OpenbotPrivileged from "./openbot/PrivilegedResponses.ts";
+import { OpenbotPrivilegedResponseError } from "@t3tools/contracts/openbot-privileged-bridge";
+import * as OpenbotFiles from "./openbot/Files.ts";
+import * as OpenbotCodingPolicy from "./openbot/CodingPolicy.ts";
 import * as PeerThreadRelay from "./peer/PeerThreadRelay.ts";
 
 import * as DateTime from "effect/DateTime";
@@ -1504,6 +1527,98 @@ export const layerWsRpc = (
       const threadViewers = yield* ThreadViewers.ThreadViewers;
       const providerSessionManager = yield* ProviderSessionManager.ProviderSessionManagerV2;
       const scheduledTasks = yield* ScheduledTasks.ScheduledTaskService;
+      const sledTools = yield* Effect.serviceOption(OpenbotSledTools.SledTools);
+      const openbot = yield* Effect.serviceOption(Openbot.Integration);
+      const openbotMaintenance = yield* Effect.serviceOption(OpenbotMaintenance.Maintenance);
+      const openbotComputerGateway = yield* Effect.serviceOption(
+        OpenbotComputerGateway.ComputerViewGateway,
+      );
+      const openbotBrowserGateway = yield* Effect.serviceOption(
+        OpenbotBrowserGateway.BrowserViewGateway,
+      );
+      const openbotUpstream = yield* Effect.serviceOption(OpenbotUpstream.UpstreamRuntime);
+      const openbotCoding = yield* Effect.serviceOption(OpenbotCoding.CodingBridge);
+      const openbotChannelCoding = yield* Effect.serviceOption(OpenbotChannelCoding.ChannelCoding);
+      const openbotChannelGrants = yield* Effect.serviceOption(
+        OpenbotChannelGrants.ChannelCodingGrants,
+      );
+      const openbotContinuity = yield* Effect.serviceOption(OpenbotContinuity.Continuity);
+      const openbotDelivery = yield* Effect.serviceOption(OpenbotDelivery.CodingDelivery);
+      const openbotFiles = yield* Effect.serviceOption(OpenbotFiles.Files);
+      const openbotPrivileged = yield* Effect.serviceOption(OpenbotPrivileged.PrivilegedResponses);
+      const openbotCodingPolicy = yield* Effect.serviceOption(OpenbotCodingPolicy.CodingPolicy);
+      const botRead = Effect.fn("Ws.openbotRead")(
+        function* (request: OpenbotReadRequest, hostId?: string) {
+          if (Option.isNone(openbot))
+            return yield* new OpenbotError({ message: "Openbot is not configured." });
+          const botHost = openbot.value;
+          if (request.operation !== READ_ROSTER_PINS) {
+            const result = hostId
+              ? yield* botHost.apiReadToHost(hostId, request)
+              : yield* botHost.apiRead(request);
+            if (
+              request.operation === "compatibility.read" &&
+              result &&
+              typeof result === "object" &&
+              !Array.isArray(result) &&
+              "capabilities" in result &&
+              Array.isArray(result.capabilities)
+            ) {
+              return {
+                ...result,
+                capabilities: [
+                  ...result.capabilities,
+                  "sled-roster-pins-v1",
+                  "sled-library-stream-v1",
+                ],
+              };
+            }
+            return result;
+          }
+          const activeHostId = yield* botHost.readyHostId;
+          if (!hostId || activeHostId !== hostId)
+            return yield* new OpenbotError({
+              message: "The selected bot computer is unavailable.",
+            });
+          return yield* rosterPins(sql, currentSession, hostId, request);
+        },
+        Effect.mapError((error) => new OpenbotError({ message: error.message })),
+      );
+      const botAdmin = Effect.fn("Ws.openbotAdmin")(
+        function* (hostId: string, request: OpenbotAdminRequest) {
+          if (request.operation === "channel.send") {
+            if (Option.isNone(openbotChannelCoding))
+              return yield* new OpenbotError({ message: "Channel coding is unavailable." });
+            return yield* openbotChannelCoding.value.send(hostId, request);
+          }
+          if (request.operation === "channel.grants") {
+            if (Option.isNone(openbotChannelGrants) || request.command.hostId !== hostId)
+              return yield* new OpenbotError({ message: "Channel grants are unavailable." });
+            return yield* openbotChannelGrants.value
+              .command(request.command)
+              .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)));
+          }
+          if (Option.isNone(openbot))
+            return yield* new OpenbotError({ message: "Openbot is not configured." });
+          if (request.operation === SET_ROSTER_PINS) {
+            if ((yield* openbot.value.readyHostId) !== hostId)
+              return yield* new OpenbotError({
+                message: "The selected bot computer is unavailable.",
+              });
+            return yield* rosterPins(sql, currentSession, hostId, request);
+          }
+          return yield* openbot.value.apiAdminToHost(hostId, request);
+        },
+        (effect) =>
+          effect.pipe(
+            Effect.provideService(OpenbotRemoteCoding.Caller, {
+              kind: "session",
+              sessionId: currentSessionId,
+              limits: { runtimeMode: "full-access", interactionMode: "default" },
+            }),
+            Effect.mapError((error) => new OpenbotError({ message: error.message })),
+          ),
+      );
       const secretRequests = yield* SecretRequests.SecretRequests;
       const guestShares = yield* GuestShareService.GuestShareService;
       const pullRequests = yield* PullRequestService.PullRequestService;
@@ -2356,6 +2471,409 @@ export const layerWsRpc = (
               Effect.as(commandOutputHub.subscribe(input)),
             ),
           ),
+        [WS_METHODS.openbotAttention]: () =>
+          Option.isSome(openbot)
+            ? openbot.value.attentionSnapshot
+            : Effect.succeed({
+                hostId: null,
+                state: "disconnected" as const,
+                complete: false,
+                requests: [],
+              }),
+        [WS_METHODS.openbotAttentionRespond]: (input) =>
+          Option.isSome(openbot)
+            ? openbot.value
+                .apiAdminToHost(input.hostId, input.request)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
+        [WS_METHODS.openbotSubscribeChanges]: () =>
+          Stream.merge(
+            Option.isSome(openbot)
+              ? openbot.value.subscribeChanges
+              : Stream.make({ hostId: null, resource: "all" as const }),
+            Option.isSome(openbotDelivery) ? openbotDelivery.value.changes : Stream.empty,
+          ).pipe(
+            Stream.merge(
+              Option.isSome(openbotMaintenance) ? openbotMaintenance.value.changes : Stream.empty,
+            ),
+            Stream.merge(
+              Option.isSome(openbotContinuity) ? openbotContinuity.value.changes : Stream.empty,
+            ),
+          ),
+        [WS_METHODS.openbotMaintenanceStatus]: () =>
+          Option.isSome(openbotMaintenance)
+            ? openbotMaintenance.value.get.pipe(
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(new OpenbotError({ message: "Upstream maintenance is unavailable." })),
+        [WS_METHODS.openbotLiveVoiceCommand]: (input) => {
+          const command = Option.getOrUndefined(openbot)?.liveVoiceCommand;
+          return command
+            ? command(currentSessionId, input).pipe(
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+                Effect.withTracerEnabled(false),
+              )
+            : Effect.fail(new OpenbotError({ message: "Live voice is unavailable." }));
+        },
+        [WS_METHODS.openbotComputerViewCommand]: (input) =>
+          Option.isSome(openbotComputerGateway)
+            ? openbotComputerGateway.value
+                .command(currentSessionId, input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "The computer viewer is unavailable." })),
+        [WS_METHODS.openbotBrowserViewCommand]: (input) =>
+          Option.isSome(openbotBrowserGateway)
+            ? openbotBrowserGateway.value
+                .command(currentSessionId, input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "The bot browser view is unavailable." })),
+        [WS_METHODS.openbotMaintenanceCommand]: (input) =>
+          Option.isSome(openbotMaintenance)
+            ? openbotMaintenance.value
+                .execute(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Upstream maintenance is unavailable." })),
+        [WS_METHODS.openbotUpstreamStatus]: () =>
+          Option.isSome(openbotUpstream)
+            ? openbotUpstream.value.getStatus.pipe(
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(new OpenbotError({ message: "Openbot release staging is unavailable." })),
+        [WS_METHODS.openbotUpstreamCheck]: (input) =>
+          Option.isSome(openbotUpstream)
+            ? (input.version === undefined
+                ? openbotUpstream.value.checkLatest
+                : openbotUpstream.value.checkVersion(input.version)
+              ).pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot release staging is unavailable." })),
+        [WS_METHODS.openbotUpstreamStage]: (input) =>
+          Option.isSome(openbotUpstream)
+            ? openbotUpstream.value
+                .stage(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot release staging is unavailable." })),
+        [WS_METHODS.openbotCodingPolicyGet]: (input) =>
+          Option.isSome(openbotCodingPolicy)
+            ? openbotCodingPolicy.value
+                .get(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Bot coding policy is unavailable." })),
+        [WS_METHODS.openbotCodingPolicyEnable]: (input) =>
+          Option.isSome(openbotCodingPolicy)
+            ? openbotCodingPolicy.value
+                .enable(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Bot coding policy is unavailable." })),
+        [WS_METHODS.openbotCodingPolicyDisable]: (input) =>
+          Option.isSome(openbotCodingPolicy)
+            ? openbotCodingPolicy.value
+                .disable(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Bot coding policy is unavailable." })),
+        [WS_METHODS.openbotNewTaskStart]: (input) =>
+          Option.isSome(openbotFiles)
+            ? openbotFiles.value.newTaskStart(currentSessionId, input)
+            : Effect.fail(new OpenbotFilesError({ operation: "send", reason: "transfer" })),
+        [WS_METHODS.openbotInstanceTransfer]: (input) =>
+          Option.isSome(openbotFiles)
+            ? openbotFiles.value.instanceTransfer(currentSessionId, input)
+            : Effect.fail(new OpenbotFilesError({ operation: "upload", reason: "transfer" })),
+        [WS_METHODS.openbotImportContext]: (input) =>
+          Option.isSome(openbotFiles)
+            ? openbotFiles.value.importContext(currentSessionId, input.hostId)
+            : Effect.fail(new OpenbotFilesError({ operation: "list", reason: "transfer" })),
+        [WS_METHODS.openbotArchiveUpload]: (input) =>
+          input.principalId === currentSessionId && Option.isSome(openbotFiles)
+            ? openbotFiles.value.archiveUpload(currentSessionId, input)
+            : Effect.fail(new OpenbotFilesError({ operation: "upload", reason: "transfer" })),
+        [WS_METHODS.openbotImportExecute]: (input) =>
+          input.principalId === currentSessionId && Option.isSome(openbotFiles)
+            ? openbotFiles.value.importExecute(currentSessionId, input.request)
+            : Effect.fail(new OpenbotFilesError({ operation: "upload", reason: "transfer" })),
+        [WS_METHODS.openbotFilesListWorkspace]: (input) =>
+          Option.isSome(openbotFiles)
+            ? openbotFiles.value.listWorkspace(input)
+            : Effect.fail(new OpenbotFilesError({ operation: "list", reason: "transfer" })),
+        [WS_METHODS.openbotFilesSearch]: (input) =>
+          Option.isSome(openbotFiles)
+            ? openbotFiles.value.search(input)
+            : Effect.fail(new OpenbotFilesError({ operation: "search", reason: "transfer" })),
+        [WS_METHODS.openbotFilesMaterialize]: (input) =>
+          Option.isSome(openbotFiles)
+            ? openbotFiles.value.materialize(input)
+            : Effect.fail(new OpenbotFilesError({ operation: "download", reason: "transfer" })),
+        [WS_METHODS.openbotQueueAttachmentContext]: (input) => {
+          const { principalId, ...request } = input;
+          if (principalId !== currentSessionId || Option.isNone(openbotFiles))
+            return Effect.fail(new OpenbotFilesError({ operation: "send", reason: "ownership" }));
+          const files = openbotFiles.value;
+          return serverEnvironment.getEnvironmentId.pipe(
+            Effect.flatMap((environmentId) =>
+              environmentId === request.environmentId
+                ? files.queueAttachmentContext(currentSessionId, request)
+                : Effect.fail(new OpenbotFilesError({ operation: "send", reason: "ownership" })),
+            ),
+          );
+        },
+        [WS_METHODS.openbotQueueAttachmentSave]: (input) => {
+          const { principalId, ...request } = input;
+          if (principalId !== currentSessionId || Option.isNone(openbotFiles))
+            return Effect.fail(new OpenbotFilesError({ operation: "send", reason: "ownership" }));
+          const files = openbotFiles.value;
+          return serverEnvironment.getEnvironmentId.pipe(
+            Effect.flatMap((environmentId) =>
+              environmentId === request.environmentId
+                ? files.editQueueAttachments(currentSessionId, request, false)
+                : Effect.fail(new OpenbotFilesError({ operation: "send", reason: "ownership" })),
+            ),
+          );
+        },
+        [WS_METHODS.openbotQueueAttachmentResult]: (input) => {
+          const { principalId, ...request } = input;
+          if (principalId !== currentSessionId || Option.isNone(openbotFiles))
+            return Effect.fail(new OpenbotFilesError({ operation: "send", reason: "ownership" }));
+          const files = openbotFiles.value;
+          return serverEnvironment.getEnvironmentId.pipe(
+            Effect.flatMap((environmentId) =>
+              environmentId === request.environmentId
+                ? files.editQueueAttachments(currentSessionId, request, true)
+                : Effect.fail(new OpenbotFilesError({ operation: "send", reason: "ownership" })),
+            ),
+          );
+        },
+        [WS_METHODS.openbotPrivilegedScope]: (input) =>
+          Option.isSome(openbotPrivileged)
+            ? openbotPrivileged.value.scope(currentSessionId, input.hostId)
+            : Effect.fail(new OpenbotPrivilegedResponseError({})),
+        [WS_METHODS.openbotPrivilegedExecute]: (input) =>
+          Option.isSome(openbotPrivileged)
+            ? openbotPrivileged.value.execute(currentSessionId, input)
+            : Effect.fail(new OpenbotPrivilegedResponseError({})),
+        [WS_METHODS.openbotFilesContext]: (input) =>
+          Option.isSome(openbotFiles)
+            ? openbotFiles.value.fileContext(currentSessionId, input.hostId)
+            : Effect.fail(new OpenbotFilesError({ operation: "list", reason: "transfer" })),
+        [WS_METHODS.openbotFilesOriginalUpload]: (input) =>
+          input.principalId === currentSessionId && Option.isSome(openbotFiles)
+            ? serverEnvironment.getEnvironmentId.pipe(
+                Effect.flatMap((environmentId) =>
+                  openbotFiles.value.originalUpload(
+                    currentSessionId,
+                    environmentId,
+                    input,
+                    "upload",
+                  ),
+                ),
+              )
+            : Effect.fail(new OpenbotFilesError({ operation: "upload", reason: "transfer" })),
+        [WS_METHODS.openbotFilesRecoverUpload]: (input) =>
+          input.principalId === currentSessionId && Option.isSome(openbotFiles)
+            ? serverEnvironment.getEnvironmentId.pipe(
+                Effect.flatMap((environmentId) =>
+                  openbotFiles.value.originalUpload(
+                    currentSessionId,
+                    environmentId,
+                    input,
+                    "upload-status",
+                  ),
+                ),
+              )
+            : Effect.fail(new OpenbotFilesError({ operation: "upload", reason: "transfer" })),
+        [WS_METHODS.openbotFilesCancelUpload]: (input) =>
+          input.principalId === currentSessionId && Option.isSome(openbotFiles)
+            ? serverEnvironment.getEnvironmentId.pipe(
+                Effect.flatMap((environmentId) =>
+                  openbotFiles.value.originalUpload(
+                    currentSessionId,
+                    environmentId,
+                    input,
+                    "upload-cancel",
+                  ),
+                ),
+              )
+            : Effect.fail(new OpenbotFilesError({ operation: "upload", reason: "transfer" })),
+        [WS_METHODS.openbotFilesUploadDraft]: (input) =>
+          Option.isSome(openbotFiles)
+            ? openbotFiles.value.uploadDraft(input)
+            : Effect.fail(new OpenbotFilesError({ operation: "upload", reason: "transfer" })),
+        [WS_METHODS.openbotFilesListDrafts]: (input) =>
+          Option.isSome(openbotFiles)
+            ? serverEnvironment.getEnvironmentId.pipe(
+                Effect.flatMap((environmentId) =>
+                  openbotFiles.value.listDrafts(input, {
+                    principal: currentSessionId,
+                    environmentId,
+                  }),
+                ),
+              )
+            : Effect.fail(new OpenbotFilesError({ operation: "list", reason: "transfer" })),
+        [WS_METHODS.openbotFilesSendDraft]: (input) =>
+          Option.isSome(openbotFiles)
+            ? serverEnvironment.getEnvironmentId.pipe(
+                Effect.flatMap((environmentId) =>
+                  openbotFiles.value.sendDraft(input, {
+                    principal: currentSessionId,
+                    environmentId,
+                  }),
+                ),
+              )
+            : Effect.fail(new OpenbotFilesError({ operation: "send", reason: "transfer" })),
+        [WS_METHODS.openbotFilesDiscardDraft]: (input) =>
+          Option.isSome(openbotFiles)
+            ? serverEnvironment.getEnvironmentId.pipe(
+                Effect.flatMap((environmentId) =>
+                  openbotFiles.value.discardDraft(input, {
+                    principal: currentSessionId,
+                    environmentId,
+                  }),
+                ),
+              )
+            : Effect.fail(new OpenbotFilesError({ operation: "discard", reason: "transfer" })),
+        [WS_METHODS.openbotUpstreamInstall]: (input) =>
+          Option.isSome(openbotUpstream)
+            ? openbotUpstream.value
+                .install(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Bot engine installation is unavailable." })),
+        [WS_METHODS.openbotRuntimeActivate]: (input) =>
+          Option.isSome(openbot)
+            ? openbot.value
+                .activateRuntime(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Bot engine activation is unavailable." })),
+        [WS_METHODS.openbotRuntimeRollback]: () =>
+          Option.isSome(openbot)
+            ? openbot.value.rollbackRuntime.pipe(
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(new OpenbotError({ message: "Bot engine rollback is unavailable." })),
+        [WS_METHODS.openbotReadToHost]: (input) => botRead(input.request, input.hostId),
+        [WS_METHODS.openbotRead]: (input) => botRead(input),
+        [WS_METHODS.openbotWrite]: (input) =>
+          Option.isSome(openbot)
+            ? openbot.value
+                .apiWrite(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
+        [WS_METHODS.openbotWriteToHost]: (input) =>
+          Option.isSome(openbot)
+            ? openbot.value
+                .apiWriteToHost(input.hostId, input.request)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
+        [WS_METHODS.openbotAdminToHost]: (input) => botAdmin(input.hostId, input.request),
+        [WS_METHODS.openbotAdmin]: Effect.fn("WsServer.openbotAdmin")(function* (input) {
+          if (Option.isNone(openbot))
+            return yield* new OpenbotError({ message: "Openbot is not configured." });
+          const hostId = yield* openbot.value.readyHostId;
+          if (!hostId) return yield* new OpenbotError({ message: "Openbot is not configured." });
+          return yield* botAdmin(hostId, input);
+        }),
+        [WS_METHODS.openbotContinuityStatus]: () =>
+          Option.isSome(openbotContinuity)
+            ? openbotContinuity.value.execute({ action: "status" }).pipe(
+                Effect.provideService(OpenbotContinuity.ContinuityCallerSession, currentSessionId),
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(new OpenbotError({ message: "Bot continuity is unavailable." })),
+        [WS_METHODS.openbotContinuityCommand]: (input) =>
+          Option.isSome(openbotContinuity)
+            ? openbotContinuity.value.execute(input).pipe(
+                Effect.provideService(OpenbotContinuity.ContinuityCallerSession, currentSessionId),
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(new OpenbotError({ message: "Bot continuity is unavailable." })),
+        [WS_METHODS.openbotCodingLaunch]: (input) =>
+          Option.isSome(openbotCoding)
+            ? openbotCoding.value.launch(input).pipe(
+                Effect.provideService(OpenbotRemoteCoding.Caller, {
+                  kind: "session",
+                  sessionId: currentSessionId,
+                  limits: { runtimeMode: "full-access", interactionMode: "default" },
+                }),
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(new OpenbotError({ message: "Openbot coding bridge is unavailable." })),
+        [WS_METHODS.openbotCodingGet]: (input) =>
+          Option.isSome(openbotCoding)
+            ? openbotCoding.value
+                .get(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot coding bridge is unavailable." })),
+        [WS_METHODS.openbotCodingList]: (input) =>
+          Option.isSome(openbotCoding)
+            ? openbotCoding.value
+                .list(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(new OpenbotError({ message: "Openbot coding bridge is unavailable." })),
+        [WS_METHODS.openbotCodingSend]: (input) =>
+          Option.isSome(openbotCoding)
+            ? openbotCoding.value.send(input).pipe(
+                Effect.provideService(OpenbotRemoteCoding.Caller, {
+                  kind: "session",
+                  sessionId: currentSessionId,
+                  limits: { runtimeMode: "full-access", interactionMode: "default" },
+                }),
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(new OpenbotError({ message: "Openbot coding bridge is unavailable." })),
+        [WS_METHODS.openbotCodingCancel]: (input) =>
+          Option.isSome(openbotCoding)
+            ? openbotCoding.value.cancel(input).pipe(
+                Effect.provideService(OpenbotRemoteCoding.Caller, {
+                  kind: "session",
+                  sessionId: currentSessionId,
+                  limits: { runtimeMode: "full-access", interactionMode: "default" },
+                }),
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(new OpenbotError({ message: "Openbot coding bridge is unavailable." })),
+        [WS_METHODS.openbotSledToolsStatus]: (_input) =>
+          Option.isSome(sledTools)
+            ? sledTools.value.status.pipe(
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(
+                new OpenbotError({ message: "The Sled tools connection is unavailable." }),
+              ),
+        [WS_METHODS.openbotSledToolsConnect]: (input) =>
+          Option.isSome(sledTools)
+            ? sledTools.value
+                .connect(input)
+                .pipe(Effect.mapError((error) => new OpenbotError({ message: error.message })))
+            : Effect.fail(
+                new OpenbotError({ message: "The Sled tools connection is unavailable." }),
+              ),
+        [WS_METHODS.openbotSledToolsDisconnect]: (_input) =>
+          Option.isSome(sledTools)
+            ? sledTools.value.disconnect.pipe(
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(
+                new OpenbotError({ message: "The Sled tools connection is unavailable." }),
+              ),
+        [WS_METHODS.openbotStatus]: () =>
+          Option.isSome(openbot)
+            ? openbot.value.status
+            : Effect.succeed({ state: "disabled" as const }),
+        [WS_METHODS.openbotStart]: () =>
+          Option.isSome(openbot)
+            ? openbot.value.start.pipe(
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
+        [WS_METHODS.openbotStop]: () =>
+          Option.isSome(openbot)
+            ? openbot.value.stop.pipe(
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
+        [WS_METHODS.openbotListAgents]: () =>
+          Option.isSome(openbot)
+            ? openbot.value.listAgents.pipe(
+                Effect.mapError((error) => new OpenbotError({ message: error.message })),
+              )
+            : Effect.fail(new OpenbotError({ message: "Openbot is not configured." })),
         [ORCHESTRATION_V2_WS_METHODS.subscribePromptSuggestion]: (input) =>
           providerSessionManager.subscribePromptSuggestion(input.threadId),
         [WS_METHODS.scheduledTasksSubscribe]: (_input) =>
@@ -3108,6 +3626,15 @@ export const layerWsRpc = (
           /* Request instrumentation already owns the span; keep this helper in that context. */
           Effect.fnUntraced(function* (input) {
             const path = yield* Path.Path;
+            if (input.resource._tag === "bot-library-image") {
+              if (
+                Option.isNone(openbot) ||
+                (yield* openbot.value.readyHostId) !== input.resource.hostId
+              ) {
+                return yield* new AssetWorkspaceContextNotFoundError({ resource: input.resource });
+              }
+              return yield* issueAssetUrl({ resource: input.resource });
+            }
             if (
               input.resource._tag === "attachment" ||
               input.resource._tag === "native-app-icon" ||
@@ -3657,6 +4184,22 @@ export const WS_RPC_SERVER_OPTIONS = {
 
 export const layer = Layer.unwrap(
   Effect.gen(function* () {
+    const openbot = yield* Effect.serviceOption(Openbot.Integration);
+    const openbotCoding = yield* Effect.serviceOption(OpenbotCoding.CodingBridge);
+    const openbotChannelCoding = yield* Effect.serviceOption(OpenbotChannelCoding.ChannelCoding);
+    const openbotChannelGrants = yield* Effect.serviceOption(
+      OpenbotChannelGrants.ChannelCodingGrants,
+    );
+    const openbotContinuity = yield* Effect.serviceOption(OpenbotContinuity.Continuity);
+    const openbotDelivery = yield* Effect.serviceOption(OpenbotDelivery.CodingDelivery);
+    const openbotFiles = yield* Effect.serviceOption(OpenbotFiles.Files);
+    const openbotPrivileged = yield* Effect.serviceOption(OpenbotPrivileged.PrivilegedResponses);
+    const openbotCodingPolicy = yield* Effect.serviceOption(OpenbotCodingPolicy.CodingPolicy);
+    const sledTools = yield* Effect.serviceOption(OpenbotSledTools.SledTools);
+    const upstream = yield* Effect.serviceOption(OpenbotUpstream.UpstreamRuntime);
+    const maintenance = yield* Effect.serviceOption(OpenbotMaintenance.Maintenance);
+    const computerGateway = yield* Effect.serviceOption(OpenbotComputerGateway.ComputerViewGateway);
+    const browserGateway = yield* Effect.serviceOption(OpenbotBrowserGateway.BrowserViewGateway);
     const remoteDesktop = yield* RemoteDesktop.Service;
     const serverBrowser = yield* ServerBrowser.ServerBrowser;
     const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
@@ -3745,48 +4288,130 @@ export const layer = Layer.unwrap(
               serverBrowser,
               reportProfiles,
               readSettingsClient(url.value),
-            ).pipe(
-              Layer.provideMerge(RpcSerialization.layerJson),
-              // Handler-context reporters see only request defects, not server-wide defects.
-              Layer.provide(DefectReporter.layer),
-              Layer.provide(AcpRegistrySessions.layer),
-              Layer.provide(Layer.succeed(SqlClient.SqlClient, sql)),
-              Layer.provide(ProviderMaintenanceRunner.layer),
-              Layer.provide(Layer.succeed(RemoteDesktop.Service, remoteDesktop)),
-              Layer.provide(Layer.succeed(NpmRelease.NpmRelease, npmRelease)),
-              Layer.provide(Layer.succeed(ServerSelfUpdate.ServerSelfUpdate, serverSelfUpdate)),
-              // Share server-lifetime PR caches so WS mutations invalidate every client's HTTP diffs.
-              Layer.provide(Layer.succeed(PullRequestService.PullRequestService, pullRequests)),
-              Layer.provide(Layer.succeed(IssueService.IssueService, issues)),
-              Layer.provide(Layer.succeed(ThreadIssueService.ThreadIssueService, threadIssues)),
-              Layer.provide(
-                Layer.succeed(IssueTrackerConnections.IssueTrackerConnections, issueTrackers),
-              ),
-              Layer.provide(OtlpEndpointCheck.layer),
-              Layer.provide(
-                Layer.succeed(
-                  PullRequestReviewGuideService.PullRequestReviewGuideService,
-                  reviewGuides,
+            )
+              .pipe(
+                Layer.provide(
+                  Layer.mergeAll(
+                    Option.match(openbotPrivileged, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) =>
+                        Layer.succeed(OpenbotPrivileged.PrivilegedResponses, service),
+                    }),
+                    Option.match(openbotFiles, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) => Layer.succeed(OpenbotFiles.Files, service),
+                    }),
+                    Option.match(computerGateway, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) =>
+                        Layer.succeed(OpenbotComputerGateway.ComputerViewGateway, service),
+                    }),
+                    Option.match(browserGateway, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) =>
+                        Layer.succeed(OpenbotBrowserGateway.BrowserViewGateway, service),
+                    }),
+                    Option.match(openbotChannelCoding, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) =>
+                        Layer.succeed(OpenbotChannelCoding.ChannelCoding, service),
+                    }),
+                    Option.match(openbotChannelGrants, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) =>
+                        Layer.succeed(OpenbotChannelGrants.ChannelCodingGrants, service),
+                    }),
+                    Option.match(openbotContinuity, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) => Layer.succeed(OpenbotContinuity.Continuity, service),
+                    }),
+                    Option.match(openbotCodingPolicy, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) => Layer.succeed(OpenbotCodingPolicy.CodingPolicy, service),
+                    }),
+                  ),
                 ),
-              ),
-              Layer.provide(Layer.succeed(PeerLinks.PeerLinks, peerLinks)),
-              Layer.provide(Layer.succeed(PeerLinkRequests.PeerLinkRequests, peerLinkRequests)),
-              Layer.provide(Layer.succeed(PeerThreadRelay.PeerThreadRelay, peerThreadRelay)),
-              Layer.provide(Layer.succeed(PeerClientPairing.PeerClientPairing, peerClientPairing)),
-              Layer.provide(
-                SourceControlDiscovery.layer.pipe(
-                  Layer.provide(
-                    SourceControlProviderRegistry.layer.pipe(
-                      Layer.provide(SourceControlBuiltInDrivers.layer),
-                      Layer.provideMerge(GitVcsDriver.layer),
-                      Layer.provide(
-                        VcsDriverRegistry.layer.pipe(Layer.provide(VcsProjectConfig.layer)),
+                Layer.provide(
+                  Option.match(openbotDelivery, {
+                    onNone: () => Layer.empty,
+                    onSome: (service) => Layer.succeed(OpenbotDelivery.CodingDelivery, service),
+                  }),
+                ),
+                Layer.provide(
+                  Option.match(openbot, {
+                    onNone: () => Layer.empty,
+                    onSome: (service) => Layer.succeed(Openbot.Integration, service),
+                  }),
+                ),
+                Layer.provide(
+                  Option.match(openbotCoding, {
+                    onNone: () => Layer.empty,
+                    onSome: (service) => Layer.succeed(OpenbotCoding.CodingBridge, service),
+                  }),
+                ),
+                Layer.provide(
+                  Option.match(sledTools, {
+                    onNone: () => Layer.empty,
+                    onSome: (service) => Layer.succeed(OpenbotSledTools.SledTools, service),
+                  }),
+                ),
+                Layer.provide(
+                  Layer.mergeAll(
+                    Option.match(maintenance, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) => Layer.succeed(OpenbotMaintenance.Maintenance, service),
+                    }),
+                    Option.match(upstream, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) => Layer.succeed(OpenbotUpstream.UpstreamRuntime, service),
+                    }),
+                  ),
+                ),
+                Layer.provideMerge(RpcSerialization.layerJson),
+                // Handler-context reporters see only request defects, not server-wide defects.
+                Layer.provide(DefectReporter.layer),
+                Layer.provide(AcpRegistrySessions.layer),
+                Layer.provide(Layer.succeed(SqlClient.SqlClient, sql)),
+                Layer.provide(ProviderMaintenanceRunner.layer),
+                Layer.provide(Layer.succeed(RemoteDesktop.Service, remoteDesktop)),
+                Layer.provide(Layer.succeed(NpmRelease.NpmRelease, npmRelease)),
+                Layer.provide(Layer.succeed(ServerSelfUpdate.ServerSelfUpdate, serverSelfUpdate)),
+                // Share server-lifetime PR caches so WS mutations invalidate every client's HTTP diffs.
+                Layer.provide(Layer.succeed(PullRequestService.PullRequestService, pullRequests)),
+                Layer.provide(Layer.succeed(IssueService.IssueService, issues)),
+                Layer.provide(Layer.succeed(ThreadIssueService.ThreadIssueService, threadIssues)),
+                Layer.provide(
+                  Layer.succeed(IssueTrackerConnections.IssueTrackerConnections, issueTrackers),
+                ),
+                Layer.provide(OtlpEndpointCheck.layer),
+              )
+              .pipe(
+                Layer.provide(
+                  Layer.succeed(
+                    PullRequestReviewGuideService.PullRequestReviewGuideService,
+                    reviewGuides,
+                  ),
+                ),
+                Layer.provide(Layer.succeed(PeerLinks.PeerLinks, peerLinks)),
+                Layer.provide(Layer.succeed(PeerLinkRequests.PeerLinkRequests, peerLinkRequests)),
+                Layer.provide(Layer.succeed(PeerThreadRelay.PeerThreadRelay, peerThreadRelay)),
+                Layer.provide(
+                  Layer.succeed(PeerClientPairing.PeerClientPairing, peerClientPairing),
+                ),
+                Layer.provide(
+                  SourceControlDiscovery.layer.pipe(
+                    Layer.provide(
+                      SourceControlProviderRegistry.layer.pipe(
+                        Layer.provide(SourceControlBuiltInDrivers.layer),
+                        Layer.provideMerge(GitVcsDriver.layer),
+                        Layer.provide(
+                          VcsDriverRegistry.layer.pipe(Layer.provide(VcsProjectConfig.layer)),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
           ),
         );
         const framedRpcWebSocketHttpEffect = url.value.searchParams.has(

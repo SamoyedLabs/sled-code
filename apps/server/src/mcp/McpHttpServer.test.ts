@@ -34,6 +34,7 @@ import * as NetAddress from "effect/net/NetAddress";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as ThreadLaunchService from "../orchestration-v2/ThreadLaunchService.ts";
+import * as ThreadLaunchReceipts from "../orchestration-v2/ThreadLaunchReceipts.ts";
 import * as AssetSigner from "../assets/AssetSigner.ts";
 import * as DocumentText from "../provider/DocumentText.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
@@ -338,6 +339,7 @@ const layerRecordingTools = (calls: Array<unknown>) => {
         Layer.mock(PreviewManager.PreviewManager)({}),
         Layer.mock(PreviewAutomationBroker.PreviewAutomationBroker)({}),
         Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
+        Layer.mock(ThreadLaunchReceipts.ThreadLaunchReceipts)({}),
         Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
           namedProjectsRoot: process.cwd(),
         }),

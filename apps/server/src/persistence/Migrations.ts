@@ -110,6 +110,25 @@ import Migration0099 from "./Migrations/099_BackgroundRecoveryIndexes.ts";
 import Migration0100 from "./Migrations/100_TurnStartReadIndexes.ts";
 import Migration0101 from "./Migrations/101_DelegatedTaskReadIndexes.ts";
 import Migration0102 from "./Migrations/102_ThreadItemCounts.ts";
+import Migration0103 from "./Migrations/103_OpenbotCodingTasks.ts";
+import Migration0104 from "./Migrations/104_OpenbotCodingDeliveryRecovery.ts";
+import Migration0105 from "./Migrations/105_OpenbotRemoteCoding.ts";
+import Migration0106 from "./Migrations/106_OpenbotRemoteCodingCommands.ts";
+import Migration0107 from "./Migrations/107_ThreadLaunchReceipts.ts";
+import Migration0108 from "./Migrations/108_OpenbotFileDrafts.ts";
+import Migration0109 from "./Migrations/109_OpenbotFileTargets.ts";
+import Migration0110 from "./Migrations/110_OpenbotCodingPolicies.ts";
+import Migration0111 from "./Migrations/111_OpenbotFileDeliveryIdentity.ts";
+import Migration0112 from "./Migrations/112_OpenbotHostPreference.ts";
+import Migration0113 from "./Migrations/113_OpenbotMaintenance.ts";
+import Migration0114 from "./Migrations/114_OpenbotChannelOrigins.ts";
+import Migration0115 from "./Migrations/115_OpenbotChannelCodingTasks.ts";
+import Migration0116 from "./Migrations/116_OpenbotChannelRuntime.ts";
+import Migration0117 from "./Migrations/117_OpenbotContinuity.ts";
+import Migration0118 from "./Migrations/118_OpenbotFileBatches.ts";
+import Migration0119 from "./Migrations/119_OpenbotOriginalUploads.ts";
+import Migration0120 from "./Migrations/120_PrivilegedCommitBarrier.ts";
+import Migration0121 from "./Migrations/121_OpenbotRosterPins.ts";
 
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -215,6 +234,25 @@ const migrationEntries = [
   [100, "TurnStartReadIndexes", Migration0100],
   [101, "DelegatedTaskReadIndexes", Migration0101],
   [102, "ThreadItemCounts", Migration0102],
+  [103, "OpenbotCodingTasks", Migration0103],
+  [104, "OpenbotCodingDeliveryRecovery", Migration0104],
+  [105, "OpenbotRemoteCoding", Migration0105],
+  [106, "OpenbotRemoteCodingCommands", Migration0106],
+  [107, "ThreadLaunchReceipts", Migration0107],
+  [108, "OpenbotFileDrafts", Migration0108],
+  [109, "OpenbotFileTargets", Migration0109],
+  [110, "OpenbotCodingPolicies", Migration0110],
+  [111, "OpenbotFileDeliveryIdentity", Migration0111],
+  [112, "OpenbotHostPreference", Migration0112],
+  [113, "OpenbotMaintenance", Migration0113],
+  [114, "OpenbotChannelOrigins", Migration0114],
+  [115, "OpenbotChannelCodingTasks", Migration0115],
+  [116, "OpenbotChannelRuntime", Migration0116],
+  [117, "OpenbotContinuity", Migration0117],
+  [118, "OpenbotFileBatches", Migration0118],
+  [119, "OpenbotOriginalUploads", Migration0119],
+  [120, "PrivilegedCommitBarrier", Migration0120],
+  [121, "OpenbotRosterPins", Migration0121],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

@@ -1,3 +1,4 @@
+import { APPROVAL_SHUTDOWN_REASON } from "./ApprovalRecovery.ts";
 import type { ProjectThreadAwarenessV2Input } from "@t3tools/shared/agentAwareness";
 import { applyOrchestrationV2ThreadVisit, pendingGuestMessageCount } from "@t3tools/contracts";
 import { applyThreadPullRequestLinkUpdate } from "../sourceControl/threadPullRequests.ts";
@@ -5852,9 +5853,24 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
               ORDER BY provider_turn.provider_thread_id ASC, provider_turn.ordinal ASC
             `,
             runtimeRequests: sql<PayloadRow>`
-              SELECT payload_json FROM orchestration_v2_projection_runtime_requests
-              WHERE thread_id = ${threadId} AND status = 'pending'
-              ORDER BY created_at ASC, runtime_request_id ASC
+              SELECT request.payload_json FROM orchestration_v2_projection_runtime_requests AS request
+              WHERE request.thread_id = ${threadId} AND (
+                request.status = 'pending'
+                OR (
+                  request.status IN ('cancelled', 'expired')
+                  AND json_extract(request.payload_json, '$.responseCapability.type') = 'not_resumable'
+                  AND json_extract(request.payload_json, '$.responseCapability.reason') = ${APPROVAL_SHUTDOWN_REASON}
+                  AND EXISTS (
+                    SELECT 1 FROM orchestration_v2_projection_provider_turns AS turn
+                    JOIN orchestration_v2_projection_runs AS run
+                      ON json_extract(run.payload_json, '$.activeAttemptId') = turn.run_attempt_id
+                    WHERE turn.provider_turn_id = request.provider_turn_id
+                      AND run.thread_id = ${threadId}
+                      AND run.status IN ('preparing', 'starting', 'running', 'waiting')
+                  )
+                )
+              )
+              ORDER BY request.created_at ASC, request.runtime_request_id ASC
             `,
             // CROSS JOIN keeps empty run cohorts out of message history; the run index bounds each lookup.
             messages: sql<PayloadRow>`

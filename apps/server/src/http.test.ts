@@ -134,7 +134,7 @@ describe("workspace page preview responses", () => {
 });
 
 describe("browser API CORS", () => {
-  it("accepts protocol negotiation with authenticated browser headers", async () => {
+  it("accepts protocol negotiation and signed archive PUT preflights", async () => {
     const layerRoute = Layer.effectDiscard(
       Effect.gen(function* () {
         const router = yield* HttpRouter.HttpRouter;
@@ -173,6 +173,19 @@ describe("browser API CORS", () => {
       expect(allowedHeaders.has(ORCHESTRATION_PROTOCOL_HEADER)).toBe(true);
       expect(allowedHeaders.has("authorization")).toBe(true);
       expect(allowedHeaders.has("dpop")).toBe(true);
+      const upload = await handler(
+        new Request("https://backend.example/api/openbot/archive-upload/owned-token", {
+          method: "OPTIONS",
+          headers: {
+            origin: "t3code://app",
+            "access-control-request-method": "PUT",
+            "access-control-request-headers": "content-type",
+          },
+        }),
+      );
+      expect(upload.status).toBe(204);
+      expect(upload.headers.get("access-control-allow-origin")).toBe("*");
+      expect(upload.headers.get("access-control-allow-methods")?.split(/,\s*/)).toContain("PUT");
     } finally {
       await dispose();
     }

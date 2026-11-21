@@ -1,3 +1,4 @@
+import { COMPOSER_PROMPT_SURFACE } from "./chat/composerPromptSurface";
 import { useNativeFileDrag } from "../useNativeFileDrag";
 import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
 import { useAtomValue } from "@effect/atom-react";
@@ -1099,10 +1100,7 @@ function ComposerPromptEditorTiptapInner(
   };
 
   const editorAttributes = {
-    class: cn(
-      "composer-tiptap -m-1 block max-h-52 min-h-[calc(2lh+--spacing(2))] overflow-y-auto p-1 whitespace-pre-wrap wrap-break-word bg-transparent leading-relaxed text-foreground focus:outline-none",
-      className,
-    ),
+    class: cn(COMPOSER_PROMPT_SURFACE, className),
     "data-testid": "composer-editor",
     "data-composer-rich-text": richText ? "true" : "false",
     role: "textbox",

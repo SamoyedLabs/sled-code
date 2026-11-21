@@ -37,6 +37,7 @@ import {
   threadHasStarted,
 } from "../lib/chatThreadActions";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
+import { requestWorkspaceContentFocus } from "../lib/workspaceFocus";
 import { readT3ProjectFile } from "../lib/t3ProjectFileDefaults";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { environmentSummaries } from "../state/presentation";
@@ -359,6 +360,7 @@ export function createNewThreadHandler(router: AnyRouter) {
           routeTargetAfterWrites?.kind === "draft" &&
           routeTargetAfterWrites.draftId === emptyStoredDraftThread.draftId
         ) {
+          requestWorkspaceContentFocus();
           return opened;
         }
         await router.navigate({
@@ -393,6 +395,7 @@ export function createNewThreadHandler(router: AnyRouter) {
         ...pickExplicitWorkspaceOptions(options),
       });
       seedPrompt(currentRouteTarget.draftId);
+      requestWorkspaceContentFocus();
       return Promise.resolve({
         draftId: currentRouteTarget.draftId,
         threadId: latestActiveDraftThread.threadId,

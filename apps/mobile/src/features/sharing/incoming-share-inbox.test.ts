@@ -226,3 +226,35 @@ describe("IncomingShareInbox", () => {
     expect([...persisted.values()]).toEqual([draft("share-other")]);
   });
 });
+
+it("keeps bot reservations through reload and rejects project consume, stale changes and premature bot consume", async () => {
+  const { inbox, persisted } = createHarness();
+  persisted.set("s", draft("s"));
+  const transfer = {
+    destination: {
+      environmentId: "e",
+      principalId: "app-session",
+      hostId: "h",
+      agentId: "a",
+      threadId: "t",
+      target: { kind: "main" as const },
+    },
+    phase: "staging" as const,
+    text: "hello",
+    sourceIds: [],
+    drafts: [],
+    pendingSourceId: null,
+  };
+  await inbox.updateBotTransfer("s", null, transfer);
+  expect((await inbox.refresh({ ingestNative: false }))[0]?.botTransfer).toEqual(transfer);
+  await expect(inbox.reserve("s", { environmentId: "e", projectId: "project" })).rejects.toThrow(
+    "bot",
+  );
+  await expect(inbox.consume("s")).rejects.toThrow("bot");
+  await expect(inbox.updateBotTransfer("s", null, null)).rejects.toThrow("changed");
+  await expect(inbox.consumeBotTransfer("s", transfer)).rejects.toThrow("changed");
+  await inbox.updateBotTransfer("s", transfer, null);
+  expect(persisted.get("s")?.text).toBe(PAYLOAD.value);
+  await inbox.reserve("s", { environmentId: "e", projectId: "project" });
+  await expect(inbox.updateBotTransfer("s", null, transfer)).rejects.toThrow("changed");
+});

@@ -1,7 +1,10 @@
 import { useAtomValue } from "@effect/atom-react";
-import { useGT } from "gt-react";
+import { useGT, T } from "gt-react";
 import * as Schema from "effect/Schema";
 import {
+  Activity,
+  lazy,
+  Suspense,
   useEffect,
   useState,
   useSyncExternalStore,
@@ -18,7 +21,11 @@ import {
   threadUndoClaimsShortcut,
   undoLatestThreadAction,
 } from "../hooks/showThreadUndoNotice";
-import { getLocalStorageItem, removeLocalStorageItem } from "../hooks/useLocalStorage";
+import {
+  getLocalStorageItem,
+  removeLocalStorageItem,
+  setLocalStorageItem,
+} from "../hooks/useLocalStorage";
 import {
   isRichTextBoldShortcut,
   isSidebarToggleShortcut,
@@ -39,6 +46,13 @@ import {
   usePanelAnimationSettings,
   usePanelNavigationSuppression,
 } from "../panelAnimations";
+import {
+  WorkspaceModeRail,
+  WorkspaceSidebarHeader,
+  WorkspaceSidebarSizeContext,
+  useWorkspaceBotsMode,
+} from "./WorkspaceModeHeader";
+import { BotsWorkspacePane } from "./bots/BotsWorkspacePane";
 import { BackgroundThreadAnnouncer } from "./BackgroundThreadAnnouncer";
 import { HistorySwipeNavigation } from "./HistorySwipeNavigation";
 import ThreadSidebar from "./Sidebar";
@@ -68,7 +82,9 @@ import { appAtomRegistry } from "../rpc/atomRegistry";
 import { registerCommands, registerMenuAction } from "../shortcuts/dispatcher";
 import { resolveThreadRouteRef } from "../threadRoutes";
 
-const MACOS_TRAFFIC_LIGHTS_LEFT_INSET = "var(--desktop-window-controls-inset, 90px)";
+const BotElementsPreview = lazy(() =>
+  import("./bots/BotElementsPreview").then((module) => ({ default: module.BotElementsPreview })),
+);
 
 function subscribeToViewportWidth(onChange: () => void): () => void {
   window.addEventListener("resize", onChange);
@@ -77,43 +93,6 @@ function subscribeToViewportWidth(onChange: () => void): () => void {
 
 function readViewportWidth(): number {
   return window.innerWidth;
-}
-
-// Cache the synchronous fullscreen IPC read until subscription.
-let windowFullscreenSnapshot: boolean | null = null;
-
-function macosDesktopBridge() {
-  if (!isElectron || !isMacPlatform(navigator.platform)) return null;
-  return window.desktopBridge ?? null;
-}
-
-function subscribeToWindowFullscreen(onChange: () => void): () => void {
-  const bridge = macosDesktopBridge();
-  if (
-    typeof bridge?.getWindowFullscreenState !== "function" ||
-    typeof bridge.onWindowFullscreenStateChange !== "function"
-  ) {
-    return () => {};
-  }
-  const unsubscribe = bridge.onWindowFullscreenStateChange((fullscreen) => {
-    windowFullscreenSnapshot = fullscreen;
-    onChange();
-  });
-  // The window may have changed state between the first render and this subscription.
-  windowFullscreenSnapshot = bridge.getWindowFullscreenState();
-  return () => {
-    unsubscribe();
-    windowFullscreenSnapshot = null;
-  };
-}
-
-function readWindowFullscreen(): boolean {
-  if (windowFullscreenSnapshot === null) {
-    const getWindowFullscreenState = macosDesktopBridge()?.getWindowFullscreenState;
-    windowFullscreenSnapshot =
-      typeof getWindowFullscreenState === "function" ? getWindowFullscreenState() : false;
-  }
-  return windowFullscreenSnapshot;
 }
 
 function readInitialThreadSidebarWidth(): number {
@@ -321,6 +300,7 @@ function SidebarControl({ showSidebar }: { readonly showSidebar: boolean }) {
   const gt = useGT();
   const router = useRouter();
   const usagePageOpen = useLocation({ select: (location) => location.pathname === "/usage" });
+  const botsMode = useLocation({ select: (location) => location.pathname.startsWith("/bots") });
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const { toggleSidebar } = useSidebar();
   const mobileSidebarSheetMounted = useMobileSidebarSheetMounted();
@@ -391,8 +371,12 @@ function SidebarControl({ showSidebar }: { readonly showSidebar: boolean }) {
       ref={appShellCommandsRef}
       className={cn(
         "pointer-events-none fixed left-[var(--workspace-controls-left)] top-[var(--workspace-controls-top)] z-50 ml-px flex h-[var(--workspace-topbar-height)] items-center",
-        mobileSidebarSheetMounted && "hidden",
+        (botsMode || mobileSidebarSheetMounted) && "hidden",
       )}
+      style={{
+        top: "calc(var(--workspace-controls-top) + var(--workspace-shell-top, 48px))",
+        left: "calc(var(--workspace-controls-left) + var(--workspace-mode-rail-width, 0px))",
+      }}
       data-sidebar-control=""
     >
       {showSidebar ? (
@@ -436,9 +420,15 @@ export function AppSidebarLayout({
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
     usePanelAnimationSettings();
   const pathname = useLocation({ select: (location) => location.pathname });
+  const botsMode = useWorkspaceBotsMode();
+  const previewActive = pathname === "/bots/ai-elements-preview";
+  const [previewVisited, setPreviewVisited] = useState(previewActive);
+  if (previewActive && !previewVisited) setPreviewVisited(true);
+  const [botsVisited, setBotsVisited] = useState(botsMode);
+  if (botsMode && !botsVisited) setBotsVisited(true);
   const panelAnimationsSuppressed = usePanelNavigationSuppression(pathname);
   const routePanelAnimationsActive = panelAnimationsActive && !panelAnimationsSuppressed;
-  const isMacosDesktop = isElectron && isMacPlatform(navigator.platform);
+
   const [sidebarWidth, setSidebarWidth] = useState(readInitialThreadSidebarWidth);
   // A clamped drag may not change width, so viewport changes need a separate subscription.
   const viewportWidth = useSyncExternalStore(subscribeToViewportWidth, readViewportWidth);
@@ -453,60 +443,121 @@ export function AppSidebarLayout({
     }
     setSidebarWidth(resolveInitialThreadSidebarWidth(null));
   };
-  const isWindowFullscreen = useSyncExternalStore(
-    subscribeToWindowFullscreen,
-    readWindowFullscreen,
-  );
-  const windowControlsInsetStyle = (
-    isMacosDesktop && !isWindowFullscreen
-      ? { "--workspace-controls-left": MACOS_TRAFFIC_LIGHTS_LEFT_INSET }
-      : {}
-  ) as CSSProperties;
+  const windowControlsInsetStyle = {} as CSSProperties;
+  const shellTop = 0;
   const sidebarProviderStyle = {
+    "--workspace-sidebar-header-height": "calc(var(--workspace-topbar-height) + 44px)",
+    "--workspace-shell-height": `calc(100dvh - ${shellTop}px)`,
+    "--workspace-shell-top": `${shellTop}px`,
+    ...(isElectron && isMacPlatform(navigator.platform)
+      ? {
+          "--workspace-controls-left":
+            "max(12px, calc(var(--desktop-window-controls-inset, 90px) - 52px))",
+        }
+      : {}),
     "--sidebar-width": `${clampThreadSidebarWidth(sidebarWidth, sidebarMinimumWidth, sidebarMaximumWidth)}px`,
     "--panel-animation-duration": `${panelAnimationDurationMs}ms`,
     ...windowControlsInsetStyle,
   } as CSSProperties;
 
   return (
-    <PanelAnimationSuppressionProvider value={panelAnimationsSuppressed}>
-      <SidebarProvider
-        className="h-dvh! min-h-0!"
-        data-panel-animations={routePanelAnimationsActive ? "true" : "false"}
-        storageKey="chat_thread_sidebar_open"
-        style={sidebarProviderStyle}
-      >
-        {showSidebar ? (
-          <>
-            <SidebarBrandWidthProbe isElectron={isElectron} onWidthChange={setBrandWidth} />
-            <Sidebar
-              side="left"
-              collapsible="offcanvas"
-              data-app-sidebar=""
-              {...sidebarArea}
-              role="navigation"
-              aria-label={gt("Threads")}
-              resizable={{
-                maxWidth: sidebarMaximumWidth,
-                minWidth: sidebarMinimumWidth,
-                shouldAcceptWidth: ({ currentWidth, nextWidth, wrapper }) =>
-                  nextWidth <= currentWidth ||
-                  wrapper.clientWidth - nextWidth >= THREAD_MAIN_CONTENT_MIN_WIDTH,
-                storageKey: THREAD_SIDEBAR_WIDTH_STORAGE_KEY,
-                onResize: setSidebarWidth,
-              }}
-              style={windowControlsInsetStyle}
+    <div
+      className="flex h-dvh flex-col overflow-hidden dark:bg-black dark:[--sidebar:#000] dark:[--sidebar-row-selected:#0d0d0d] dark:[--sidebar-stage-fade:#000] dark:[--surface-grain:none]"
+      style={
+        {
+          "--workspace-mode-rail-width": "52px",
+        } as CSSProperties
+      }
+    >
+      <div className="flex min-h-0 flex-1">
+        <WorkspaceModeRail />
+        <div className="flex min-w-0 flex-1">
+          <PanelAnimationSuppressionProvider value={panelAnimationsSuppressed}>
+            <SidebarProvider
+              className="relative h-full! min-h-0! flex-1"
+              data-panel-animations={routePanelAnimationsActive ? "true" : "false"}
+              storageKey="chat_thread_sidebar_open"
+              style={sidebarProviderStyle}
             >
-              <ThreadSidebar routeReveal={sidebarRouteReveal} />
-              <SidebarRail onDoubleClick={resetSidebarWidth} />
-            </Sidebar>
-          </>
-        ) : null}
-        {children}
-        <BackgroundThreadAnnouncer />
-        <SidebarControl showSidebar={showSidebar} />
-        {isElectron ? <HistorySwipeNavigation /> : null}
-      </SidebarProvider>
-    </PanelAnimationSuppressionProvider>
+              <WorkspaceSidebarSizeContext
+                value={{
+                  width: clampThreadSidebarWidth(
+                    sidebarWidth,
+                    sidebarMinimumWidth,
+                    sidebarMaximumWidth,
+                  ),
+                  resize: (width) => {
+                    const next = clampThreadSidebarWidth(
+                      width,
+                      sidebarMinimumWidth,
+                      sidebarMaximumWidth,
+                    );
+                    setSidebarWidth(next);
+                    setLocalStorageItem(THREAD_SIDEBAR_WIDTH_STORAGE_KEY, next, Schema.Finite);
+                  },
+                  reset: resetSidebarWidth,
+                }}
+              >
+                {showSidebar ? (
+                  <>
+                    <WorkspaceSidebarHeader />
+                    <SidebarBrandWidthProbe isElectron={isElectron} onWidthChange={setBrandWidth} />
+                    <Activity mode={botsMode || previewActive ? "hidden" : "visible"}>
+                      <Sidebar
+                        side="left"
+                        collapsible="offcanvas"
+                        data-app-sidebar=""
+                        {...sidebarArea}
+                        role="navigation"
+                        aria-label={gt("Threads")}
+                        className="left-[var(--workspace-mode-rail-width)] group-data-[collapsible=offcanvas]:left-[calc(var(--workspace-mode-rail-width)-var(--sidebar-width))] group-data-[collapsible=offcanvas]:invisible"
+                        resizable={{
+                          maxWidth: sidebarMaximumWidth,
+                          minWidth: sidebarMinimumWidth,
+                          shouldAcceptWidth: ({ currentWidth, nextWidth, wrapper }) =>
+                            nextWidth <= currentWidth ||
+                            wrapper.clientWidth - nextWidth >= THREAD_MAIN_CONTENT_MIN_WIDTH,
+                          storageKey: THREAD_SIDEBAR_WIDTH_STORAGE_KEY,
+                          onResize: setSidebarWidth,
+                        }}
+                        style={windowControlsInsetStyle}
+                      >
+                        <ThreadSidebar routeReveal={sidebarRouteReveal} />
+                        <SidebarRail onDoubleClick={resetSidebarWidth} />
+                      </Sidebar>
+                    </Activity>
+                  </>
+                ) : null}
+                {children}
+                {previewVisited && (
+                  <section
+                    className="absolute inset-0 flex min-h-0 flex-col bg-background"
+                    aria-label={gt("Retained Bots preview")}
+                    style={{ display: previewActive ? undefined : "none" }}
+                    inert={!previewActive}
+                  >
+                    <Activity mode={previewActive ? "visible" : "hidden"}>
+                      <Suspense
+                        fallback={
+                          <p className="p-6 text-sm text-muted-foreground">
+                            <T>Opening preview…</T>
+                          </p>
+                        }
+                      >
+                        <BotElementsPreview />
+                      </Suspense>
+                    </Activity>
+                  </section>
+                )}
+                {botsVisited && <BotsWorkspacePane active={botsMode} />}
+              </WorkspaceSidebarSizeContext>
+              <BackgroundThreadAnnouncer />
+              <SidebarControl showSidebar={showSidebar} />
+              {isElectron ? <HistorySwipeNavigation /> : null}
+            </SidebarProvider>
+          </PanelAnimationSuppressionProvider>
+        </div>
+      </div>
+    </div>
   );
 }

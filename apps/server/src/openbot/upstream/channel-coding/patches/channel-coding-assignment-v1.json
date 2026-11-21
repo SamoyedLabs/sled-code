@@ -1,0 +1,42 @@
+{
+  "upstream": {
+    "repository": "https://github.com/nightly-labs/openbot",
+    "version": "0.60.0",
+    "commit": "0c7753fa622c38419939cd230657f40e5883d098"
+  },
+  "capability": "sled-channel-coding-assignment-v1",
+  "status": "internal-service-only",
+  "advertiseByDefault": false,
+  "runtimeVerified": false,
+  "patchSha256": "4e0186267cd9b1f1cee3d1b4f4842425de13dfdc89a48419e3158f831612ee68",
+  "baseFiles": {
+    "src/backend/channel-service.ts": "81d26abc2278fb6ae56714b40f24cdb5f3cfb66a1e56e65463e5a6ae189377e5",
+    "src/backend/channel-store.ts": "4d95139e14f72e65e11622aa5e7498056ad2b16ebc6c728e25c1359937efd109",
+    "src/backend/protocol.ts": "9dd03aa08a41b7c016348ebc5f155ff66aaa01c064869ae8ef0fe59da26ec0c2",
+    "src/backend/local-mcp-bridge.ts": "b3bbc9a91b9c0be40d43ad5013394689b6211e6de247d01b7a1dc24a088f44ee",
+    "src/backend/agent/openbot-tool-router.ts": "9be6d700e3499f6abc2c8dcf6208da05fd278a842cd430789843cddf5febe7a2",
+    "src/backend/channel-tools.ts": "ace6c19c74368c55c7b0592b2661f0ddbc3535ae34cb749a04e45fd978533a42"
+  },
+  "patchedFiles": {
+    "src/backend/channel-service.ts": "7e5477e55b4125c2e6affd6ed4fa42922da2e96e2f1380c71858a029eab7ba3c",
+    "src/backend/channel-store.ts": "71413a394398150bbfd956fb0c2a21c20a66b4eba7ce8a2339ade41e64b3b315",
+    "src/backend/channel-coding-origin.ts": "49caa8595458b4f05a9ffa7bef53aa3947656ad08ba2ba6ade9d785a5b89d122",
+    "src/backend/channel-coding-extension.ts": "9c259e5e06ad22ebdb001f184108df248fc5da5adc762e9646400dcaf3e59110",
+    "scripts/channel-coding-idle-e2e.mjs": "35e1256ca5ef557c183e84ce5761d942f9c0071810ed1b5803f5d07ebf1d350e",
+    "scripts/channel-coding-origin-e2e.mjs": "3c408fb890a98f8fc7e5cd144f6f99e1df0617815279c01e58660f0aebdae922",
+    "scripts/channel-coding-refusal-e2e.mjs": "3d50ea42a051ee3c21749ff1383d25970df4497f3276d6d0a90791bf12ed3cff",
+    "src/backend/channel-coding-runtime.ts": "ff26f2fc094d2fc0aff1d90e427f671ed24d7024aee78523761cd9c7c3c0e86d",
+    "src/backend/protocol.ts": "1bb32451fb1587485844030889369d93d414784cae27c5774f2267ddb71e66bb",
+    "src/backend/local-mcp-bridge.ts": "2dc87dd79394cfcd911ad7ebbd43864d66cb41f412a71bd36f5584a8eb246551",
+    "src/backend/agent/openbot-tool-router.ts": "d43c75c76d93cd424c083371b0954a7369638813ae9a9ebbe9c0f2358025aae6",
+    "src/backend/channel-tools.ts": "114130f9a7d56f94f01cc60dcd1cec0021b194ea7e2b72c9bd2c52a7ebe7432e",
+    "scripts/channel-coding-progress-e2e.mjs": "e4a484f563ab13ad4b51351a21f1cac75fd6f0a012ba7600e324b9013d093130"
+  },
+  "promotionRequires": [
+    "assignment-scoped authenticated transport and capability negotiation",
+    "original Sled approval owner and host-bound configured grant enforcement",
+    "full persisted-store deadline/recovery/provider lifecycle runtime proof by root",
+    "authenticated patched engine transport/provider runtime verification by root"
+  ],
+  "progressCapability": "sled-channel-coding-progress-v1"
+}

@@ -95,7 +95,6 @@ import {
   squashAtomCommandFailure,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
-import { isElectron } from "../env";
 import {
   resolveShortcutCommand,
   shortcutLabelForCommand,
@@ -255,7 +254,7 @@ import {
   useComboboxFilter,
 } from "./ui/combobox";
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
-import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
+import { SidebarChromeFooter } from "./sidebar/SidebarChrome";
 import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
 import { TooltipProvider } from "./ui/tooltip";
 import {
@@ -2995,7 +2994,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const newThreadInProjectShortcutLabel = shortcutLabelForCommand(keybindings, "chat.newLocal");
   return (
     <SidebarFolderDrop>
-      <SidebarChromeHeader isElectron={isElectron} />
+      <div className="h-[var(--workspace-sidebar-header-height)] shrink-0" aria-hidden="true" />
       <SidebarContent
         ref={sidebarContentRef}
         className="min-h-full"

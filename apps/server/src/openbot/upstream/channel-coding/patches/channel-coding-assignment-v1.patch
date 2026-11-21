@@ -1,0 +1,1581 @@
+--- a/src/backend/channel-service.ts
++++ b/src/backend/channel-service.ts
+@@ -1,3 +1,5 @@
++import { channelOrigin, storedChannelOrigin, type SledChannelOrigin } from "./channel-coding-origin";
++import { decodeCodingProgress, type CodingProgress, type CodingProgressReceipt, channelCoding, type CodingActor, type CodingBinding, type CodingReceipt, codingLifetime, type CodingSnapshot } from "./channel-coding-extension";
+ import { randomUUID } from "node:crypto";
+ import { realpathSync } from "node:fs";
+ import { basename, dirname, isAbsolute, join, normalize, sep } from "node:path";
+@@ -27,7 +29,7 @@
+ import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
+ import { isFixedSourceText, matchingSourceKeys, sourceText } from "@openbot/i18n/source";
+ import { createOpenBotLogger } from "@openbot/logging";
+-import { Deferred, Effect, Exit, Fiber, Result, Schema, Scope } from "effect";
++import { Clock, Schedule, Deferred, Effect, Exit, Fiber, Result, Schema, Scope } from "effect";
+ import { type ChannelOperationError, channelFailure, channelResult, channelSync } from "./channel-effects";
+ import {
+   assignmentText,
+@@ -176,7 +178,7 @@
+   senderAgentId: string;
+ }
+
+-type ChannelServiceCommand = ChannelCommand | ChannelHandoffCommand;
++type ChannelServiceCommand = (ChannelCommand & { sledOrigin?: SledChannelOrigin }) | ChannelHandoffCommand;
+
+ /** The author id of a handoff request. Like `routine:`, it tells the message from a person's. */
+ function channelHandoffAuthorId(agentId: string): string {
+@@ -191,6 +193,8 @@
+   readonly memories: ChannelMemoryStore;
+   readonly #history: ChannelHistory;
+   #scope = Scope.makeUnsafe();
++  #codingDeadline: Fiber.Fiber<void> | undefined;
++  #codingChanged = Deferred.makeUnsafe<void>();
+   readonly #pumps = new Map<string, Fiber.Fiber<void>>();
+   readonly #commands = new Map<string, Deferred.Deferred<void>>();
+   readonly #commandFibers = new Set<Fiber.Fiber<Channel | void, ChannelOperationError>>();
+@@ -262,6 +266,21 @@
+    * applied, or returns null to drop it. A caller that completes a command from the stored channel must do it there: the
+    * channel it reads before the call can be older than the commands that still wait in the queue.
+    */
++  readonly sendAttributed = Effect.fn("ChannelService.sendAttributed")((
++    command: Extract<ChannelCommand, { type: "send" }>,
++    actor: { id: string; name: string },
++    originRef: string,
++  ) => Effect.gen({ self: this }, function* () {
++    const origin = yield* channelSync(() => channelOrigin(originRef, command, actor.id));
++    yield* this.#serialize(command.channelId, this.apply({ ...command, sledOrigin: origin }, actor));
++    return yield* channelSync(() => {
++      const accepted = storedChannelOrigin(this.store.message(command.channelId, origin.messageId));
++      if (accepted.originRef !== origin.originRef || accepted.operationId !== origin.operationId || accepted.payloadHash !== origin.payloadHash || accepted.actorId !== actor.id)
++        throw new Error("Attributable channel request conflict.");
++      return { ...accepted, channelId: command.channelId, receiptId: `channels:${actor.id}:${command.operationId}` };
++    });
++  }));
++
+   readonly command = Effect.fn("ChannelService.command")(
+     (
+       command: ChannelCommand,
+@@ -444,6 +463,15 @@
+     const operationId = `${actor.id}:${command.operationId}`;
+     const receipt = yield* channelSync(() => this.store.database.commandResult(`channels:${operationId}`));
+     if (receipt !== undefined) {
++      if (command.type === "send" && "sledOrigin" in command && command.sledOrigin) {
++        yield* channelSync(() => {
++          const expected = command.sledOrigin;
++          if (!expected) throw new Error("Missing origin.");
++          const accepted = storedChannelOrigin(this.store.message(command.channelId, expected.messageId));
++          if (accepted.operationId !== expected.operationId || accepted.actorId !== actor.id || accepted.payloadHash !== expected.payloadHash || accepted.originRef !== expected.originRef)
++            throw new Error("Attributable channel request conflict.");
++        });
++      }
+       const channel = yield* channelSync(() => this.store.get(command.channelId));
+       const assignments = (yield* channelSync(() => this.store.assignments(channel.id))).filter(activeAssignment);
+       const superseded = (yield* channelSync(() => this.store.tasks(channel.id))).filter((task) =>
+@@ -573,7 +601,9 @@
+     if (command.type === "send") {
+       const recipientAgentId = command.recipientAgentId;
+       if (recipientAgentId) yield* channelSync(() => this.requireAvailableMember(channel, recipientAgentId));
+-      const id = randomUUID();
++      const origin = "sledOrigin" in command ? command.sledOrigin : undefined;
++      const id = origin?.messageId ?? randomUUID();
++      if (origin && this.store.message(command.channelId, id)) return yield* channelFailure(new Error("Origin already used."));
+       // The files are committed here, not at the dispatch: a channel dispatches when a member is
+       // free, which can be after a restart, and a restart clears every draft with its files. The
+       // request would then hold ids that resolve to nothing, and no retry could bring the upload
+@@ -686,6 +716,7 @@
+           ...recipients.slice(1).map((agentId) => this.newTask(current.id, id, text, agentId)),
+         ];
+         const message = this.message(current.id, task.id, { kind: "member", ...actor }, text, id);
++        if (origin) Object.assign(message, { sledOrigin: origin });
+         message.message.replyToMessageId = command.replyToMessageId;
+         if (committed) message.message.attachments = committed.attachments;
+         const affected = continued.flatMap((item) => descendants(allTasks, item.id));
+@@ -1050,6 +1081,8 @@
+     (channelId?: string): Effect.Effect<void, ChannelOperationError> =>
+       Effect.gen({ self: this }, function* () {
+         if (this.#stopped) return;
++        yield* this.#startCodingDeadline();
++        yield* this.expireCoding();
+         const archived = yield* channelSync(() => this.store.archivedIds());
+         for (const id of yield* channelSync(() => this.store.ids())) {
+           if (this.#deletedChannels.has(id)) continue;
+@@ -2058,6 +2091,10 @@
+     const archived = yield* channelSync(() => this.store.archivedIds());
+     for (const channelId of yield* channelSync(() => this.store.ids())) {
+       for (let assignment of (yield* channelSync(() => this.store.assignments(channelId))).filter(activeAssignment)) {
++        if (assignment.coding?.lease?.providerCompleted && assignment.turnId) {
++          yield* this.complete(channelId, assignment.turnId, "completed");
++          continue;
++        }
+         const context = assignment.deliveryId
+           ? this.mailbox.getDelivery(assignment.deliveryId)
+           : this.mailbox.deliveryForKey(`channel-assignment:${assignment.id}`);
+@@ -2245,6 +2282,7 @@
+         (item) => item.id === assignment.taskId,
+       );
+       if (!task) return;
++      if (assignment.coding?.lease?.providerCompleted) return;
+       // The drain and the turn start both report the same turn. Only the first report saves the
+       // cursor: a changed message or a compaction can reset it before the second report.
+       const repeated = assignment.state === "running" && assignment.turnId === turnId;
+@@ -2538,10 +2576,15 @@
+
+   private complete(channelId: string, turnId: string, status: string): Effect.Effect<void, ChannelOperationError> {
+     return Effect.gen({ self: this }, function* () {
+-      const assignment = (yield* channelSync(() => this.store.assignments(channelId))).find(
++      let assignment = (yield* channelSync(() => this.store.assignments(channelId))).find(
+         (item) => item.turnId === turnId,
+       );
+       if (!assignment || !activeAssignment(assignment)) return;
++      if (assignment.coding?.lease?.providerCompleted && assignment.pendingRevision !== null) {
++        const cleared = { ...assignment, pendingRevision: null, pendingOutcome: null };
++        assignment = cleared;
++        yield* channelSync(() => this.store.update(this.store.get(channelId), { assignments: [cleared] }));
++      }
+       if (assignment.pendingRevision !== null) {
+         yield* channelSync(() =>
+           this.store.update(this.store.get(channelId), { assignments: [{ ...assignment, pendingOutcome: status }] }),
+@@ -2551,6 +2594,20 @@
+       const tasks = yield* channelSync(() => this.store.tasks(channelId));
+       const task = tasks.find((item) => item.id === assignment.taskId);
+       if (!task) return;
++      const now = yield* Clock.currentTimeMillis;
++      const lifetime = yield* channelSync(() => codingLifetime(this.codingView(channelId, assignment, task), now, status));
++      if (lifetime === "hold") {
++        const coding = assignment.coding;
++        const lease = coding?.lease;
++        if (!coding || !lease) return yield* channelFailure(new Error("Invalid coding lease."));
++        if (!lease.providerCompleted)
++          yield* channelSync(() => this.store.update(this.store.get(channelId), {
++            assignments: [{ ...assignment, coding: { ...coding, lease: { ...lease, providerCompleted: true } } }],
++          }));
++        this.publish(channelId);
++        return;
++      }
++      if (lifetime === "interrupt") status = "interrupted";
+       const newChildren = task.dependencies.filter((id) => !assignment.awaitedTaskIds.includes(id));
+       const pendingChildren = task.dependencies.some(
+         (id) => !tasks.some((item) => item.id === id && item.state === "completed"),
+@@ -2691,6 +2748,162 @@
+       instructions: channel.instructions,
+     };
+   });
++
++  /** Internal service seam only. The caller must authenticate an assignment-scoped actor.
++   * Reserves the assignment, not the provider process. Grants no Sled authority.
++   */
++  readonly coding = Effect.fn("ChannelService.coding")((
++    actor: CodingActor,
++    binding: CodingBinding,
++    action: "bind" | "receipt" | "submit" | "renew" | "refuse",
++    text?: string,
++  ) => Effect.gen({ self: this }, function* () {
++    yield* this.#startCodingDeadline();
++    const now = yield* Clock.currentTimeMillis;
++    const receipt = yield* channelSync(() => {
++    const channel = this.store.get(binding.channelId);
++    const tasks = this.store.tasks(binding.channelId);
++    const task = tasks.find((item) => item.id === binding.taskId);
++    const assignment = this.store.assignments(binding.channelId).find((item) => item.id === binding.assignmentId);
++    if (!task || !assignment) throw new Error("Channel coding assignment not found.");
++    const root = tasks.find(t => t.id === task.rootTaskId) ?? task;
++    const person = this.store.message(binding.channelId, root.requestMessageId)?.author;
++    const messageId = `channel-result-${assignment.id}-revision-${assignment.taskRevision}`;
++    const existing = this.store.message(binding.channelId, messageId);
++    return channelCoding({
++      now: () => now,
++      read: () => ({
++        channelId: channel.id,
++        archived: channel.archived,
++        member: channel.members.some((item) => item.agentId === binding.agentId),
++        task,
++        assignment,
++        requesterId: person?.id ?? null,
++        receipt: assignment.coding ?? null,
++        result: existing ? { messageId: existing.id, text: existing.message.text } : null,
++      }),
++      commit: (receipt: CodingReceipt, writeResult: boolean) => {
++        const messages: ChannelMessage[] = [];
++        if (writeResult && receipt.result) {
++          const message = this.message(binding.channelId, task.id, {
++            kind: "agent", id: binding.agentId,
++            name: this.hooks.agents().find((item) => item.id === binding.agentId)?.name ?? binding.agentId,
++          }, receipt.result.text, receipt.result.messageId);
++          message.message.author = "assistant";
++          message.message.turnId = binding.turnId;
++          messages.push(message);
++        }
++        // Receipt and exact assistant message commit atomically in the existing event log.
++        this.store.update(channel, { assignments: [{ ...assignment, coding: receipt }], messages });
++        this.publish(binding.channelId);
++      },
++    }, actor, binding, action, text);
++    });
++    if (((action === "submit" && receipt?.result) || action === "refuse") && receipt?.lease?.providerCompleted)
++      yield* this.complete(binding.channelId, binding.turnId, "completed");
++    return receipt;
++  }));
++
++  /** Progress never changes task/assignment lifecycle. A crash after intent commit stays uncertain. */
++  readonly codingProgress = Effect.fn("ChannelService.codingProgress")((actor: CodingActor, binding: CodingBinding, input: CodingProgress) => Effect.gen({ self: this }, function* () {
++    const event = yield* channelSync(() => decodeCodingProgress(input));
++    const prepared = yield* channelSync(() => {
++      const channel = this.store.get(binding.channelId);
++      const task = this.store.tasks(binding.channelId).find(t => t.id === binding.taskId);
++      const assignment = this.store.assignments(binding.channelId).find(a => a.id === binding.assignmentId);
++      if (!task || !assignment) throw new Error("Missing coding assignment.");
++      // Reuse the current-assignment, requester, membership and lease validation before even replaying.
++      channelCoding({ read: () => this.codingView(binding.channelId, assignment, task), now: () => Date.now(), commit: () => {} }, actor, binding, "bind");
++      const receipt = assignment.coding;
++      if (!receipt || receipt.result) throw new Error("Coding progress requires an active reservation.");
++      const existing = receipt.progress?.find(p => p.eventId === event.eventId);
++      if (existing) {
++        if (existing.status !== event.status || existing.updatedAt !== event.updatedAt) throw new Error("Coding progress conflict.");
++        return { event: existing, dispatch: false, threadId: "" };
++      }
++      // No unbounded journal growth or eviction that could permit a duplicate old delivery.
++      if ((receipt.progress?.length ?? 0) >= 4096) throw new Error("Coding progress receipt limit.");
++      const pending: CodingProgressReceipt = { ...event, delivery: "uncertain" };
++      const threadId = this.store.context(binding.channelId, binding.agentId).threadId;
++      this.store.update(channel, { assignments: [{ ...assignment, coding: { ...receipt, progress: [...(receipt.progress ?? []), pending] } }] });
++      return { event: pending, dispatch: true, threadId };
++    });
++    if (!prepared.dispatch) return prepared.event;
++    const text = `Sled coding status: ${event.status}. Observed ${event.updatedAt}. This is a status observation, not a user answer, permission approval, or completed result.`;
++    const outcome = this.hooks.steer
++      ? yield* this.hooks.steer(binding.agentId, prepared.threadId, binding.turnId, `sled-coding-progress-${event.eventId}`, text).pipe(Effect.catchCause(() => Effect.succeed("uncertain" as const)))
++      : "rejected" as const;
++    return yield* channelSync(() => {
++      const channel = this.store.get(binding.channelId);
++      const assignment = this.store.assignments(binding.channelId).find(a => a.id === binding.assignmentId);
++      if (!assignment?.coding) return prepared.event;
++      const result: CodingProgressReceipt = { ...event, delivery: outcome };
++      this.store.update(channel, { assignments: [{ ...assignment, coding: { ...assignment.coding, progress: assignment.coding.progress?.map(p => p.eventId === event.eventId ? result : p) } }] });
++      this.publish(binding.channelId);
++      return result;
++    });
++  }));
++
++  private codingView(channelId: string, assignment: ChannelAssignment, task: ChannelTask): CodingSnapshot {
++    const channel = this.store.get(channelId);
++    const tasks = this.store.tasks(channelId);
++    const root = tasks.find(t => t.id === task.rootTaskId) ?? task;
++    const person = this.store.message(channelId, root.requestMessageId)?.author;
++    const existing = this.store.message(channelId, `channel-result-${assignment.id}-revision-${assignment.taskRevision}`);
++    return { channelId: channel.id, archived: channel.archived, member: channel.members.some((m) => m.agentId === assignment.agentId),
++      task, assignment, requesterId: person?.id ?? null, receipt: assignment.coding ?? null,
++      result: existing ? { messageId: existing.id, text: existing.message.text } : null };
++  }
++
++  /** A running provider is not interrupted here; late submission refuses and completion pauses. */
++  #startCodingDeadline(): Effect.Effect<void> {
++    return Effect.gen({ self: this }, function* () {
++      if (this.#stopped || this.#codingDeadline) return;
++      const work = Effect.gen({ self: this }, function* () {
++        while (!this.#stopped) {
++          const changed = Deferred.makeUnsafe<void>();
++          this.#codingChanged = changed;
++          const { now, deadline } = yield* Effect.gen({ self: this }, function* () {
++            yield* this.expireCoding();
++            const now = yield* Clock.currentTimeMillis;
++            const deadline = yield* channelSync(() => {
++              let next = Infinity;
++              for (const id of this.store.ids()) {
++                for (const assignment of this.store.assignments(id)) {
++                  const coding = assignment.coding;
++                  if (activeAssignment(assignment) && assignment.turnId && !coding?.result &&
++                    coding?.lease && coding.lease.expiresAt > now)
++                    next = Math.min(next, coding.lease.expiresAt);
++                }
++              }
++              return next;
++            });
++            return { now, deadline };
++          }).pipe(Effect.retry({ times: 3, schedule: Schedule.exponential("100 millis") }));
++          // Expiry runs outside the race, so release -> wake cannot interrupt its own completion.
++          if (Number.isFinite(deadline))
++            yield* Effect.raceFirst(Deferred.await(changed), Effect.sleep(Math.max(0, deadline - now)));
++          else yield* Deferred.await(changed);
++        }
++      }).pipe(Effect.catch((failure) => Effect.sync(() => this.hooks.error(failure.cause))));
++      const fiber = yield* Effect.forkIn(work, this.#scope, { startImmediately: false });
++      this.#codingDeadline = fiber;
++      fiber.addObserver(() => {
++        if (this.#codingDeadline === fiber) this.#codingDeadline = undefined;
++      });
++    });
++  }
++
++  readonly expireCoding = Effect.fn("ChannelService.expireCoding")(function* (this: ChannelService) {
++    const now = yield* Clock.currentTimeMillis;
++    for (const id of yield* channelSync(() => this.store.ids())) {
++      for (const assignment of yield* channelSync(() => this.store.assignments(id))) {
++        if (activeAssignment(assignment) && assignment.turnId && assignment.coding?.lease?.providerCompleted &&
++          !assignment.coding.result && now >= assignment.coding.lease.expiresAt)
++          yield* this.complete(id, assignment.turnId, "interrupted");
++      }
++    }
++  }).bind(this);
+
+   readonly tool = Effect.fn("ChannelService.tool")(function* (
+     this: ChannelService,
+@@ -2947,7 +3160,7 @@
+         // A turn of this revision already has the correction in its packet.
+         item.taskRevision < task.revision,
+     );
+-    if (!assignment?.turnId) return false;
++    if (!assignment?.turnId || assignment.coding?.lease?.providerCompleted) return false;
+     const turnId = assignment.turnId;
+     const agent = this.hooks.agents().find((item) => item.id === assignment.agentId);
+     if (!agent) return false;
+@@ -2982,7 +3195,7 @@
+     const current = (yield* channelSync(() => this.store.assignments(channelId))).find(
+       (item) => item.id === assignment.id,
+     );
+-    if (current?.state !== "running") return false;
++    if (current?.state !== "running" || current.coding?.lease?.providerCompleted) return false;
+     yield* channelSync(() =>
+       this.store.update(this.store.get(channelId), { assignments: [{ ...current, pendingRevision: task.revision }] }),
+     );
+@@ -3068,6 +3281,10 @@
+       const task = tasks.find((item) => item.id === assignment.taskId);
+       if (!task || !activeAssignment(assignment)) continue;
+       if (options.staleOnly && assignment.taskRevision >= task.revision) continue;
++      if (assignment.coding?.lease?.providerCompleted && assignment.turnId) {
++        yield* this.complete(channelId, assignment.turnId, "interrupted");
++        continue;
++      }
+       if (assignment.pendingRevision !== null) {
+         const pendingOutcome = assignment.pendingOutcome;
+         assignment = { ...assignment, pendingRevision: null, pendingOutcome: null };
+@@ -3307,6 +3524,7 @@
+   }
+
+   private publish(channelId: string): void {
++    Effect.runSync(Deferred.succeed(this.#codingChanged, undefined));
+     this.hooks.changed(channelId, this.store.get(channelId).revision);
+     this.#syncQueueHolds(channelId);
+   }
+@@ -3337,6 +3555,7 @@
+     this: ChannelService,
+   ): Effect.fn.Return<void, ChannelOperationError> {
+     this.#stopped = true;
++    this.#codingDeadline = undefined;
+     yield* Fiber.awaitAll([
+       ...this.#events,
+       ...this.#pumps.values(),
+--- a/src/backend/channel-store.ts
++++ b/src/backend/channel-store.ts
+@@ -1,3 +1,4 @@
++import { decodeCodingReceipt, type CodingReceipt } from "./channel-coding-extension";
+ import { randomUUID } from "node:crypto";
+ import type { DatabaseSync } from "node:sqlite";
+ import {
+@@ -31,6 +32,8 @@
+ import { revokeRoutineWebhooks } from "./webhook-route-store";
+
+ export interface ChannelAssignment {
++  /** Retained in channel events and rebuilt with the assignment projection. */
++  coding?: CodingReceipt;
+   id: string;
+   channelId: string;
+   taskId: string;
+@@ -936,6 +939,7 @@
+   )
+     throw new Error("Invalid stored channel assignment.");
+   return {
++    ...(value.coding === undefined ? {} : { coding: decodeCodingReceipt(value.coding) }),
+     id: value.id,
+     channelId: value.channelId,
+     taskId: value.taskId,
+--- /dev/null
++++ b/src/backend/channel-coding-origin.ts
+@@ -0,0 +1,63 @@
++// @effect-diagnostics nodeBuiltinImport:off preferSchemaOverJson:off -- Maintained upstream adapter uses canonical JSON hashes and Node crypto.
++import * as NodeCrypto from "node:crypto";
++
++export interface SledChannelOrigin {
++  readonly originRef: string;
++  readonly operationId: string;
++  readonly payloadHash: string;
++  readonly actorId: string;
++  readonly messageId: string;
++}
++const canonical = (value: unknown): string => {
++  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
++  if (value !== null && typeof value === "object")
++    return `{${Object.entries(value)
++      .filter(([, v]) => v !== undefined)
++      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
++      .map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`)
++      .join(",")}}`;
++  return JSON.stringify(value);
++};
++export function channelOrigin(
++  originRef: string,
++  command: { operationId: string },
++  actorId: string,
++): SledChannelOrigin {
++  if (!/^[a-f0-9]{64}$/.test(originRef)) throw new Error("Invalid Sled origin reference.");
++  return {
++    originRef,
++    operationId: command.operationId,
++    actorId,
++    payloadHash: NodeCrypto.createHash("sha256").update(canonical(command)).digest("hex"),
++    messageId: `sled-origin-${originRef}`,
++  };
++}
++export function storedChannelOrigin(value: unknown): SledChannelOrigin {
++  if (value === null || typeof value !== "object" || !("sledOrigin" in value))
++    throw new Error("Missing attributable request.");
++  const origin = value.sledOrigin;
++  if (
++    origin === null ||
++    typeof origin !== "object" ||
++    !("originRef" in origin) ||
++    typeof origin.originRef !== "string" ||
++    !/^[a-f0-9]{64}$/.test(origin.originRef) ||
++    !("operationId" in origin) ||
++    typeof origin.operationId !== "string" ||
++    !("payloadHash" in origin) ||
++    typeof origin.payloadHash !== "string" ||
++    !/^[a-f0-9]{64}$/.test(origin.payloadHash) ||
++    !("actorId" in origin) ||
++    typeof origin.actorId !== "string" ||
++    !("messageId" in origin) ||
++    origin.messageId !== `sled-origin-${origin.originRef}`
++  )
++    throw new Error("Invalid attributable request.");
++  return {
++    originRef: origin.originRef,
++    operationId: origin.operationId,
++    payloadHash: origin.payloadHash,
++    actorId: origin.actorId,
++    messageId: origin.messageId,
++  };
++}
+--- /dev/null
++++ b/src/backend/channel-coding-extension.ts
+@@ -0,0 +1,394 @@
++/** Maintained Openbot service extension. No HTTP route or runtime capability is implied. */
++export class ChannelCodingAuthorityError extends Error {
++  override readonly name = "ChannelCodingAuthorityError";
++}
++export interface CodingBinding {
++  channelId: string;
++  taskId: string;
++  taskRevision: number;
++  assignmentId: string;
++  agentId: string;
++  turnId: string;
++  requestMessageId: string;
++  requesterId: string;
++  operationId: string;
++}
++export interface CodingProgress {
++  eventId: string;
++  status: "executing" | "needs_input" | "needs_approval";
++  updatedAt: string;
++}
++export interface CodingProgressReceipt extends CodingProgress {
++  delivery: "accepted" | "rejected" | "uncertain";
++}
++export function decodeCodingProgress(value: unknown): CodingProgress {
++  if (
++    !isCodingObject(value) ||
++    !("eventId" in value) ||
++    !("status" in value) ||
++    !("updatedAt" in value) ||
++    typeof value.eventId !== "string" ||
++    !/^[a-f0-9]{64}$/.test(value.eventId) ||
++    (value.status !== "executing" &&
++      value.status !== "needs_input" &&
++      value.status !== "needs_approval") ||
++    typeof value.updatedAt !== "string" ||
++    !Number.isFinite(Date.parse(value.updatedAt))
++  )
++    throw new Error("Invalid coding progress.");
++  return {
++    eventId: value.eventId,
++    status: value.status,
++    updatedAt: value.updatedAt,
++  };
++}
++export interface CodingReceipt {
++  progress?: CodingProgressReceipt[];
++  binding: CodingBinding;
++  /** Engine-private: never projected into tool arguments/results or model history. */
++  attestation?: {
++    credentialHash: string;
++    originRef: string | null;
++    requesterKind: "session" | "routine" | "agent";
++    payloadHash: string;
++    /** Definitive first-attempt refusal; no external coding work was accepted. */
++    refused?: true;
++  };
++  result: null | { messageId: string; text: string };
++  /** Absent on old receipts: old bindings never acquire a lease by replay. */
++  lease?: { reservedAt: number; renewedAt?: number; expiresAt: number; providerCompleted: boolean };
++}
++export interface CodingActor {
++  /** Supplied by a trusted, assignment-scoped transport, never by request JSON. */
++  agentId: string;
++  turnId: string;
++  requesterId: string;
++}
++export interface CodingSnapshot {
++  channelId: string;
++  archived: boolean;
++  member: boolean;
++  task: {
++    id: string;
++    revision: number;
++    state: string;
++    ownerAgentId: string | null;
++    requestMessageId: string;
++  };
++  assignment: {
++    id: string;
++    taskId: string;
++    taskRevision: number;
++    agentId: string;
++    turnId: string | null;
++    state: string;
++    requestMessageId: string | null;
++  };
++  requesterId: string | null;
++  receipt: CodingReceipt | null;
++  result: { messageId: string; text: string } | null;
++}
++export interface CodingPort {
++  read(binding: CodingBinding): CodingSnapshot;
++  now(): number;
++  /** Commit receipt and optional assistant result in ONE durable channel transaction. */
++  commit(receipt: CodingReceipt, writeResult: boolean): void;
++}
++const fields = [
++  "channelId",
++  "taskId",
++  "assignmentId",
++  "agentId",
++  "turnId",
++  "requestMessageId",
++  "requesterId",
++  "operationId",
++] as const;
++function isCodingObject(value: unknown): value is object {
++  return typeof value === "object" && value !== null && !Array.isArray(value);
++}
++function codingIdentifier(value: unknown): string {
++  if (typeof value !== "string" || !value.length || value.length > 512)
++    throw new Error("Invalid coding identity.");
++  return value;
++}
++export function decodeCodingReceipt(value: unknown): CodingReceipt {
++  if (!isCodingObject(value) || !("binding" in value) || !("result" in value))
++    throw new Error("Invalid coding receipt.");
++  const source = value.binding;
++  if (
++    !isCodingObject(source) ||
++    !("taskRevision" in source) ||
++    !("channelId" in source) ||
++    !("taskId" in source) ||
++    !("assignmentId" in source) ||
++    !("agentId" in source) ||
++    !("turnId" in source) ||
++    !("requestMessageId" in source) ||
++    !("requesterId" in source) ||
++    !("operationId" in source)
++  )
++    throw new Error("Invalid coding binding.");
++  if (
++    typeof source.taskRevision !== "number" ||
++    !Number.isSafeInteger(source.taskRevision) ||
++    source.taskRevision < 0
++  )
++    throw new Error("Invalid task revision.");
++  const binding: CodingBinding = {
++    channelId: codingIdentifier(source.channelId),
++    taskId: codingIdentifier(source.taskId),
++    taskRevision: source.taskRevision,
++    assignmentId: codingIdentifier(source.assignmentId),
++    agentId: codingIdentifier(source.agentId),
++    turnId: codingIdentifier(source.turnId),
++    requestMessageId: codingIdentifier(source.requestMessageId),
++    requesterId: codingIdentifier(source.requesterId),
++    operationId: codingIdentifier(source.operationId),
++  };
++  let result: CodingReceipt["result"] = null;
++  if (value.result !== null) {
++    if (
++      !isCodingObject(value.result) ||
++      !("messageId" in value.result) ||
++      !("text" in value.result) ||
++      typeof value.result.messageId !== "string" ||
++      !value.result.messageId.length ||
++      typeof value.result.text !== "string" ||
++      !value.result.text.trim() ||
++      value.result.text.length > 100_000
++    )
++      throw new Error("Invalid coding result.");
++    result = { messageId: value.result.messageId, text: value.result.text };
++  }
++  let lease: CodingReceipt["lease"];
++  if ("lease" in value) {
++    const source = value.lease;
++    if (
++      !isCodingObject(source) ||
++      !("reservedAt" in source) ||
++      !("expiresAt" in source) ||
++      !("providerCompleted" in source) ||
++      typeof source.reservedAt !== "number" ||
++      !Number.isSafeInteger(source.reservedAt) ||
++      source.reservedAt < 0 ||
++      typeof source.expiresAt !== "number" ||
++      !Number.isSafeInteger(source.expiresAt) ||
++      source.expiresAt <= source.reservedAt ||
++      ("renewedAt" in source &&
++        (typeof source.renewedAt !== "number" ||
++          !Number.isSafeInteger(source.renewedAt) ||
++          source.renewedAt < source.reservedAt ||
++          source.renewedAt >= source.expiresAt)) ||
++      source.expiresAt -
++        ("renewedAt" in source && typeof source.renewedAt === "number"
++          ? source.renewedAt
++          : source.reservedAt) >
++        30 * 60_000 ||
++      typeof source.providerCompleted !== "boolean"
++    )
++      throw new Error("Invalid coding lease.");
++    lease = {
++      reservedAt: source.reservedAt,
++      ...("renewedAt" in source && typeof source.renewedAt === "number"
++        ? { renewedAt: source.renewedAt }
++        : {}),
++      expiresAt: source.expiresAt,
++      providerCompleted: source.providerCompleted,
++    };
++  }
++  let attestation: CodingReceipt["attestation"];
++  if ("attestation" in value) {
++    const a = value.attestation;
++    if (
++      !isCodingObject(a) ||
++      !("credentialHash" in a) ||
++      !("originRef" in a) ||
++      !("requesterKind" in a) ||
++      !("payloadHash" in a) ||
++      typeof a.credentialHash !== "string" ||
++      !/^[a-f0-9]{64}$/.test(a.credentialHash) ||
++      (a.originRef !== null &&
++        (typeof a.originRef !== "string" || !/^[a-f0-9]{64}$/.test(a.originRef))) ||
++      (a.requesterKind !== "session" &&
++        a.requesterKind !== "routine" &&
++        a.requesterKind !== "agent") ||
++      typeof a.payloadHash !== "string" ||
++      !/^[a-f0-9]{64}$/.test(a.payloadHash)
++    )
++      throw new Error("Invalid coding attestation.");
++    if ("refused" in a && a.refused !== true) throw new Error("Invalid coding refusal.");
++    attestation = {
++      credentialHash: a.credentialHash,
++      originRef: a.originRef,
++      requesterKind: a.requesterKind,
++      payloadHash: a.payloadHash,
++      ...("refused" in a ? { refused: true as const } : {}),
++    };
++  }
++  return {
++    binding,
++    result,
++    ...("progress" in value
++      ? {
++          progress: (() => {
++            if (!Array.isArray(value.progress)) throw new Error("Invalid progress receipts.");
++            const ids = new Set<string>();
++            return value.progress.map((entry: unknown): CodingProgressReceipt => {
++              const event = decodeCodingProgress(entry);
++              if (
++                !isCodingObject(entry) ||
++                !("delivery" in entry) ||
++                (entry.delivery !== "accepted" &&
++                  entry.delivery !== "rejected" &&
++                  entry.delivery !== "uncertain") ||
++                ids.has(event.eventId)
++              )
++                throw new Error("Invalid progress receipt.");
++              ids.add(event.eventId);
++              return { ...event, delivery: entry.delivery };
++            });
++          })(),
++        }
++      : {}),
++    ...(lease === undefined ? {} : { lease }),
++    ...(attestation === undefined ? {} : { attestation }),
++  };
++}
++function same(a: CodingBinding, b: CodingBinding): boolean {
++  return a.taskRevision === b.taskRevision && fields.every((field) => a[field] === b[field]);
++}
++
++/** Synchronous: no yield between current-assignment validation and the durable commit. */
++export function channelCoding(
++  port: CodingPort,
++  actor: CodingActor,
++  binding: CodingBinding,
++  action: "bind" | "receipt" | "submit" | "renew" | "refuse",
++  text?: string,
++): CodingReceipt | null {
++  decodeCodingReceipt({ binding, result: null });
++  const view = port.read(binding);
++  if (
++    view.channelId !== binding.channelId ||
++    !view.member ||
++    actor.agentId !== binding.agentId ||
++    actor.turnId !== binding.turnId ||
++    actor.requesterId !== binding.requesterId ||
++    view.requesterId !== binding.requesterId
++  )
++    throw new ChannelCodingAuthorityError("Coding authority mismatch.");
++  const assignment = view.assignment;
++  if (
++    assignment.id !== binding.assignmentId ||
++    assignment.agentId !== binding.agentId ||
++    assignment.turnId !== binding.turnId ||
++    assignment.taskId !== binding.taskId ||
++    assignment.taskRevision !== binding.taskRevision ||
++    assignment.requestMessageId !== binding.requestMessageId
++  )
++    throw new ChannelCodingAuthorityError("Coding assignment mismatch.");
++  const receipt = view.receipt;
++  if (receipt && !same(receipt.binding, binding)) throw new Error("Coding operation conflict.");
++  // Historical receipt reads reconcile uncertain submission without reviving old work.
++  if (action === "receipt") return receipt;
++  if (
++    view.archived ||
++    assignment.state !== "running" ||
++    view.task.id !== binding.taskId ||
++    view.task.state !== "running" ||
++    view.task.revision !== binding.taskRevision ||
++    view.task.ownerAgentId !== binding.agentId ||
++    view.task.requestMessageId !== binding.requestMessageId
++  )
++    throw new ChannelCodingAuthorityError("Coding assignment is stale.");
++  if (receipt?.attestation?.refused)
++    throw new ChannelCodingAuthorityError("Coding request was refused.");
++  if (action === "refuse") {
++    if (!receipt?.attestation || receipt.result || view.result)
++      throw new ChannelCodingAuthorityError("Coding reservation cannot refuse.");
++    const next: CodingReceipt = {
++      ...receipt,
++      attestation: { ...receipt.attestation, refused: true },
++    };
++    port.commit(next, false);
++    return next;
++  }
++  const now = port.now();
++  if (receipt?.lease && now >= receipt.lease.expiresAt)
++    throw new ChannelCodingAuthorityError("Coding lease expired.");
++  if (action === "renew") {
++    if (!receipt?.lease || receipt.result)
++      throw new ChannelCodingAuthorityError("Coding reservation cannot renew.");
++    const next = {
++      ...receipt,
++      lease: { ...receipt.lease, renewedAt: now, expiresAt: now + 30 * 60_000 },
++    };
++    decodeCodingReceipt(next);
++    port.commit(next, false);
++    return next;
++  }
++  if (action === "bind") {
++    if (receipt) return receipt;
++    if (view.result) throw new Error("The assignment already has a result.");
++    const next: CodingReceipt = {
++      binding,
++      result: null,
++      lease: { reservedAt: now, expiresAt: now + 30 * 60_000, providerCompleted: false },
++    };
++    decodeCodingReceipt(next);
++    port.commit(next, false);
++    return next;
++  }
++  if (!receipt) throw new Error("Bind the coding operation first.");
++  if (typeof text !== "string" || !text.trim() || text.length > 100_000)
++    throw new Error("Invalid coding result.");
++  const messageId = `channel-result-${binding.assignmentId}-revision-${binding.taskRevision}`;
++  if (receipt.result) {
++    if (
++      receipt.result.text !== text ||
++      receipt.result.messageId !== messageId ||
++      view.result?.text !== text ||
++      view.result.messageId !== messageId
++    )
++      throw new Error("Coding result conflict.");
++    return receipt;
++  }
++  if (view.result) throw new Error("The assignment already has a result.");
++  const next = { ...receipt, result: { messageId, text } };
++  port.commit(next, true);
++  return next;
++}
++
++/** Completion/recovery share the same durable decision; no process-local keepalive. */
++export function codingLifetime(
++  view: CodingSnapshot,
++  now: number,
++  status: string,
++): "hold" | "complete" | "interrupt" {
++  const receipt = view.receipt;
++  if (!receipt?.lease || receipt.attestation?.refused || status !== "completed") return "complete";
++  const b = receipt.binding;
++  const a = view.assignment;
++  if (
++    view.channelId !== b.channelId ||
++    view.archived ||
++    !view.member ||
++    view.requesterId !== b.requesterId ||
++    a.id !== b.assignmentId ||
++    a.taskId !== b.taskId ||
++    a.taskRevision !== b.taskRevision ||
++    a.agentId !== b.agentId ||
++    a.turnId !== b.turnId ||
++    a.requestMessageId !== b.requestMessageId ||
++    a.state !== "running" ||
++    view.task.id !== b.taskId ||
++    view.task.revision !== b.taskRevision ||
++    view.task.state !== "running" ||
++    view.task.ownerAgentId !== b.agentId ||
++    view.task.requestMessageId !== b.requestMessageId
++  )
++    return "interrupt";
++  if (receipt.result || view.result) return "complete"; // A provider result always wins its existing slot.
++  return now >= receipt.lease.expiresAt ? "interrupt" : "hold";
++}
+--- /dev/null
++++ b/scripts/channel-coding-idle-e2e.mjs
+@@ -0,0 +1,255 @@
++import * as NodeAssert from "node:assert/strict";
++import * as NodeFS from "node:fs";
++import * as NodeOS from "node:os";
++import * as NodePath from "node:path";
++import { Effect } from "effect";
++import { TestClock } from "effect/testing";
++import { ChannelService } from "../src/backend/channel-service.ts";
++import { OpenBotDatabase } from "../src/backend/openbot-database.ts";
++
++// Runs in patched upstream scripts/, against its actual class, store and SQLite event log.
++const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "openbot-coding-idle-"));
++const start = Date.now();
++const errors = [];
++const scheduled = [];
++let database = new OpenBotDatabase(root);
++await Effect.runPromise(database.initialize());
++const hooks = {
++  agents: () => [],
++  generate: () => Effect.die("Unexpected model call"),
++  schedule: (id) => scheduled.push(id),
++  interrupt: () => Effect.die("Unexpected provider interruption"),
++  busy: () => true,
++  changed: () => {},
++  error: (error) => errors.push(error),
++};
++const makeService = () => new ChannelService(database, {}, {}, hooks);
++let service = makeService();
++const state = (id) => service.store.assignments(id)[0].state;
++const taskState = (id) => service.store.tasks(id)[0].state;
++function seed(id, expiresAt, completed = true, pendingRevision = null) {
++  const channel = service.store.create(id, {
++    name: id,
++    title: id,
++    instructions: "",
++    members: [{ agentId: id }],
++    leadAgentId: null,
++  });
++  const binding = {
++    channelId: id,
++    taskId: id,
++    taskRevision: 1,
++    assignmentId: id,
++    agentId: id,
++    turnId: id,
++    requestMessageId: id,
++    requesterId: "person",
++    operationId: id,
++  };
++  service.store.update(channel, {
++    messages: [
++      {
++        id,
++        channelId: id,
++        sequence: 0,
++        author: { kind: "member", id: "person", name: "Person" },
++        taskId: id,
++        superseded: false,
++        message: {
++          id,
++          author: "user",
++          text: "Request",
++          createdAt: new Date().toISOString(),
++          status: "completed",
++        },
++      },
++    ],
++    tasks: [
++      {
++        id,
++        channelId: id,
++        rootTaskId: id,
++        parentTaskId: null,
++        ownerAgentId: id,
++        requestMessageId: id,
++        instruction: "Work",
++        attachmentDraftIds: [],
++        expectedResult: "Result",
++        sourceMessageIds: [],
++        dependencies: [],
++        resources: ["host"],
++        state: "running",
++        revision: 1,
++        assignmentCount: 1,
++        error: null,
++      },
++    ],
++    assignments: [
++      {
++        id,
++        channelId: id,
++        taskId: id,
++        taskRevision: 1,
++        agentId: id,
++        turnId: id,
++        requestMessageId: id,
++        state: "running",
++        deliveryId: null,
++        throughSequence: 0,
++        summaryVersion: 0,
++        pendingRevision,
++        pendingOutcome: null,
++        awaitedTaskIds: [],
++        resources: ["host"],
++        coding: {
++          binding,
++          result: null,
++          lease: { reservedAt: start, expiresAt: start + expiresAt, providerCompleted: completed },
++        },
++      },
++    ],
++  });
++  return binding;
++}
++function change(id, update) {
++  service.store.update(service.store.get(id), {
++    assignments: [{ ...service.store.assignments(id)[0], ...update }],
++  });
++  service.publish(id);
++}
++const program = Effect.gen(function* () {
++  yield* TestClock.setTime(start);
++  seed("later", 2000);
++  yield* service.wake();
++  yield* TestClock.adjust(0);
++  seed("earlier", 1000, true, 2);
++  service.publish("earlier");
++  yield* TestClock.adjust(999);
++  NodeAssert.equal(state("earlier"), "running");
++  yield* TestClock.adjust(1);
++  NodeAssert.equal(
++    state("earlier"),
++    "interrupted",
++    "idle expiry must release an ended provider, including pending steer",
++  );
++  NodeAssert.equal(taskState("earlier"), "paused");
++  NodeAssert.equal(state("later"), "running");
++  yield* TestClock.adjust(1000);
++  NodeAssert.equal(state("later"), "interrupted", "must continue after expiry -> release -> wake");
++  NodeAssert.deepEqual(scheduled.sort(), ["earlier", "later"]);
++
++  seed("cancelled", 3000);
++  seed("reassigned", 3500);
++  seed("future", 4000);
++  yield* service.wake();
++  change("cancelled", { state: "interrupted" });
++  change("reassigned", { state: "interrupted", agentId: "replacement" });
++  yield* TestClock.adjust(1500);
++  NodeAssert.equal(state("future"), "running");
++  NodeAssert.equal(scheduled.length, 2, "removed leases must not release twice");
++  yield* TestClock.adjust(500);
++  NodeAssert.equal(state("future"), "interrupted");
++
++  seed("stopped", 5000);
++  yield* service.wake();
++  yield* service.stop();
++  yield* TestClock.adjust(2000);
++  NodeAssert.equal(state("stopped"), "running", "scope stop must cancel the deadline");
++  database.close();
++  database = new OpenBotDatabase(root);
++  yield* database.initialize();
++  service = makeService();
++  seed("pending", 8000);
++  yield* service.recover();
++  NodeAssert.equal(state("stopped"), "interrupted", "restart must settle expired persisted holds");
++  NodeAssert.equal(state("pending"), "running", "restart must preserve a pending persisted hold");
++  yield* TestClock.adjust(2000);
++  NodeAssert.equal(state("pending"), "interrupted", "restart must reconstruct its deadline");
++
++  const binding = seed("live", 9000, false);
++  yield* service.wake();
++  yield* TestClock.adjust(1000);
++  NodeAssert.equal(state("live"), "running", "expiry does not claim to interrupt a live provider");
++  const refusal = yield* Effect.result(
++    service.coding(
++      { agentId: "live", turnId: "live", requesterId: "person" },
++      binding,
++      "submit",
++      "Late",
++    ),
++  );
++  NodeAssert.equal(refusal._tag, "Failure");
++  yield* service.complete("live", "live", "completed");
++  NodeAssert.equal(state("live"), "interrupted");
++  NodeAssert.equal(taskState("live"), "paused");
++  yield* TestClock.adjust(10000);
++  NodeAssert.equal(
++    scheduled.filter((id) => id === "live").length,
++    1,
++    "expired live provider must not repeat",
++  );
++  NodeAssert.deepEqual(errors, []);
++
++  seed("transient-expiry", 20000);
++  yield* service.wake();
++  service.publish("transient-expiry");
++  const realUpdate = service.store.update.bind(service.store);
++  let expiryFailures = 0;
++  service.store.update = (channel, changes, ...rest) => {
++    if (
++      channel.id === "transient-expiry" &&
++      changes?.assignments?.some((item) => item.state === "interrupted") &&
++      expiryFailures === 0
++    ) {
++      expiryFailures++;
++      throw new Error("Injected expiry transaction failure");
++    }
++    return realUpdate(channel, changes, ...rest);
++  };
++  yield* TestClock.adjust(1000);
++  NodeAssert.equal(expiryFailures, 1);
++  yield* TestClock.adjust(100);
++  service.store.update = realUpdate;
++  NodeAssert.equal(
++    state("transient-expiry"),
++    "interrupted",
++    "transient expiry failure must retry while idle",
++  );
++  NodeAssert.equal(taskState("transient-expiry"), "paused");
++
++  seed("exhausted-owner", 22000);
++  const realIds = service.store.ids.bind(service.store);
++  let scanFailures = 0;
++  service.store.ids = () => {
++    scanFailures++;
++    throw new Error("Injected deadline scan failure");
++  };
++  service.publish("exhausted-owner");
++  yield* TestClock.adjust(0);
++  yield* TestClock.adjust(100);
++  yield* TestClock.adjust(200);
++  yield* TestClock.adjust(400);
++  yield* TestClock.adjust(800);
++  NodeAssert.equal(scanFailures, 4, "failure retry budget must be bounded");
++  service.store.ids = realIds;
++  seed("restarted-owner", 30000);
++  yield* service.wake();
++  yield* TestClock.adjust(8400);
++  NodeAssert.equal(
++    state("restarted-owner"),
++    "interrupted",
++    "wake must restart an exhausted deadline owner",
++  );
++  NodeAssert.equal(errors.length, 1, "exhausted failure must remain visible");
++  yield* service.stop();
++});
++try {
++  await Effect.runPromise(program.pipe(Effect.provide(TestClock.layer())));
++  process.stdout.write(
++    `${JSON.stringify({ passed: true, proof: "actual patched ChannelService + ChannelStore + SQLite + TestClock", scheduled })}\n`,
++  );
++} finally {
++  await Effect.runPromise(service.stop());
++  database.close();
++  NodeFS.rmSync(root, { recursive: true, force: true });
++}
+--- /dev/null
++++ b/scripts/channel-coding-origin-e2e.mjs
+@@ -0,0 +1,104 @@
++import * as NodeAssert from "node:assert/strict";
++import * as NodeFS from "node:fs";
++import * as NodeOS from "node:os";
++import * as NodePath from "node:path";
++import { Effect } from "effect";
++import { ChannelService } from "../src/backend/channel-service.ts";
++import { OpenBotDatabase } from "../src/backend/openbot-database.ts";
++
++const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "openbot-channel-origin-"));
++let database = new OpenBotDatabase(root);
++await Effect.runPromise(database.initialize());
++const hooks = {
++  agents: () => [],
++  generate: () => Effect.die("Unexpected model call"),
++  schedule: () => {},
++  interrupt: () => Effect.die("Unexpected provider interruption"),
++  busy: () => true,
++  changed: () => {},
++  error: () => {},
++};
++let service = new ChannelService(database, {}, {}, hooks);
++const command = {
++  type: "send",
++  channelId: "channel",
++  operationId: "operation",
++  text: "request",
++  recipientAgentId: null,
++  replyToMessageId: null,
++  attachmentDraftIds: [],
++};
++const actor = { id: "owner", name: "Owner" };
++const ref = "a".repeat(64);
++const run = (effect) => Effect.runPromise(effect);
++try {
++  service.store.update(
++    service.store.create("channel", {
++      name: "Channel",
++      title: "Channel",
++      instructions: "",
++      members: [],
++      leadAgentId: null,
++    }),
++    {},
++  );
++  const receipt = await run(service.sendAttributed(command, actor, ref));
++  NodeAssert.equal(receipt.messageId, `sled-origin-${ref}`);
++  NodeAssert.equal(
++    service.store.messages("channel").filter((m) => m.id === receipt.messageId).length,
++    1,
++  );
++  NodeAssert.equal(service.store.tasks("channel")[0].requestMessageId, receipt.messageId);
++  NodeAssert.deepEqual(await run(service.sendAttributed(command, actor, ref)), receipt);
++  NodeAssert.equal(
++    service.store.messages("channel").filter((m) => m.id === receipt.messageId).length,
++    1,
++  );
++  await NodeAssert.rejects(
++    run(service.sendAttributed({ ...command, text: "changed" }, actor, ref)),
++  );
++  await NodeAssert.rejects(
++    run(service.sendAttributed(command, { id: "other", name: "Other" }, ref)),
++  );
++  await NodeAssert.rejects(run(service.sendAttributed(command, actor, "b".repeat(64))));
++  service.store.rebuild("channel");
++  NodeAssert.deepEqual(await run(service.sendAttributed(command, actor, ref)), receipt);
++  await run(service.stop());
++  database.close();
++  database = new OpenBotDatabase(root);
++  await run(database.initialize());
++  service = new ChannelService(database, {}, {}, hooks);
++  NodeAssert.deepEqual(await run(service.sendAttributed(command, actor, ref)), receipt);
++  const second = await run(
++    service.sendAttributed(
++      { ...command, operationId: "second", text: "continue" },
++      actor,
++      "c".repeat(64),
++    ),
++  );
++  NodeAssert.notEqual(second.messageId, receipt.messageId);
++  NodeAssert.deepEqual(await run(service.sendAttributed(command, actor, ref)), receipt);
++  const update = service.store.update.bind(service.store);
++  service.store.update = () => {
++    throw new Error("Injected failure before atomic commit");
++  };
++  await NodeAssert.rejects(
++    run(service.sendAttributed({ ...command, operationId: "third" }, actor, "d".repeat(64))),
++  );
++  service.store.update = update;
++  NodeAssert.equal(service.store.message("channel", `sled-origin-${"d".repeat(64)}`), null);
++  const recovered = await run(
++    service.sendAttributed({ ...command, operationId: "third" }, actor, "d".repeat(64)),
++  );
++  NodeAssert.equal(
++    service.store.messages("channel").filter((m) => m.id === recovered.messageId).length,
++    1,
++  );
++  process.stdout.write(
++    "PASS actual ChannelService attributable send, immutable retries, continuation, SQLite restart and event replay\n",
++  );
++} finally {
++  await run(service.stop());
++  database.close();
++  NodeFS.rmSync(root, { recursive: true, force: true });
++}
+--- /dev/null
++++ b/scripts/channel-coding-refusal-e2e.mjs
+@@ -0,0 +1,77 @@
++import assert from "node:assert/strict";
++import * as fs from "node:fs";
++import * as os from "node:os";
++import * as path from "node:path";
++import { Effect } from "effect";
++import { ChannelService } from "../src/backend/channel-service.ts";
++import { ChannelCodingRuntime } from "../src/backend/channel-coding-runtime.ts";
++import { OpenBotDatabase } from "../src/backend/openbot-database.ts";
++
++// Actual maintained runtime, service, store and SQLite. Only the outbound HTTP peer is replaced.
++const root = fs.mkdtempSync(path.join(os.tmpdir(), "openbot-coding-refusal-"));
++let database = new OpenBotDatabase(root);
++await Effect.runPromise(database.initialize());
++const hooks = {
++  agents: () => [], generate: () => Effect.die("Unexpected model call"),
++  schedule: () => {}, interrupt: () => Effect.die("Unexpected interruption"),
++  busy: () => true, changed: () => {}, error: () => {},
++};
++let service = new ChannelService(database, {}, {}, hooks);
++let runtime = new ChannelCodingRuntime(service);
++const run = effect => Effect.runPromise(effect);
++const servers = [{ id: "sled", enabled: true, transport: "http", url: "http://127.0.0.1:1/mcp", headers: [] }];
++const intent = { title: "Owned coding", prompt: "Owned request" };
++const actors = new Map();
++function seed(id) {
++  const channel = service.store.create(id, { name: id, title: id, instructions: "", members: [{ agentId: id }], leadAgentId: null });
++  service.store.update(channel, {
++    messages: [{ id, channelId: id, sequence: 0, author: { kind: "member", id: "routine:owned", name: "Owned" }, taskId: id, superseded: false,
++      message: { id, author: "user", text: "Request", createdAt: new Date().toISOString(), status: "completed" } }],
++    tasks: [{ id, channelId: id, rootTaskId: id, parentTaskId: null, ownerAgentId: id, requestMessageId: id, instruction: "Work", attachmentDraftIds: [], expectedResult: "Result", sourceMessageIds: [], dependencies: [], resources: [], state: "running", revision: 1, assignmentCount: 1, error: null }],
++    assignments: [{ id, channelId: id, taskId: id, taskRevision: 1, agentId: id, turnId: id, requestMessageId: id, state: "running", deliveryId: null, throughSequence: 0, summaryVersion: 0, pendingRevision: null, pendingOutcome: null, awaitedTaskIds: [], resources: [] }],
++  });
++  const actor = { agentId: id, turnId: id, threadId: service.store.context(id, id).threadId };
++  actors.set(id, actor);
++  return actor;
++}
++const assignment = id => service.store.assignments(id)[0];
++const refused = () => new Response(null, { status: 403, headers: { "x-sled-coding-outcome": "refused" } });
++const realFetch = globalThis.fetch;
++try {
++  runtime.configure("sled");
++  globalThis.fetch = async () => refused();
++  await assert.rejects(run(runtime.launch(seed("refused"), intent, servers)), /refused/);
++  await run(service.complete("refused", "refused", "completed"));
++  assert.equal(assignment("refused").state, "completed", "definite refusal must not leave an active reservation until deadline");
++  assert.equal(assignment("refused").coding.result, null, "refusal must not fabricate a coding result");
++  service.store.rebuild("refused");
++  assert.equal(assignment("refused").coding.attestation.refused, true);
++
++  for (const id of ["lost", "unmarked-403", "server-500", "bad-json"]) {
++    globalThis.fetch = async () => {
++      if (id === "lost") throw new TypeError("Lost response after possible acceptance");
++      return id === "bad-json" ? new Response("invalid", { status: 200 }) : new Response(null, { status: id === "server-500" ? 500 : 403 });
++    };
++    await assert.rejects(run(runtime.launch(seed(id), intent, servers)));
++    await run(service.complete(id, id, "completed"));
++    assert.equal(assignment(id).state, "running", `${id} must retain uncertain acceptance`);
++  }
++  await run(service.stop());
++  database.close();
++  database = new OpenBotDatabase(root);
++  await run(database.initialize());
++  service = new ChannelService(database, {}, {}, hooks);
++  runtime = new ChannelCodingRuntime(service);
++  globalThis.fetch = async () => refused();
++  for (const id of ["lost", "unmarked-403", "server-500", "bad-json"]) {
++    await assert.rejects(run(runtime.launch(actors.get(id), intent, servers)), /refused/);
++    assert.equal(assignment(id).state, "running", "later refusal must not erase earlier ambiguous acceptance after restart");
++    assert.notEqual(assignment(id).coding.attestation.refused, true);
++  }
++  console.log("PASS actual ChannelCodingRuntime + ChannelService + SQLite: definitive refusal releases; unmarked/transport/5xx/malformed receipt preserve uncertainty across restart");
++} finally {
++  globalThis.fetch = realFetch;
++  await run(service.stop());
++  database.close();
++  fs.rmSync(root, { recursive: true, force: true });
++}
+--- /dev/null
++++ b/src/backend/channel-coding-runtime.ts
+@@ -0,0 +1,134 @@
++/** Private engine adapter. Credentials never enter a provider request or tool result. */
++import { createHash, createHmac, randomBytes } from "node:crypto";
++import { Effect } from "effect";
++import type { ChannelCommand, McpServerConfig } from "@openbot/contracts/ipc";
++import type { ChannelService } from "./channel-service";
++export { ChannelCodingAuthorityError } from "./channel-coding-extension";
++import { ChannelCodingAuthorityError, type CodingProgress, type CodingBinding, type CodingReceipt } from "./channel-coding-extension";
++import { storedChannelOrigin } from "./channel-coding-origin";
++const digest = (text: string) => createHash("sha256").update(text).digest("hex");
++const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.map(canonical).join(",")}]` :
++  value !== null && typeof value === "object" ? `{${Object.entries(value).filter(([,v])=>v!==undefined)
++    .sort(([a],[b])=>a<b?-1:a>b?1:0).map(([k,v])=>`${JSON.stringify(k)}:${canonical(v)}`).join(",")}}` : JSON.stringify(value);
++export class ChannelCodingRuntime {
++  constructor(readonly channels: ChannelService) {}
++  private config() {
++    const db = this.channels.store.database.connection;
++    db.exec("CREATE TABLE IF NOT EXISTS sled_channel_coding_config (singleton INTEGER PRIMARY KEY CHECK(singleton=1), mcp_id TEXT NOT NULL, credential_key TEXT NOT NULL)");
++    return db;
++  }
++  configure(mcpServerId: string): { configured: true } {
++    if (!mcpServerId || mcpServerId.length > 512) throw new Error("Invalid connector configuration.");
++    this.config().prepare("INSERT INTO sled_channel_coding_config VALUES(1,?,?) ON CONFLICT(singleton) DO UPDATE SET mcp_id=excluded.mcp_id").run(mcpServerId, randomBytes(32).toString("hex"));
++    return { configured: true };
++  }
++  status() { return { capability: "sled-channel-coding-assignment-v1" as const, available: true, progressCapability: "sled-channel-coding-progress-v1" as const }; }
++  send(command: Extract<ChannelCommand,{type:"send"}>, actor: {id:string;name:string}, originRef:string) {
++    return this.channels.sendAttributed(command, actor, originRef);
++  }
++  recover(originRef:string, channelId:string, operationId:string, actorId:string) {
++    const message = this.channels.store.message(channelId, `sled-origin-${originRef}`);
++    if (!message) return null;
++    const origin = storedChannelOrigin(message);
++    if (origin.originRef !== originRef || origin.operationId !== operationId || origin.actorId !== actorId)
++      throw new Error("Attributable channel request conflict.");
++    return { ...origin, channelId, receiptId: `channels:${actorId}:${operationId}` };
++  }
++  private locate(credential:string) {
++    if (!/^[a-f0-9]{64}$/.test(credential)) throw new ChannelCodingAuthorityError("Invalid assignment credential.");
++    const hash=digest(credential);
++    for (const channelId of this.channels.store.ids()) {
++      const assignment=this.channels.store.assignments(channelId).find(a=>a.coding?.attestation?.credentialHash===hash);
++      if (assignment?.coding?.attestation) return { assignment, receipt: assignment.coding, attestation: assignment.coding.attestation };
++    }
++    throw new ChannelCodingAuthorityError("Unknown assignment credential.");
++  }
++  verify(credential:string,purpose:"launch"|"reconcile") {
++    const {assignment,receipt,attestation}=this.locate(credential);
++    const b=receipt.binding;
++    const channel=this.channels.store.get(b.channelId);
++    const task=this.channels.store.tasks(b.channelId).find(t=>t.id===b.taskId);
++    if (receipt.attestation?.refused || !task || channel.archived || !channel.members.some(m=>m.agentId===b.agentId) ||
++      assignment.taskRevision!==b.taskRevision || assignment.turnId!==b.turnId ||
++      task.revision!==b.taskRevision || task.ownerAgentId!==b.agentId ||
++      assignment.requestMessageId!==b.requestMessageId || !receipt.lease || Date.now()>=receipt.lease.expiresAt ||
++      (purpose==="launch" && (assignment.state!=="running" || task.state!=="running")) ||
++      (purpose==="reconcile" && !receipt.result && assignment.state!=="running"))
++      throw new ChannelCodingAuthorityError("Stale channel assignment.");
++    return {originRef:attestation.originRef,requesterKind:attestation.requesterKind,binding:b,
++      expiresAt:receipt.lease.expiresAt,payloadHash:attestation.payloadHash};
++  }
++  renew(credential:string) {
++    const verified=this.verify(credential,"reconcile");
++    return this.channels.coding({agentId:verified.binding.agentId,turnId:verified.binding.turnId,requesterId:verified.binding.requesterId},verified.binding,"renew").pipe(Effect.map(receipt=>{
++      if(!receipt)throw new ChannelCodingAuthorityError("Coding reservation cannot renew.");
++      return receipt;
++    }));
++  }
++  receipt(credential:string) {
++    const verified=this.verify(credential,"reconcile");
++    return this.channels.coding({agentId:verified.binding.agentId,turnId:verified.binding.turnId,requesterId:verified.binding.requesterId},verified.binding,"receipt");
++  }
++  progress(credential:string,event:CodingProgress) {
++    const verified=this.verify(credential,"reconcile");
++    return this.channels.codingProgress({agentId:verified.binding.agentId,turnId:verified.binding.turnId,requesterId:verified.binding.requesterId},verified.binding,event);
++  }
++  submit(credential:string,text:string) {
++    const verified=this.verify(credential,"reconcile");
++    return this.channels.coding({agentId:verified.binding.agentId,turnId:verified.binding.turnId,requesterId:verified.binding.requesterId},verified.binding,"submit",text);
++  }
++  /** Caller derives these execution identities from the actual loaded AgentClient. */
++  launch(actor:{agentId:string;turnId:string;threadId:string},intent:unknown,servers:readonly McpServerConfig[]) {
++    return Effect.gen({self:this},function*(){
++      const channelId=this.channels.store.channelForThread(actor.threadId);
++      if (!channelId) throw new Error("Coding delegation needs an active channel execution.");
++      const assignments=this.channels.store.assignments(channelId);
++      const assignment=assignments.find(a=>a.agentId===actor.agentId&&a.turnId===actor.turnId&&a.state==="running");
++      const tasks=this.channels.store.tasks(channelId);
++      const task=tasks.find(t=>t.id===assignment?.taskId);
++      if (!assignment || !task || !assignment.requestMessageId) throw new Error("No active channel assignment.");
++      const root=tasks.find(t=>t.id===task.rootTaskId)??task;
++      const request=this.channels.store.message(channelId,root.requestMessageId);
++      if (!request) throw new Error("No originating channel request.");
++      const author=request.author;
++      const requesterKind=author.id.startsWith("routine:")?"routine":author.kind==="agent"||author.id.startsWith("agent:")?"agent":"session";
++      const originRef=requesterKind==="session"?storedChannelOrigin(request).originRef:null;
++      const binding:CodingBinding={channelId,taskId:task.id,taskRevision:assignment.taskRevision,
++        assignmentId:assignment.id,agentId:actor.agentId,turnId:actor.turnId,
++        requestMessageId:assignment.requestMessageId,requesterId:author.id,
++        operationId:`sled-${assignment.id}-${assignment.taskRevision}`};
++      const codingActor={agentId:actor.agentId,turnId:actor.turnId,requesterId:author.id};
++      const row=this.config().prepare("SELECT mcp_id,credential_key FROM sled_channel_coding_config WHERE singleton=1").get();
++      if (!row || typeof row.credential_key!=="string") throw new Error("The registered Sled connector is unavailable.");
++      const id=row && typeof row.mcp_id==="string"?row.mcp_id:null;
++      const connector=servers.find(s=>s.id===id && s.enabled && s.transport==="http");
++      if (!connector) throw new Error("The registered Sled connector is unavailable.");
++      const endpoint=new URL(connector.url);
++      if (endpoint.protocol!=="http:" || !["127.0.0.1","localhost","[::1]"].includes(endpoint.hostname)) throw new Error("Connector must use the local Sled endpoint.");
++      endpoint.pathname="/api/openbot/channel-coding";endpoint.search="";endpoint.hash="";
++      const receipt=yield* this.channels.coding(codingActor,binding,"bind");
++      if (!receipt?.lease) throw new Error("Missing coding reservation.");
++      const payloadHash=digest(canonical(intent));
++      if (receipt.attestation && receipt.attestation.payloadHash!==payloadHash) throw new Error("Coding intent changed for this assignment.");
++      // Stable unguessable capability across lost responses/restart, without persisting plaintext.
++      const credential=createHmac("sha256",row.credential_key).update(canonical({binding,payloadHash,reservedAt:receipt.lease.reservedAt})).digest("hex");
++      const next:CodingReceipt={...receipt,attestation:{credentialHash:digest(credential),originRef,requesterKind,payloadHash}};
++      // Persist only a one-way token hash in the existing durable assignment event.
++      this.channels.store.update(this.channels.store.get(channelId),{assignments:[{...assignment,coding:next}]});
++      const headers:Record<string,string>={"Content-Type":"application/json"};
++      for(const item of connector.headers) headers[item.key]=item.value;
++      const response=yield* Effect.tryPromise(()=>fetch(endpoint,{method:"POST",headers,
++        body:JSON.stringify({credential,launch:intent}),redirect:"error",signal:AbortSignal.timeout(30_000)}));
++      if (!response.ok) {
++        // Bare 403 is ambiguous: old servers also returned it after a dispatched launch failed.
++        // A previous attempt may have been accepted, even if this retry is definitely refused.
++        if (!receipt.attestation && response.status === 403 &&
++          response.headers.get("x-sled-coding-outcome") === "refused")
++          yield* this.channels.coding(codingActor,binding,"refuse");
++        throw new Error(`Sled coding request refused (${response.status}).`);
++      }
++      // Server returns only the actual Sled thread receipt, never the private credential.
++      return yield* Effect.tryPromise(()=>response.json() as Promise<unknown>);
++    });
++  }
++}
+--- a/src/backend/protocol.ts
++++ b/src/backend/protocol.ts
+@@ -42,6 +42,8 @@
+ export type RpcMessage = RpcRequest | RpcNotification | RpcResponse;
+
+ export interface DynamicToolCallParams {
++  /** Set by the engine-owned private MCP bridge, never from model arguments. */
++  sledExecutionIsolated?: boolean;
+   threadId: string;
+   turnId: string;
+   callId: string;
+--- a/src/backend/local-mcp-bridge.ts
++++ b/src/backend/local-mcp-bridge.ts
+@@ -83,6 +83,7 @@
+    */
+   call: (
+     params: {
++      sledExecutionIsolated?: boolean;
+       threadId: string;
+       turnId: string;
+       callId: string;
+@@ -327,6 +328,7 @@
+             return yield* route
+               .call(
+                 {
++                  sledExecutionIsolated: route.shareKey === null && member.activeTurnId() !== null,
+                   threadId: member.threadId,
+                   turnId: member.activeTurnId() ?? randomUUID(),
+                   callId: randomUUID(),
+--- a/src/backend/agent/openbot-tool-router.ts
++++ b/src/backend/agent/openbot-tool-router.ts
+@@ -1,3 +1,4 @@
++import { ChannelCodingRuntime } from "../channel-coding-runtime";
+ import { randomUUID } from "node:crypto";
+ import { chatVisualItemType } from "@openbot/contracts/chat-visual";
+ import { sortConversationMessages } from "@openbot/contracts/conversation-order";
+@@ -399,6 +400,19 @@
+                   ? result
+                   : openBotToolFailure(sourceText("error.agent.historyUnavailable")),
+               );
++            return;
++          }
++          if (params.namespace === "openbot" && params.tool === "channel_sled_coding") {
++            const scope = this.#conversation.historyScope(params.threadId, client);
++            const snapshot = scope ? this.#conversation.snapshotWithTurn(scope.agentId, params.turnId) : undefined;
++            const isolated = client.provider === "codex" || client.provider === "claude" || params.sledExecutionIsolated === true;
++            if (!scope || !snapshot || snapshot.threadId !== scope.threadId || !isolated || client.provider === "opencode") {
++              client.respond(request.id, openBotToolFailure("Coding needs an authenticated, isolated active execution."));
++              return;
++            }
++            const result = yield* new ChannelCodingRuntime(this.#channels).launch({agentId:scope.agentId,
++              turnId:params.turnId,threadId:scope.threadId},params.arguments,this.#hooks.enabledMcpServers());
++            if (!request.signal?.aborted && client.running) client.respond(request.id,openBotToolResult(result));
+             return;
+           }
+           // Keep the transport identifiers and abort signal; enter the original dispatch below.
+--- a/src/backend/channel-tools.ts
++++ b/src/backend/channel-tools.ts
+@@ -25,6 +25,11 @@
+   "It changes only this channel, and only in a task that a person's message started, not a routine run.";
+
+ export const CHANNEL_TOOL_DEFINITIONS: readonly { name: string; description: string; shape: z.ZodRawShape }[] = [
++  { name: "channel_sled_coding", description: "Delegate this active channel assignment to Sled Code. Use the configured coding destination and wait for its exact result. Execution identity and permissions are supplied privately by the engine.",
++    shape: { title:z.string().min(1).max(256),prompt:z.string().min(1).max(200000),
++      projectId:z.string().optional(),environmentId:z.string().optional(),
++      modelSelection:z.unknown().optional(),runtimeMode:z.string().optional(),interactionMode:z.string().optional(),workspaceStrategy:z.unknown().optional() } },
++
+   {
+     name: "channel_history",
+     description: "Read earlier shared channel messages. This never starts another agent.",
+--- /dev/null
++++ b/scripts/channel-coding-progress-e2e.mjs
+@@ -0,0 +1,73 @@
++import assert from "node:assert/strict";
++import * as fs from "node:fs";
++import * as os from "node:os";
++import * as path from "node:path";
++import { Effect } from "effect";
++import { ChannelService } from "../src/backend/channel-service.ts";
++import { ChannelCodingRuntime } from "../src/backend/channel-coding-runtime.ts";
++import { OpenBotDatabase } from "../src/backend/openbot-database.ts";
++
++// Actual maintained runtime, service, store and SQLite. Only the outbound HTTP peer is replaced.
++const root = fs.mkdtempSync(path.join(os.tmpdir(), "openbot-coding-refusal-"));
++let database = new OpenBotDatabase(root);
++await Effect.runPromise(database.initialize());
++const delivered = [];
++const hooks = {
++  steer: (agentId, threadId, turnId, messageId, text) => Effect.sync(() => { delivered.push({agentId, threadId, turnId, messageId, text}); return "accepted"; }),
++  agents: () => [], generate: () => Effect.die("Unexpected model call"),
++  schedule: () => {}, interrupt: () => Effect.die("Unexpected interruption"),
++  busy: () => true, changed: () => {}, error: () => {},
++};
++let service = new ChannelService(database, {}, {}, hooks);
++let runtime = new ChannelCodingRuntime(service);
++const run = effect => Effect.runPromise(effect);
++const servers = [{ id: "sled", enabled: true, transport: "http", url: "http://127.0.0.1:1/mcp", headers: [] }];
++const intent = { title: "Owned coding", prompt: "Owned request" };
++const actors = new Map();
++function seed(id) {
++  const channel = service.store.create(id, { name: id, title: id, instructions: "", members: [{ agentId: id }], leadAgentId: null });
++  service.store.update(channel, {
++    messages: [{ id, channelId: id, sequence: 0, author: { kind: "member", id: "routine:owned", name: "Owned" }, taskId: id, superseded: false,
++      message: { id, author: "user", text: "Request", createdAt: new Date().toISOString(), status: "completed" } }],
++    tasks: [{ id, channelId: id, rootTaskId: id, parentTaskId: null, ownerAgentId: id, requestMessageId: id, instruction: "Work", attachmentDraftIds: [], expectedResult: "Result", sourceMessageIds: [], dependencies: [], resources: [], state: "running", revision: 1, assignmentCount: 1, error: null }],
++    assignments: [{ id, channelId: id, taskId: id, taskRevision: 1, agentId: id, turnId: id, requestMessageId: id, state: "running", deliveryId: null, throughSequence: 0, summaryVersion: 0, pendingRevision: null, pendingOutcome: null, awaitedTaskIds: [], resources: [] }],
++  });
++  const actor = { agentId: id, turnId: id, threadId: service.store.context(id, id).threadId };
++  actors.set(id, actor);
++  return actor;
++}
++const assignment = id => service.store.assignments(id)[0];
++const refused = () => new Response(null, { status: 403, headers: { "x-sled-coding-outcome": "refused" } });
++
++const binding = id => ({channelId:id, taskId:id, taskRevision:1, assignmentId:id, agentId:id, turnId:id, requestMessageId:id, requesterId:"routine:owned", operationId:"operation"});
++const actor = id => ({agentId:id,turnId:id,requesterId:"routine:owned"});
++const event = {eventId:"a".repeat(64),status:"needs_approval",updatedAt:"2026-11-04T19:30:00.000Z"};
++try {
++  seed("one"); seed("other");
++  await run(service.coding(actor("one"), binding("one"), "bind"));
++  const receipt = await run(service.codingProgress(actor("one"), binding("one"), event));
++  assert.equal(receipt.delivery,"accepted");
++  assert.equal(delivered.length,1);
++  assert.equal(delivered[0].agentId,"one"); assert.equal(delivered[0].turnId,"one");
++  assert.equal(delivered[0].threadId,service.store.context("one","one").threadId);
++  assert.equal(assignment("one").state,"running"); assert.equal(assignment("one").coding.result,null);
++  assert.equal(service.store.messages("one").filter(m => m.message.author === "assistant").length,0);
++  await assert.rejects(run(service.codingProgress(actor("other"),binding("one"),event)),e => /authority/.test(String(e.cause)));
++  await assert.rejects(run(service.codingProgress(actor("one"),binding("one"),{...event,status:"needs_input"})),e => /conflict/.test(String(e.cause)));
++  hooks.steer = (...args) => Effect.sync(() => { delivered.push(args); throw new Error("response lost"); });
++  const uncertain = {...event,eventId:"b".repeat(64),status:"needs_input"};
++  assert.equal((await run(service.codingProgress(actor("one"),binding("one"),uncertain))).delivery,"uncertain");
++  await run(service.stop()); database.close();
++  database = new OpenBotDatabase(root); await run(database.initialize());
++  service = new ChannelService(database, {}, {}, hooks);
++  assert.deepEqual(await run(service.codingProgress(actor("one"),binding("one"),event)),receipt);
++  assert.equal((await run(service.codingProgress(actor("one"),binding("one"),uncertain))).delivery,"uncertain");
++  assert.equal(delivered.length,2,"no duplicate after SQLite reopen and ambiguous response");
++  service.store.rebuild("one");
++  assert.equal(assignment("one").coding.progress.length,2,"event journal replay preserves dedupe");
++  const channel=service.store.get("one");
++  service.store.update(channel,{tasks:service.store.tasks("one").map(t=>({...t,revision:2}))});
++  await assert.rejects(run(service.codingProgress(actor("one"),binding("one"),event)),e => /stale/.test(String(e.cause)));
++  assert.equal(delivered.length,2);
++  console.log("PASS actual ChannelService + SQLite reopen: exact bot, nonterminal, stable receipt, ambiguous dedupe, conflict and stale refusal");
++} finally { await run(service.stop()); database.close(); fs.rmSync(root,{recursive:true,force:true}); }

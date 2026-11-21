@@ -1,0 +1,1092 @@
+--- a/packages/contracts/src/team-protocol/current.ts
++++ b/packages/contracts/src/team-protocol/current.ts
+@@ -292,6 +292,7 @@
+   SLED_IMPORT_CAPABILITY,
+   "sled-files-identity-v1",
+   "sled-files-upload-recovery-v1",
++  "sled-queue-attachments-v1",
+   SLED_CHANNEL_CODING_CAPABILITY,
+   BROWSER_SECRET_CAPABILITY,
+   ...TEAM_PROTOCOL_V9_CAPABILITIES,
+@@ -602,6 +603,7 @@
+   SLED_IMPORT_CAPABILITY,
+   "sled-files-identity-v1",
+   "sled-files-upload-recovery-v1",
++  "sled-queue-attachments-v1",
+   SLED_CHANNEL_CODING_CAPABILITY,
+   AGENT_REVIEW_CAPABILITY,
+   AGENT_ADOPTION_CAPABILITY,
+--- a/packages/contracts/src/team-protocol/optional-routes.ts
++++ b/packages/contracts/src/team-protocol/optional-routes.ts
+@@ -1,3 +1,4 @@
++import {SLED_QUEUE_ATTACHMENTS_CODECS} from "./sled-queue-attachments-v1";
+ import { SLED_FILES_UPLOAD_CODECS } from "./sled-files-upload-v1";
+ import { SLED_FILES_IDENTITY_CODECS } from "./sled-files-identity-v1";
+ import { SLED_IMPORT_CODECS } from "./durable-agent-import-v1";
+@@ -145,6 +146,7 @@
+   ...SLED_IMPORT_CODECS,
+   ...SLED_FILES_IDENTITY_CODECS,
+   ...SLED_FILES_UPLOAD_CODECS,
++  ...SLED_QUEUE_ATTACHMENTS_CODECS,
+   ...LIVE_ACTIVITY_PUSH_CODECS,
+   ...PUSH_NOTIFICATIONS_CODECS,
+   ...ANDROID_PUSH_NOTIFICATIONS_CODECS,
+--- /dev/null
++++ b/packages/contracts/src/team-protocol/sled-queue-attachments-v1.ts
+@@ -0,0 +1,116 @@
++import { fields, identifier, nullable, string, count, oneOf, list, type OptionalRouteCodec } from "./admin-wire";
++import { isDynamicRecord } from "../runtime-values";
++import { decodeOriginalUpload } from "./sled-files-upload-v1";
++const target = {
++  environmentId: identifier,
++  hostId: identifier,
++  agentId: identifier,
++  threadId: identifier,
++  taskId: nullable(identifier),
++  deliveryId: identifier,
++  editId: identifier,
++};
++const hash = (value: unknown) => {
++  if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value)) throw new Error("Invalid revision");
++  return value;
++};
++const id = (value: unknown): string => {
++  identifier(value);
++  if (typeof value !== "string") throw new Error("Invalid identifier");
++  return value;
++};
++const upload = (value: unknown) => {
++  if (
++    !isDynamicRecord(value) ||
++    Object.keys(value).some((k) => k !== "identity" && k !== "draftId") ||
++    !isDynamicRecord(value.identity) ||
++    "environmentId" in value.identity
++  )
++    throw new Error("Invalid draft");
++  const { environmentId: _bound, ...identity } = decodeOriginalUpload(
++    { ...value.identity, environmentId: "bound-by-route" },
++    false,
++  );
++  return { identity: { ...identity }, draftId: id(value.draftId) };
++};
++const editKeys = {
++  ...target,
++  expectedRevision: hash,
++  text: string(100000),
++  keepAttachmentIds: list(identifier, 10),
++  uploads: list((v) => ({ ...upload(v), identity: { ...upload(v).identity } }), 10),
++};
++export function decodeQueueAttachmentContext(value: unknown) {
++  if (!isDynamicRecord(value) || Object.keys(value).some((k) => !Object.hasOwn(target, k)))
++    throw new Error("Invalid queue context");
++  return targetValue(value);
++}
++function targetValue(value: unknown) {
++  if (!isDynamicRecord(value)) throw new Error("Invalid queue target");
++  return {
++    environmentId: id(value.environmentId),
++    hostId: id(value.hostId),
++    agentId: id(value.agentId),
++    threadId: id(value.threadId),
++    taskId: value.taskId === null ? null : id(value.taskId),
++    deliveryId: id(value.deliveryId),
++    editId: id(value.editId),
++  };
++}
++export function decodeQueueAttachmentEdit(value: unknown) {
++  if (
++    !isDynamicRecord(value) ||
++    Object.keys(value).some((k) => !Object.hasOwn(editKeys, k)) ||
++    typeof value.text !== "string" ||
++    value.text.length > 100000 ||
++    !Array.isArray(value.keepAttachmentIds) ||
++    !Array.isArray(value.uploads)
++  )
++    throw new Error("Invalid queue edit");
++  if (!value.uploads.length || value.uploads.length + value.keepAttachmentIds.length > 10)
++    throw new Error("Invalid attachment count");
++  return {
++    ...targetValue(value),
++    expectedRevision: hash(value.expectedRevision),
++    text: value.text,
++    keepAttachmentIds: value.keepAttachmentIds.map(id),
++    uploads: value.uploads.map(upload),
++  };
++}
++const attachment = fields({
++  id: identifier,
++  name: string(255),
++  size: count,
++  kind: oneOf("image", "file"),
++  mimeType: string(255),
++  previewKind: oneOf("image", "pdf", "text", "none"),
++});
++const receipt = fields({
++  requestHash: hash,
++  deliveryId: identifier,
++  editId: identifier,
++  expectedRevision: hash,
++  messageId: identifier,
++  attachments: list(attachment, 10),
++});
++export const SLED_QUEUE_ATTACHMENTS_CAPABILITY = "sled-queue-attachments-v1";
++export const SLED_QUEUE_ATTACHMENTS_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map<
++  string,
++  OptionalRouteCodec
++>([
++  [
++    "/v1/sled/queue-attachments/context",
++    {
++      request: decodeQueueAttachmentContext,
++      response: (_status, value) =>
++        fields({ expectedRevision: hash, text: string(100000), keepAttachmentIds: list(identifier, 10) })(value),
++    },
++  ],
++  ...["save", "result"].map(
++    (action) =>
++      [
++        `/v1/sled/queue-attachments/${action}`,
++        { request: decodeQueueAttachmentEdit, response: (_status: number, value: unknown) => nullable(receipt)(value) },
++      ] as const,
++  ),
++]);
+--- a/src/backend/agent-service.ts
++++ b/src/backend/agent-service.ts
+@@ -1,3 +1,4 @@
++import type { QueueAttachmentAcquireCommit, QueueAttachmentEdit } from "./mailbox-store";
+ import { steerChannelProgress } from "./channel-progress-steer";
+ import { createHash, randomUUID } from "node:crypto";
+ import { EventEmitter } from "node:events";
+@@ -4736,6 +4737,24 @@
+       throw new Error("Original message authority differs.");
+   }
+ 
++  validateQueueAttachmentTarget(input: Pick<QueueAttachmentEdit, "agentId" | "threadId" | "taskId">): void {
++    this.#validateMessageThread({agentId: input.agentId, expectedThreadId: input.threadId, text: "",
++      ...(input.taskId === null ? {} : {taskId: input.taskId})});
++  }
++
++  queueAttachmentContext(input: Pick<QueueAttachmentEdit, "principal" | "environmentId" | "hostId" | "agentId" | "threadId" | "taskId" | "deliveryId" | "editId">) {
++    this.validateQueueAttachmentTarget(input);
++    return this.#mailbox.queueAttachmentContext(input);
++  }
++
++  queueAttachmentResult(input: QueueAttachmentEdit, validate: () => void) {
++    return this.#mailbox.queueAttachmentResult(input, () => {this.validateQueueAttachmentTarget(input);validate();});
++  }
++
++  saveQueueAttachments(input: QueueAttachmentEdit, validate: () => void, acquireCommit: QueueAttachmentAcquireCommit, sender?: ConversationMessageSender) {
++    return this.#queue.saveAttachments(input, () => {this.validateQueueAttachmentTarget(input);validate();}, acquireCommit, sender);
++  }
++
+   validateOriginalUpload(identity: OriginalUploadIdentity): void {
+     this.#validateMessageThread({ agentId: identity.agentId, expectedThreadId: identity.threadId, text: "", ...(identity.taskId === null ? {} : { taskId: identity.taskId }) });
+   }
+--- a/src/backend/agent/queue-controls.ts
++++ b/src/backend/agent/queue-controls.ts
+@@ -12,7 +12,7 @@
+ import type { AgentStore } from "../agent-store";
+ import type { ChannelAssignment } from "../channel-store";
+ import { causeHelpers } from "../effect-boundary";
+-import type { MailboxStore } from "../mailbox-store";
++import type { QueueAttachmentAcquireCommit, QueueAttachmentEdit, MailboxStore } from "../mailbox-store";
+ import { decodeRecordResponse } from "../protocol";
+ import type { ConversationRuntime } from "./conversation-runtime";
+ import type { CustomEndpoints } from "./custom-endpoints";
+@@ -174,6 +174,22 @@
+     return this.#mailbox.listQueue(agentId);
+   }, Effect.uninterruptible);
+ 
++  readonly saveAttachments = Effect.fn("QueueControls.saveAttachments")(function* (
++    this: QueueControls, input: QueueAttachmentEdit, validate: () => void, acquireCommit: QueueAttachmentAcquireCommit, sender?: ConversationMessageSender,
++  ) {
++    if (this.#hooks.channelAssignment(input.deliveryId))
++      return yield* new QueueOperationFailed({ cause: new Error("Channel queue unavailable") });
++    const receipt = yield* this.#mailbox.saveQueueAttachments(input, validate, acquireCommit, sender).pipe(toQueueOperationFailed);
++    const snapshot = this.#conversation.snapshotToUpdate(input.agentId);
++    if (snapshot) {
++      this.#mailboxSync.syncMailboxMessages(snapshot);
++      this.#conversation.emitConversation(snapshot, "queue.message-updated");
++    }
++    this.#mailboxSync.emitQueue(input.agentId);
++    this.#drain.scheduleDrain(input.agentId);
++    return receipt;
++  }, Effect.uninterruptible);
++
+   readonly update = Effect.fn("QueueControls.update")(function* (
+     this: QueueControls,
+     input: UpdateQueuedMessageInput,
+--- a/src/backend/mailbox-store.ts
++++ b/src/backend/mailbox-store.ts
+@@ -26,6 +26,7 @@
+   AGENT_RUNTIME_ATTENTION_LIMIT,
+   AGENT_RUNTIME_TEXT_LIMIT,
+   AGENT_RUNTIME_WORKING_ITEMS_LIMIT,
++  isAttachmentSummary,
+   isConversationMessageSender,
+   isMessageReaction,
+   QUEUE_STEER_FALLBACKS,
+@@ -163,6 +164,40 @@
+ 
+ function isActiveDelivery(delivery: StoredDelivery): boolean {
+   return delivery.status === "queued" || delivery.status === "starting" || delivery.status === "running";
++}
++
++export interface QueueAttachmentEdit {
++  principal: string;
++  environmentId: string;
++  hostId: string;
++  agentId: string;
++  threadId: string;
++  taskId: string | null;
++  deliveryId: string;
++  editId: string;
++  expectedRevision: string;
++  text: string;
++  keepAttachmentIds: string[];
++  uploads: Array<{ identity: OriginalUploadIdentity; draftId: string }>;
++}
++export interface QueueAttachmentReceipt {
++  requestHash: string;
++  deliveryId: string;
++  editId: string;
++  expectedRevision: string;
++  messageId: string;
++  attachments: AttachmentSummary[];
++}
++export interface QueueAttachmentCommitIdentity {
++ purpose: "queue-attachments";environmentId:string;hostId:string;agentId:string;threadId:string;taskId:string|null;
++ deliveryId:string;editId:string;expectedRevision:string;requestHash:string;
++}
++export interface QueueAttachmentCommitPermit {assertCommit():void;release():Promise<void>}
++export type QueueAttachmentAcquireCommit=(principal:string,identity:QueueAttachmentCommitIdentity)=>Promise<QueueAttachmentCommitPermit>;
++interface QueueAttachmentGuard {
++  acquireCommit: QueueAttachmentAcquireCommit;
++  input: QueueAttachmentEdit;
++  validateAuthority: () => void;
+ }
+ 
+ export interface OriginalUploadIdentity {
+@@ -1991,6 +2026,7 @@
+       throw new QueueEditRejectedError(sourceText("error.backend.editUnavailable"));
+     if (draftIds.length > MAX_ATTACHMENTS || new Set(draftIds).size !== draftIds.length)
+       throw new Error("Invalid edit attachment count.");
++    this.assertOriginalUploadDraftOwner(draftIds);
+     const drafts = draftIds.map((id) => {
+       const draft = this.#state.drafts.find((item) => item.id === id);
+       if (!draft) throw new Error(sourceText("error.backend.attachmentDraftGone", { id }));
+@@ -2090,6 +2126,81 @@
+     if (this.#queueUpdates.has(deliveryId)) throw new Error(sourceText("error.backend.messageBeingSaved"));
+   }
+ 
++  queueAttachmentContext(input: Pick<QueueAttachmentEdit, "principal" | "environmentId" | "hostId" | "threadId" | "agentId" | "deliveryId" | "editId" | "taskId">) {
++    this.#assertQueueNotUpdating(input.deliveryId);
++    const delivery = this.#state.deliveries.find(d => d.id === input.deliveryId && d.recipientAgentId === input.agentId);
++    if (delivery?.status !== "queued" || delivery.finishedEditOutcomes?.[input.editId]) throw new Error("Queue edit unavailable");
++    const message = this.#requireMessage(delivery.messageId);
++    if ((message.taskId ?? null) !== input.taskId || message.channelId || message.messaging || message.sender.kind !== "user") throw new Error("Queue target differs");
++    const key=`sled-queue-owner:${input.editId}`;
++    const owner=queueAttachmentOwnerHash(input);
++    const previous=this.#state.idempotency[key];
++    if(previous!==undefined && previous!==owner)throw new Error("Queue edit owner differs");
++    this.#state.idempotency[key]=owner;
++    try{this.beginQueueEdit(input.agentId,input.deliveryId,input.editId);}
++    catch(cause){if(previous===undefined)delete this.#state.idempotency[key];else this.#state.idempotency[key]=previous;throw cause;}
++    return { expectedRevision: this.queueAttachmentRevision(input.agentId, input.deliveryId),text:message.text,keepAttachmentIds:message.attachments.map(a=>a.id) };
++  }
++
++  /** A revision of the persisted item, including edit history so content ABA is stale. */
++  queueAttachmentRevision(agentId: string, deliveryId: string): string {
++    const delivery = this.#state.deliveries.find(d => d.id === deliveryId && d.recipientAgentId === agentId);
++    if (delivery?.status !== "queued") throw new Error("Queue item unavailable");
++    const message = this.#requireMessage(delivery.messageId);
++    return createHash("sha256").update(JSON.stringify({ delivery, message })).digest("hex");
++  }
++
++  queueAttachmentResult(input: QueueAttachmentEdit, validateAuthority: () => void): QueueAttachmentReceipt | null {
++    validateAuthority();
++    const raw = this.#state.idempotency[`sled-queue-edit:${input.editId}`];
++    if (!raw) return null;
++    return parseStoredJson("queue attachment receipt", raw, receipt => {
++    if(!isRecord(receipt) || typeof receipt.requestHash!=="string" || typeof receipt.deliveryId!=="string" || typeof receipt.editId!=="string" || typeof receipt.expectedRevision!=="string" || typeof receipt.messageId!=="string" || !Array.isArray(receipt.attachments) || !receipt.attachments.every(isAttachmentSummary))throw new Error("Invalid stored queue receipt");
++    if (receipt.requestHash !== queueAttachmentRequestHash(input)) throw new Error("Queue edit identity differs");
++    return {requestHash:receipt.requestHash,deliveryId:receipt.deliveryId,editId:receipt.editId,expectedRevision:receipt.expectedRevision,messageId:receipt.messageId,attachments:receipt.attachments};
++    });
++  }
++
++  #assertQueueAttachmentEdit({ input, validateAuthority }: QueueAttachmentGuard): void {
++    validateAuthority();
++    if(this.#state.idempotency[`sled-queue-owner:${input.editId}`]!==queueAttachmentOwnerHash(input))throw new Error("Queue edit owner differs");
++    const delivery = this.#state.deliveries.find(d => d.id === input.deliveryId && d.recipientAgentId === input.agentId);
++    if (delivery?.status !== "queued" || delivery.editId !== input.editId ||
++      this.queueAttachmentRevision(input.agentId, input.deliveryId) !== input.expectedRevision)
++      throw new Error("Queue revision changed");
++    const message = this.#requireMessage(delivery.messageId);
++    if ((message.taskId ?? null) !== input.taskId || message.channelId || message.messaging || message.sender.kind !== "user")
++      throw new Error("Queue target differs");
++    for (const upload of input.uploads) {
++      for (const key of ["principal", "environmentId", "hostId", "agentId", "threadId", "taskId"] as const)
++        if (upload.identity[key] !== input[key]) throw new Error("Original draft owner differs");
++      const receipt = this.originalUploadStatus(upload.identity, validateAuthority);
++      if (receipt?.state !== "ready" || receipt.attachment.id !== upload.draftId)
++        throw new Error("Original draft unavailable");
++    }
++  }
++
++  saveQueueAttachments(input: QueueAttachmentEdit, validateAuthority: () => void, acquireCommit: QueueAttachmentAcquireCommit, sender?: ConversationMessageSender) {
++    return Effect.gen({ self: this }, function* () {
++      const previous = yield* storedSync(() => this.queueAttachmentResult(input, validateAuthority));
++      if (previous) return previous;
++      yield* storedSync(() => {
++        this.#assertQueueAttachmentEdit({input,validateAuthority,acquireCommit});
++        const key=`sled-queue-attempt:${input.editId}`;
++        if(this.#state.idempotency[key])throw new Error("Queue edit attempt uncertain; result lookup required");
++        this.#state.idempotency[key]=queueAttachmentRequestHash(input);
++        try {this.#persist("queue.attachment-attempt");}catch(cause){delete this.#state.idempotency[key];throw cause;}
++      });
++      yield* this.updateQueuedMessage(input.agentId, input.deliveryId, input.text, input.keepAttachmentIds,
++        input.uploads.map(u => u.draftId), input.editId, sender, { input, validateAuthority, acquireCommit });
++      return yield* storedSync(() => {
++        const receipt = this.queueAttachmentResult(input, validateAuthority);
++        if (!receipt) throw new Error("Queue receipt unavailable");
++        return receipt;
++      });
++    }).pipe(Effect.uninterruptible);
++  }
++
+   updateQueuedMessage(
+     agentId: string,
+     deliveryId: string,
+@@ -2098,6 +2209,7 @@
+     attachmentDraftIds: string[],
+     editId?: string,
+     sender?: ConversationMessageSender,
++    guard?: QueueAttachmentGuard,
+   ) {
+     return Effect.gen({ self: this }, function* () {
+       yield* storedSync(() => this.#assertQueueNotUpdating(deliveryId));
+@@ -2110,6 +2222,7 @@
+         attachmentDraftIds,
+         editId,
+         sender,
++        guard,
+       ).pipe(
+         Effect.ensuring(
+           Effect.sync(() => {
+@@ -2129,8 +2242,16 @@
+     attachmentDraftIds: string[],
+     editId: string | undefined,
+     sender: ConversationMessageSender | undefined,
++    guard: QueueAttachmentGuard | undefined,
+   ): Effect.fn.Return<void, StoredStateFailure> {
+-    try {
++    let permit: QueueAttachmentCommitPermit | undefined;
++    return yield* Effect.gen({self:this},function*(){
++    try {
++      this.assertOriginalUploadDraftOwner(attachmentDraftIds, guard ? {
++        principal: guard.input.principal, environmentId: guard.input.environmentId, hostId: guard.input.hostId,
++        agentId: guard.input.agentId, threadId: guard.input.threadId, taskId: guard.input.taskId,
++      } : undefined);
++      if (guard) this.#assertQueueAttachmentEdit(guard);
+       const delivery = this.#state.deliveries.find(
+         (candidate) => candidate.id === deliveryId && candidate.recipientAgentId === agentId,
+       );
+@@ -2171,6 +2292,8 @@
+       const draftAttachmentPaths = drafts.map((draft) => draft.path);
+       let newAttachmentPaths: string[] = [];
+       let releasedOwned: StoredDraft[] = [];
++      let mutationStarted = false;
++      const receiptKey = guard ? `sled-queue-edit:${guard.input.editId}` : undefined;
+       {
+         const updated = yield* Effect.result(
+           Effect.gen({ self: this }, function* () {
+@@ -2200,6 +2323,18 @@
+               newAttachmentPaths = replacementAttachments
+                 .filter((attachment) => !message.attachments.some((item) => item.id === attachment.id))
+                 .map((attachment) => attachment.path);
++              if (guard) {
++                if(guard.input.uploads.some((upload,index)=>committedDrafts[index]?.sha256!==upload.identity.sha256 || committedDrafts[index]?.size!==upload.identity.size))throw new Error("Original attachment bytes changed");
++                const input=guard.input;
++                permit=yield* Effect.tryPromise({try:()=>guard.acquireCommit(input.principal,{
++                  purpose:"queue-attachments",environmentId:input.environmentId,hostId:input.hostId,agentId:input.agentId,
++                  threadId:input.threadId,taskId:input.taskId,deliveryId:input.deliveryId,editId:input.editId,
++                  expectedRevision:input.expectedRevision,requestHash:queueAttachmentRequestHash(input),
++                }),catch:cause=>new StoredStateFailure({cause})});
++                permit.assertCommit();
++                this.#assertQueueAttachmentEdit(guard);
++              }
++              mutationStarted = true;
+               message.text = rewriteAttachmentReferences(normalizedText, (reference) => {
+                 const attachment = replacementByReferenceId.get(reference.attachmentId);
+                 return attachment ? { attachmentId: attachment.id, name: attachment.name } : null;
+@@ -2226,6 +2361,14 @@
+               this.#changes.messageIds.add(message.id);
+               this.#changes.deliveryIds.add(delivery.id);
+               for (const id of [...draftIds, ...releasedOwned.map((draft) => draft.id)]) this.#changes.draftIds.add(id);
++              if (guard && receiptKey) {
++                const receipt: QueueAttachmentReceipt = {
++                  requestHash: queueAttachmentRequestHash(guard.input), deliveryId, editId: guard.input.editId,
++                  expectedRevision: guard.input.expectedRevision, messageId: message.id,
++                  attachments: replacementAttachments.map(toAttachmentSummary),
++                };
++                this.#state.idempotency[receiptKey] = JSON.stringify(receipt);
++              }
+               this.#persist(
+                 "message.updated",
+                 `mailbox:message-updated:${deliveryId}:${randomUUID()}`,
+@@ -2238,6 +2381,8 @@
+         );
+         if (Result.isFailure(updated)) {
+           const error = updated.failure.cause;
++          if (mutationStarted) {
++          if (receiptKey) delete this.#state.idempotency[receiptKey];
+           message.text = previous.text;
+           message.attachments = previous.attachments;
+           setSenderMember(message, previous.senderMember);
+@@ -2252,6 +2397,7 @@
+               this.#state.drafts.push(draft);
+             }
+           }
++          }
+           yield* this.#files
+             .removeAttachmentDirectories(newAttachmentPaths)
+             .pipe(Effect.mapError(({ cause }) => new StoredStateFailure({ cause })));
+@@ -2265,6 +2411,10 @@
+     } catch (cause) {
+       return yield* new StoredStateFailure({ cause });
+     }
++    }).pipe(Effect.ensuring(Effect.suspend(()=>{
++      const held=permit;
++      return held ? Effect.tryPromise({try:()=>held.release(),catch:cause=>new StoredStateFailure({cause})}).pipe(Effect.orDie) : Effect.void;
++    })));
+   }, Effect.uninterruptible);
+ 
+   /**
+@@ -3392,3 +3542,17 @@
+ ): message is StoredMessage & { sender: { kind: "agent"; agentId: string }; replyToMessageId: string } {
+   return message.sender.kind === "agent" && message.replyToMessageId !== null && message.expectsReply === false;
+ }
++
++function queueAttachmentRequestHash(input: QueueAttachmentEdit): string {
++  return createHash("sha256").update(JSON.stringify([
++    input.principal, input.environmentId, input.hostId, input.agentId, input.threadId, input.taskId,
++    input.deliveryId, input.editId, input.expectedRevision, input.text, input.keepAttachmentIds,
++    input.uploads.map(u => [u.draftId, u.identity.operationId, u.identity.name, u.identity.mimeType,
++      u.identity.size, u.identity.sha256, u.identity.principal, u.identity.environmentId,
++      u.identity.hostId, u.identity.agentId, u.identity.threadId, u.identity.taskId]),
++  ])).digest("hex");
++}
++
++function queueAttachmentOwnerHash(input:Pick<QueueAttachmentEdit,"principal"|"environmentId"|"hostId"|"agentId"|"threadId"|"taskId"|"deliveryId"|"editId">):string{
++ return createHash("sha256").update(JSON.stringify([input.principal,input.environmentId,input.hostId,input.agentId,input.threadId,input.taskId,input.deliveryId,input.editId])).digest("hex");
++}
+--- /dev/null
++++ b/src/backend/queue-attachments.test.ts
+@@ -0,0 +1,311 @@
++import { createHash } from "node:crypto";
++import { mkdtemp, rm, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { expect, it, vi } from "vitest";
++import { MailboxStore } from "./mailbox-store";
++const acquire = async () => ({ assertCommit() {}, async release() {} });
++const copyGate = vi.hoisted(() => ({ after: async (_destination: string) => {} }));
++vi.mock("node:fs/promises", async (original) => {
++  const actual = await original<typeof import("node:fs/promises")>();
++  return {
++    ...actual,
++    copyFile: async (...args: Parameters<typeof actual.copyFile>) => {
++      await actual.copyFile(...args);
++      await copyGate.after(String(args[1]));
++    },
++  };
++});
++import { OpenBotDatabase } from "./openbot-database";
++import { runCauseEffect as run } from "./effect-boundary";
++
++it("refuses legacy queue consumption of original owned drafts", async () => {
++  const root = await mkdtemp(join(tmpdir(), "queue-owned-"));
++  const db = new OpenBotDatabase(root);
++  try {
++    const m = new MailboxStore(root, join(root, "shared"), db);
++    await run(m.initialize());
++    const bytes = Buffer.from("fixture");
++    const identity = {
++      operationId: "upload",
++      principal: "session",
++      environmentId: "env",
++      hostId: "host",
++      agentId: "agent",
++      threadId: "thread",
++      taskId: null,
++      name: "file.txt",
++      mimeType: "text/plain",
++      size: bytes.length,
++      sha256: createHash("sha256").update(bytes).digest("hex"),
++    };
++    const draft = await run(m.prepareOriginalUpload(identity, bytes, () => {}));
++    const queued = await run(m.enqueue({ sender: { kind: "user" }, recipientAgentIds: ["agent"], text: "original" }));
++    const delivery = queued.deliveries[0]!.id;
++    m.beginQueueEdit("agent", delivery, "edit");
++    await expect(
++      run(m.updateQueuedMessage("agent", delivery, "changed", [], [draft.attachment.id], "edit")),
++    ).rejects.toThrow("Original draft owner differs");
++    expect(m.getDelivery(delivery)?.delivery.text).toBe("original");
++  } finally {
++    db.close();
++    await rm(root, { recursive: true, force: true });
++  }
++});
++
++it("commits receipt with consumed drafts, reopens once, and refuses changed identities and late races", async () => {
++  const root = await mkdtemp(join(tmpdir(), "queue-receipt-"));
++  let db = new OpenBotDatabase(root);
++  try {
++    let m = new MailboxStore(root, join(root, "shared"), db);
++    await run(m.initialize());
++    const bytes = Buffer.from("exact bytes");
++    const identity = {
++      operationId: "upload",
++      principal: "session",
++      environmentId: "env",
++      hostId: "host",
++      agentId: "agent",
++      threadId: "thread",
++      taskId: null,
++      name: "new.txt",
++      mimeType: "text/plain",
++      size: bytes.length,
++      sha256: createHash("sha256").update(bytes).digest("hex"),
++    };
++    const draft = await run(m.prepareOriginalUpload(identity, bytes, () => {}));
++    const queued = await run(m.enqueue({ sender: { kind: "user" }, recipientAgentIds: ["agent"], text: "original" }));
++    const deliveryId = queued.deliveries[0]!.id;
++    m.beginQueueEdit("agent", deliveryId, "edit");
++    const input = {
++      principal: identity.principal,
++      environmentId: "env",
++      hostId: "host",
++      agentId: "agent",
++      threadId: "thread",
++      taskId: null,
++      deliveryId,
++      editId: "edit",
++      expectedRevision: m.queueAttachmentRevision("agent", deliveryId),
++      text: "edited",
++      keepAttachmentIds: [],
++      uploads: [{ identity, draftId: draft.attachment.id }],
++    };
++    input.expectedRevision = m.queueAttachmentContext(input).expectedRevision;
++    await expect(
++      run(m.saveQueueAttachments({ ...input, expectedRevision: "0".repeat(64) }, () => {}, acquire)),
++    ).rejects.toThrow("Queue revision changed");
++    await expect(run(m.saveQueueAttachments({ ...input, principal: "other" }, () => {}, acquire))).rejects.toThrow();
++    let release!: () => void;
++    let copied!: () => void;
++    const barrier = new Promise<void>((r) => (release = r)),
++      entered = new Promise<void>((r) => (copied = r));
++    copyGate.after = async () => {
++      copied();
++      await barrier;
++    };
++    let valid = true;
++    const saving = run(
++      m.saveQueueAttachments(
++        input,
++        () => {
++          if (!valid) throw new Error("reassigned");
++        },
++        acquire,
++      ),
++    );
++    await entered;
++    expect(() => m.cancelNow("agent", deliveryId)).toThrow();
++    await expect(run(m.saveQueueAttachments(input, () => {}, acquire))).rejects.toThrow();
++    valid = false;
++    release();
++    await expect(saving).rejects.toThrow("reassigned");
++    copyGate.after = async () => {};
++    expect(m.getDelivery(deliveryId)?.delivery.text).toBe("original");
++    expect(m.originalUploadStatus(identity, () => {})?.state).toBe("ready");
++    expect(m.queueAttachmentResult(input, () => {})).toBeNull();
++    await expect(run(m.saveQueueAttachments(input, () => {}, acquire))).rejects.toThrow("uncertain");
++    m.finishQueueEdit("agent", deliveryId, "edit");
++    m.beginQueueEdit("agent", deliveryId, "edit2");
++    input.editId = "edit2";
++    input.expectedRevision = m.queueAttachmentContext(input).expectedRevision;
++    const receipt = await run(m.saveQueueAttachments(input, () => {}, acquire));
++    expect(receipt.attachments).toHaveLength(1);
++    expect(m.originalUploadStatus(identity, () => {})?.state).toBe("released");
++    db.close();
++    db = new OpenBotDatabase(root);
++    m = new MailboxStore(root, join(root, "shared"), db);
++    await run(m.initialize());
++    expect(m.queueAttachmentResult(input, () => {})).toEqual(receipt);
++    expect(await run(m.saveQueueAttachments(input, () => {}, acquire))).toEqual(receipt);
++    expect(m.getDelivery(deliveryId)?.delivery.attachments).toHaveLength(1);
++    for (const changed of [
++      { principal: "other" },
++      { environmentId: "other" },
++      { threadId: "other" },
++      { text: "other" },
++      { expectedRevision: "0".repeat(64) },
++    ])
++      expect(() => m.queueAttachmentResult({ ...input, ...changed }, () => {})).toThrow();
++    expect(() =>
++      m.queueAttachmentResult(input, () => {
++        throw new Error("revoked");
++      }),
++    ).toThrow("revoked");
++  } finally {
++    db.close();
++    await rm(root, { recursive: true, force: true });
++  }
++});
++
++it.each(["revision", "cancel-upload", "expired-permit", "lost-release", "changed-copy"] as const)(
++  "refuses or recovers the exact final transaction after %s",
++  async (race) => {
++    const root = await mkdtemp(join(tmpdir(), "queue-final-"));
++    let db = new OpenBotDatabase(root);
++    try {
++      let m = new MailboxStore(root, join(root, "shared"), db);
++      await run(m.initialize());
++      const bytes = Buffer.from("owned");
++      const identity = {
++        operationId: "upload",
++        principal: "session",
++        environmentId: "env",
++        hostId: "host",
++        agentId: "agent",
++        threadId: "thread",
++        taskId: null,
++        name: "new.txt",
++        mimeType: "text/plain",
++        size: bytes.length,
++        sha256: createHash("sha256").update(bytes).digest("hex"),
++      };
++      const draft = await run(m.prepareOriginalUpload(identity, bytes, () => {}));
++      const queued = await run(m.enqueue({ sender: { kind: "user" }, recipientAgentIds: ["agent"], text: "original" }));
++
++      const deliveryId = queued.deliveries[0]!.id;
++      m.beginQueueEdit("agent", deliveryId, "edit");
++      const input = {
++        principal: "session",
++        environmentId: "env",
++        hostId: "host",
++        agentId: "agent",
++        threadId: "thread",
++        taskId: null,
++        deliveryId,
++        editId: "edit",
++        expectedRevision: m.queueAttachmentRevision("agent", deliveryId),
++        text: "changed",
++        keepAttachmentIds: [],
++        uploads: [{ identity, draftId: draft.attachment.id }],
++      };
++      input.expectedRevision = m.queueAttachmentContext(input).expectedRevision;
++      let reached!: () => void, release!: () => void;
++      const entered = new Promise<void>((r) => (reached = r)),
++        barrier = new Promise<void>((r) => (release = r));
++      let finished = false;
++      if (race === "changed-copy")
++        copyGate.after = async (destination) => {
++          await writeFile(destination, "tampered");
++          reached();
++        };
++      const saving = run(
++        m.saveQueueAttachments(
++          input,
++          () => {},
++          async () => {
++            reached();
++            await barrier;
++            return {
++              assertCommit() {
++                if (race === "expired-permit") throw new Error("expired");
++              },
++              async release() {
++                finished = true;
++                if (race === "lost-release") throw new Error("lost release");
++              },
++            };
++          },
++        ),
++      );
++      await entered;
++      if (race === "revision") await run(m.markSteerFallback(deliveryId, "steer-failed"));
++      if (race === "cancel-upload") await run(m.cancelOriginalUpload(identity, () => {}));
++      release();
++      await expect(saving).rejects.toThrow();
++      expect(finished).toBe(race !== "changed-copy");
++      copyGate.after = async () => {};
++      if (race === "lost-release") {
++        db.close();
++        db = new OpenBotDatabase(root);
++        m = new MailboxStore(root, join(root, "shared"), db);
++        await run(m.initialize());
++        expect(m.queueAttachmentResult(input, () => {})?.messageId).toBe(queued.messageId);
++        expect(m.getDelivery(deliveryId)?.delivery.attachments).toHaveLength(1);
++      } else {
++        expect(m.getDelivery(deliveryId)?.delivery.text).toBe("original");
++        expect(m.queueAttachmentResult(input, () => {})).toBeNull();
++        expect(m.originalUploadStatus(identity, () => {})?.state).toBe(race === "cancel-upload" ? "released" : "ready");
++        await expect(run(m.saveQueueAttachments(input, () => {}, acquire))).rejects.toThrow();
++      }
++    } finally {
++      db.close();
++      await rm(root, { recursive: true, force: true });
++    }
++  },
++);
++
++it("acquires the actual existing task queue item with owner-bound authoritative content", async () => {
++  const root = await mkdtemp(join(tmpdir(), "queue-task-"));
++  const db = new OpenBotDatabase(root);
++  try {
++    const m = new MailboxStore(root, join(root, "shared"), db);
++    await run(m.initialize());
++    const queued = await run(
++      m.enqueue({ sender: { kind: "user" }, recipientAgentIds: ["agent"], taskId: "task", text: "actual task text" }),
++    );
++    const scope = {
++      principal: "session",
++      environmentId: "env",
++      hostId: "host",
++      agentId: "agent",
++      threadId: "task-thread",
++      taskId: "task",
++      deliveryId: queued.deliveries[0]!.id,
++      editId: "task-edit",
++    };
++    const first = m.queueAttachmentContext(scope);
++    expect(first.text).toBe("actual task text");
++    expect(m.queueAttachmentContext(scope)).toEqual(first);
++    expect(() => m.queueAttachmentContext({ ...scope, principal: "other" })).toThrow("owner differs");
++    expect(() => m.queueAttachmentContext({ ...scope, taskId: null })).toThrow("target differs");
++    const bytes = Buffer.from("task file");
++    const identity = {
++      ...scope,
++      operationId: "task-upload",
++      name: "task.txt",
++      mimeType: "text/plain",
++      size: bytes.length,
++      sha256: createHash("sha256").update(bytes).digest("hex"),
++    };
++    const uploaded = await run(m.prepareOriginalUpload(identity, bytes, () => {}));
++    const receipt = await run(
++      m.saveQueueAttachments(
++        {
++          ...scope,
++          expectedRevision: first.expectedRevision,
++          text: "task edit",
++          keepAttachmentIds: [],
++          uploads: [{ identity, draftId: uploaded.attachment.id }],
++        },
++        () => {},
++        acquire,
++      ),
++    );
++    expect(receipt.messageId).toBe(queued.messageId);
++    expect(m.getDelivery(scope.deliveryId)?.delivery.text).toBe("task edit");
++  } finally {
++    db.close();
++    await rm(root, { recursive: true, force: true });
++  }
++});
+--- a/src/main/host-service.ts
++++ b/src/main/host-service.ts
+@@ -122,6 +122,7 @@
+   events?: ForwardedApiOptions["events"];
+   agentImport?: ForwardedApiOptions["agentImport"];
+   sledImport?: ForwardedApiOptions["sledImport"];
++  sledQueueAttachments?: ForwardedApiOptions["sledQueueAttachments"];
+   sledFiles?: ForwardedApiOptions["sledFiles"];
+   instanceTransfer?: ForwardedApiOptions["instanceTransfer"];
+   routineFlows?: ForwardedApiOptions["routineFlows"];
+@@ -456,6 +457,7 @@
+       ...(options.hostedSites === undefined ? {} : { hostedSites: options.hostedSites }),
+       ...(options.events === undefined ? {} : { events: options.events }),
+       ...(options.agentImport === undefined ? {} : { agentImport: options.agentImport }),
++      ...(options.sledQueueAttachments === undefined ? {} : {sledQueueAttachments:options.sledQueueAttachments}),
+       ...(options.sledFiles === undefined ? {} : { sledFiles: options.sledFiles }),
+       ...(options.sledImport === undefined ? {} : { sledImport: options.sledImport }),
+       ...(options.instanceTransfer === undefined ? {} : { instanceTransfer: options.instanceTransfer }),
+--- a/src/main/team-api-server.ts
++++ b/src/main/team-api-server.ts
+@@ -1,3 +1,4 @@
++import {routeSledQueueAttachments} from "./team-api/route-sled-queue-attachments";
+ import { routeSledFilesIdentity } from "./team-api/route-sled-files-identity";
+ import { routeSledFilesUpload } from "./team-api/route-sled-files-upload";
+ import { SLED_CHANNEL_CODING_CAPABILITY } from "@openbot/contracts/team-protocol/sled-channel-coding-v1";
+@@ -1107,6 +1108,9 @@
+         return;
+       if ((await routeWorkflows(context, this.#options.workflows, this.#options.agents, hidden)) === "handled") return;
+       if ((await this.#routeEvents(context)) === "handled") return;
++      const queueAttachments=this.#options.sledQueueAttachments;
++      const queueHostId=this.#options.store.getIdentity()?.serverId;
++      if(queueAttachments?.enabled && queueHostId && (await routeSledQueueAttachments(context,queueAttachments.agents,{...queueAttachments,hostId:queueHostId})) === "handled")return;
+       const sledFiles = this.#options.sledFiles;
+       const sledHostId = this.#options.store.getIdentity()?.serverId;
+       const trustedFiles = sledFiles && sledHostId ? { secret: sledFiles.secret, environmentId: sledFiles.environmentId, hostId: sledHostId } : undefined;
+@@ -2254,6 +2258,7 @@
+           if (capability === ROUTINE_RECOVERY_CAPABILITY) return this.#options.events !== undefined;
+           if (capability === ROUTINE_RESULTS_CAPABILITY) return this.#options.admin?.routineResults !== undefined;
+           if (capability === WEBHOOK_TESTS_CAPABILITY) return this.#options.events !== undefined;
++          if (capability === "sled-queue-attachments-v1") return this.#options.sledQueueAttachments?.enabled === true;
+           if (capability === "sled-files-identity-v1") return true;
+           if (capability === "sled-files-upload-recovery-v1") return this.#options.sledFiles !== undefined;
+           if (capability === SLED_IMPORT_CAPABILITY) return this.#options.sledImport !== undefined;
+--- a/src/main/team-api/dependencies.ts
++++ b/src/main/team-api/dependencies.ts
+@@ -1,3 +1,4 @@
++import type {QueueAttachmentHost} from "./queue-attachments-host";
+ import type { ChannelCodingRuntime } from "../../backend/channel-coding-runtime";
+ import type { AgentAdoptionService } from "../agent-adoption-service";
+ import type { Effect } from "effect";
+@@ -600,6 +601,7 @@
+   machine?: TeamApiMachine;
+   hostedSites?: TeamApiHostedSites;
+   agentImport?: TeamApiAgentImport;
++  sledQueueAttachments?: QueueAttachmentHost;
+   sledFiles?: {secret: string; environmentId: string; mailbox: Pick<MailboxStore, "prepareOriginalUpload" | "originalUploadStatus" | "cancelOriginalUpload">; validate: AgentService["validateOriginalUpload"]};
+   sledImport?: {service: import("../durable-agent-import").DurableAgentImport; secret: string};
+   instanceTransfer?: TeamApiInstanceTransfer;
+--- /dev/null
++++ b/src/main/team-api/queue-attachments-binding.ts
+@@ -0,0 +1,109 @@
++// @effect-diagnostics nodeBuiltinImport:off -- shared server/engine authentication boundary.
++import { createHmac, timingSafeEqual } from "node:crypto";
++
++export interface QueueAttachmentsBindingRequest {
++  readonly principal: string;
++  readonly hostId: string;
++  readonly method: string;
++  readonly path: string;
++  readonly bodySha256: string;
++}
++const domain = "sled-queue-attachments-v1\n";
++const fail = (): never => {
++  throw new Error("Invalid Queue attachments binding");
++};
++const signature = (secret: string, payload: string) =>
++  createHmac("sha256", secret)
++    .update(domain + payload)
++    .digest();
++const validRequest = (request: QueueAttachmentsBindingRequest) =>
++  request.principal.length > 0 &&
++  request.principal.length <= 256 &&
++  request.hostId.length > 0 &&
++  request.hostId.length <= 256 &&
++  request.method === "POST" &&
++  [
++    "/v1/sled/queue-attachments/context",
++    "/v1/sled/queue-attachments/save",
++    "/v1/sled/queue-attachments/result",
++  ].includes(request.path) &&
++  /^[a-f0-9]{64}$/.test(request.bodySha256);
++
++/** Called only with the authenticated Sled caller; never accept a caller-supplied principal. */
++export function signQueueAttachmentsBinding(
++  secret: string,
++  request: QueueAttachmentsBindingRequest,
++  now: number,
++): string {
++  if (!secret || !validRequest(request) || !Number.isSafeInteger(now)) return fail();
++  const payload = Buffer.from(JSON.stringify({ v: 1, ...request, issuedAt: now, expiresAt: now + 30_000 })).toString(
++    "base64url",
++  );
++  return `${payload}.${signature(secret, payload).toString("base64url")}`;
++}
++
++/** A normal upstream member cannot choose a Sled owner by sending an unsigned header. */
++export function verifyQueueAttachmentsBinding(
++  secret: string,
++  token: string,
++  expected: Omit<QueueAttachmentsBindingRequest, "principal">,
++  now: number,
++): string {
++  if (!secret || token.length > 4096 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token)) return fail();
++  const [payload, mac] = token.split(".");
++  if (!payload || !mac) return fail();
++  const actual = Buffer.from(mac, "base64url"),
++    wanted = signature(secret, payload);
++  if (actual.length !== wanted.length || !timingSafeEqual(actual, wanted)) return fail();
++  let value: unknown;
++  try {
++    value = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
++  } catch {
++    return fail();
++  }
++  if (typeof value !== "object" || value === null) return fail();
++  if (
++    !("v" in value) ||
++    !("principal" in value) ||
++    !("hostId" in value) ||
++    !("method" in value) ||
++    !("path" in value) ||
++    !("bodySha256" in value) ||
++    !("issuedAt" in value) ||
++    !("expiresAt" in value)
++  )
++    return fail();
++  const claim = value;
++  if (
++    claim.v !== 1 ||
++    typeof claim.principal !== "string" ||
++    typeof claim.hostId !== "string" ||
++    typeof claim.method !== "string" ||
++    typeof claim.path !== "string" ||
++    typeof claim.bodySha256 !== "string" ||
++    typeof claim.issuedAt !== "number" ||
++    typeof claim.expiresAt !== "number"
++  )
++    return fail();
++  const request = {
++    principal: claim.principal,
++    hostId: claim.hostId,
++    method: claim.method,
++    path: claim.path,
++    bodySha256: claim.bodySha256,
++  };
++  if (
++    !validRequest(request) ||
++    !Number.isSafeInteger(now) ||
++    !Number.isSafeInteger(claim.issuedAt) ||
++    claim.expiresAt !== claim.issuedAt + 30_000 ||
++    now < claim.issuedAt ||
++    now >= claim.expiresAt ||
++    request.hostId !== expected.hostId ||
++    request.method !== expected.method ||
++    request.path !== expected.path ||
++    request.bodySha256 !== expected.bodySha256
++  )
++    return fail();
++  return request.principal;
++}
+--- /dev/null
++++ b/src/main/team-api/queue-attachments-host.ts
+@@ -0,0 +1,40 @@
++import type { AgentService } from "../../backend/agent-service";
++import type { QueueAttachmentAcquireCommit } from "../../backend/mailbox-store";
++import { createQueueCommitClient } from "./queue-commit-client.ts";
++import type { PrivilegedCommitClient } from "./privileged-commit-client.ts";
++export interface QueueAttachmentHost {
++  enabled: boolean;
++  secret: string;
++  environmentId: string;
++  agents: Pick<AgentService, "queueAttachmentContext" | "queueAttachmentResult" | "saveQueueAttachments">;
++  validate: (principal: string, target: { agentId: string; threadId: string; taskId: string | null }) => void;
++  acquireCommit: QueueAttachmentAcquireCommit;
++}
++/** Bootstrap supplies the ONE inherited fd4 client already owned by the retained child. */
++export function createQueueAttachmentHost(input: {
++  enabled: boolean;
++  secret: string;
++  environmentId: string;
++  agents: AgentService;
++  client: PrivilegedCommitClient;
++}): QueueAttachmentHost {
++  const acquire = createQueueCommitClient(input.client);
++  return {
++    enabled: input.enabled,
++    secret: input.secret,
++    environmentId: input.environmentId,
++    agents: input.agents,
++    validate: (_principal, target) => input.agents.validateQueueAttachmentTarget(target),
++    acquireCommit: (principal, identity) =>
++      acquire(principal, {
++        purpose: "queue-attachments",
++        agentId: identity.agentId,
++        threadId: identity.threadId,
++        taskId: identity.taskId,
++        deliveryId: identity.deliveryId,
++        editId: identity.editId,
++        expectedRevision: identity.expectedRevision,
++        requestHash: identity.requestHash,
++      }),
++  };
++}
+--- /dev/null
++++ b/src/main/team-api/route-sled-queue-attachments.ts
+@@ -0,0 +1,80 @@
++import { createHash } from "node:crypto";
++import { runCauseEffect } from "../../backend/effect-boundary";
++import type { AgentService } from "../../backend/agent-service";
++import type { QueueAttachmentAcquireCommit, QueueAttachmentEdit } from "../../backend/mailbox-store";
++import { verifyQueueAttachmentsBinding } from "./queue-attachments-binding";
++import { HttpError } from "./http-error";
++import type { TeamApiRequestContext, RouteOutcome } from "./request-context";
++import { readBinary, requireAgentLevel, memberSender } from "./request-helpers";
++import {
++  decodeQueueAttachmentContext,
++  decodeQueueAttachmentEdit,
++} from "../../../packages/contracts/src/team-protocol/sled-queue-attachments-v1";
++export async function routeSledQueueAttachments(
++  context: TeamApiRequestContext,
++  agents: Pick<AgentService, "queueAttachmentContext" | "queueAttachmentResult" | "saveQueueAttachments">,
++  trusted: {
++    secret: string;
++    hostId: string;
++    environmentId: string;
++    acquireCommit: QueueAttachmentAcquireCommit;
++    validate: (principal: string, target: { agentId: string; threadId: string; taskId: string | null }) => void;
++  },
++): Promise<RouteOutcome> {
++  const path = context.url.pathname;
++  if (
++    context.method !== "POST" ||
++    !["context", "save", "result"].some((a) => path === `/v1/sled/queue-attachments/${a}`)
++  )
++    return "unmatched";
++  if (context.url.search || !context.capabilities.has("sled-queue-attachments-v1"))
++    throw new HttpError(400, "Queue attachments unavailable");
++  const raw = await readBinary(context.request, 160000);
++  const token = context.request.headers["x-sled-queue-attachments"];
++  if (typeof token !== "string") throw new HttpError(403, "Queue attachments unavailable");
++  const principal = verifyQueueAttachmentsBinding(
++    trusted.secret,
++    token,
++    { hostId: trusted.hostId, method: "POST", path, bodySha256: createHash("sha256").update(raw).digest("hex") },
++    Date.now(),
++  );
++  const value = JSON.parse(Buffer.from(raw).toString("utf8"));
++  const body = path.endsWith("/context") ? decodeQueueAttachmentContext(value) : decodeQueueAttachmentEdit(value);
++  if (body.hostId !== trusted.hostId || body.environmentId !== trusted.environmentId)
++    throw new HttpError(403, "Queue attachments unavailable");
++  const validate = () => {
++    requireAgentLevel(context, body.agentId, "chat");
++    trusted.validate(principal, body);
++  };
++  validate();
++  if (path.endsWith("/context"))
++    return context.json(200, agents.queueAttachmentContext({ ...decodeQueueAttachmentContext(value), principal }));
++  const edit = decodeQueueAttachmentEdit(value);
++  const input: QueueAttachmentEdit = {
++    ...edit,
++    principal,
++    uploads: edit.uploads.map((u) => ({
++      draftId: u.draftId,
++      identity: {
++        operationId: u.identity.operationId,
++        principal,
++        environmentId: body.environmentId,
++        hostId: u.identity.hostId,
++        agentId: u.identity.agentId,
++        threadId: u.identity.threadId,
++        taskId: u.identity.taskId,
++        name: u.identity.name,
++        mimeType: u.identity.mimeType,
++        size: u.identity.size,
++        sha256: u.identity.sha256,
++      },
++    })),
++  };
++  if (path.endsWith("/result")) return context.json(200, agents.queueAttachmentResult(input, validate));
++  return context.json(
++    200,
++    await runCauseEffect(
++      agents.saveQueueAttachments(input, validate, trusted.acquireCommit, memberSender(context.member)),
++    ),
++  );
++}

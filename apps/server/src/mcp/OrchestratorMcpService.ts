@@ -1063,6 +1063,12 @@ function threadDetail(
       : { delegatedFrom: projection.thread.delegatedFrom }),
     runCount,
     itemCount,
+    pendingRequestKinds: projection.runtimeRequests
+      .filter((request) => request.status === "pending")
+      .map((request) => ({ requestId: request.id, kind: request.kind })),
+    pendingRequestIds: projection.runtimeRequests
+      .filter((request) => request.status === "pending")
+      .map((request) => request.id),
     pendingRequestCount: projection.runtimeRequests.filter(
       (request) => request.status === "pending",
     ).length,

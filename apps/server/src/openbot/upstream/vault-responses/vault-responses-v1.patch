@@ -1,0 +1,988 @@
+--- a/src/backend/agent/attention-registry.ts
++++ b/src/backend/agent/attention-registry.ts
+@@ -18,6 +18,7 @@
+ import { type DynamicRecord, isOneOf } from "@openbot/contracts/runtime-values";
+ import {
+   type ConversationUiBlock,
++  isSecretFormField,
+   normalizeConversationUiBlock,
+   UI_BLOCK_LIMITS,
+   UI_BLOCK_TEXT_ACTION_ID,
+@@ -436,7 +437,204 @@
+  * provider a response, so every path out of these maps either answers the request or cancels it;
+  * an entry silently dropped is an agent stuck forever.
+  */
++export interface PrivilegedTarget {
++  agentId: string;
++  threadId: string;
++  turnId: string;
++  messageId: string;
++  blockId: string;
++  requestId: RequestId;
++}
++
+ export class AttentionRegistry {
++  readonly #privilegedResults = new Map<
++    string,
++    {
++      target: PrivilegedTarget;
++      principal: string;
++      pending: PendingPrompt;
++      state: {
++        nonce: string;
++        status: "pending" | "answered" | "interrupted" | "unknown";
++      };
++    }
++  >();
++
++  privilegedResult(target: PrivilegedTarget, nonce: string, principal: string, authorize: () => void) {
++    authorize();
++    const record = this.#privilegedResults.get(nonce);
++    if (
++      !record ||
++      record.principal !== principal ||
++      record.target.agentId !== target.agentId || record.target.threadId !== target.threadId ||
++      record.target.turnId !== target.turnId || record.target.messageId !== target.messageId ||
++      record.target.blockId !== target.blockId || record.target.requestId !== target.requestId
++    )
++      return { nonce, status: "unknown" as const };
++    if (record.state.status !== "answered" && this.#prompts.get(record.pending.id) !== record.pending)
++      record.state.status = "interrupted";
++    return { nonce, status: record.state.status };
++  }
++
++  readonly #privileged = new WeakMap<
++    PendingPrompt,
++    {
++      nonce: string;
++      principal: string;
++      status: "pending" | "answered" | "interrupted" | "unknown";
++    }
++  >();
++
++  privilegedContext(target: PrivilegedTarget, principal: string, authorize: () => void) {
++    authorize();
++    const pending = this.#privilegedPending(target);
++    const block = pending.uiBlock;
++    if (!block) throw new Error("Privileged response unavailable");
++    if (!block.apiKey && !block.vault && !uiBlockHasPrivilegedAction(block.spec))
++      throw new Error("Privileged response unavailable");
++    let state = this.#privileged.get(pending);
++    if (!state) {
++      state = { nonce: randomUUID(), principal, status: "pending" };
++      this.#privileged.set(pending, state);
++      if (this.#privilegedResults.size >= 1024) {
++        const oldest = this.#privilegedResults.keys().next().value;
++        if (oldest) this.#privilegedResults.delete(oldest);
++      }
++      this.#privilegedResults.set(state.nonce, {
++        target: { ...target },
++        principal,
++        pending,
++        state,
++      });
++    }
++    if (state.principal !== principal) throw new Error("Privileged response unavailable");
++    return {
++      nonce: state.nonce,
++      status: state.status,
++      kind: block.apiKey ? "apiKey" : block.vault ? "vault" : "privileged",
++    };
++  }
++
++  #privilegedPending(target: PrivilegedTarget): PendingPrompt {
++    const pending = this.#prompts.get(target.requestId);
++    if (
++      !pending?.client.running ||
++      pending.agentId !== target.agentId ||
++      pending.publicThreadId !== target.threadId ||
++      pending.turnId !== target.turnId ||
++      pending.messageId !== target.messageId ||
++      pending.uiBlock?.blockId !== target.blockId
++    )
++      throw new Error("Privileged response unavailable");
++    const privateThread = getString(pending.params, "threadId");
++    if (
++      !privateThread ||
++      this.#conversation.agentForThread(privateThread) !== pending.agentId ||
++      this.#conversation.publicThreadId(pending.agentId, privateThread) !== pending.publicThreadId
++    )
++      throw new Error("Privileged response unavailable");
++    return pending;
++  }
++
++  readonly respondPrivileged = Effect.fn("AttentionRegistry.respondPrivileged")(function* (
++    this: AttentionRegistry,
++    input: {
++      target: PrivilegedTarget;
++      nonce: string;
++      consent: true;
++      response: UiBlockResponse;
++    },
++    principal: string,
++    responder: PromptResponder,
++    authorize: () => void,
++    acquireCommit: () => Promise<{ release(): Promise<void> }>,
++  ) {
++    const pending = yield* attentionStep(() => this.#privilegedPending(input.target));
++    const state = this.#privileged.get(pending);
++    const check = () => {
++      authorize();
++      if (
++        !responder.privileged ||
++        responder.automatic ||
++        input.consent !== true ||
++        this.#privilegedPending(input.target) !== pending ||
++        !state ||
++        state.principal !== principal ||
++        state.nonce !== input.nonce
++      )
++        throw new Error("Privileged response unavailable");
++    };
++    yield* attentionStep(check);
++    if (state?.status !== "pending" || pending.saving)
++      return yield* attentionStep(() => {
++        throw new Error("Privileged response unavailable");
++      });
++    const block = pending.uiBlock;
++    if (!block) throw new Error("Privileged response unavailable");
++    const response = validateUiBlockResponse(block.spec, input.response);
++    if (!response || response.actionId === UI_BLOCK_TEXT_ACTION_ID)
++      return yield* attentionStep(() => {
++        throw new Error("Privileged response unavailable");
++      });
++    // A consumed attempt stays closed even when the effect or its callback has an unknown outcome.
++    state.status = "unknown";
++    pending.saving = true;
++    clearTimeout(pending.autoAnswer?.timer);
++    let lease: { release(): Promise<void> } | undefined;
++    const commit = async () => {
++      check();
++      lease = await acquireCommit();
++      return check;
++    };
++    const execution = Effect.gen({ self: this }, function* () {
++      let result: DynamicToolResult;
++      if (block.apiKey) {
++        const raw = response.values?.[API_KEY_FIELD_ID];
++        if (!this.#apiKeys || typeof raw !== "string" || !raw.trim())
++          throw new Error("Privileged response unavailable");
++        yield* attentionStep(check);
++        const key = yield* this.#apiKeys.save(pending.agentId, block.apiKey.name, raw.trim(), commit);
++        result = apiKeyPromptResult(block.blockId, key);
++      } else if (block.vault) {
++        const item = enteredVaultItem(block.vault.kind, response.values ?? {});
++        if (!item || !this.#vaultItems) throw new Error("Privileged response unavailable");
++        yield* attentionStep(check);
++        const saved = yield* this.#vaultItems.addEntered(item, this.#agentName(pending.agentId), commit);
++        result = vaultPromptResult(block.blockId, saved);
++      } else {
++        // Generic secret forms have no released destination and must never reach a provider reply.
++        if (block.spec.type === "form" && block.spec.fields.some(isSecretFormField))
++          throw new Error("Privileged response unavailable");
++        yield* Effect.promise(async () => {
++          (await commit())();
++        });
++        result = uiBlockPromptResult({
++          status: "answered",
++          blockId: block.blockId,
++          response,
++        });
++      }
++      yield* attentionStep(() => {
++        check();
++        pending.client.respond(pending.id, result);
++        this.#prompts.delete(pending.id);
++        state.status = "answered";
++        this.#routines.markRunningForTurn(pending.turnId);
++        this.#emitInputResolved("prompt", pending.id, pending.agentId);
++        this.#resolvePersistedPrompt(pending, { status: "cancelled" }, { status: "closed" });
++        this.#emitRuntimeSnapshot();
++      });
++    });
++    yield* execution.pipe(
++      Effect.catch(() => Effect.void),
++      Effect.catchDefect(() => Effect.void),
++      Effect.ensuring(Effect.promise(() => lease?.release().catch(() => undefined) ?? Promise.resolve())),
++    );
++    if (this.#prompts.get(pending.id) !== pending && this.#privileged.get(pending)?.status !== "answered")
++      state.status = "interrupted";
++    return { nonce: state.nonce, status: state.status };
++  }).bind(this);
++
+   // A handle belongs to one pending object, even when a provider reuses its request ID.
+   readonly #localHandles = new WeakMap<PendingPrompt | PendingApproval | PendingBrowserTakeover, string>();
+   readonly #conversation: AttentionConversation;
+@@ -578,6 +776,11 @@
+     input: RespondToPromptInput,
+     responder?: PromptResponder,
+   ) {
++    yield* attentionStep(() => {
++      const pending = this.#prompts.get(input.requestId);
++      const attempted = pending && this.#privileged.get(pending);
++      if (attempted && attempted.status !== "pending") throw new Error("Privileged response unavailable");
++    });
+     const saved = yield* this.#saveApiKeyAnswer(input, responder);
+     const savedItem = yield* this.#saveVaultAnswer(input, responder);
+     yield* attentionStep(() => {
+--- a/src/backend/agent-api-keys.ts
++++ b/src/backend/agent-api-keys.ts
+@@ -57,10 +57,11 @@
+     agentId: string,
+     name: string,
+     value: string,
++    beforeCommit?: () => void | Promise<() => void>,
+   ) {
+     const path = yield* this.#keyPath(agentId, name);
+     registerSecretValue(value);
+-    yield* writeFileAtomically(path, value, { createDirectory: true }).pipe(Effect.mapError(failed));
++    yield* writeFileAtomically(path, value, { createDirectory: true, beforeCommit }).pipe(Effect.mapError(failed));
+     return { name, path } satisfies SavedApiKey;
+   });
+ 
+--- a/src/backend/atomic-json-file.ts
++++ b/src/backend/atomic-json-file.ts
+@@ -1,3 +1,4 @@
++import { renameSync } from "node:fs";
+ import { randomUUID } from "node:crypto";
+ import { mkdir, open, rename, rm } from "node:fs/promises";
+ import { dirname } from "node:path";
+@@ -12,6 +13,7 @@
+ export interface WriteJsonFileOptions {
+   /** Creates the parent directory, readable only by the user, when it is missing. */
+   createDirectory?: boolean;
++  beforeCommit?: () => void | Promise<() => void>;
+ }
+ 
+ /** Replaces `path` with `value` as one line of JSON, readable only by the user. */
+@@ -118,7 +120,15 @@
+         for (let attempt = 0; ; attempt += 1) {
+           const renamed = yield* Effect.result(
+             Effect.tryPromise({
+-              try: () => rename(temporaryPath, path),
++              try: async () => {
++                if (options.beforeCommit) {
++                  const acquired = options.beforeCommit();
++                  if (acquired) (await acquired)();
++                  renameSync(temporaryPath, path);
++                  return;
++                }
++                return rename(temporaryPath, path);
++              },
+               catch: (cause) => new AtomicFileWriteError({ operation: "rename", cause }),
+             }),
+           );
+--- a/src/backend/vault-items.ts
++++ b/src/backend/vault-items.ts
+@@ -121,5 +121,5 @@
+    * Adds an item that the user typed. The values are checked as the Vault page checks them; a wrong
+    * value fails with text that the user reads.
+    */
+-  addEntered(item: VaultEnteredItem, addedBy: string | undefined): Effect.Effect<VaultAgentResult, PasswordVaultError>;
++  addEntered(item: VaultEnteredItem, addedBy: string | undefined, beforeCommit?: () => void | Promise<() => void>): Effect.Effect<VaultAgentResult, PasswordVaultError>;
+ }
+--- a/src/main/vault-store.ts
++++ b/src/main/vault-store.ts
+@@ -129,7 +129,7 @@
+    * Makes the next record from the current one and stores it. The record changes only after the
+    * write. An error that `change` throws fails the update; the same record back writes nothing.
+    */
+-  update(change: (current: VaultRecord) => VaultRecord): Effect.Effect<VaultRecord, PasswordVaultError> {
++  update(change: (current: VaultRecord) => VaultRecord, beforeCommit?: () => void | Promise<() => void>): Effect.Effect<VaultRecord, PasswordVaultError> {
+     return this.#serialize(
+       Effect.gen({ self: this }, function* () {
+         const next = yield* vaultDecode(() => change(this.#record));
+@@ -137,7 +137,7 @@
+         const encrypted = yield* vaultDecode(() => this.#cipher.encrypt(JSON.stringify(next)).toString("base64"));
+         if (encrypted.length + 32 > MAX_VAULT_ENVELOPE_BYTES)
+           return yield* new PasswordVaultError({ cause: new Error(sourceText("error.vault.tooLarge")) });
+-        yield* writeJsonFileAtomically(this.#path, { version: 1, record: encrypted }, { createDirectory: true }).pipe(
++        yield* writeJsonFileAtomically(this.#path, { version: 1, record: encrypted }, { createDirectory: true, beforeCommit }).pipe(
+           Effect.mapError(({ cause }) => new PasswordVaultError({ cause })),
+         );
+         this.#record = next;
+--- a/src/main/vault-service.ts
++++ b/src/main/vault-service.ts
+@@ -478,6 +478,7 @@
+     this: VaultService,
+     item: VaultEnteredItem,
+     addedBy: string | undefined,
++    beforeCommit?: () => void | Promise<() => void>,
+   ) {
+     const outcome: { saved: VaultAgentResult | null } = { saved: null };
+     yield* this.#change((record) => {
+@@ -485,7 +486,7 @@
+       const next = this.#put(record, decodeVaultSaveInput(item), addedBy);
+       outcome.saved = itemName(next.record, next.id);
+       return next.record;
+-    });
++    }, beforeCommit);
+     return outcome.saved ?? (yield* vaultError("error.vault.itemMissing"));
+   });
+ 
+@@ -545,7 +546,7 @@
+     save: (change, addedBy) => this.#agentSave(change, addedBy),
+     delete: (id) => this.#agentDelete(id),
+     saveLogin: (login, addedBy) => this.#saveTypedLogin(login, addedBy),
+-    addEntered: (item, addedBy) => this.#addEntered(item, addedBy),
++    addEntered: (item, addedBy, beforeCommit) => this.#addEntered(item, addedBy, beforeCommit),
+   };
+ 
+   /** `record` with `input` added or changed, and the id of that item. */
+@@ -663,11 +664,12 @@
+   readonly #change = Effect.fn("VaultService.change")(function* (
+     this: VaultService,
+     change: (record: VaultRecord) => VaultRecord,
++    beforeCommit?: () => void | Promise<() => void>,
+   ) {
+     if (this.#status === "unavailable") return yield* vaultError("error.vault.unavailable");
+     if (this.#status === "unreadable") return yield* vaultError("error.vault.unreadable");
+     const before = this.#store.read();
+-    const next = yield* this.#store.update(change);
++    const next = yield* this.#store.update(change, beforeCommit);
+     if (next === before) return;
+     registerSecrets(next);
+     this.#emit();
+--- a/src/backend/agent-service.ts
++++ b/src/backend/agent-service.ts
+@@ -148,6 +148,7 @@
+   AttentionRegistry,
+   type LocalAttentionResponse,
+   type PromptResponder,
++  type PrivilegedTarget,
+ } from "./agent/attention-registry";
+ import { backgroundModel } from "./agent/background-model";
+ import { BootRecovery } from "./agent/boot-recovery";
+@@ -5121,6 +5122,18 @@
+   }, Effect.uninterruptible).bind(this);
+ 
+   /** `responder` is absent for the person at this computer; the Team API gives the member who answers. */
++  privilegedResponseContext(target: PrivilegedTarget, principal: string, authorize: () => void) {
++    return this.#attention.privilegedContext(target, principal, authorize);
++  }
++
++  privilegedResponseResult(target: PrivilegedTarget, nonce: string, principal: string, authorize: () => void) {
++    return this.#attention.privilegedResult(target, nonce, principal, authorize);
++  }
++
++  respondPrivileged(...args: Parameters<AttentionRegistry["respondPrivileged"]>) {
++    return this.#attention.respondPrivileged(...args);
++  }
++
+   respondToPrompt(input: RespondToPromptInput, responder?: PromptResponder): Effect.Effect<void, AgentLifecycleFailed> {
+     return this.#attention
+       .respondToPrompt(input, responder)
+--- /dev/null
++++ b/src/backend/agent/privileged-response.test.ts
+@@ -0,0 +1,313 @@
++import { mkdtemp, readFile, rm } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { Effect } from "effect";
++import { describe, expect, it, vi } from "vitest";
++import type { ConversationSnapshot } from "@openbot/contracts/ipc";
++import type { AgentClient } from "../agent-client";
++import { AgentApiKeys } from "../agent-api-keys";
++import { AttentionRegistry, type SurfacedUiBlock } from "./attention-registry";
++import type { VaultItems } from "../vault-items";
++import { VaultService } from "../../main/vault-service";
++import { VaultStore } from "../../main/vault-store";
++import { apiKeyFormSpec, vaultRequestFormSpec } from "./prompts";
++
++const commit = async () => ({ release: async () => {} });
++const target = {
++  agentId: "agent-a",
++  threadId: "public",
++  turnId: "turn",
++  messageId: "question-prompt:turn:req",
++  blockId: "block",
++  requestId: "req",
++};
++function fixture(apiKeys: AgentApiKeys, vaultItems?: VaultItems, block?: SurfacedUiBlock) {
++  const output: unknown[] = [];
++  const snapshot: ConversationSnapshot = {
++    agentId: "agent-a",
++    threadId: "public",
++    activeTurnId: "turn",
++    revision: 0,
++    messages: [],
++  };
++  const client: AgentClient = {
++    provider: "codex",
++    running: true,
++    start() {},
++    stop: () => Effect.void,
++    request: () => Effect.die("Unexpected fixture request"),
++    notify() {},
++    respondError() {},
++    on() {
++      return this;
++    },
++    once() {
++      return this;
++    },
++    off() {
++      return this;
++    },
++    respond: (_id: unknown, value: unknown) => output.push(value),
++  };
++  const registry = new AttentionRegistry({
++    conversation: {
++      agentForThread: () => "agent-a",
++      publicThreadId: () => "public",
++      ensureSnapshot: () => snapshot,
++      emitConversation: () => output.push(structuredClone(snapshot)),
++    },
++    browser: {
++      listTabs: () => [],
++      beginTakeover: () => Effect.void,
++      endTakeover: () => {},
++    },
++    hostedSites: { prepareApproval: () => Effect.succeed(null), resolveApproval: () => Effect.void },
++    routines: { markNeedsAttention: () => {}, markRunningForTurn: () => {} },
++    emit: (event: unknown) => output.push(event),
++    emitError: (...args: unknown[]) => output.push(args),
++    emitRuntimeSnapshot: () => {},
++    apiKeys,
++    vaultItems,
++  });
++  const spec = apiKeyFormSpec({ name: "SYNTHETIC_KEY", title: "Key" });
++  if (!spec) throw new Error("Invalid synthetic fixture");
++  const surface = () =>
++    registry.surfaceUiBlock(
++      client,
++      {
++        id: "req",
++        method: "item/tool/call",
++        params: { threadId: "private", turnId: "turn" },
++      },
++      block ?? { blockId: "block", spec, apiKey: { name: "SYNTHETIC_KEY" } },
++    );
++  surface();
++  return { registry, output, client, surface };
++}
++describe("dedicated registry API key response", () => {
++  it("saves only in the original agent key store and never exposes the canary in events or prompt history", async () => {
++    const root = await mkdtemp(join(tmpdir(), "privileged-registry-"));
++    try {
++      const { registry, output } = fixture(new AgentApiKeys(root));
++      const authorize = () => {};
++      const context = registry.privilegedContext(target, "principal", authorize);
++      const input = {
++        target,
++        nonce: context.nonce,
++        consent: true as const,
++        response: {
++          actionId: "submit",
++          values: { key: "synthetic-secret-canary" },
++        },
++      };
++      expect(
++        await Effect.runPromise(
++          registry.respondPrivileged(input, "principal", { privileged: true }, authorize, commit),
++        ),
++      ).toEqual({ nonce: context.nonce, status: "answered" });
++      expect(await readFile(join(root, "agent-a/SYNTHETIC_KEY"), "utf8")).toBe("synthetic-secret-canary");
++      expect(JSON.stringify(output)).not.toContain("synthetic-secret-canary");
++      expect(
++        (
++          await Effect.runPromiseExit(
++            registry.respondPrivileged(input, "principal", { privileged: true }, authorize, commit),
++          )
++        )._tag,
++      ).toBe("Failure");
++    } finally {
++      await rm(root, { recursive: true, force: true });
++    }
++  });
++  it("checks live authority at the actual file replacement and refuses wrong principal or replaced pending", async () => {
++    const root = await mkdtemp(join(tmpdir(), "privileged-registry-"));
++    try {
++      const { registry, surface, output } = fixture(new AgentApiKeys(root));
++      let checks = 0;
++      const authorize = () => {
++        if (++checks >= 4) throw new Error("synthetic-secret-canary");
++      };
++      const context = registry.privilegedContext(target, "principal", authorize);
++      const input = {
++        target,
++        nonce: context.nonce,
++        consent: true as const,
++        response: {
++          actionId: "submit",
++          values: { key: "synthetic-secret-canary" },
++        },
++      };
++      expect(
++        (
++          await Effect.runPromiseExit(
++            registry.respondPrivileged(input, "other", { privileged: true }, () => {}, commit),
++          )
++        )._tag,
++      ).toBe("Failure");
++      const result = await Effect.runPromise(
++        registry.respondPrivileged(input, "principal", { privileged: true }, authorize, commit),
++      );
++      expect(result.status).toBe("unknown");
++      await expect(readFile(join(root, "agent-a/SYNTHETIC_KEY"))).rejects.toThrow();
++      expect(JSON.stringify(output)).not.toContain("synthetic-secret-canary");
++      surface();
++      expect(
++        (
++          await Effect.runPromiseExit(
++            registry.respondPrivileged(input, "principal", { privileged: true }, () => {}, commit),
++          )
++        )._tag,
++      ).toBe("Failure");
++    } finally {
++      await rm(root, { recursive: true, force: true });
++    }
++  });
++  it("does not resurrect an interrupted callback after a real save crosses an asynchronous barrier", async () => {
++    const root = await mkdtemp(join(tmpdir(), "privileged-registry-"));
++    try {
++      const keys = new AgentApiKeys(root);
++      const original = keys.save.bind(keys);
++      let signal!: () => void;
++      let release!: () => void;
++      const saved = new Promise<void>((resolve) => {
++        signal = resolve;
++      });
++      const barrier = new Promise<void>((resolve) => {
++        release = resolve;
++      });
++      vi.spyOn(keys, "save").mockImplementation((...args) =>
++        Effect.gen(function* () {
++          const result = yield* original(...args);
++          signal();
++          yield* Effect.promise(() => barrier);
++          return result;
++        }),
++      );
++      const { registry, client, output } = fixture(keys);
++      const context = registry.privilegedContext(target, "principal", () => {});
++      const input = {
++        target,
++        nonce: context.nonce,
++        consent: true as const,
++        response: {
++          actionId: "submit",
++          values: { key: "synthetic-barrier-canary" },
++        },
++      };
++      const pending = Effect.runPromise(
++        registry.respondPrivileged(input, "principal", { privileged: true }, () => {}, commit),
++      );
++      await saved;
++      expect(
++        (
++          await Effect.runPromiseExit(
++            registry.respondPrivileged(input, "principal", { privileged: true }, () => {}, commit),
++          )
++        )._tag,
++      ).toBe("Failure");
++      registry.cancelRequest(client, "req");
++      release();
++      expect((await pending).status).toBe("interrupted");
++      expect(registry.privilegedResult(target, context.nonce, "principal", () => {}).status).toBe("interrupted");
++      expect(JSON.stringify(output)).not.toContain("synthetic-barrier-canary");
++      expect(await readFile(join(root, "agent-a/SYNTHETIC_KEY"), "utf8")).toBe("synthetic-barrier-canary");
++    } finally {
++      await rm(root, { recursive: true, force: true });
++    }
++  });
++
++  it("fails closed when the live commit bridge revokes authority during its asynchronous check", async () => {
++    const root = await mkdtemp(join(tmpdir(), "privileged-registry-"));
++    try {
++      const { registry } = fixture(new AgentApiKeys(root));
++      const context = registry.privilegedContext(target, "principal", () => {});
++      let entered!: () => void;
++      let release!: () => void;
++      let authorized = true;
++      const arrived = new Promise<void>((resolve) => {
++        entered = resolve;
++      });
++      const barrier = new Promise<void>((resolve) => {
++        release = resolve;
++      });
++      const acquire = async () => {
++        entered();
++        await barrier;
++        if (!authorized) throw new Error("Unavailable");
++        return { release: async () => {} };
++      };
++      const input = {
++        target,
++        nonce: context.nonce,
++        consent: true as const,
++        response: {
++          actionId: "submit",
++          values: { key: "synthetic-live-canary" },
++        },
++      };
++      const result = Effect.runPromise(
++        registry.respondPrivileged(input, "principal", { privileged: true }, () => {}, acquire),
++      );
++      await arrived;
++      authorized = false;
++      release();
++      expect((await result).status).toBe("unknown");
++      await expect(readFile(join(root, "agent-a/SYNTHETIC_KEY"))).rejects.toThrow();
++      expect(
++        (
++          await Effect.runPromiseExit(
++            registry.respondPrivileged(input, "principal", { privileged: true }, () => {}, commit),
++          )
++        )._tag,
++      ).toBe("Failure");
++    } finally {
++      await rm(root, { recursive: true, force: true });
++    }
++  });
++  it("routes the released Vault request through addEntered without creating an agent API key", async () => {
++    const root = await mkdtemp(join(tmpdir(), "privileged-vault-"));
++    try {
++      const vault = new VaultService({
++        store: new VaultStore(join(root, "vault.json"), {
++          encrypt: (value) => Buffer.from(value).reverse(),
++          decrypt: (value) => Buffer.from(value).reverse().toString("utf8"),
++        }),
++        canPersist: () => true,
++      });
++      await Effect.runPromise(vault.load());
++      const spec = vaultRequestFormSpec({ kind: "login", title: "Save login" });
++      if (typeof spec === "string") throw new Error(spec);
++      const { registry, output } = fixture(new AgentApiKeys(root), vault.items, {
++        blockId: "block",
++        spec,
++        vault: { kind: "login" },
++      });
++      const context = registry.privilegedContext(target, "principal", () => {});
++      const input = {
++        target,
++        nonce: context.nonce,
++        consent: true as const,
++        response: {
++          actionId: "submit",
++          values: { website: "https://example.com", username: "synthetic-user", password: "synthetic-vault-canary" },
++        },
++      };
++      expect(
++        (
++          await Effect.runPromise(
++            registry.respondPrivileged(input, "principal", { privileged: true }, () => {}, commit),
++          )
++        ).status,
++      ).toBe("answered");
++      const items = vault.state().items;
++      expect(items).toHaveLength(1);
++      expect(items[0]?.kind).toBe("login");
++      if (!items[0]) throw new Error("Missing saved fixture");
++      expect(vault.reveal({ id: items[0].id, field: "password" })).toBe("synthetic-vault-canary");
++      expect(JSON.stringify(output)).not.toContain("synthetic-vault-canary");
++      expect(registry.privilegedResult(target, context.nonce, "principal", () => {}).status).toBe("answered");
++      await expect(readFile(join(root, "agent-a/SYNTHETIC_KEY"))).rejects.toThrow();
++    } finally {
++      await rm(root, { recursive: true, force: true });
++    }
++  });
++});
+--- a/src/main/vault-service.test.ts
++++ b/src/main/vault-service.test.ts
+@@ -127,3 +127,30 @@
+     expect(await readFile(path, "utf8")).toBe("not json");
+   });
+ });
++
++describe("dedicated entered item commit authority", () => {
++  it("refuses a revoked owner after encrypted preparation and leaves the actual store unchanged", async () => {
++    let active = true;
++    const vault = new VaultService({
++      store: new VaultStore(path, {
++        ...cipher,
++        encrypt: (value) => {
++          active = false;
++          return cipher.encrypt(value);
++        },
++      }),
++      canPersist: () => true,
++    });
++    await Effect.runPromise(vault.load());
++    const result = await Effect.runPromiseExit(
++      vault.items.addEntered(LOGIN, "agent", () => {
++        if (!active) throw new Error("Privileged response unavailable");
++      }),
++    );
++    expect(result._tag).toBe("Failure");
++    expect(vault.state().items).toEqual([]);
++    const reopened = service();
++    await Effect.runPromise(reopened.load());
++    expect(reopened.state().items).toEqual([]);
++  });
++});
+--- /dev/null
++++ b/src/main/team-api/route-sled-privileged-responses.ts
+@@ -0,0 +1,90 @@
++import { createHash } from "node:crypto";
++import { Schema } from "effect";
++import type { AgentService } from "../../backend/agent-service";
++import { runCauseEffect } from "../../backend/effect-boundary";
++import {
++  PrivilegedResponseRequest,
++  PRIVILEGED_RESPONSE_CAPABILITY,
++} from "../../../packages/contracts/src/team-protocol/sled-privileged-responses-v1";
++import type { PrivilegedTarget } from "../../backend/agent/attention-registry";
++import { verifyPrivilegedResponseBinding } from "./privileged-response-binding";
++import { HttpError } from "./http-error";
++import type { TeamApiRequestContext, RouteOutcome } from "./request-context";
++import { readBinary, requireAgentLevel, requireAdmin, memberSender } from "./request-helpers";
++
++export interface PrivilegedResponseAuthority {
++  secret: string;
++  hostId: string;
++  environmentId: string;
++  assertUpstream(principal: string, target: PrivilegedTarget): void;
++  acquireCommit(principal: string, target: PrivilegedTarget, nonce: string): Promise<{ release(): Promise<void> }>;
++}
++const paths = {
++  "privilegedResponse.context": "/v1/sled/privileged-responses/context",
++  "privilegedResponse.respond": "/v1/sled/privileged-responses/respond",
++  "privilegedResponse.result": "/v1/sled/privileged-responses/result",
++};
++export async function routeSledPrivilegedResponses(
++  context: TeamApiRequestContext,
++  agents: AgentService,
++  authority: PrivilegedResponseAuthority,
++): Promise<RouteOutcome> {
++  if (context.method !== "POST" || !Object.values(paths).includes(context.url.pathname)) return "unmatched";
++  try {
++    if (context.url.search || !context.capabilities.has(PRIVILEGED_RESPONSE_CAPABILITY)) throw new Error();
++    requireAdmin(context.member);
++    const raw = await readBinary(context.request, 1_100_000);
++    const token = context.request.headers["x-sled-privileged-response-binding"];
++    if (typeof token !== "string") throw new Error();
++    const expected = {
++      hostId: authority.hostId,
++      environmentId: authority.environmentId,
++      method: "POST",
++      path: context.url.pathname,
++      bodySha256: createHash("sha256").update(raw).digest("hex"),
++    };
++    const principal = verifyPrivilegedResponseBinding(authority.secret, token, expected, Date.now());
++    const input = Schema.decodeUnknownSync(Schema.fromJsonString(PrivilegedResponseRequest))(
++      Buffer.from(raw).toString("utf8"),
++      { onExcessProperty: "error" },
++    );
++    if (paths[input.operation] !== context.url.pathname) throw new Error();
++    const authorize = () => {
++      verifyPrivilegedResponseBinding(authority.secret, token, expected, Date.now());
++      requireAgentLevel(context, input.target.agentId, "manage");
++      authority.assertUpstream(principal, input.target);
++    };
++    authorize();
++    if (input.operation === "privilegedResponse.context") {
++      const result = agents.privilegedResponseContext(input.target, principal, authorize);
++      return context.json(200, { nonce: result.nonce, status: result.status });
++    }
++    if (input.operation === "privilegedResponse.result")
++      return context.json(200, agents.privilegedResponseResult(input.target, input.nonce, principal, authorize));
++    return context.json(
++      200,
++      await runCauseEffect(
++        agents.respondPrivileged(
++          {
++            ...input,
++            response: {
++              actionId: input.response.actionId,
++              values: Object.fromEntries(
++                Object.entries(input.response.values ?? {}).map(([key, value]) => [
++                  key,
++                  typeof value === "string" ? value : [...value],
++                ]),
++              ),
++            },
++          },
++          principal,
++          { privileged: true, sender: memberSender(context.member) },
++          authorize,
++          () => authority.acquireCommit(principal, input.target, input.nonce),
++        ),
++      ),
++    );
++  } catch {
++    throw new HttpError(403, "Privileged response unavailable");
++  }
++}
+--- /dev/null
++++ b/src/main/team-api/privileged-response-binding.ts
+@@ -0,0 +1,122 @@
++// @effect-diagnostics nodeBuiltinImport:off -- shared server/engine authentication boundary.
++import { createHmac, timingSafeEqual } from "node:crypto";
++
++export interface PrivilegedResponseBindingRequest {
++  readonly principal: string;
++  readonly hostId: string;
++  readonly environmentId: string;
++  readonly method: string;
++  readonly path: string;
++  readonly bodySha256: string;
++}
++const domain = "sled-privileged-response-principal-v1\n";
++const fail = (): never => {
++  throw new Error("Invalid privileged response binding");
++};
++const signature = (secret: string, payload: string) =>
++  createHmac("sha256", secret)
++    .update(domain + payload)
++    .digest();
++const validRequest = (request: PrivilegedResponseBindingRequest) =>
++  request.principal.length > 0 &&
++  request.principal.length <= 256 &&
++  request.hostId.length > 0 &&
++  request.hostId.length <= 256 &&
++  request.method === "POST" &&
++  [
++    "/v1/sled/privileged-responses/context",
++    "/v1/sled/privileged-responses/respond",
++    "/v1/sled/privileged-responses/result",
++  ].includes(request.path) &&
++  request.environmentId.length > 0 &&
++  request.environmentId.length <= 256 &&
++  /^[a-f0-9]{64}$/.test(request.bodySha256);
++
++/** Called only with the authenticated Sled caller; never accept a caller-supplied principal. */
++export function signPrivilegedResponseBinding(
++  secret: string,
++  request: PrivilegedResponseBindingRequest,
++  now: number,
++): string {
++  if (!secret || !validRequest(request) || !Number.isSafeInteger(now)) return fail();
++  const payload = Buffer.from(
++    JSON.stringify({
++      v: 1,
++      ...request,
++      issuedAt: now,
++      expiresAt: now + 30_000,
++    }),
++  ).toString("base64url");
++  return `${payload}.${signature(secret, payload).toString("base64url")}`;
++}
++
++/** A normal upstream member cannot choose a Sled owner by sending an unsigned header. */
++export function verifyPrivilegedResponseBinding(
++  secret: string,
++  token: string,
++  expected: Omit<PrivilegedResponseBindingRequest, "principal">,
++  now: number,
++): string {
++  if (!secret || token.length > 4096 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token)) return fail();
++  const [payload, mac] = token.split(".");
++  if (!payload || !mac) return fail();
++  const actual = Buffer.from(mac, "base64url"),
++    wanted = signature(secret, payload);
++  if (actual.length !== wanted.length || !timingSafeEqual(actual, wanted)) return fail();
++  let value: unknown;
++  try {
++    value = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
++  } catch {
++    return fail();
++  }
++  if (
++    typeof value !== "object" ||
++    value === null ||
++    !("v" in value) ||
++    !("principal" in value) ||
++    !("hostId" in value) ||
++    !("environmentId" in value) ||
++    !("method" in value) ||
++    !("path" in value) ||
++    !("bodySha256" in value) ||
++    !("issuedAt" in value) ||
++    !("expiresAt" in value)
++  )
++    return fail();
++  const claim = value;
++  if (
++    claim.v !== 1 ||
++    typeof claim.principal !== "string" ||
++    typeof claim.hostId !== "string" ||
++    typeof claim.environmentId !== "string" ||
++    typeof claim.method !== "string" ||
++    typeof claim.path !== "string" ||
++    typeof claim.bodySha256 !== "string" ||
++    typeof claim.issuedAt !== "number" ||
++    typeof claim.expiresAt !== "number"
++  )
++    return fail();
++  const request = {
++    principal: claim.principal,
++    hostId: claim.hostId,
++    environmentId: claim.environmentId,
++    method: claim.method,
++    path: claim.path,
++    bodySha256: claim.bodySha256,
++  };
++  if (
++    !validRequest(request) ||
++    !Number.isSafeInteger(now) ||
++    !Number.isSafeInteger(claim.issuedAt) ||
++    claim.expiresAt !== claim.issuedAt + 30_000 ||
++    now < claim.issuedAt ||
++    now >= claim.expiresAt ||
++    request.hostId !== expected.hostId ||
++    request.environmentId !== expected.environmentId ||
++    request.method !== expected.method ||
++    request.path !== expected.path ||
++    request.bodySha256 !== expected.bodySha256
++  )
++    return fail();
++  return request.principal;
++}
+--- /dev/null
++++ b/packages/contracts/src/team-protocol/sled-privileged-responses-v1.ts
+@@ -0,0 +1,44 @@
++import * as Schema from "effect/Schema";
++
++const Id = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256));
++const Value = Schema.Union([
++  Schema.String.check(Schema.isMaxLength(16_384)),
++  Schema.Array(Id).check(Schema.isMaxLength(64)),
++]);
++export const PrivilegedResponseTarget = Schema.Struct({
++  agentId: Id,
++  threadId: Id,
++  turnId: Id,
++  messageId: Id,
++  blockId: Id,
++  requestId: Schema.Union([Id, Schema.Int]),
++});
++export type PrivilegedResponseTarget = typeof PrivilegedResponseTarget.Type;
++export const PrivilegedResponseRequest = Schema.Union([
++  Schema.Struct({
++    operation: Schema.Literal("privilegedResponse.context"),
++    target: PrivilegedResponseTarget,
++  }),
++  Schema.Struct({
++    operation: Schema.Literal("privilegedResponse.respond"),
++    target: PrivilegedResponseTarget,
++    nonce: Id,
++    consent: Schema.Literal(true),
++    response: Schema.Struct({
++      actionId: Id,
++      values: Schema.optional(Schema.Record(Id, Value).check(Schema.isMaxProperties(64))),
++    }),
++  }),
++  Schema.Struct({
++    operation: Schema.Literal("privilegedResponse.result"),
++    target: PrivilegedResponseTarget,
++    nonce: Id,
++  }),
++]);
++export type PrivilegedResponseRequest = typeof PrivilegedResponseRequest.Type;
++export const PrivilegedResponseResult = Schema.Struct({
++  nonce: Id,
++  status: Schema.Literals(["pending", "answered", "interrupted", "unknown"]),
++});
++export type PrivilegedResponseResult = typeof PrivilegedResponseResult.Type;
++export const PRIVILEGED_RESPONSE_CAPABILITY = "sled-privileged-responses-v1";

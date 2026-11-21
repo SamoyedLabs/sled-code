@@ -1,0 +1,134 @@
+/** Private engine adapter. Credentials never enter a provider request or tool result. */
+import { createHash, createHmac, randomBytes } from "node:crypto";
+import { Effect } from "effect";
+import type { ChannelCommand, McpServerConfig } from "@openbot/contracts/ipc";
+import type { ChannelService } from "./channel-service";
+export { ChannelCodingAuthorityError } from "./channel-coding-extension";
+import { ChannelCodingAuthorityError, type CodingProgress, type CodingBinding, type CodingReceipt } from "./channel-coding-extension";
+import { storedChannelOrigin } from "./channel-coding-origin";
+const digest = (text: string) => createHash("sha256").update(text).digest("hex");
+const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.map(canonical).join(",")}]` :
+  value !== null && typeof value === "object" ? `{${Object.entries(value).filter(([,v])=>v!==undefined)
+    .sort(([a],[b])=>a<b?-1:a>b?1:0).map(([k,v])=>`${JSON.stringify(k)}:${canonical(v)}`).join(",")}}` : JSON.stringify(value);
+export class ChannelCodingRuntime {
+  constructor(readonly channels: ChannelService) {}
+  private config() {
+    const db = this.channels.store.database.connection;
+    db.exec("CREATE TABLE IF NOT EXISTS sled_channel_coding_config (singleton INTEGER PRIMARY KEY CHECK(singleton=1), mcp_id TEXT NOT NULL, credential_key TEXT NOT NULL)");
+    return db;
+  }
+  configure(mcpServerId: string): { configured: true } {
+    if (!mcpServerId || mcpServerId.length > 512) throw new Error("Invalid connector configuration.");
+    this.config().prepare("INSERT INTO sled_channel_coding_config VALUES(1,?,?) ON CONFLICT(singleton) DO UPDATE SET mcp_id=excluded.mcp_id").run(mcpServerId, randomBytes(32).toString("hex"));
+    return { configured: true };
+  }
+  status() { return { capability: "sled-channel-coding-assignment-v1" as const, available: true, progressCapability: "sled-channel-coding-progress-v1" as const }; }
+  send(command: Extract<ChannelCommand,{type:"send"}>, actor: {id:string;name:string}, originRef:string) {
+    return this.channels.sendAttributed(command, actor, originRef);
+  }
+  recover(originRef:string, channelId:string, operationId:string, actorId:string) {
+    const message = this.channels.store.message(channelId, `sled-origin-${originRef}`);
+    if (!message) return null;
+    const origin = storedChannelOrigin(message);
+    if (origin.originRef !== originRef || origin.operationId !== operationId || origin.actorId !== actorId)
+      throw new Error("Attributable channel request conflict.");
+    return { ...origin, channelId, receiptId: `channels:${actorId}:${operationId}` };
+  }
+  private locate(credential:string) {
+    if (!/^[a-f0-9]{64}$/.test(credential)) throw new ChannelCodingAuthorityError("Invalid assignment credential.");
+    const hash=digest(credential);
+    for (const channelId of this.channels.store.ids()) {
+      const assignment=this.channels.store.assignments(channelId).find(a=>a.coding?.attestation?.credentialHash===hash);
+      if (assignment?.coding?.attestation) return { assignment, receipt: assignment.coding, attestation: assignment.coding.attestation };
+    }
+    throw new ChannelCodingAuthorityError("Unknown assignment credential.");
+  }
+  verify(credential:string,purpose:"launch"|"reconcile") {
+    const {assignment,receipt,attestation}=this.locate(credential);
+    const b=receipt.binding;
+    const channel=this.channels.store.get(b.channelId);
+    const task=this.channels.store.tasks(b.channelId).find(t=>t.id===b.taskId);
+    if (receipt.attestation?.refused || !task || channel.archived || !channel.members.some(m=>m.agentId===b.agentId) ||
+      assignment.taskRevision!==b.taskRevision || assignment.turnId!==b.turnId ||
+      task.revision!==b.taskRevision || task.ownerAgentId!==b.agentId ||
+      assignment.requestMessageId!==b.requestMessageId || !receipt.lease || Date.now()>=receipt.lease.expiresAt ||
+      (purpose==="launch" && (assignment.state!=="running" || task.state!=="running")) ||
+      (purpose==="reconcile" && !receipt.result && assignment.state!=="running"))
+      throw new ChannelCodingAuthorityError("Stale channel assignment.");
+    return {originRef:attestation.originRef,requesterKind:attestation.requesterKind,binding:b,
+      expiresAt:receipt.lease.expiresAt,payloadHash:attestation.payloadHash};
+  }
+  renew(credential:string) {
+    const verified=this.verify(credential,"reconcile");
+    return this.channels.coding({agentId:verified.binding.agentId,turnId:verified.binding.turnId,requesterId:verified.binding.requesterId},verified.binding,"renew").pipe(Effect.map(receipt=>{
+      if(!receipt)throw new ChannelCodingAuthorityError("Coding reservation cannot renew.");
+      return receipt;
+    }));
+  }
+  receipt(credential:string) {
+    const verified=this.verify(credential,"reconcile");
+    return this.channels.coding({agentId:verified.binding.agentId,turnId:verified.binding.turnId,requesterId:verified.binding.requesterId},verified.binding,"receipt");
+  }
+  progress(credential:string,event:CodingProgress) {
+    const verified=this.verify(credential,"reconcile");
+    return this.channels.codingProgress({agentId:verified.binding.agentId,turnId:verified.binding.turnId,requesterId:verified.binding.requesterId},verified.binding,event);
+  }
+  submit(credential:string,text:string) {
+    const verified=this.verify(credential,"reconcile");
+    return this.channels.coding({agentId:verified.binding.agentId,turnId:verified.binding.turnId,requesterId:verified.binding.requesterId},verified.binding,"submit",text);
+  }
+  /** Caller derives these execution identities from the actual loaded AgentClient. */
+  launch(actor:{agentId:string;turnId:string;threadId:string},intent:unknown,servers:readonly McpServerConfig[]) {
+    return Effect.gen({self:this},function*(){
+      const channelId=this.channels.store.channelForThread(actor.threadId);
+      if (!channelId) throw new Error("Coding delegation needs an active channel execution.");
+      const assignments=this.channels.store.assignments(channelId);
+      const assignment=assignments.find(a=>a.agentId===actor.agentId&&a.turnId===actor.turnId&&a.state==="running");
+      const tasks=this.channels.store.tasks(channelId);
+      const task=tasks.find(t=>t.id===assignment?.taskId);
+      if (!assignment || !task || !assignment.requestMessageId) throw new Error("No active channel assignment.");
+      const root=tasks.find(t=>t.id===task.rootTaskId)??task;
+      const request=this.channels.store.message(channelId,root.requestMessageId);
+      if (!request) throw new Error("No originating channel request.");
+      const author=request.author;
+      const requesterKind=author.id.startsWith("routine:")?"routine":author.kind==="agent"||author.id.startsWith("agent:")?"agent":"session";
+      const originRef=requesterKind==="session"?storedChannelOrigin(request).originRef:null;
+      const binding:CodingBinding={channelId,taskId:task.id,taskRevision:assignment.taskRevision,
+        assignmentId:assignment.id,agentId:actor.agentId,turnId:actor.turnId,
+        requestMessageId:assignment.requestMessageId,requesterId:author.id,
+        operationId:`sled-${assignment.id}-${assignment.taskRevision}`};
+      const codingActor={agentId:actor.agentId,turnId:actor.turnId,requesterId:author.id};
+      const row=this.config().prepare("SELECT mcp_id,credential_key FROM sled_channel_coding_config WHERE singleton=1").get();
+      if (!row || typeof row.credential_key!=="string") throw new Error("The registered Sled connector is unavailable.");
+      const id=row && typeof row.mcp_id==="string"?row.mcp_id:null;
+      const connector=servers.find(s=>s.id===id && s.enabled && s.transport==="http");
+      if (!connector) throw new Error("The registered Sled connector is unavailable.");
+      const endpoint=new URL(connector.url);
+      if (endpoint.protocol!=="http:" || !["127.0.0.1","localhost","[::1]"].includes(endpoint.hostname)) throw new Error("Connector must use the local Sled endpoint.");
+      endpoint.pathname="/api/openbot/channel-coding";endpoint.search="";endpoint.hash="";
+      const receipt=yield* this.channels.coding(codingActor,binding,"bind");
+      if (!receipt?.lease) throw new Error("Missing coding reservation.");
+      const payloadHash=digest(canonical(intent));
+      if (receipt.attestation && receipt.attestation.payloadHash!==payloadHash) throw new Error("Coding intent changed for this assignment.");
+      // Stable unguessable capability across lost responses/restart, without persisting plaintext.
+      const credential=createHmac("sha256",row.credential_key).update(canonical({binding,payloadHash,reservedAt:receipt.lease.reservedAt})).digest("hex");
+      const next:CodingReceipt={...receipt,attestation:{credentialHash:digest(credential),originRef,requesterKind,payloadHash}};
+      // Persist only a one-way token hash in the existing durable assignment event.
+      this.channels.store.update(this.channels.store.get(channelId),{assignments:[{...assignment,coding:next}]});
+      const headers:Record<string,string>={"Content-Type":"application/json"};
+      for(const item of connector.headers) headers[item.key]=item.value;
+      const response=yield* Effect.tryPromise(()=>fetch(endpoint,{method:"POST",headers,
+        body:JSON.stringify({credential,launch:intent}),redirect:"error",signal:AbortSignal.timeout(30_000)}));
+      if (!response.ok) {
+        // Bare 403 is ambiguous: old servers also returned it after a dispatched launch failed.
+        // A previous attempt may have been accepted, even if this retry is definitely refused.
+        if (!receipt.attestation && response.status === 403 &&
+          response.headers.get("x-sled-coding-outcome") === "refused")
+          yield* this.channels.coding(codingActor,binding,"refuse");
+        throw new Error(`Sled coding request refused (${response.status}).`);
+      }
+      // Server returns only the actual Sled thread receipt, never the private credential.
+      return yield* Effect.tryPromise(()=>response.json() as Promise<unknown>);
+    });
+  }
+}

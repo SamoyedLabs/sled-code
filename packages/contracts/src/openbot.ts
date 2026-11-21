@@ -1,0 +1,69 @@
+import * as Schema from "effect/Schema";
+import { OpenbotAdminRequest, OpenbotReadRequest } from "./openbotApi.ts";
+
+export const OpenbotHostReadInput = Schema.Struct({
+  hostId: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)),
+  request: OpenbotReadRequest,
+});
+export type OpenbotHostReadInput = typeof OpenbotHostReadInput.Type;
+
+export const OpenbotHostAdminInput = Schema.Struct({
+  hostId: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)),
+  request: OpenbotAdminRequest,
+});
+export type OpenbotHostAdminInput = typeof OpenbotHostAdminInput.Type;
+
+export const OpenbotHostStatus = Schema.Struct({
+  desiredRunning: Schema.optional(Schema.Boolean),
+  recovery: Schema.optional(
+    Schema.Struct({
+      state: Schema.Literals([
+        "idle",
+        "starting",
+        "running",
+        "backoff",
+        "exhausted",
+        "preference-error",
+        "switching",
+      ]),
+      attempt: Schema.Int,
+      retryAt: Schema.NullOr(Schema.String),
+    }),
+  ),
+  hostId: Schema.optional(Schema.String),
+  state: Schema.Literals(["disabled", "stopped", "starting", "ready", "failed"]),
+  reason: Schema.optional(
+    Schema.Literals([
+      "disabled",
+      "configuration",
+      "filesystem",
+      "spawn",
+      "readiness",
+      "timeout",
+      "exited",
+    ]),
+  ),
+});
+export type OpenbotHostStatus = typeof OpenbotHostStatus.Type;
+
+export const OpenbotAgent = Schema.Struct({
+  listingId: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512))),
+  id: Schema.String,
+  name: Schema.String,
+  provider: Schema.String,
+  title: Schema.optional(Schema.String.check(Schema.isMaxLength(512))),
+  description: Schema.optional(Schema.String.check(Schema.isMaxLength(100_000))),
+  preview: Schema.optional(Schema.String.check(Schema.isMaxLength(100_000))),
+  updatedAt: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMaxLength(160)))),
+  avatarVersion: Schema.optional(Schema.String.check(Schema.isPattern(/^[0-9a-f-]{36}$/i))),
+  avatarSeed: Schema.optional(Schema.String.check(Schema.isMaxLength(128))),
+  avatarHue: Schema.optional(
+    Schema.NullOr(Schema.Literals([0, 30, 55, 100, 150, 185, 215, 245, 280, 320])),
+  ),
+});
+
+export const OpenbotAgentList = Schema.Array(OpenbotAgent);
+
+export class OpenbotError extends Schema.TaggedError<OpenbotError>()("OpenbotError", {
+  message: Schema.String,
+}) {}

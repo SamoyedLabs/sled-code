@@ -507,6 +507,11 @@ export function parseMarkdownDocument(markdown: string): Root {
   return parser.parse(markdownForNativeParsing(markdown));
 }
 
+/** Raw positions let a chat replace whole top-level fences while retaining the original prose. */
+export function topLevelMarkdownCodeBlocks(markdown: string) {
+  return (parser.parse(markdown) as Root).children.filter((node) => node.type === "code");
+}
+
 export function markdownForNativeRendering(markdown: string, fileLink: RegExp): string {
   return transformNativeMarkdown(markdownForNativeParsing(markdown), fileLink, true);
 }

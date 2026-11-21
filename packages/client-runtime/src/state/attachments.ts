@@ -1,14 +1,15 @@
 import {
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
   WS_METHODS,
-  type AttachmentCreateUploadUrlInput,
   type AttachmentCreateUploadUrlResult,
   type AttachmentDeleteInput,
+  type AttachmentUploadRequest,
   type EnvironmentId,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
 import { mFallback, msg } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
 import type { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
@@ -91,7 +92,7 @@ export function verifyPersistedAttachmentUpload<A, E>(input: {
 }
 
 type AttachmentCreateUploadUrlCommand<E> = AtomCommand<
-  { readonly environmentId: EnvironmentId; readonly input: AttachmentCreateUploadUrlInput },
+  { readonly environmentId: EnvironmentId; readonly input: AttachmentUploadRequest },
   AttachmentCreateUploadUrlResult,
   E
 >;
@@ -116,6 +117,17 @@ export function deletePendingAttachmentUpload<E>(input: {
   );
 }
 
+export class AttachmentTransferError extends Schema.TaggedError<AttachmentTransferError>()(
+  "AttachmentTransferError",
+  {
+    cause: Schema.Defect(),
+  },
+) {
+  override get message(): string {
+    return this.cause instanceof Error ? this.cause.message : String(this.cause);
+  }
+}
+
 export type AttachmentUploadCycleResult =
   | { readonly status: "uploaded"; readonly attachmentId: string }
   | {
@@ -135,7 +147,8 @@ export function runAttachmentUploadCycle<E, RE, TE>(input: {
   readonly createUploadUrl: AttachmentCreateUploadUrlCommand<E>;
   readonly remove: AttachmentRemoveCommand<RE>;
   readonly environmentId: EnvironmentId;
-  readonly upload: AttachmentCreateUploadUrlInput;
+  readonly upload: AttachmentUploadRequest;
+  readonly onMinted?: (attachmentId: string) => "continue" | "cancel";
   readonly resolveUploadUrl: (relativeUrl: string) => string | null;
   /** Sends the bytes; interrupting it aborts the transfer. */
   readonly transport: (url: string) => Effect.Effect<void, TE>;
@@ -157,6 +170,20 @@ export function runAttachmentUploadCycle<E, RE, TE>(input: {
         } as const;
       }
       const attachmentId = minted.value.attachmentId;
+      if (input.onMinted?.(attachmentId) === "cancel") {
+        deletePendingAttachmentUpload({
+          registry: input.registry,
+          remove: input.remove,
+          environmentId: input.environmentId,
+          attachmentId,
+        });
+        return {
+          status: "failed",
+          step: "mint",
+          attachmentId: null,
+          error: new AttachmentTransferError({ cause: "Upload cancelled." }),
+        } as const;
+      }
       return yield* restore(
         Effect.suspend(() => {
           const url = input.resolveUploadUrl(minted.value.relativeUrl);

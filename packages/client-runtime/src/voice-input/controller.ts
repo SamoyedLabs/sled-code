@@ -92,7 +92,7 @@ export interface VoiceRecorder {
 
 export type VoiceInputControllerDependencies = {
   readonly recorder: VoiceRecorder;
-  readonly getTranscriber: () => VoiceTranscriber | null;
+  readonly getTranscriber: (ownerKey: string) => VoiceTranscriber | null;
   readonly requestPermission: () => Promise<{
     readonly granted: boolean;
     readonly canAskAgain: boolean;
@@ -379,7 +379,7 @@ export class VoiceInputController {
         await this.finishRecording(true, this.recordingUri);
         return;
       }
-      const transcriber = this.dependencies.getTranscriber();
+      const transcriber = this.dependencies.getTranscriber(initiatingDraft.ownerKey);
       if (!transcriber) {
         this.setError(this.text(msg("Voice transcription is not available.")), null, "unavailable");
         return;

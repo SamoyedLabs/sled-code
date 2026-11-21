@@ -3835,10 +3835,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             ) : null}
 
             {isComposerCollapsedMobile && speechInput.state.phase === "idle" ? null : (
-              <div
-                data-chat-composer-footer="true"
+              <ComposerSurface.Footer
                 className={cn(
-                  "flex min-w-0 flex-nowrap items-center overflow-visible px-2 pb-2",
                   pendingUserInputs.length > 0 && "pt-2",
                   showMobilePendingAnswerActions &&
                     speechInput.state.phase === "idle" &&
@@ -3963,7 +3961,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     />
                   </ComposerFooterPrimaryActions>
                 </div>
-              </div>
+              </ComposerSurface.Footer>
             )}
             {showInlineRestingControls ? (
               <div className="h-8">

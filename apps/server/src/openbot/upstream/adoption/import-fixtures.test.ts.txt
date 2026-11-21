@@ -1,0 +1,118 @@
+import { mkdtemp, mkdir, rm, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { Effect } from "effect";
+import { zipSync, strToU8 } from "fflate";
+import { afterEach, expect, it, vi } from "vitest";
+import { AgentStore } from "../backend/agent-store";
+import { OpenBotDatabase } from "../backend/openbot-database";
+import { AgentImportService } from "./agent-import-service";
+import { DurableAgentImport } from "./durable-agent-import";
+const roots: string[] = [];
+afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
+const bytes = () => zipSync({ "openbot-import.json": strToU8(JSON.stringify({ format: "openbot-agent-import", version: 1, source: { app: "owned-fixture" }, agents: [{ key: "student", name: "Student", description: "Owned fixture", memories: [], routines: [], skills: [] }] })) });
+async function setup(existing?: string) {
+  const root = existing ?? await mkdtemp(join(tmpdir(), "sled-import-")); if (!existing) roots.push(root);
+  const database = new OpenBotDatabase(join(root, "data"));
+  const store = new AgentStore(join(root, "data"), join(root, "home"), database);
+  await Effect.runPromise(store.initialize());
+  const agents = {
+    listAgents: () => store.list(), createAgentProfile: (input: Parameters<typeof store.createAgent>[0]) => store.createAgent(input).pipe(Effect.orDie),
+    createRoutine: () => { throw new Error("Unexpected routine"); }, createMemory: () => { throw new Error("Unexpected memory"); }, memoryLimit: () => 100, initializeMemorySelection: () => {},
+    setAvatar: (id: string, image: Parameters<typeof store.setAvatar>[1]) => store.setAvatar(id, image).pipe(Effect.orDie), deleteAgent: (id: string) => store.deleteAgent(id).pipe(Effect.asVoid, Effect.orDie),
+    channels: { command: () => Effect.die("Unexpected channel") }, createChannelMemory: () => {}, createChannelRoutine: () => {}, deleteChannel: () => Effect.void,
+  };
+  const service = new AgentImportService(agents, { library: () => { throw new Error("Unexpected skill"); }, installLocal: () => Effect.void }, () => ({ id: "owner", name: "Owner" }));
+  const durable = new DurableAgentImport(service, join(root, "receipts"));
+  return { root, database, store, durable, service };
+}
+it("stages real ZIP, isolates principals, survives restart, applies once and recovers exact result", async () => {
+  let s = await setup();
+  const preview = await s.durable.stage("owner", "request-1", bytes());
+  expect(preview.state).toBe("staged"); expect(s.store.list()).toHaveLength(0);
+  expect(await s.durable.status("other")).toBeNull();
+  const input = { token: preview.token, keys: ["student"], channelKeys: [], timezone: "America/Chicago" };
+  await expect(s.durable.apply("other", input, { id: "other", name: "Other" })).rejects.toThrow("closed");
+  expect(await s.durable.discard("other", preview.token)).toBeNull();
+  s.database.close(); s = await setup(s.root);
+  expect((await s.durable.status("owner"))?.token).toBe(preview.token);
+  const [result, duplicate] = await Promise.all([s.durable.apply("owner", input, { id: "owner", name: "Owner" }), s.durable.apply("owner", input, { id: "owner", name: "Owner" })]);
+  expect(duplicate).toEqual(result);
+  expect(result.state).toBe("complete"); expect(s.store.list()).toHaveLength(1);
+  s.database.close(); s = await setup(s.root);
+  expect(await s.durable.apply("owner", input, { id: "owner", name: "Owner" })).toEqual(result);
+  expect(s.store.list()).toHaveLength(1);
+  await expect(s.durable.apply("owner", { ...input, timezone: "UTC" }, { id: "owner", name: "Owner" })).rejects.toThrow("selection changed");
+  expect((await s.durable.discard("owner", input.token))?.state).toBe("discarded"); s.database.close();
+});
+it("refuses malformed/oversize archives, invalid selection and replay of a crash-window apply", async () => {
+  const s = await setup();
+  await expect(s.durable.stage("owner", "bad", new Uint8Array([1,2,3]))).rejects.toThrow();
+  await expect(s.durable.stage("owner", "big", new Uint8Array(104857601))).rejects.toThrow("100 MiB");
+  await expect(s.durable.stage("owner", "traversal", zipSync({ "../escape": strToU8("not allowed") }))).rejects.toThrow();
+  const p = await s.durable.stage("owner", "valid", bytes());
+  await expect(s.durable.apply("owner", { token: p.token, keys: ["wrong"], channelKeys: [], timezone: "UTC" }, { id: "owner", name: "Owner" })).rejects.toThrow("preview");
+  const path = join(s.root, "receipts", createHash("sha256").update("owner").digest("hex") + ".json");
+  const journal = JSON.parse(await readFile(path, "utf8")); journal.state = "applying";
+  await writeFile(path, JSON.stringify(journal));
+  expect((await s.durable.status("owner"))?.state).toBe("uncertain");
+  expect((await s.durable.apply("owner", { token: p.token, keys: ["student"], channelKeys: [], timezone: "UTC" }, { id: "owner", name: "Owner" })).state).toBe("uncertain");
+  await expect(s.durable.discard("owner", p.token)).rejects.toThrow("unresolved");
+  expect(s.store.list()).toHaveLength(0); s.database.close();
+});
+it("discard survives restart and cannot import the discarded token", async () => {
+  let s = await setup(); const p = await s.durable.stage("owner", "first", bytes());
+  await s.durable.discard("owner", p.token); s.database.close(); s = await setup(s.root);
+  expect((await s.durable.status("owner"))?.state).toBe("discarded");
+  await expect(s.durable.apply("owner", { token: p.token, keys: ["student"], channelKeys: [], timezone: "UTC" }, { id: "owner", name: "Owner" })).rejects.toThrow("closed");
+  expect(s.store.list()).toHaveLength(0); s.database.close();
+});
+
+it("retains created profiles when the actual producer completes but its response is lost", async () => {
+  let s = await setup(); const p = await s.durable.stage("owner", "response-loss", bytes());
+  const original = s.service.apply;
+  vi.spyOn(s.service, "apply").mockImplementation((input, caller) => original(input, caller).pipe(Effect.flatMap(() => Effect.die(new Error("response lost after creation")))));
+  const input = { token: p.token, keys: ["student"], channelKeys: [], timezone: "UTC" };
+  expect((await s.durable.apply("owner", input, { id: "owner", name: "Owner" })).state).toBe("uncertain");
+  expect(s.store.list()).toHaveLength(1); const id = s.store.list()[0]!.id;
+  s.database.close(); s = await setup(s.root);
+  expect((await s.durable.apply("owner", input, { id: "owner", name: "Owner" })).state).toBe("uncertain");
+  expect(s.store.list().map(a => a.id)).toEqual([id]); s.database.close();
+});
+
+it("bounds retained archives and releases capacity only after safe discard", async () => {
+  const s = await setup();
+  const first = await s.durable.stage("one", "one", bytes());
+  for (const owner of ["two", "three", "four"]) await s.durable.stage(owner, owner, bytes());
+  await expect(s.durable.stage("five", "five", bytes())).rejects.toThrow("staging is full");
+  await s.durable.discard("one", first.token);
+  expect((await s.durable.stage("five", "five", bytes())).state).toBe("staged"); s.database.close();
+});
+it("does not reveal imported agents hidden after completion through status recovery", async () => {
+  const { IncomingMessage, ServerResponse } = await import("node:http");
+  const { Socket } = await import("node:net");
+  const { routeDurableAgentImport } = await import("./team-api/route-durable-agent-import");
+  const s = await setup(); const p = await s.durable.stage("owner", "hidden", bytes());
+  await s.durable.apply("owner", { token: p.token, keys: ["student"], channelKeys: [], timezone: "UTC" }, { id: "owner", name: "Owner" });
+  const request = new IncomingMessage(new Socket()); request.method = "POST"; request.url = "/v1/sled-agent-import/status";
+  const json = vi.fn(() => "handled" as const);
+  await expect(routeDurableAgentImport({ request, response: new ServerResponse(request), method: "POST", url: new URL(request.url, "http://fixture.invalid"), protocol: 3, capabilities: new Set(["sled-agent-import-v1"]), member: { id: "owner", username: "owner", email: null, name: null, role: "owner", createdAt: "2026-11-04T00:00:00Z", disabled: false }, token: "fixture", sessionId: "fixture", sessionExpiresAt: "2026-11-05T00:00:00Z", agentLevel: () => "manage", json, empty: () => "handled" }, s.durable, () => false, new Set(s.store.list().map(a => a.id)))).rejects.toMatchObject({ status: 404 });
+  expect(json).not.toHaveBeenCalled(); s.database.close(); request.destroy();
+});
+it("imports only selected agents and their file bytes into new workspaces", async () => {
+  const s = await setup();
+  const archive = zipSync({ "openbot-import.json": strToU8(JSON.stringify({ format: "openbot-agent-import", version: 1, agents: [{ key: "a", name: "Selected", description: "", files: "agents/a/files" }, { key: "b", name: "Not selected", description: "" }] })), "agents/a/files/notes.txt": strToU8("owned archive notes") });
+  const p = await s.durable.stage("owner", "selected", archive);
+  const result = await s.durable.apply("owner", { token: p.token, keys: ["a"], channelKeys: [], timezone: "UTC" }, { id: "owner", name: "Owner" });
+  expect(result.state).toBe("complete"); expect(s.store.list().map(a => a.name)).toEqual(["Selected"]);
+  expect(await readFile(join(s.store.list()[0]!.workspacePath, "imported", "notes.txt"), "utf8")).toBe("owned archive notes"); s.database.close();
+});
+
+it("recovers source loss before the stage receipt without consuming permanent staging capacity", async () => {
+  const s = await setup(); const directory = join(s.root, "receipts"); await mkdir(directory);
+  for (const owner of ["one", "two", "three", "four"]) await writeFile(join(directory, createHash("sha256").update(owner).digest("hex") + ".zip"), bytes());
+  expect(await s.durable.status("one")).toBeNull();
+  expect((await s.durable.stageUpload("owner", "recover", async () => bytes())).state).toBe("staged");
+  expect(s.store.list()).toHaveLength(0); s.database.close();
+});

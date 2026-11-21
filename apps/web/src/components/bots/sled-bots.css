@@ -1,0 +1,98 @@
+/* Sled's theme owns this workspace; upstream selectors retain their interaction contracts. */
+:root .openbot-react,
+.openbot-react.ob-shell.ob-sled-shell,
+.openbot-react.bot-settings-surface {
+  --openbot-bg-canvas: var(--background);
+  --openbot-bg-frame: var(--background);
+  --openbot-bg-sidebar: var(--sidebar);
+  --openbot-bg-surface: var(--card);
+  --openbot-bg-surface-raised: var(--message-surface, var(--muted));
+  --openbot-bg-control: color-mix(in srgb, var(--input) 32%, var(--background));
+  --openbot-bg-control-hover: var(--accent);
+  --openbot-bg-control-active: var(--accent);
+  --openbot-text-primary: var(--foreground);
+  --openbot-text-secondary: var(--muted-foreground);
+  --openbot-text-muted: var(--muted-foreground);
+  --openbot-text-dim: var(--muted-foreground);
+  --openbot-border: var(--border);
+  --openbot-border-strong: var(--border);
+  --openbot-hover: var(--accent);
+  --openbot-accent: var(--primary);
+  --openbot-accent-text: var(--primary);
+  --openbot-accent-soft: var(--accent);
+  --openbot-font-sans: var(--font-sans);
+  --openbot-text-lg: 14px;
+  --openbot-radius-bubble: 12px;
+  --openbot-chat-entry-gap: 20px;
+}
+
+.openbot-react.ob-shell.ob-sled-shell .ob-chat {
+  --conversation-column-width: 800px;
+}
+.openbot-react.ob-shell.ob-sled-shell .ob-chat-scroll {
+  padding-inline: max(24px, calc((100% - 800px) / 2));
+  padding-block: 24px 32px;
+}
+.openbot-react.ob-shell.ob-sled-shell .ob-chat-message[data-author="agent"] {
+  padding-inline-start: 44px;
+}
+.openbot-react.ob-shell.ob-sled-shell .ob-live-message-avatar {
+  position: absolute;
+  inset-inline-start: 0;
+  top: calc(var(--openbot-chat-entry-gap, 20px) + 2px);
+}
+.openbot-react.ob-shell.ob-sled-shell .ob-live-message-author {
+  margin-bottom: 8px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+}
+.openbot-react.ob-shell.ob-sled-shell .ob-chat-bubble {
+  max-width: 95%;
+  letter-spacing: normal;
+}
+.openbot-react.ob-shell.ob-sled-shell .ob-chat-bubble-content {
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: 16px;
+  border-start-start-radius: 4px;
+  background: var(--card);
+  color: var(--foreground);
+  padding: 12px 16px;
+  font-size: 14px;
+  line-height: 1.625;
+}
+.openbot-react.ob-shell.ob-sled-shell .ob-chat-message[data-author="user"] .ob-chat-bubble-content {
+  border-color: transparent;
+  border-start-start-radius: 16px;
+  border-start-end-radius: 4px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.openbot-react.ob-shell.ob-sled-shell .ob-group-message-author {
+  padding-inline: 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.openbot-react.ob-shell.ob-sled-shell .ob-group-message-avatar {
+  align-self: start;
+}
+.openbot-react.ob-shell.ob-sled-shell .ob-group-message-avatar > svg {
+  width: 32px;
+  height: 32px;
+  translate: 0;
+}
+.openbot-react.ob-shell.ob-sled-shell .ob-group-frame[data-embedded] {
+  border: 0;
+  border-radius: 0;
+}
+.openbot-react.ob-shell.ob-sled-shell .ob-group-header {
+  min-height: 56px;
+}
+.openbot-react.ob-shell.ob-sled-shell .ob-group-header .channel-header-copy {
+  flex-direction: column;
+  align-items: start;
+  gap: 2px;
+}
+.openbot-react.ob-shell.ob-sled-shell .ob-group-composer-wrap .ob-chat-composer {
+  background: var(--card);
+}

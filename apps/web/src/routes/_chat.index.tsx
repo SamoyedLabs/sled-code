@@ -98,7 +98,7 @@ function DraftStartError({ onRetry }: { readonly onRetry: () => void }) {
     <SidebarInset
       {...contentArea}
       role="main"
-      className="h-dvh min-h-0 overflow-hidden overscroll-y-none"
+      className="h-[var(--workspace-shell-height,100dvh)] min-h-0 overflow-hidden overscroll-y-none"
     >
       {isElectron ? <WorkspacePageHeader electron /> : null}
       <Empty className="flex-1">

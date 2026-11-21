@@ -17,6 +17,7 @@ export function useVoiceInputController(input: {
   readonly readDraftMessage: () => string | null;
   readonly selection: ComposerEditorSelection;
   readonly disabled?: boolean;
+  readonly transcriberAvailable?: boolean;
   readonly onChangeDraftMessage: (value: string) => void;
   readonly onChangeSelection: (selection: ComposerEditorSelection) => void;
 }) {
@@ -64,7 +65,9 @@ export function useVoiceInputController(input: {
   const state = global.ownerKey === input.ownerKey ? global.state : IDLE_STATE;
   const isBusy = voiceInputBlocksSubmission(state);
   return {
-    isAvailable: global.isAvailable && (!global.isBusy || global.ownerKey === input.ownerKey),
+    isAvailable:
+      (input.transcriberAvailable ?? global.isAvailable) &&
+      (!global.isBusy || global.ownerKey === input.ownerKey),
     state,
     audioLevels: global.audioLevels,
     elapsedSeconds: global.elapsedSeconds,

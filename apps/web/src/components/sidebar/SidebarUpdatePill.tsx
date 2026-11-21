@@ -196,11 +196,11 @@ export async function installLocalUpdate(
   }
 }
 
-export function SidebarUpdatePill() {
-  return <SidebarUpdateControl />;
+export function SidebarUpdatePill({ rail = false }: { rail?: boolean }) {
+  return <SidebarUpdateControl rail={rail} />;
 }
 
-function SidebarUpdateControl() {
+function SidebarUpdateControl({ rail }: { rail: boolean }) {
   const state = useDesktopUpdateState();
   const gt = useGT();
   const messages = useMessages();
@@ -441,8 +441,15 @@ function SidebarUpdateControl() {
           ? { status: "downloading", percent: state.downloadPercent }
           : { status: "waiting" };
     return (
-      <SidebarMenuItem className="@container/sidebar-update ml-auto flex min-w-8 flex-1">
+      <SidebarMenuItem
+        className={
+          rail
+            ? "flex size-10 items-center justify-center"
+            : "@container/sidebar-update ml-auto flex min-w-8 flex-1"
+        }
+      >
         <SidebarUpdateCapsule
+          compact={rail}
           run={run}
           local={local}
           icon={statusIcon}
@@ -478,7 +485,8 @@ function SidebarUpdateControl() {
       }
       aria-disabled={isInteractionDisabled || undefined}
       className={cn(
-        "inline-flex size-8 items-center justify-center rounded-full outline-hidden ring-ring transition-colors focus-visible:ring-2 focus-visible:ring-inset",
+        "inline-flex items-center justify-center outline-hidden ring-ring transition-colors focus-visible:ring-2 focus-visible:ring-inset",
+        rail ? "size-10 rounded-lg" : "size-8 rounded-full",
         isInteractionDisabled ? "cursor-not-allowed" : "cursor-pointer",
         showUpdateIconState
           ? cn(
@@ -520,7 +528,9 @@ function SidebarUpdateControl() {
   );
 
   return (
-    <SidebarMenuItem className="ml-auto shrink-0">
+    <SidebarMenuItem
+      className={rail ? "flex size-10 items-center justify-center" : "ml-auto shrink-0"}
+    >
       <Popover
         handle={releaseNotesPopoverHandle}
         open={releaseNotesOpen && showReleaseNotesPopover}

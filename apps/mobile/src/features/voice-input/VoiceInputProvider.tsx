@@ -15,6 +15,12 @@ import {
   rememberMicrophones,
 } from "../../lib/microphonePriority";
 import { getLocalVoiceTranscriber } from "../../native/voiceTranscription";
+import {
+  getBotSpeechTranscriber,
+  usesBotLocalRecognizer,
+  usesBotScribeRecognizer,
+} from "../bots/upstream/voice/botRecognition";
+import { createBotScribeCapture } from "../bots/upstream/voice/botScribeCapture";
 import { createVoiceRecorder } from "../../native/voiceRecorder";
 import { mobilePreferencesAtom, saveMobilePreferences } from "../../state/preferences";
 import { getNativeShowcaseScene } from "../showcase/nativeShowcaseScene";
@@ -118,9 +124,24 @@ const voiceInputAtom = Atom.make((get) => {
       return preferredMicrophoneInput(inputs, order);
     },
   });
+  const scribe = createBotScribeCapture((status) =>
+    session.controller.handleRecorderStatus(status),
+  );
+  let scribeSelected = false;
+  const currentRecorder = () => (scribeSelected ? scribe.recorder : recorder);
   const session: VoiceInputSession = new VoiceInputSession({
-    recorder,
-    getTranscriber: () => {
+    recorder: {
+      get uri() {
+        return currentRecorder().uri;
+      },
+      prepareToRecordAsync: () => currentRecorder().prepareToRecordAsync(),
+      record: (options) => currentRecorder().record(options),
+      stop: () => currentRecorder().stop(),
+    },
+    getTranscriber: (ownerKey) => {
+      scribeSelected = usesBotScribeRecognizer(ownerKey);
+      if (scribeSelected) return scribe.transcriber;
+      if (usesBotLocalRecognizer(ownerKey)) return getBotSpeechTranscriber();
       const route = registry.get(voiceRouteAtom);
       if (route) return route.transcriber;
       const transcriber = registry.get(localVoiceTranscriberAtom);
@@ -128,6 +149,7 @@ const voiceInputAtom = Atom.make((get) => {
     },
     requestPermission: permission.requestPermission,
     configureRecording: async () => {
+      if (scribeSelected) return;
       const token = acquireAudioSession("recording");
       audioToken = token;
       try {
@@ -141,8 +163,11 @@ const voiceInputAtom = Atom.make((get) => {
       if (audioToken) await releaseAudioSession(audioToken);
       audioToken = null;
     },
-    deleteRecording: (uri) => new File(uri).delete(),
+    deleteRecording: (uri) => {
+      if (!scribe.release(uri)) new File(uri).delete();
+    },
     sampleRecording: () => {
+      if (scribeSelected) return scribe.sample();
       const status = recorder.getStatus();
       return status?.isRecording
         ? { durationMillis: status.durationMillis, metering: status.metering }

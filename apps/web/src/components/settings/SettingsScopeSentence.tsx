@@ -80,6 +80,14 @@ export function SettingsScopeSentence() {
     environments,
     onChange: scope.selectScope,
   };
+  if (pathname === "/settings/bots")
+    return (
+      <p className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <T context="settings scope sentence for bot host">
+          Computer <Var>{<EnvironmentScopeMenu {...props} />}</Var>
+        </T>
+      </p>
+    );
   const group = scope.groups.find((candidate) => candidate.projectKey === scope.search.project);
   const hasCheckouts = group ? settingsScopeCheckoutChoices(group, scope.search).length > 0 : false;
   const project = <ProjectScopeMenu {...props} />;

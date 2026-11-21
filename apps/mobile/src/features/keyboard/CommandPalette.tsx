@@ -20,7 +20,7 @@ import {
   threadRecentUse,
 } from "@t3tools/shared/paletteSearch";
 import { searchMatchHintLabel } from "@t3tools/shared/paletteSearchCopy";
-import { T, useGT, useMessages } from "gt-react-native";
+import { T, useGT, useMessages, msg } from "gt-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -78,6 +78,7 @@ import { PullRequestGlyph } from "../pull-requests/pullRequestGlyphs";
 import { openSettings } from "../settings/settings-navigation";
 import { useSelectWorkspaceTab } from "../layout/workspace/useSelectWorkspaceTab";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
+import { m as i18nMessage } from "../../i18n/messages";
 
 const PALETTE_COMMANDS: ReadonlyArray<HardwareKeyboardCommand> = [
   "commandPalette",
@@ -333,6 +334,13 @@ export function CommandPalette(props: {
         title: gt("Manage environments"),
         searchTerms: ["connections", "server", "remote"],
         run: () => openSettings(navigation, "SettingsEnvironments"),
+      },
+      {
+        key: "bots",
+        kind: "action",
+        title: i18nMessage(msg("Bots")),
+        searchTerms: ["openbot", "persistent", "teammates"],
+        run: () => navigation.navigate("Bots"),
       },
       {
         key: "scheduledTasks",

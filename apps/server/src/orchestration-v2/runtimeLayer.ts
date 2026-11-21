@@ -1,3 +1,6 @@
+import * as OpenbotCoding from "../openbot/CodingBridge.ts";
+import * as OpenbotRemoteCoding from "../openbot/RemoteCoding.ts";
+import * as ThreadLaunchReceipts from "./ThreadLaunchReceipts.ts";
 import * as WorktreeBranchSync from "./WorktreeBranchSync.ts";
 import * as GuestShareService from "../guest/GuestShareService.ts";
 import * as UsageLimitRecoveryWorker from "./UsageLimitRecoveryWorker.ts";
@@ -401,7 +404,23 @@ export const layer = Layer.mergeAll(
   layerLegacyV1ThreadImporterProvided,
 );
 
+const layerOpenbotRemoteCodingProvided = OpenbotRemoteCoding.layer.pipe(
+  Layer.provide(layerThreadManagementProvided),
+);
+
 export const layerProduction = Layer.mergeAll(
+  ThreadLaunchReceipts.layer.pipe(Layer.provide(layerThreadManagementProvided)),
+  layerOpenbotRemoteCodingProvided,
+  OpenbotCoding.layer.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        layerThreadLaunchProvided,
+        layerThreadManagementProvided,
+        layerOpenbotRemoteCodingProvided,
+        ProjectionStore.layer,
+      ),
+    ),
+  ),
   WorktreeBranchSync.layer.pipe(
     Layer.provide(Layer.merge(layerThreadManagementProvided, ProjectionStore.layer)),
   ),
@@ -430,6 +449,7 @@ export const layerProduction = Layer.mergeAll(
 ).pipe(
   Layer.provide(ResourceCleanupService.layer.pipe(Layer.provide(layerScheduledTaskProvided))),
   Layer.provideMerge(layerProjectService),
-  Layer.provide(Scheduler.layer),
+  // Share this scheduler with Sled-owned maintenance responsibilities outside orchestration.
+  Layer.provideMerge(Scheduler.layer),
   Layer.provideMerge(layerEventInfrastructure),
 );

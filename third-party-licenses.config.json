@@ -1,6 +1,14 @@
 {
   "customNotices": [
     {
+      "name": "OpenBot workspace and protocols",
+      "version": "0.60.0",
+      "bundles": ["desktop", "web", "mobile"],
+      "license": "PolyForm-Noncommercial-1.0.0 OR Commercial",
+      "sourceUrl": "https://github.com/nightly-labs/openbot/tree/0c7753fa622c38419939cd230657f40e5883d098",
+      "noticeFiles": ["third-party/openbot/NOTICE", "third-party/openbot/LICENSE"]
+    },
+    {
       "bundles": ["desktop", "mobile"],
       "license": "MIT",
       "name": "Apple Speech engine (adapted from @react-native-ai/apple)",
@@ -348,7 +356,9 @@
       "version": "0.4.0",
       "license": "Apache-2.0 AND OFL-1.1",
       "generatedNotices": [
-        { "licenseId": "Apache-2.0" },
+        {
+          "licenseId": "Apache-2.0"
+        },
         {
           "licenseId": "OFL-1.1",
           "copyrights": [
