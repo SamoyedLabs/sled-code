@@ -212,6 +212,10 @@ it.effect(
         );
         expect(send).toBe(1);
       }).pipe(Effect.provide(Layer.fresh(Attention.layer).pipe(Layer.provide(dependencies))));
-    }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" })));
+    }).pipe(
+      Effect.provide(
+        Layer.merge(NodeSqliteClient.layer({ filename: ":memory:" }), NodeCryptoLayer.layer),
+      ),
+    );
   },
 );

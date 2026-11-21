@@ -291,81 +291,85 @@ export const layer = Api.make(
       }),
     });
 
-    const layerRuntime = Layer.empty.pipe(
-      Layer.provideMerge(MobileRegistrations.layer),
-      Layer.provideMerge(AgentActivityPublisher.layer),
-      Layer.provideMerge(
-        BotAttention.layer.pipe(
-          Layer.provide(
-            Layer.effect(SqlClient.SqlClient, RelayDb.RelayDb.pipe(Effect.map((db) => db.$client))),
-          ),
-        ),
-      ),
-      Layer.provideMerge(EnvironmentConnector.layer),
-      Layer.provideMerge(EnvironmentLinker.layer),
-      Layer.provideMerge(
-        Layer.mergeAll(
-          EnvironmentPublishSignatures.layer,
-          ManagedEndpointReaper.layer,
-          HeldHooks.layer,
-        ),
-      ),
-      Layer.provideMerge(
-        ManagedEndpointProvider.layerCloudflareBindings(
-          managedEndpointTunnelBinding,
-          managedEndpointDnsBinding,
-          alchemyRuntimeContext,
-        ),
-      ),
-      Layer.provideMerge(DpopProofs.layer),
-      Layer.provideMerge(ApnsDeliveries.layer),
-      Layer.provideMerge(
-        FcmDeliveries.layer.pipe(
-          Layer.provide(
-            Layer.succeed(FcmDeliveryQueueSender.FcmDeliveryQueueSender, {
-              send: Effect.fn("FcmDeliveryQueueSender.send")(
-                function* (body) {
-                  return yield* fcmDeliveryQueueSender.send(body);
-                },
-                Effect.provideService(Alchemy.RuntimeContext, alchemyRuntimeContext),
-              ),
-            }),
-          ),
-          Layer.provideMerge(
-            FcmClient.layer.pipe(
-              Layer.provide(FcmAssertionSigner.layer),
-              Layer.provide(
-                Layer.succeed(WebCrypto.WebCrypto, { subtle: globalThis.crypto.subtle }),
+    const layerRuntime = Layer.empty
+      .pipe(
+        Layer.provideMerge(MobileRegistrations.layer),
+        Layer.provideMerge(AgentActivityPublisher.layer),
+        Layer.provideMerge(
+          BotAttention.layer.pipe(
+            Layer.provide(
+              Layer.effect(
+                SqlClient.SqlClient,
+                RelayDb.RelayDb.pipe(Effect.map((db) => db.$client)),
               ),
             ),
           ),
         ),
-      ),
-      Layer.provideMerge(ApnsClient.layer.pipe(Layer.provideMerge(ApnsProviderTokens.layer))),
-      Layer.provideMerge(
-        ApnsDeliveryQueue.layerCloudflareQueues(apnsDeliveryQueueSender, alchemyRuntimeContext),
-      ),
-      Layer.provideMerge(Layer.mergeAll(AgentActivityRows.layer, Devices.layer, layerHookInbox)),
-      Layer.provideMerge(EnvironmentCredentials.layer),
-      Layer.provideMerge(
-        Layer.mergeAll(
-          CloudflareApiPause.layer,
-          EnvironmentLinks.layer,
-          ManagedEndpointAllocations.layer,
-          ManagedTunnelLimits.layer,
+        Layer.provideMerge(EnvironmentConnector.layer),
+        Layer.provideMerge(EnvironmentLinker.layer),
+        Layer.provideMerge(
+          Layer.mergeAll(
+            EnvironmentPublishSignatures.layer,
+            ManagedEndpointReaper.layer,
+            HeldHooks.layer,
+          ),
         ),
-      ),
-      Layer.provideMerge(Layer.mergeAll(LiveActivities.layer, T3ChatAccounts.layer)),
-      Layer.provideMerge(DeliveryAttempts.layer),
-      Layer.provideMerge(RelayTokens.layer.pipe(Layer.provideMerge(CloudMintSigner.layer))),
-      Layer.provideMerge(
-        RelayDb.RelayTransactions.layer.pipe(
-          Layer.provideMerge(Layer.succeed(RelayDb.RelayDb, db)),
+        Layer.provideMerge(
+          ManagedEndpointProvider.layerCloudflareBindings(
+            managedEndpointTunnelBinding,
+            managedEndpointDnsBinding,
+            alchemyRuntimeContext,
+          ),
         ),
-      ),
-      Layer.provideMerge(Layer.effect(RelayConfiguration.RelayConfiguration, loadSettings)),
-      Layer.provideMerge(layerWebcrypto),
-    );
+        Layer.provideMerge(DpopProofs.layer),
+        Layer.provideMerge(ApnsDeliveries.layer),
+        Layer.provideMerge(
+          FcmDeliveries.layer.pipe(
+            Layer.provide(
+              Layer.succeed(FcmDeliveryQueueSender.FcmDeliveryQueueSender, {
+                send: Effect.fn("FcmDeliveryQueueSender.send")(
+                  function* (body) {
+                    return yield* fcmDeliveryQueueSender.send(body);
+                  },
+                  Effect.provideService(Alchemy.RuntimeContext, alchemyRuntimeContext),
+                ),
+              }),
+            ),
+            Layer.provideMerge(
+              FcmClient.layer.pipe(
+                Layer.provide(FcmAssertionSigner.layer),
+                Layer.provide(
+                  Layer.succeed(WebCrypto.WebCrypto, { subtle: globalThis.crypto.subtle }),
+                ),
+              ),
+            ),
+          ),
+        ),
+        Layer.provideMerge(ApnsClient.layer.pipe(Layer.provideMerge(ApnsProviderTokens.layer))),
+        Layer.provideMerge(
+          ApnsDeliveryQueue.layerCloudflareQueues(apnsDeliveryQueueSender, alchemyRuntimeContext),
+        ),
+        Layer.provideMerge(Layer.mergeAll(AgentActivityRows.layer, Devices.layer, layerHookInbox)),
+        Layer.provideMerge(EnvironmentCredentials.layer),
+        Layer.provideMerge(
+          Layer.mergeAll(
+            CloudflareApiPause.layer,
+            EnvironmentLinks.layer,
+            ManagedEndpointAllocations.layer,
+            ManagedTunnelLimits.layer,
+          ),
+        ),
+        Layer.provideMerge(Layer.mergeAll(LiveActivities.layer, T3ChatAccounts.layer)),
+        Layer.provideMerge(DeliveryAttempts.layer),
+        Layer.provideMerge(RelayTokens.layer.pipe(Layer.provideMerge(CloudMintSigner.layer))),
+        Layer.provideMerge(
+          RelayDb.RelayTransactions.layer.pipe(
+            Layer.provideMerge(Layer.succeed(RelayDb.RelayDb, db)),
+          ),
+        ),
+        Layer.provideMerge(Layer.effect(RelayConfiguration.RelayConfiguration, loadSettings)),
+      )
+      .pipe(Layer.provideMerge(layerWebcrypto));
 
     // Fails open: a limiter outage must not drop webhooks or app telemetry.
     const allowWith =

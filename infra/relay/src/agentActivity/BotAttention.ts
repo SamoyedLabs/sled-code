@@ -10,6 +10,7 @@ import { stableStringify } from "@t3tools/shared/relaySigning";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Digest from "effect/crypto/Digest";
+import * as Signature from "effect/crypto/Signature";
 import * as Hex from "effect/encoding/Hex";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -53,19 +54,19 @@ const make = Effect.gen(function* () {
   const apns = yield* ApnsClient.ApnsClient;
   const fcm = yield* FcmClient.FcmClient;
   const digest = yield* Digest.Digest;
+  const signature = yield* Signature.Signature;
   return BotAttention.of({
     publish: Effect.fn("BotAttention.publish")(
       function* (input) {
         const now = yield* DateTime.now;
-        const proof = yield* verifyRelayJwt({
+        const proof = yield* verifyRelayJwt(RelayBotAttentionProof, {
           publicKey: input.environmentPublicKey,
           token: input.request.proof,
           typ: "t3-bot-attention+jwt",
           issuer: `t3-env:${input.environmentId}`,
           audience: normalizeRelayIssuer(config.relayIssuer),
-          nowEpochSeconds: Math.floor(now.epochMilliseconds / 1000),
         }).pipe(
-          Effect.flatMap(Schema.decodeUnknownEffect(RelayBotAttentionProof)),
+          Effect.provideService(Signature.Signature, signature),
           Effect.mapError((cause) => new BotAttentionError({ reason: "authority", cause })),
         );
         if (

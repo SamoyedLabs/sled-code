@@ -4,7 +4,8 @@ import { render } from "../../../test/render";
 import { UnifiedUsagePage } from "./UnifiedUsagePage";
 import "~/index.css";
 
-vi.mock("../../state/environments", () => ({
+vi.mock("../../state/environments", async (original) => ({
+  ...(await original<typeof import("../../state/environments")>()),
   usePrimaryEnvironmentId: () => EnvironmentId.make("primary"),
   useEnvironments: () => ({
     environments: [

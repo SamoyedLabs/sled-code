@@ -71,11 +71,12 @@ export function useBotCommandPaletteGroups(
   const files = useEnvironmentQuery(
     searchEnabled ? openbot.fileSearch({ environmentId, input: { hostId: ready, query } }) : null,
   );
+  const agentList = Array.isArray(agents.data) ? agents.data : [];
   const routines = useBotRoutineIndex({
     enabled: Boolean(searchEnabled),
     environmentId: environmentId ?? null,
     hostId: ready || null,
-    agents: agents.data ?? [],
+    agents: agentList,
     channels: channelList(channels.data) ?? [],
   });
   const messagePage = decodeMessageMatches(searchEnabled ? messages.data : undefined);
@@ -131,7 +132,7 @@ export function useBotCommandPaletteGroups(
     run: () => go("chats", { botCreate: "group" }),
   });
   const conversations: CommandPaletteActionItem[] = [
-    ...(agents.data ?? []).map((agent): CommandPaletteActionItem => ({
+    ...agentList.map((agent): CommandPaletteActionItem => ({
       kind: "action",
       value: `bot:${agent.id}`,
       title: agent.name,
@@ -157,7 +158,7 @@ export function useBotCommandPaletteGroups(
           value: `bot-message:${hit.agentId}:${hit.message.id}`,
           title: hit.message.text.slice(0, 100) || gt("Bot message"),
           description: gt("Bot message · {value}", {
-            value: agents.data?.find((agent) => agent.id === hit.agentId)?.name ?? "Conversation",
+            value: agentList.find((agent) => agent.id === hit.agentId)?.name ?? "Conversation",
           }),
           searchTerms: [query, hit.message.text],
           icon: <MessagesSquareIcon className="size-4" />,

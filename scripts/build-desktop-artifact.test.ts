@@ -2091,16 +2091,18 @@ it.effect(
       );
       assert.deepInclude(config.mac, { identity: "-", hardenedRuntime: false, notarize: false });
     }).pipe(
-      Effect.provide(NodeServices.layer),
       Effect.provide(
-        ConfigProvider.layer(
-          ConfigProvider.fromEnv({
-            env: {
-              T3CODE_DESKTOP_PRIVATE_BUILD: "true",
-              T3CODE_DESKTOP_PRIVATE_HOME: "/private/sled-owned-dev-test",
-              SLED_MAC_DISTRIBUTION: "private-development",
-            },
-          }),
+        Layer.mergeAll(
+          NodeServices.layer,
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                T3CODE_DESKTOP_PRIVATE_BUILD: "true",
+                T3CODE_DESKTOP_PRIVATE_HOME: "/private/sled-owned-dev-test",
+                SLED_MAC_DISTRIBUTION: "private-development",
+              },
+            }),
+          ),
         ),
       ),
     ),

@@ -41,7 +41,7 @@ it.each([
     );
     const composer = screen.container.querySelector('[data-slot="composer-shell"]')!;
     await screen.getByRole("button", { name: /Choose bot model/ }).click();
-    await expect.element(page.getByRole("combobox", { name: "Search models..." })).toBeVisible();
+    await expect.element(page.getByPlaceholder("Search models...")).toBeVisible();
     await vi.waitFor(() => {
       const card = composer.getBoundingClientRect();
       const popup = document.querySelector('[data-slot="popover-popup"]')!.getBoundingClientRect();

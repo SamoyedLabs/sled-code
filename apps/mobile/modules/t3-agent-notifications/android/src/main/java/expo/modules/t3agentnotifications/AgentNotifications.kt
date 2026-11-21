@@ -128,7 +128,9 @@ object AgentNotifications {
       channels(context)
       val scheme = prefs.getString("scheme", "t3code") ?: "t3code"
       val alerted = showAlert(context, prefs, scheme, data)
-      if (data["t3_kind"] != "bot_attention") updateActivity(context, prefs, data, updatedAt, alerted)
+      if (data["t3_kind"] != "bot_attention") {
+        updateActivity(context, prefs, data, updatedAt, alerted)
+      }
     }
   }
 

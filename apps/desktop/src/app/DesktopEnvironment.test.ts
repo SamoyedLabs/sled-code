@@ -50,7 +50,7 @@ describe("DesktopEnvironment", () => {
       assert.equal(environment.isDevelopment, false);
       assert.equal(
         environment.clientAssetsDir,
-        "/Applications/T3 Code.app/Contents/Resources/app.asar/apps/server/dist/client",
+        "/Applications/Sled Code.app/Contents/Resources/app.asar/apps/server/dist/client",
       );
     }),
   );

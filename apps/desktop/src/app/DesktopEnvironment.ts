@@ -1,8 +1,9 @@
-import type {
-  DesktopAppBranding,
-  DesktopAppStageLabel,
-  DesktopRuntimeArch,
-  DesktopRuntimeInfo,
+import {
+  DesktopAppStageLabelSchema,
+  type DesktopAppBranding,
+  type DesktopAppStageLabel,
+  type DesktopRuntimeArch,
+  type DesktopRuntimeInfo,
 } from "@t3tools/contracts";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
@@ -10,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopConfig from "./DesktopConfig.ts";
@@ -87,6 +89,7 @@ export class DesktopEnvironment extends Context.Service<
 >()("@t3tools/desktop/app/DesktopEnvironment") {}
 
 const APP_BASE_NAME = "Sled Code";
+const decodeStageLabel = Schema.decodeUnknownOption(DesktopAppStageLabelSchema);
 
 function resolveDesktopAppStageLabel(input: {
   readonly isDevelopment: boolean;
@@ -172,10 +175,13 @@ const make = Effect.fn("desktop.environment.make")(function* (
     isDevelopment,
     appVersion: input.appVersion,
   });
-  const branding = {
+  const branding: DesktopAppBranding = {
     ...defaultBranding,
     displayName: Option.getOrElse(config.appNameOverride, () => defaultBranding.displayName),
-    stageLabel: Option.getOrElse(config.appStageLabelOverride, () => defaultBranding.stageLabel),
+    stageLabel: Option.getOrElse(
+      Option.flatMap(config.appStageLabelOverride, decodeStageLabel),
+      () => defaultBranding.stageLabel,
+    ),
   };
   const displayName = branding.displayName;
   const stateDir = resolveDesktopStateDir({
