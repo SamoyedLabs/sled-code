@@ -311,6 +311,7 @@ it("tests the selected model after download and preserves its transcript across 
           status,
           transcriptionEnvironmentId: target.environmentId,
           transcriptionEnvironmentLabel: target.label,
+          usesDeviceTranscription: false,
           setup: {
             open: false,
             step: 0,
