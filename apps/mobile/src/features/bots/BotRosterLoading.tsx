@@ -2,11 +2,7 @@ import { useBotReducedMotion } from "./botFeedback";
 import { useIsFocused } from "@react-navigation/native";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import Animated, {
-  ReduceMotion,
-  SlideOutUp,
-  useSharedValue,
-} from "react-native-reanimated";
+import Animated, { ReduceMotion, SlideOutUp, useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { OpenBotText } from "./upstream/OpenBotTypography";

@@ -7,6 +7,7 @@ import { View, Pressable } from "react-native";
 import type { AgentImportController } from "@t3tools/client-runtime/openbot/agent-import";
 import { Button } from "../../components/ui/Button";
 import { AppText as Text } from "../../components/ui/AppText";
+import { T, Var, useGT } from "gt-react-native";
 export function BotAgentImport({
   controller: c,
   destination,
@@ -21,6 +22,7 @@ export function BotAgentImport({
     requestId: string;
   } | null>;
 }) {
+  const gt = useGT();
   const s = useSyncExternalStore(c.subscribe, c.snapshot, c.snapshot);
   const [instructionId, setInstructionId] = useState<string | null>(null);
   const [shareNotice, setShareNotice] = useState("");
@@ -36,11 +38,11 @@ export function BotAgentImport({
       file.write(instruction.text);
       await Sharing.shareAsync(file.uri, {
         mimeType: "text/markdown",
-        dialogTitle: `Save ${instruction.label} export instructions`,
+        dialogTitle: gt("Save {label} export instructions", { label: instruction.label }),
       });
     })()
       .catch(() => {
-        setShareNotice("Could not open sharing. You can read the instructions below.");
+        setShareNotice(gt("Could not open sharing. You can read the instructions below."));
       })
       .finally(() => {
         try {
@@ -54,21 +56,25 @@ export function BotAgentImport({
   const locked = s.busy || s.uncertain || s.receipt?.state !== "staged";
   return (
     <View className="gap-3 p-3">
-      <Text accessibilityRole="header">Import agents</Text>
+      <Text accessibilityRole="header">
+        <T>Import agents</T>
+      </Text>
       <Text>
-        Prepare an export with the upstream instructions. Sled uploads the ZIP to the destination
-        host; keep it within 100 MiB.
+        <T>
+          Prepare an export with the upstream instructions. Sled uploads the ZIP to the destination
+          host; keep it within 100 MiB.
+        </T>
       </Text>
       {IMPORT_INSTRUCTIONS.map((instruction) => (
         <View key={instruction.id} className="gap-2">
           <Button
-            label={`Read ${instruction.label} export instructions`}
+            label={gt("Read {label} export instructions", { label: instruction.label })}
             onPress={() =>
               setInstructionId(instructionId === instruction.id ? null : instruction.id)
             }
           />
           <Button
-            label={`Save ${instruction.label} instructions`}
+            label={gt("Save {label} instructions", { label: instruction.label })}
             disabled={sharing}
             onPress={() => void saveInstruction(instruction)}
           />
@@ -77,12 +83,18 @@ export function BotAgentImport({
       ))}
       {!!shareNotice && <Text accessibilityLiveRegion="polite">{shareNotice}</Text>}
       <Text>
-        Destination: {destination}. Creates new agents. Accounts and provider credentials are not
-        imported.
+        <T>
+          Destination: <Var>{destination}</Var>. Creates new agents. Accounts and provider
+          credentials are not imported.
+        </T>
       </Text>
-      <Button label="Recover / refresh import" disabled={s.busy} onPress={() => void c.refresh()} />
       <Button
-        label="Choose ZIP (up to 100 MiB)"
+        label={gt("Recover / refresh import")}
+        disabled={s.busy}
+        onPress={() => void c.refresh()}
+      />
+      <Button
+        label={gt("Choose ZIP (up to 100 MiB)")}
         disabled={s.busy || s.uncertain || (!!s.receipt && s.receipt.state !== "discarded")}
         onPress={() => {
           void chooseArchive()
@@ -95,9 +107,14 @@ export function BotAgentImport({
       {s.receipt && (
         <>
           <Text>
-            Status: {s.receipt.state} · Source: {s.receipt.preview.sourceApp}
+            <T>
+              Status: <Var>{s.receipt.state}</Var> · Source:{" "}
+              <Var>{s.receipt.preview.sourceApp}</Var>
+            </T>
           </Text>
-          <Text accessibilityRole="header">Choose agents</Text>
+          <Text accessibilityRole="header">
+            <T>Choose agents</T>
+          </Text>
           {s.receipt.preview.agents.map((agent) => (
             <Pressable
               key={agent.key}
@@ -110,16 +127,22 @@ export function BotAgentImport({
               <Text>
                 {s.keys.includes(agent.key) ? "✓ " : "○ "}
                 {agent.name}
-                {agent.nameExists ? " (name already exists)" : ""}
+                {agent.nameExists ? gt(" (name already exists)") : ""}
               </Text>
               <Text>{agent.description}</Text>
               <Text>
-                {agent.skillCount} skills · {agent.routineCount} routines · {agent.memoryCount}{" "}
-                memories · {agent.fileCount} files
+                <T>
+                  <Var>{agent.skillCount}</Var> skills · <Var>{agent.routineCount}</Var> routines ·{" "}
+                  <Var>{agent.memoryCount}</Var>
+                  <Var> </Var>
+                  memories · <Var>{agent.fileCount}</Var> files
+                </T>
               </Text>
             </Pressable>
           ))}
-          <Text accessibilityRole="header">Choose group chats</Text>
+          <Text accessibilityRole="header">
+            <T>Choose group chats</T>
+          </Text>
           {s.receipt.preview.channels.map((channel) => (
             <Pressable
               key={channel.key}
@@ -133,8 +156,10 @@ export function BotAgentImport({
               onPress={() => c.select("channelKeys", channel.key)}
             >
               <Text>
-                {s.channelKeys.includes(channel.key) ? "✓ " : "○ "}
-                {channel.name}: members {channel.memberKeys.join(", ")}
+                <T>
+                  <Var>{s.channelKeys.includes(channel.key) ? "✓ " : "○ "}</Var>
+                  <Var>{channel.name}</Var>: members <Var>{channel.memberKeys.join(", ")}</Var>
+                </T>
               </Text>
             </Pressable>
           ))}
@@ -142,23 +167,28 @@ export function BotAgentImport({
             <Text key={warning}>{warning}</Text>
           ))}
           <Text>
-            Choose at least one agent. Selected chats use only agents that successfully import.
+            <T>
+              Choose at least one agent. Selected chats use only agents that successfully import.
+            </T>
           </Text>
           <Button
-            label={`Import selected into ${destination}`}
+            label={gt("Import selected into {destination}", { destination })}
             disabled={locked || !s.keys.length}
             onPress={() => void c.apply(Intl.DateTimeFormat().resolvedOptions().timeZone)}
           />
           <Button
-            label={s.receipt.state === "complete" ? "Dismiss result" : "Discard archive"}
+            label={s.receipt.state === "complete" ? gt("Dismiss result") : gt("Discard archive")}
             disabled={s.busy || s.uncertain || !["staged", "complete"].includes(s.receipt.state)}
             onPress={() => void c.discard()}
           />
           {s.receipt.result && (
             <>
               <Text>
-                Imported: {s.receipt.result.agents.map((a) => a.name).join(", ")}; channels:{" "}
-                {s.receipt.result.channels.map((a) => a.name).join(", ")}
+                <T>
+                  Imported: <Var>{s.receipt.result.agents.map((a) => a.name).join(", ")}</Var>;
+                  channels:<Var> </Var>
+                  <Var>{s.receipt.result.channels.map((a) => a.name).join(", ")}</Var>
+                </T>
               </Text>
               {[...s.receipt.result.skipped, ...s.receipt.result.skippedChannels].map((item) => (
                 <Text key={item.key}>

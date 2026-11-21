@@ -36,5 +36,8 @@ const settings = fields({ fastMode: nullable(boolean) });
 export const AGENT_FAST_MODE_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   [AGENT_FAST_MODE_ROUTES.models, adminRoute(empty, fields({ models: list(fastModel, 1_000) }))],
   [AGENT_FAST_MODE_ROUTES.settings, adminRoute(fields({ agentId: identifier }), settings)],
-  [AGENT_FAST_MODE_ROUTES.update, adminRoute(fields({ agentId: identifier, fastMode: boolean }), settings)],
+  [
+    AGENT_FAST_MODE_ROUTES.update,
+    adminRoute(fields({ agentId: identifier, fastMode: boolean }), settings),
+  ],
 ]);

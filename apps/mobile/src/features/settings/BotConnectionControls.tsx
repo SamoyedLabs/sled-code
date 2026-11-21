@@ -5,6 +5,8 @@ import { AppText as Text } from "../../components/ui/AppText";
 import { Menu } from "../../components/ui/Menu";
 import { ControlPill } from "../../components/ui/ControlPill";
 import * as Dialog from "../../components/ui/Dialog";
+import { m } from "../../i18n/messages";
+import { msg, useGT } from "gt-react-native";
 
 export function Picker({
   label,
@@ -19,6 +21,7 @@ export function Picker({
   disabled: boolean;
   onChange: (value: string) => void;
 }) {
+  const gt = useGT();
   return (
     <View className="gap-2">
       <Text>{label}</Text>
@@ -37,7 +40,7 @@ export function Picker({
         }}
       >
         <ControlPill
-          label={options.find((option) => option.id === value)?.name ?? "Choose an option"}
+          label={options.find((option) => option.id === value)?.name ?? gt("Choose an option")}
           disabled={disabled || options.length === 0}
           variant="pill"
         />
@@ -47,9 +50,9 @@ export function Picker({
 }
 
 export function confirm(message: string, action: () => void) {
-  Dialog.alert("Remove connection?", message, [
-    { text: "Cancel", style: "cancel" },
-    { text: "Remove", style: "destructive", onPress: action },
+  Dialog.alert(m(msg("Remove connection?")), message, [
+    { text: m(msg("Cancel")), style: "cancel" },
+    { text: m(msg("Remove")), style: "destructive", onPress: action },
   ]);
 }
 

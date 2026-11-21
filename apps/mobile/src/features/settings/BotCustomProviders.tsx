@@ -18,6 +18,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import * as Dialog from "../../components/ui/Dialog";
 import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
+import { T, Var, useGT } from "gt-react-native";
 
 type Draft =
   | { kind: "endpoint"; value: BotCustomEndpointDraft }
@@ -32,6 +33,7 @@ export function BotCustomProviders({
   hostId: string;
   onChange: () => void;
 }) {
+  const gt = useGT();
   const allowed = useAtomValue(
     openbot.adminToHost.permissionAtom(environmentId, {
       hostId,
@@ -65,7 +67,7 @@ export function BotCustomProviders({
         : customAcpAgents(result.value);
       if (rows === null) {
         setError(
-          "This engine returned unsupported custom provider settings. Reload before editing.",
+          gt("This engine returned unsupported custom provider settings. Reload before editing."),
         );
         break;
       }
@@ -82,21 +84,25 @@ export function BotCustomProviders({
     lock.current = false;
   };
   const remove = (kind: "endpoint" | "acp", id: string, name: string) =>
-    Dialog.alert(`Remove ${name}?`, "Bots using it will move to another available provider.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: () =>
-          void execute([
-            {
-              operation:
-                kind === "endpoint" ? "provider.custom.delete" : "provider.customAgent.delete",
-              id,
-            },
-          ]),
-      },
-    ]);
+    Dialog.alert(
+      gt("Remove {name}?", { name }),
+      gt("Bots using it will move to another available provider."),
+      [
+        { text: gt("Cancel"), style: "cancel" },
+        {
+          text: gt("Remove"),
+          style: "destructive",
+          onPress: () =>
+            void execute([
+              {
+                operation:
+                  kind === "endpoint" ? "provider.custom.delete" : "provider.customAgent.delete",
+                id,
+              },
+            ]),
+        },
+      ],
+    );
   const save = () => {
     if (!draft) return;
     const request =
@@ -105,7 +111,9 @@ export function BotCustomProviders({
         : customAcpRequest(draft.value);
     if (!request) {
       setError(
-        "Complete the required fields. Use one model or argument per line; model labels follow |. Check the field limits and endpoint URL.",
+        gt(
+          "Complete the required fields. Use one model or argument per line; model labels follow |. Check the field limits and endpoint URL.",
+        ),
       );
       return;
     }
@@ -118,13 +126,15 @@ export function BotCustomProviders({
   };
   return (
     <View className="gap-3">
-      <Text textRole="headline">Custom providers and ACP agents</Text>
+      <Text textRole="headline">
+        <T>Custom providers and ACP agents</T>
+      </Text>
       <Text className="text-foreground-muted">
-        Connect an OpenAI-compatible endpoint, or an ACP command installed on this bot host.
+        <T>Connect an OpenAI-compatible endpoint, or an ACP command installed on this bot host.</T>
       </Text>
       <View className="flex-row flex-wrap gap-2">
         <Button
-          label="Load custom providers"
+          label={gt("Load custom providers")}
           tone="secondary"
           size="compact"
           disabled={!allowed || busy}
@@ -136,7 +146,7 @@ export function BotCustomProviders({
           }
         />
         <Button
-          label="Add endpoint"
+          label={gt("Add endpoint")}
           tone="secondary"
           size="compact"
           disabled={!allowed || busy || draft !== null}
@@ -148,7 +158,7 @@ export function BotCustomProviders({
           }
         />
         <Button
-          label="Add ACP agent"
+          label={gt("Add ACP agent")}
           tone="secondary"
           size="compact"
           disabled={!allowed || busy || draft !== null}
@@ -172,17 +182,22 @@ export function BotCustomProviders({
         </Text>
       )}
       {endpoints?.length === 0 && (
-        <Text className="text-foreground-muted">No custom endpoints saved.</Text>
+        <Text className="text-foreground-muted">
+          <T>No custom endpoints saved.</T>
+        </Text>
       )}
       {endpoints?.map((endpoint) => (
         <View key={endpoint.id} className="gap-2">
           <Text>{endpoint.name}</Text>
           <Text selectable className="text-foreground-muted">
-            {endpoint.baseUrl} · {endpoint.models.length} models · {endpoint.harness}
-            {endpoint.hasApiKey ? " · Key saved" : ""}
+            <T>
+              <Var>{endpoint.baseUrl}</Var> · <Var>{endpoint.models.length}</Var> models ·{" "}
+              <Var>{endpoint.harness}</Var>
+              <Var>{endpoint.hasApiKey ? gt(" · Key saved") : ""}</Var>
+            </T>
           </Text>
           <Button
-            label={`Remove ${endpoint.name}`}
+            label={gt("Remove {name}", { name: endpoint.name })}
             tone="secondary"
             size="compact"
             disabled={!allowed || busy || draft !== null}
@@ -192,23 +207,27 @@ export function BotCustomProviders({
       ))}
       {endpoints && (
         <Text className="text-foreground-muted">
-          This engine supports adding and removing endpoints through Sled. Editing an existing
-          endpoint and choosing its harness require a newer upstream interface.
+          <T>
+            This engine supports adding and removing endpoints through Sled. Editing an existing
+            endpoint and choosing its harness require a newer upstream interface.
+          </T>
         </Text>
       )}
       {agents?.length === 0 && (
-        <Text className="text-foreground-muted">No custom ACP agents saved.</Text>
+        <Text className="text-foreground-muted">
+          <T>No custom ACP agents saved.</T>
+        </Text>
       )}
       {agents?.map((agent) => (
         <View key={agent.id} className="gap-2">
           <Text>{agent.name}</Text>
           <Text selectable className="text-foreground-muted">
             {agent.command} ·{" "}
-            {agent.resolvedCommand ? "Command found" : "Command not found on host"}
+            {agent.resolvedCommand ? gt("Command found") : gt("Command not found on host")}
           </Text>
           <View className="flex-row flex-wrap gap-2">
             <Button
-              label={`Edit ${agent.name}`}
+              label={gt("Edit {name}", { name: agent.name })}
               tone="secondary"
               size="compact"
               disabled={!allowed || busy || draft !== null}
@@ -229,7 +248,7 @@ export function BotCustomProviders({
               }
             />
             <Button
-              label={`Remove ${agent.name}`}
+              label={gt("Remove {name}", { name: agent.name })}
               tone="secondary"
               size="compact"
               disabled={!allowed || busy || draft !== null}
@@ -242,10 +261,10 @@ export function BotCustomProviders({
         <View className="gap-3">
           <Text>
             {draft.kind === "endpoint"
-              ? "New endpoint"
+              ? gt("New endpoint")
               : draft.editing
-                ? "Edit ACP agent"
-                : "New ACP agent"}
+                ? gt("Edit ACP agent")
+                : gt("New ACP agent")}
           </Text>
           <Field
             label="ID"
@@ -255,7 +274,7 @@ export function BotCustomProviders({
             onChange={(id) => editIdentity("id", id)}
           />
           <Field
-            label="Display name"
+            label={gt("Display name")}
             value={draft.value.name}
             maxLength={80}
             disabled={busy}
@@ -264,14 +283,14 @@ export function BotCustomProviders({
           {draft.kind === "endpoint" ? (
             <>
               <Field
-                label="Base URL"
+                label={gt("Base URL")}
                 value={draft.value.baseUrl}
                 maxLength={2048}
                 disabled={busy}
                 onChange={(baseUrl) => setDraft({ ...draft, value: { ...draft.value, baseUrl } })}
               />
               <Field
-                label="API key (optional)"
+                label={gt("API key (optional)")}
                 value={draft.value.apiKey}
                 maxLength={4096}
                 disabled={busy}
@@ -279,7 +298,7 @@ export function BotCustomProviders({
                 onChange={(apiKey) => setDraft({ ...draft, value: { ...draft.value, apiKey } })}
               />
               <Field
-                label="Models · one ID | display name per line"
+                label={gt("Models · one ID | display name per line")}
                 value={draft.value.models}
                 maxLength={22000}
                 disabled={busy}
@@ -294,21 +313,23 @@ export function BotCustomProviders({
                 onChange={(headers) => setDraft({ ...draft, value: { ...draft.value, headers } })}
               />
               <Text className="text-foreground-muted">
-                New endpoints use OpenCode. Install its runtime in Provider setup. Stored keys and
-                headers are never displayed.
+                <T>
+                  New endpoints use OpenCode. Install its runtime in Provider setup. Stored keys and
+                  headers are never displayed.
+                </T>
               </Text>
             </>
           ) : (
             <>
               <Field
-                label="Command on host"
+                label={gt("Command on host")}
                 value={draft.value.command}
                 maxLength={1024}
                 disabled={busy}
                 onChange={(command) => setDraft({ ...draft, value: { ...draft.value, command } })}
               />
               <Field
-                label="Arguments · one literal argument per line"
+                label={gt("Arguments · one literal argument per line")}
                 value={draft.value.args}
                 maxLength={32799}
                 disabled={busy}
@@ -318,7 +339,7 @@ export function BotCustomProviders({
                 }
               />
               <Field
-                label="Usage command (optional)"
+                label={gt("Usage command (optional)")}
                 value={draft.value.usagePrompt}
                 maxLength={256}
                 disabled={busy}
@@ -334,19 +355,24 @@ export function BotCustomProviders({
                 onChange={(env) => setDraft({ ...draft, value: { ...draft.value, env } })}
               />
               <Text className="text-foreground-muted">
-                Arguments run directly, without shell expansion. Unchanged saved environment values
-                are kept. Remove a row to remove that variable. Saving does not run a test command.
+                <T>
+                  Arguments run directly, without shell expansion. Unchanged saved environment
+                  values are kept. Remove a row to remove that variable. Saving does not run a test
+                  command.
+                </T>
               </Text>
             </>
           )}
           <View className="flex-row flex-wrap gap-2">
             <Button
-              label={`Save ${draft.kind === "endpoint" ? "endpoint" : "ACP agent"}`}
+              label={gt("Save {value}", {
+                value: draft.kind === "endpoint" ? "endpoint" : "ACP agent",
+              })}
               disabled={!allowed || busy}
               onPress={save}
             />
             <Button
-              label="Cancel"
+              label={gt("Cancel")}
               tone="secondary"
               disabled={busy}
               onPress={() => {
@@ -410,6 +436,7 @@ function SecretEntries({
   disabled: boolean;
   onChange: (values: BotCustomSecret[]) => void;
 }) {
+  const gt = useGT();
   const nextKey = useRef(Math.max(-1, ...values.map((entry) => entry.key)) + 1);
   return (
     <View className="gap-2">
@@ -426,7 +453,7 @@ function SecretEntries({
             }
           />
           <View className="gap-1">
-            <Text>{entry.value === null ? "Keep saved value" : "Value"}</Text>
+            <Text>{entry.value === null ? gt("Keep saved value") : gt("Value")}</Text>
             <AppTextInput
               accessibilityLabel={`${kind} ${index + 1} value`}
               value={entry.value ?? ""}
@@ -438,13 +465,13 @@ function SecretEntries({
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}
-              placeholder={entry.value === null ? "Keep saved value" : "Value"}
+              placeholder={entry.value === null ? gt("Keep saved value") : gt("Value")}
             />
           </View>
           <View className="flex-row flex-wrap gap-2">
             {entry.value === null && (
               <Button
-                label="Use empty value"
+                label={gt("Use empty value")}
                 tone="secondary"
                 size="compact"
                 disabled={disabled}
@@ -456,7 +483,10 @@ function SecretEntries({
               />
             )}
             <Button
-              label={`Remove ${kind.toLowerCase()} ${index + 1}`}
+              label={gt("Remove {value} {value2}", {
+                value: kind.toLowerCase(),
+                value2: index + 1,
+              })}
               tone="secondary"
               size="compact"
               disabled={disabled}
@@ -466,7 +496,7 @@ function SecretEntries({
         </View>
       ))}
       <Button
-        label={`Add ${kind.toLowerCase()}`}
+        label={gt("Add {value}", { value: kind.toLowerCase() })}
         tone="secondary"
         size="compact"
         disabled={disabled || values.length >= limit}

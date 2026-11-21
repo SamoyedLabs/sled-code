@@ -752,45 +752,120 @@ it.live(
       Effect.provide(Layer.mergeAll(FetchHttpClient.layer, NodeServices.layer)),
     ),
 );
-it.live("binds a multi-file reply atomically and replays the original batch after service reconstruction", () => Effect.gen(function* () {
-  const sends: Array<{ clientMessageId: string; attachmentDraftIds: string[]; replyToMessageId: string }> = [];
-  const apiUrl = yield* fixture(async (request, response) => {
-    response.setHeader("content-type", "application/json");
-    if (request.url === "/v1/auth/login") return void response.end(JSON.stringify({ sessionToken: "batch-session", sessionExpiresAt: "2099-01-01T00:00:00Z" }));
-    if (request.url === "/v1/agents") return void response.end(JSON.stringify([{ id: "bot", name: "Files", provider: "codex" }]));
-    if (request.url === "/v1/compatibility") return void response.end(JSON.stringify({ capabilities: ["sled-files-identity-v1"] }));
-    if (request.url === "/v1/sled/files/send") {
-      const chunks = []; for await (const chunk of request) chunks.push(chunk);
-      sends.push(JSON.parse(Buffer.concat(chunks).toString()));
-      if (sends.length === 1) return void response.writeHead(502).end("{}");
-      return void response.end(JSON.stringify({ messageId: "receipt", deliveries: [{ id: "conversation-entry", recipientAgentId: "bot" }] }));
-    }
-    if (request.url?.startsWith("/v1/agents/bot/conversation-page")) return void response.end(JSON.stringify({ agentId: "bot", threadId: "main", messages: [{ id: "conversation-entry", attachments: [] }] }));
-    response.writeHead(404).end("{}");
-  });
-  yield* Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    for (const id of ["first", "second"]) {
-      const summary = JSON.stringify({ id, name: `${id}.txt`, size: 3, kind: "file", mimeType: "text/plain", previewKind: "text" });
-      yield* sql`INSERT INTO openbot_file_drafts (host_id, agent_id, attachment_id, summary_json, sha256, state, client_message_id) VALUES ('host', 'bot', ${id}, ${summary}, ${"a".repeat(64)}, 'ready', ${`message-${id}`})`;
-    }
-    const input = { ...scope, attachmentId: "first", attachmentIds: ["first", "second"], expectedThreadId: "original-main", text: "Two files as one reply", replyToMessageId: "quoted", target: { kind: "main" as const } };
-    yield* Effect.gen(function* () {
-      const files = yield* Files.Files;
-      expect((yield* Effect.flip(files.sendDraft(input))).reason).toBe("transfer");
-      expect((yield* files.listDrafts(scope)).every(draft => draft.state === "sending" && draft.batchAttachmentIds?.join(",") === "first,second" && draft.replyToMessageId === "quoted")).toBe(true);
-    }).pipe(Effect.provide(Files.layer));
-    yield* Effect.gen(function* () {
-      const files = yield* Files.Files;
-      expect((yield* Effect.flip(files.sendDraft({ ...input, attachmentIds: ["first"] }))).reason).toBe("conflict");
-      expect((yield* Effect.flip(files.sendDraft({ ...input, replyToMessageId: "different" }))).reason).toBe("conflict");
-      expect((yield* Effect.flip(files.sendDraft({ ...input, agentId: "other" }))).reason).toBe("ownership");
-      expect((yield* Effect.flip(files.sendDraft({ ...input, expectedThreadId: "replacement-main" }))).reason).toBe("conflict");
-      expect(sends).toHaveLength(1);
-      const result = yield* files.sendDraft(input); expect(result.state).toBe("sent");
-      expect((yield* files.listDrafts(scope)).every(draft => draft.state === "sent")).toBe(true);
-      expect(sends).toHaveLength(2); expect(sends[1]).toMatchObject({ ...sends[0], receiptOnly: true });
-      expect(sends[0]).toMatchObject({ clientMessageId: "message-first", attachmentDraftIds: ["first", "second"], replyToMessageId: "quoted" });
-    }).pipe(Effect.provide(Files.layer));
-  }).pipe(Effect.provide(applicationAt(apiUrl)));
-}).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(FetchHttpClient.layer, NodeServices.layer))));
+it.live(
+  "binds a multi-file reply atomically and replays the original batch after service reconstruction",
+  () =>
+    Effect.gen(function* () {
+      const sends: Array<{
+        clientMessageId: string;
+        attachmentDraftIds: string[];
+        replyToMessageId: string;
+      }> = [];
+      const apiUrl = yield* fixture(async (request, response) => {
+        response.setHeader("content-type", "application/json");
+        if (request.url === "/v1/auth/login")
+          return void response.end(
+            JSON.stringify({
+              sessionToken: "batch-session",
+              sessionExpiresAt: "2099-01-01T00:00:00Z",
+            }),
+          );
+        if (request.url === "/v1/agents")
+          return void response.end(
+            JSON.stringify([{ id: "bot", name: "Files", provider: "codex" }]),
+          );
+        if (request.url === "/v1/compatibility")
+          return void response.end(JSON.stringify({ capabilities: ["sled-files-identity-v1"] }));
+        if (request.url === "/v1/sled/files/send") {
+          const chunks = [];
+          for await (const chunk of request) chunks.push(chunk);
+          sends.push(JSON.parse(Buffer.concat(chunks).toString()));
+          if (sends.length === 1) return void response.writeHead(502).end("{}");
+          return void response.end(
+            JSON.stringify({
+              messageId: "receipt",
+              deliveries: [{ id: "conversation-entry", recipientAgentId: "bot" }],
+            }),
+          );
+        }
+        if (request.url?.startsWith("/v1/agents/bot/conversation-page"))
+          return void response.end(
+            JSON.stringify({
+              agentId: "bot",
+              threadId: "main",
+              messages: [{ id: "conversation-entry", attachments: [] }],
+            }),
+          );
+        response.writeHead(404).end("{}");
+      });
+      yield* Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        for (const id of ["first", "second"]) {
+          const summary = JSON.stringify({
+            id,
+            name: `${id}.txt`,
+            size: 3,
+            kind: "file",
+            mimeType: "text/plain",
+            previewKind: "text",
+          });
+          yield* sql`INSERT INTO openbot_file_drafts (host_id, agent_id, attachment_id, summary_json, sha256, state, client_message_id) VALUES ('host', 'bot', ${id}, ${summary}, ${"a".repeat(64)}, 'ready', ${`message-${id}`})`;
+        }
+        const input = {
+          ...scope,
+          attachmentId: "first",
+          attachmentIds: ["first", "second"],
+          expectedThreadId: "original-main",
+          text: "Two files as one reply",
+          replyToMessageId: "quoted",
+          target: { kind: "main" as const },
+        };
+        yield* Effect.gen(function* () {
+          const files = yield* Files.Files;
+          expect((yield* Effect.flip(files.sendDraft(input))).reason).toBe("transfer");
+          expect(
+            (yield* files.listDrafts(scope)).every(
+              (draft) =>
+                draft.state === "sending" &&
+                draft.batchAttachmentIds?.join(",") === "first,second" &&
+                draft.replyToMessageId === "quoted",
+            ),
+          ).toBe(true);
+        }).pipe(Effect.provide(Files.layer));
+        yield* Effect.gen(function* () {
+          const files = yield* Files.Files;
+          expect(
+            (yield* Effect.flip(files.sendDraft({ ...input, attachmentIds: ["first"] }))).reason,
+          ).toBe("conflict");
+          expect(
+            (yield* Effect.flip(files.sendDraft({ ...input, replyToMessageId: "different" })))
+              .reason,
+          ).toBe("conflict");
+          expect((yield* Effect.flip(files.sendDraft({ ...input, agentId: "other" }))).reason).toBe(
+            "ownership",
+          );
+          expect(
+            (yield* Effect.flip(
+              files.sendDraft({ ...input, expectedThreadId: "replacement-main" }),
+            )).reason,
+          ).toBe("conflict");
+          expect(sends).toHaveLength(1);
+          const result = yield* files.sendDraft(input);
+          expect(result.state).toBe("sent");
+          expect((yield* files.listDrafts(scope)).every((draft) => draft.state === "sent")).toBe(
+            true,
+          );
+          expect(sends).toHaveLength(2);
+          expect(sends[1]).toMatchObject({ ...sends[0], receiptOnly: true });
+          expect(sends[0]).toMatchObject({
+            clientMessageId: "message-first",
+            attachmentDraftIds: ["first", "second"],
+            replyToMessageId: "quoted",
+          });
+        }).pipe(Effect.provide(Files.layer));
+      }).pipe(Effect.provide(applicationAt(apiUrl)));
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(Layer.mergeAll(FetchHttpClient.layer, NodeServices.layer)),
+    ),
+);

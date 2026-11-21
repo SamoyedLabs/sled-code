@@ -5,7 +5,9 @@ import {
   dataFailure,
 } from "@t3tools/client-runtime/openbot/presentation";
 import type { DataActions, DataRequest } from "@t3tools/client-runtime/openbot/presentation";
+import { useGT } from "gt-react-native";
 export function useBotData(actions: DataActions) {
+  const gt = useGT();
   const lock = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +59,9 @@ export function useBotData(actions: DataActions) {
       }
     })().catch(() =>
       setError(
-        "The data request failed or returned unsupported data. Check host support, account and permissions; refresh before retrying.",
+        gt(
+          "The data request failed or returned unsupported data. Check host support, account and permissions; refresh before retrying.",
+        ),
       ),
     );
     lock.current = false;
@@ -72,7 +76,7 @@ export function useBotData(actions: DataActions) {
     setPending,
     refreshTables: () => void run({ operation: "tables.list" }),
     refreshSites: () => void run({ operation: "sites.list" }),
-    openFailed: () => setError("The device could not open this site link."),
+    openFailed: () => setError(gt("The device could not open this site link.")),
     confirmDelete: () => {
       if (pending) void run(pending);
     },

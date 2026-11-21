@@ -17,6 +17,7 @@ import {
   type Source,
   type Category,
 } from "./marketplace-model";
+import { useGT } from "gt-react";
 export function useMarketplace(
   props: MarketplaceProps,
   tab: MarketplaceTab,
@@ -25,6 +26,7 @@ export function useMarketplace(
   category: Category | undefined,
   sort: "installs" | "updated" | "name",
 ) {
+  const gt = useGT();
   const [page, setPage] = useState<{
     agents: readonly AgentSummary[];
     skills: readonly SkillSummary[];
@@ -58,7 +60,7 @@ export function useMarketplace(
     }
     if (!supported) {
       setBusy(false);
-      setError("This host does not expose Marketplace browsing.");
+      setError(gt("This host does not expose Marketplace browsing."));
       return;
     }
     setBusy(true);
@@ -107,7 +109,7 @@ export function useMarketplace(
     });
     if (settled._tag === "Failure" && version === generation.current) {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "The Marketplace could not be loaded.");
+      setError(cause instanceof Error ? cause.message : gt("The Marketplace could not be loaded."));
     }
     if (version === generation.current) setBusy(false);
   });
@@ -126,7 +128,9 @@ export function useMarketplace(
     for (const result of results) {
       if (result.status === "fulfilled") next[result.value.id] = result.value.skills;
       else
-        setSkillError("Some agents’ skills could not be read. Retry before changing their skills.");
+        setSkillError(
+          gt("Some agents’ skills could not be read. Retry before changing their skills."),
+        );
     }
     setInstalled(next);
   });

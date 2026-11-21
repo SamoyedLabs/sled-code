@@ -4,6 +4,7 @@ import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { SymbolView, type AppSymbolName } from "../../../components/ui/AppSymbol";
 import type { ReactNode } from "react";
 import { useAppearancePreferences } from "../../settings/appearance/AppearancePreferencesProvider";
+import { T, useGT } from "gt-react-native";
 
 // OpenBot packages/brand/src/tokens-native.css, scoped to the native Bots surface.
 export function useBotPalette() {
@@ -97,12 +98,13 @@ export function BotIconButton({
   );
 }
 export function BotCodeButton({ onPress }: { onPress: () => void }) {
+  const gt = useGT();
   const p = useBotPalette();
   return (
     <BotGlass>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Return to Code"
+        accessibilityLabel={gt("Return to Code")}
         onPress={onPress}
         style={({ pressed }) => ({
           minHeight: 44,
@@ -113,7 +115,9 @@ export function BotCodeButton({ onPress }: { onPress: () => void }) {
           opacity: pressed ? 0.55 : 1,
         })}
       >
-        <Text style={{ color: p.text, fontSize: 15, fontWeight: "600" }}>Code</Text>
+        <Text style={{ color: p.text, fontSize: 15, fontWeight: "600" }}>
+          <T>Code</T>
+        </Text>
         <SymbolView name="chevron.right" size={13} tintColor={p.text} />
       </Pressable>
     </BotGlass>

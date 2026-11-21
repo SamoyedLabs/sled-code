@@ -38,6 +38,8 @@ import {
 import { ScheduleEmptyBoard } from "./ScheduleEmptyBoard";
 import "./routine-calendar.css";
 import "./schedule-adapter.css";
+import { m } from "../../../../i18n/messages";
+import { T, Var, msg, useGT } from "gt-react";
 
 type Agent = {
   id: string;
@@ -49,9 +51,9 @@ type View = "day" | "week" | "month";
 const decodeRoutines = Schema.decodeUnknownSync(Schema.Array(Routine));
 const decodeRuns = Schema.decodeUnknownSync(Schema.Array(Run));
 const VIEWS = [
-  { value: "day", label: "Day" },
-  { value: "week", label: "Week" },
-  { value: "month", label: "Month" },
+  { value: "day", label: m(msg("Day")) },
+  { value: "week", label: m(msg("Week")) },
+  { value: "month", label: m(msg("Month")) },
 ] as const;
 function daysFor(anchor: string, view: View) {
   if (view === "day") return [anchor];
@@ -80,6 +82,7 @@ export function SchedulePage(props: SchedulePageProps) {
   return <ScheduleBody key={`${props.environmentId}:${props.hostId}`} {...props} />;
 }
 function ScheduleBody(props: SchedulePageProps) {
+  const gt = useGT();
   const zone = new Intl.DateTimeFormat().resolvedOptions().timeZone;
   const [now, setNow] = useState(() => new Date());
   const today = calendarDayOf(now, zone);
@@ -198,9 +201,13 @@ function ScheduleBody(props: SchedulePageProps) {
         setNow(clock);
         setPhase("ready");
       });
-      if (settled._tag === "Failure" && request === generation.current && !(background && calendar)) {
+      if (
+        settled._tag === "Failure" &&
+        request === generation.current &&
+        !(background && calendar)
+      ) {
         const cause = squashAtomCommandFailure(settled);
-        setError(cause instanceof Error ? cause.message : "Could not load the schedule.");
+        setError(cause instanceof Error ? cause.message : gt("Could not load the schedule."));
         setPhase("error");
       }
     },
@@ -302,7 +309,7 @@ function ScheduleBody(props: SchedulePageProps) {
           <button
             key={agent.id}
             className="ui-icon-button routine-planner-agent"
-            aria-label={`Open ${agent.name}`}
+            aria-label={gt("Open {name}", { name: agent.name })}
             onClick={() => props.onOpenAgent(agent.id)}
           >
             <BotAvatar
@@ -316,17 +323,17 @@ function ScheduleBody(props: SchedulePageProps) {
     </li>
   );
   return (
-    <section className="routine-planner" data-view={view} aria-label="Schedule">
+    <section className="routine-planner" data-view={view} aria-label={gt("Schedule")}>
       <header className="routine-planner-header">
         <div className="routine-planner-title">
           <div className="routine-planner-identity">
             {props.onBack && (
-              <button className="ui-icon-button" aria-label="Back" onClick={props.onBack}>
+              <button className="ui-icon-button" aria-label={gt("Back")} onClick={props.onBack}>
                 <ArrowLeft size={16} />
               </button>
             )}
             <h2 ref={heading} tabIndex={-1}>
-              Schedule{" "}
+              <T>Schedule</T>{" "}
               {props.hostName && (
                 <>
                   <span>/</span> <span>{props.hostName}</span>
@@ -334,17 +341,21 @@ function ScheduleBody(props: SchedulePageProps) {
               )}
             </h2>
           </div>
-          <p>Times in {zone.replaceAll("_", " ")}</p>
+          <p>
+            <T>
+              Times in <Var>{zone.replaceAll("_", " ")}</Var>
+            </T>
+          </p>
         </div>
         <button className="ui-button" onClick={() => void load(anchor, view)}>
-          Refresh
+          <T>Refresh</T>
         </button>
         {!empty && (
           <div className="routine-planner-toolbar">
             <div className="routine-planner-nav">
               <button
                 className="ui-icon-button"
-                aria-label={`Previous ${view}`}
+                aria-label={gt("Previous {view}", { view })}
                 onClick={() =>
                   move(
                     view === "month"
@@ -367,11 +378,11 @@ function ScheduleBody(props: SchedulePageProps) {
                   heading.current?.focus();
                 }}
               >
-                Today
+                <T>Today</T>
               </button>
               <button
                 className="ui-icon-button"
-                aria-label={`Next ${view}`}
+                aria-label={gt("Next {view}", { view })}
                 onClick={() =>
                   move(
                     view === "month"
@@ -390,14 +401,16 @@ function ScheduleBody(props: SchedulePageProps) {
               value={view}
               onChange={setView}
               items={VIEWS}
-              label="Calendar view"
+              label={gt("Calendar view")}
             />
           </div>
         )}
         {!empty && changeDay && (
           <p className="routine-planner-clock-change">
-            Clocks change on{" "}
-            {dayText(changeDay, { weekday: "long", month: "long", day: "numeric" })}.
+            <T>
+              Clocks change on<Var> </Var>
+              <Var>{dayText(changeDay, { weekday: "long", month: "long", day: "numeric" })}</Var>.
+            </T>
           </p>
         )}
       </header>
@@ -405,7 +418,7 @@ function ScheduleBody(props: SchedulePageProps) {
         <div className="routine-planner-error" role="alert">
           <p>{error}</p>
           <button className="ui-button" onClick={() => void load(anchor, view)}>
-            Retry
+            <T>Retry</T>
           </button>
         </div>
       ) : empty ? (
@@ -413,28 +426,34 @@ function ScheduleBody(props: SchedulePageProps) {
           <ScheduleEmptyBoard days={daysFor(today, "month")} today={today} agents={props.agents} />
           <div className="routine-planner-empty-pitch">
             <h3 className="routine-planner-empty-title">
-              <span className="routine-planner-empty-lead">Set it once.</span>
+              <span className="routine-planner-empty-lead">
+                <T>Set it once.</T>
+              </span>
               <span>
-                Wake up to it{" "}
+                <T>Wake up to it</T>{" "}
                 <span className="routine-planner-hand routine-planner-empty-done">done</span>.
               </span>
             </h3>
             <p className="routine-planner-empty-lines">
-              <span>Your agents keep their own schedule.</span>
-              <span>Each run leaves a note.</span>
+              <span>
+                <T>Your agents keep their own schedule.</T>
+              </span>
+              <span>
+                <T>Each run leaves a note.</T>
+              </span>
             </p>
             {props.onCreateRoutine && (
               <label>
-                Create routine for{" "}
+                <T>Create routine for</T>{" "}
                 <select
-                  aria-label="Create routine for agent"
+                  aria-label={gt("Create routine for agent")}
                   defaultValue=""
                   onChange={(event) => {
                     if (event.target.value) props.onCreateRoutine?.(event.target.value);
                   }}
                 >
                   <option value="" disabled>
-                    Choose agent
+                    <T>Choose agent</T>
                   </option>
                   {props.agents.map((agent) => (
                     <option key={agent.id} value={agent.id}>
@@ -456,7 +475,9 @@ function ScheduleBody(props: SchedulePageProps) {
                   .map(entryRow)}
               </ul>
               {!entries.some((entry) => calendarDayOf(new Date(entry.run.at), zone) === anchor) && (
-                <p className="routine-planner-note">No runs on this day.</p>
+                <p className="routine-planner-note">
+                  <T>No runs on this day.</T>
+                </p>
               )}
             </div>
           ) : (
@@ -487,7 +508,7 @@ function ScheduleBody(props: SchedulePageProps) {
                       <h3 className="routine-planner-day-heading">
                         <button
                           className="ui-button routine-planner-day-button"
-                          aria-label={`Open ${day}`}
+                          aria-label={gt("Open {day}", { day })}
                           onClick={() => {
                             move(day, "day");
                             heading.current?.focus();
@@ -545,11 +566,15 @@ function ScheduleBody(props: SchedulePageProps) {
             </div>
           )}
           <aside className="routine-planner-upcoming">
-            <h3>Upcoming</h3>
+            <h3>
+              <T>Upcoming</T>
+            </h3>
             {upcoming.length ? (
               <ul className="routine-planner-entries">{upcoming.map(entryRow)}</ul>
             ) : (
-              <p className="routine-planner-note">No upcoming runs in this range.</p>
+              <p className="routine-planner-note">
+                <T>No upcoming runs in this range.</T>
+              </p>
             )}
           </aside>
         </div>

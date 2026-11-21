@@ -14,6 +14,8 @@ import { SettingsScreen } from "./components/SettingsScreen";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsPictureChoice } from "./components/BotSettingsPictureChoice";
 import { MotionPicture } from "./components/BotSettingsPictures";
+import { m } from "../../i18n/messages";
+import { T, msg, useGT } from "gt-react-native";
 
 function FeedbackToggle({
   title,
@@ -57,12 +59,12 @@ const motionOptions = [
 const motionPictures = [
   {
     value: true,
-    label: "Full motion",
+    label: m(msg("Full motion")),
     picture: (play: number) => <MotionPicture full play={play} />,
   },
   {
     value: false,
-    label: "Reduced",
+    label: m(msg("Reduced")),
     picture: (play: number) => <MotionPicture full={false} play={play} />,
   },
 ];
@@ -74,6 +76,7 @@ export function SettingsBotHapticsRouteScreen() {
   return <BotFeedbackSettings hapticsPage />;
 }
 function BotFeedbackSettings({ hapticsPage }: { hapticsPage: boolean }) {
+  const gt = useGT();
   const preferences = useBotFeedback();
   const reduced = useBotReducedMotion();
   const [failed, setFailed] = useState(false);
@@ -86,27 +89,27 @@ function BotFeedbackSettings({ hapticsPage }: { hapticsPage: boolean }) {
     }
   };
   return (
-    <SettingsScreen title={hapticsPage ? "Haptics" : "Animations"}>
+    <SettingsScreen title={hapticsPage ? gt("Haptics") : gt("Animations")}>
       <ScreenScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerClassName="gap-5 px-5 py-4"
       >
         {failed && (
           <Text accessibilityRole="alert" className="text-destructive">
-            Could not save this setting.
+            <T>Could not save this setting.</T>
           </Text>
         )}
         {hapticsPage ? (
-          <SettingsSection title="Touch feedback">
+          <SettingsSection title={gt("Touch feedback")}>
             <FeedbackToggle
-              title="Haptics"
-              description="Feel feedback from bot controls and gestures."
+              title={gt("Haptics")}
+              description={gt("Feel feedback from bot controls and gestures.")}
               enabled={preferences.haptics}
               onPress={() => save("haptics", !preferences.haptics)}
             />
             <FeedbackToggle
-              title="Reply feedback"
-              description="Feel the rhythm of a bot’s reply as text appears."
+              title={gt("Reply feedback")}
+              description={gt("Feel the rhythm of a bot’s reply as text appears.")}
               enabled={preferences.haptics && preferences.replyHaptics}
               disabled={!preferences.haptics}
               onPress={() => save("replyHaptics", !preferences.replyHaptics)}
@@ -115,11 +118,11 @@ function BotFeedbackSettings({ hapticsPage }: { hapticsPage: boolean }) {
         ) : (
           <>
             <SettingsSection
-              title="Motion"
+              title={gt("Motion")}
               footer="Sled also follows the device’s Reduce Motion setting."
             >
               <SettingsPictureChoice
-                label="Motion"
+                label={gt("Motion")}
                 value={preferences.animations}
                 options={motionPictures}
                 onChange={(enabled) => save("animations", enabled)}

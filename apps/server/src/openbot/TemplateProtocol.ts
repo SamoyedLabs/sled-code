@@ -30,28 +30,43 @@ export function route(request: TemplateRequest) {
   const operation = request.operation;
   const body =
     operation === "templates.adopt"
-      ? { operationId: request.operationId, kind: request.kind, sourceId: request.sourceId, timezone: request.timezone, expectedRevision: request.expectedRevision, ...(request.agentId === undefined ? {} : { agentId: request.agentId }) }
+      ? {
+          operationId: request.operationId,
+          kind: request.kind,
+          sourceId: request.sourceId,
+          timezone: request.timezone,
+          expectedRevision: request.expectedRevision,
+          ...(request.agentId === undefined ? {} : { agentId: request.agentId }),
+        }
       : operation === "templates.adoptionStatus"
         ? { operationId: request.operationId }
         : operation === "templates.adoptions"
           ? {}
           : operation === "templates.install"
-      ? {
-          templateId: request.templateId,
-          timezone: request.timezone,
-          expectedUpdatedAt: request.expectedUpdatedAt,
-        }
-      : operation === "templates.installMarketplace"
-        ? { listingId: request.listingId, timezone: request.timezone, receiptId: request.receiptId }
-        : operation === "templates.updateMarketplace"
-          ? { agentId: request.agentId, listingId: request.listingId, timezone: request.timezone }
-          : operation === "templates.detail"
-            ? { templateId: request.templateId }
-            : operation === "templates.listing"
-              ? { listingId: request.listingId }
-              : operation === "templates.publish"
-                ? { agentId: request.agentId, card: null }
-                : { agentId: request.agentId };
+            ? {
+                templateId: request.templateId,
+                timezone: request.timezone,
+                expectedUpdatedAt: request.expectedUpdatedAt,
+              }
+            : operation === "templates.installMarketplace"
+              ? {
+                  listingId: request.listingId,
+                  timezone: request.timezone,
+                  receiptId: request.receiptId,
+                }
+              : operation === "templates.updateMarketplace"
+                ? {
+                    agentId: request.agentId,
+                    listingId: request.listingId,
+                    timezone: request.timezone,
+                  }
+                : operation === "templates.detail"
+                  ? { templateId: request.templateId }
+                  : operation === "templates.listing"
+                    ? { listingId: request.listingId }
+                    : operation === "templates.publish"
+                      ? { agentId: request.agentId, card: null }
+                      : { agentId: request.agentId };
   return { method: "POST" as const, path: paths[operation], body, templateProjection: operation };
 }
 
@@ -70,12 +85,12 @@ export const project = Effect.fn("OpenbotTemplateProtocol.project")((
           : operation === "templates.publication"
             ? Schema.Struct({ publication: Schema.NullOr(TemplatePublication) })
             : operation === "templates.preview"
-      ? TemplatePreview
-      : operation === "templates.detail" || operation === "templates.listing"
-        ? TemplateReview
-        : operation === "templates.publish"
-          ? TemplatePublication
-          : TemplateInstalled;
+              ? TemplatePreview
+              : operation === "templates.detail" || operation === "templates.listing"
+                ? TemplateReview
+                : operation === "templates.publish"
+                  ? TemplatePublication
+                  : TemplateInstalled;
   return Schema.decodeUnknownEffect(schema)(value).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
   );

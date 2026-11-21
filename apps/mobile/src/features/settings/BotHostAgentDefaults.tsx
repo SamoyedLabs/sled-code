@@ -15,6 +15,8 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { BotAvatar } from "../bots/upstream/BotAvatar";
 import * as Dialog from "../../components/ui/Dialog";
 import { SettingsSection } from "./components/SettingsSection";
+import { m } from "../../i18n/messages";
+import { T, msg, useGT } from "gt-react-native";
 
 type Scope = { environmentId: EnvironmentId; hostId: string };
 const modes = Schema.Literals(["queue", "steer"]);
@@ -57,10 +59,10 @@ const background = Schema.decodeUnknownOption(
   }),
 );
 const settings = [
-  { key: "allowAutomation", title: "Local automation" },
-  { key: "allowNewChat", title: "Let bots start new chats" },
-  { key: "quickAcknowledgement", title: "Show a plan before working" },
-  { key: "busyMessageMode", title: "Messages while working" },
+  { key: "allowAutomation", title: m(msg("Local automation")) },
+  { key: "allowNewChat", title: m(msg("Let bots start new chats")) },
+  { key: "quickAcknowledgement", title: m(msg("Show a plan before working")) },
+  { key: "busyMessageMode", title: m(msg("Messages while working")) },
 ] as const;
 const choices = ["default", "on", "off"] as const;
 const planStartPresets = [10_000, 30_000, 60_000, 300_000];
@@ -71,7 +73,7 @@ function withSavedValue(presets: readonly number[], saved: number | null) {
 }
 
 function planStartLabel(time: number | null) {
-  if (time === null) return "Wait for Start";
+  if (time === null) return m(msg("Wait for Start"));
   const seconds = Math.round(time / 1_000);
   const minutes = Math.floor(seconds / 60);
   const remaining = seconds % 60;
@@ -104,6 +106,7 @@ function AdminMenu({
 }
 
 function useHostAdmin({ environmentId, hostId }: Scope) {
+  const gt = useGT();
   const set = useAtomCommand(openbot.adminToHost, { reportFailure: false });
   const pending = useRef(false);
   const [busy, setBusy] = useState(false);
@@ -115,7 +118,7 @@ function useHostAdmin({ environmentId, hostId }: Scope) {
     setError("");
     await (async () => {
       const result = await set({ environmentId, input: { hostId, request } });
-      if (result._tag === "Failure") setError("The bot computer did not confirm the change.");
+      if (result._tag === "Failure") setError(gt("The bot computer did not confirm the change."));
       refresh();
     })().finally(() => {
       pending.current = false;
@@ -126,6 +129,7 @@ function useHostAdmin({ environmentId, hostId }: Scope) {
 }
 
 export function BotHostAgentDefaults(scope: Scope) {
+  const gt = useGT();
   const { environmentId, hostId } = scope;
   const access = useAtomValue(
     openbot.settingsRead.permissionAtom(environmentId, {
@@ -202,14 +206,16 @@ export function BotHostAgentDefaults(scope: Scope) {
   const listed = data?.agents.filter(({ agentId }) => known.has(agentId)) ?? [];
   return (
     <>
-      <SettingsSection title="Bot defaults">
+      <SettingsSection title={gt("Bot defaults")}>
         {(query.error || error) && (
           <Text accessibilityRole="alert" className="px-4 py-2 text-destructive">
             {error || query.error}
           </Text>
         )}
         {query.isPending && !data && (
-          <Text className="px-4 py-3 text-foreground-muted">Loading bot defaults…</Text>
+          <Text className="px-4 py-3 text-foreground-muted">
+            <T>Loading bot defaults…</T>
+          </Text>
         )}
         {data &&
           settings.map(({ key, title }) => {
@@ -231,7 +237,7 @@ export function BotHostAgentDefaults(scope: Scope) {
           <AdminMenu
             actions={[true, false].map((enabled) => ({
               id: String(enabled),
-              title: enabled ? "On" : "Off",
+              title: enabled ? gt("On") : gt("Off"),
               state: data.defaults.commitCoAuthor === enabled ? "on" : "off",
             }))}
             onPressAction={({ nativeEvent }) =>
@@ -240,8 +246,8 @@ export function BotHostAgentDefaults(scope: Scope) {
             disabled={!canChange}
           >
             <ListRowLayout
-              label="Add a bot co-author to commits"
-              detail={data.defaults.commitCoAuthor ? "On" : "Off"}
+              label={gt("Add a bot co-author to commits")}
+              detail={data.defaults.commitCoAuthor ? gt("On") : gt("Off")}
             />
           </AdminMenu>
         )}
@@ -257,7 +263,7 @@ export function BotHostAgentDefaults(scope: Scope) {
                 {error}
               </Text>
             )}
-            <SettingsSection title="Host default">
+            <SettingsSection title={gt("Host default")}>
               <AdminMenu
                 disabled={!canChange}
                 actions={choices.slice(1).map((choice) => ({
@@ -297,7 +303,7 @@ export function BotHostAgentDefaults(scope: Scope) {
                   }
                 >
                   <ListRowLayout
-                    label="Start a plan after"
+                    label={gt("Start a plan after")}
                     detail={planStartLabel(data.defaults.planStartAfterMs)}
                   />
                 </AdminMenu>
@@ -319,13 +325,13 @@ export function BotHostAgentDefaults(scope: Scope) {
                   }
                 >
                   <ListRowLayout
-                    label="Runs per hour"
+                    label={gt("Runs per hour")}
                     detail={String(data.defaults.automationRunsPerHour)}
                   />
                 </AdminMenu>
               )}
             </SettingsSection>
-            <SettingsSection title="Bot overrides">
+            <SettingsSection title={gt("Bot overrides")}>
               {listed.length > 0 && (
                 <AdminMenu
                   disabled={!canChange}
@@ -343,7 +349,7 @@ export function BotHostAgentDefaults(scope: Scope) {
                       );
                   }}
                 >
-                  <ListRowLayout label="Set all" />
+                  <ListRowLayout label={gt("Set all")} />
                 </AdminMenu>
               )}
               {listed.map((entry) => {
@@ -387,6 +393,7 @@ export function BotHostAgentDefaults(scope: Scope) {
 }
 
 export function BotBackgroundProcesses(scope: Scope) {
+  const gt = useGT();
   const { environmentId, hostId } = scope;
   const access = useAtomValue(
     openbot.settingsRead.permissionAtom(environmentId, {
@@ -430,11 +437,11 @@ export function BotBackgroundProcesses(scope: Scope) {
     <>
       <SettingsSection>
         <Pressable accessibilityRole="button" onPress={() => setOpen(true)}>
-          <ListRowLayout label="Background programs" />
+          <ListRowLayout label={gt("Background programs")} />
         </Pressable>
       </SettingsSection>
       {open && (
-        <Sheet title="Background programs" onClose={() => setOpen(false)}>
+        <Sheet title={gt("Background programs")} onClose={() => setOpen(false)}>
           <ScreenScrollView
             contentInsetAdjustmentBehavior="automatic"
             contentContainerClassName="gap-3 px-5 py-4"
@@ -445,28 +452,34 @@ export function BotBackgroundProcesses(scope: Scope) {
               </Text>
             )}
             {query.isPending && (
-              <Text className="text-foreground-muted">Looking for background programs…</Text>
+              <Text className="text-foreground-muted">
+                <T>Looking for background programs…</T>
+              </Text>
             )}
             {decoded._tag === "Some" &&
               (rows === null ? (
                 <Text className="text-foreground-muted">
-                  This computer does not report background programs.
+                  <T>This computer does not report background programs.</T>
                 </Text>
               ) : rows.length === 0 ? (
-                <Text className="text-foreground-muted">No background programs.</Text>
+                <Text className="text-foreground-muted">
+                  <T>No background programs.</T>
+                </Text>
               ) : (
                 rows.map((row) => (
                   <AdminMenu
                     key={row.id}
                     disabled={!allowStop || busy}
                     actions={[
-                      { id: "stop", title: "Stop program", attributes: { destructive: true } },
+                      { id: "stop", title: gt("Stop program"), attributes: { destructive: true } },
                     ]}
                     onPressAction={() =>
                       Dialog.confirm({
-                        title: "Stop background program?",
-                        message: `This stops PID ${row.pid} and its children on this bot computer.`,
-                        confirmText: "Stop program",
+                        title: gt("Stop background program?"),
+                        message: gt("This stops PID {pid} and its children on this bot computer.", {
+                          pid: row.pid,
+                        }),
+                        confirmText: gt("Stop program"),
                         destructive: true,
                         onConfirm: () =>
                           void run(
@@ -485,7 +498,9 @@ export function BotBackgroundProcesses(scope: Scope) {
                       </Text>
                       <Text className="text-xs text-foreground-muted">
                         PID {row.pid}
-                        {row.ports.length ? ` · Ports ${row.ports.join(", ")}` : ""}
+                        {row.ports.length
+                          ? gt(" · Ports {value}", { value: row.ports.join(", ") })
+                          : ""}
                       </Text>
                     </View>
                   </AdminMenu>
@@ -504,16 +519,16 @@ const learningSettings = [
     read: "settings.agent-memory-limit.settings",
     write: "settings.agent-memory-limit.update",
     key: "limit",
-    label: "Memory capacity",
-    description: "How many memories each bot can retain.",
+    label: m(msg("Memory capacity")),
+    description: m(msg("How many memories each bot can retain.")),
   },
   {
     capability: "memory-review-v1",
     read: "settings.memory-review.settings",
     write: "settings.memory-review.update",
     key: "interval",
-    label: "Background memory review",
-    description: "How often a bot reviews what it learned from a chat.",
+    label: m(msg("Background memory review")),
+    description: m(msg("How often a bot reviews what it learned from a chat.")),
   },
 ] as const;
 const learningChoice = Schema.decodeUnknownOption(
@@ -525,6 +540,7 @@ const learningChoice = Schema.decodeUnknownOption(
 );
 
 export function BotHostLearning(scope: Scope) {
+  const gt = useGT();
   const { environmentId, hostId } = scope;
   const compatibility = useEnvironmentQuery(
     openbot.readFromHost({
@@ -536,7 +552,7 @@ export function BotHostLearning(scope: Scope) {
   const available = learningSettings.filter(({ capability }) => capabilities.includes(capability));
   if (!available.length) return null;
   return (
-    <SettingsSection title="Learning">
+    <SettingsSection title={gt("Learning")}>
       {available.map((setting) => (
         <HostLearningSetting key={setting.key} scope={scope} setting={setting} />
       ))}

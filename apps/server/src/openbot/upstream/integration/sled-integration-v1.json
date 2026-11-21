@@ -180,11 +180,7 @@
     "src/main/vault-service.ts": "34adb8952af3e9be77cd0a32a30a3739f0b078672d0046a74b38dfcbc75c5078",
     "src/main/vault-store.ts": "4cbdd3c301f344c72869c11adf62d4d388efb6defc779bd7bfc3c73721db0bce"
   },
-  "capabilities": [
-    "sled-channel-coding-assignment-v1",
-    "agent-review-v1",
-    "agent-adoption-v1"
-  ],
+  "capabilities": ["sled-channel-coding-assignment-v1", "agent-review-v1", "agent-adoption-v1"],
   "verification": {
     "build": false,
     "packagedAppStarted": false,
@@ -209,9 +205,7 @@
     "upstreamCommit": "0c7753fa622c38419939cd230657f40e5883d098",
     "asarSha256": "1b8aa8301c6ea08e984aa4abf4dc70939cf7a4075e643564a0adf35673a4d1ef",
     "asarHeaderSha256": "b1e09c54304702210148cfb041a4b23d72cd62bb1133459143586b07c56a9ead",
-    "topUnpackedDirectories": [
-      "node_modules/@koromix/koffi-darwin-arm64"
-    ],
+    "topUnpackedDirectories": ["node_modules/@koromix/koffi-darwin-arm64"],
     "unpackedFiles": 2241
   },
   "composedAt": "2026-11-04T23:50:35.545542+00:00",

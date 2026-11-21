@@ -273,12 +273,12 @@ export function presentPendingIncomingShare(): void {
   const pending = snapshot.drafts.find((share) => share.id === shareId);
   if (pending?.botTransfer) return;
   Dialog.alert(
-    "Where should this shared content go?",
-    "Choose a project draft or open a bot conversation. Nothing is sent automatically.",
+    m(msg("Where should this shared content go?")),
+    m(msg("Choose a project draft or open a bot conversation. Nothing is sent automatically.")),
     [
-      { text: "Later", style: "cancel" },
+      { text: m(msg("Later")), style: "cancel" },
       {
-        text: "Project draft",
+        text: m(msg("Project draft")),
         onPress: () =>
           rootNavigationRef.dispatch(
             selectWorkspaceDetail({
@@ -287,7 +287,7 @@ export function presentPendingIncomingShare(): void {
             }),
           ),
       },
-      { text: "Bot conversation", onPress: () => rootNavigationRef.navigate("Bots") },
+      { text: m(msg("Bot conversation")), onPress: () => rootNavigationRef.navigate("Bots") },
     ],
   );
 }

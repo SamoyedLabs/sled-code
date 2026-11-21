@@ -50,6 +50,7 @@ import {
 } from "./globalTaskStart";
 import "./tasks.css";
 import "./tasks-adapter.css";
+import { T, useGT } from "gt-react";
 
 type Agent = {
   id: string;
@@ -68,6 +69,7 @@ export function TasksPage(props: TasksPageProps) {
   return <TasksBody key={`${props.environmentId}:${props.hostId}`} {...props} />;
 }
 function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: TasksPageProps) {
+  const gt = useGT();
   const registry = useContext(RegistryContext);
   const agentIds = JSON.stringify(agents.map((agent) => agent.id));
   // oxlint-disable-next-line t3code/no-manual-memo -- Query atom identity owns live subscriptions and must stay stable while composer state changes.
@@ -198,7 +200,7 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
     setBusy(false);
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "The task request failed. Try again.");
+      setError(cause instanceof Error ? cause.message : gt("The task request failed. Try again."));
       return null;
     }
     return settled.value;
@@ -287,7 +289,7 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
       setError(
         cause instanceof Error
           ? cause.message
-          : "The original task start could not be confirmed. Check it before starting another.",
+          : gt("The original task start could not be confirmed. Check it before starting another."),
       );
     }
     lock.current = false;
@@ -329,7 +331,7 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
     });
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "The task could not be queued.");
+      setError(cause instanceof Error ? cause.message : gt("The task could not be queued."));
     }
     lock.current = false;
     setBusy(false);
@@ -338,7 +340,7 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
     if (pendingRef.current?.phase !== "queued" || lock.current) return;
     if (timer.current) clearTimeout(timer.current);
     if (!clearGlobalTaskAttempt(startScope, window.sessionStorage)) {
-      setError("The cancellation could not be saved. The original pending start is retained.");
+      setError(gt("The cancellation could not be saved. The original pending start is retained."));
       return;
     }
     setDraft(pendingRef.current.text);
@@ -396,7 +398,9 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
       if (stagedMove) void uploads.discardUnused(stagedMove);
-      setError(cause instanceof Error ? cause.message : "The original pending start is retained.");
+      setError(
+        cause instanceof Error ? cause.message : gt("The original pending start is retained."),
+      );
     }
     lock.current = false;
     setBusy(false);
@@ -444,17 +448,17 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
   const selectedTask = tasks.find((task) => task.id === shown);
   const empty = loaded && tasks.length === 0;
   return (
-    <section className="tasks-page" aria-label="Tasks" data-empty={empty ? "" : undefined}>
+    <section className="tasks-page" aria-label={gt("Tasks")} data-empty={empty ? "" : undefined}>
       <div className="tasks-page-scroll">
         <div className="tasks-page-column">
           <header className="tasks-page-header">
             {onBack && (
-              <button className="ui-icon-button" aria-label="Back" onClick={onBack}>
+              <button className="ui-icon-button" aria-label={gt("Back")} onClick={onBack}>
                 <ArrowLeft size={16} />
               </button>
             )}
             <h2>
-              Tasks{" "}
+              <T>Tasks</T>{" "}
               {hostName && (
                 <>
                   <span>/</span> <span>{hostName}</span>
@@ -462,27 +466,37 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
               )}
             </h2>
             <button className="ui-button" onClick={refresh}>
-              Refresh
+              <T>Refresh</T>
             </button>
           </header>
           {empty && (
             <div className="tasks-page-empty-pitch">
               <h3 className="tasks-page-empty-title">
-                <span className="tasks-page-empty-lead">Hand off the work.</span>
+                <span className="tasks-page-empty-lead">
+                  <T>Hand off the work.</T>
+                </span>
                 <span>
-                  Come back to an <span className="tasks-page-empty-word">answer</span>.
+                  <T>Come back to an</T> <span className="tasks-page-empty-word">answer</span>.
                 </span>
               </h3>
               <p className="tasks-page-empty-lines">
-                <span>Your agents work on tasks side by side.</span>
-                <span>Each answer waits here for you.</span>
+                <span>
+                  <T>Your agents work on tasks side by side.</T>
+                </span>
+                <span>
+                  <T>Each answer waits here for you.</T>
+                </span>
               </p>
             </div>
           )}
           {(error || uploads.error || loadError) && (
             <p role="alert">{error ?? uploads.error ?? loadError}</p>
           )}
-          {!loaded && !loadError && <p role="status">Loading tasks…</p>}
+          {!loaded && !loadError && (
+            <p role="status">
+              <T>Loading tasks…</T>
+            </p>
+          )}
           <div className="composer-wrap tasks-page-composer">
             <BotMessageComposer
               onDragOver={(event) => {
@@ -505,7 +519,7 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
                 type="file"
                 multiple
                 hidden
-                aria-label="Choose task attachments"
+                aria-label={gt("Choose task attachments")}
                 onChange={(event) => {
                   void uploads.add(
                     Array.from(event.currentTarget.files ?? []),
@@ -524,7 +538,11 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
                 onRemoveUpload={() => {}}
                 onRetry={() => {}}
               />
-              {uploads.busy && <p role="status">Uploading files…</p>}
+              {uploads.busy && (
+                <p role="status">
+                  <T>Uploading files…</T>
+                </p>
+              )}
               <BotComposerInput>
                 <BotComposerEditor
                   environmentId={environmentId}
@@ -534,7 +552,7 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
                   onChange={setDraft}
                   onSubmit={() => void start()}
                   disabled={!permission || busy || voice.busy || pending !== null || !agentId}
-                  placeholder="What would you like done?"
+                  placeholder={gt("What would you like done?")}
                   attachments={selectedFiles.map((file) => ({ id: file.id, name: file.name }))}
                   onFiles={
                     uploads.available
@@ -547,7 +565,7 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
                 actions={
                   <>
                     <BotComposerRecipient
-                      label="Task agent"
+                      label={gt("Task agent")}
                       value={agentId}
                       onChange={(id) => void changeAgent(id)}
                       choices={agents}
@@ -566,7 +584,7 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
                       disabled={!permission || busy || Boolean(pending)}
                     />
                     <BotComposerSend
-                      aria-label="Start task"
+                      aria-label={gt("Start task")}
                       busy={busy}
                       disabled={
                         (!draft.trim() && !selectedFileIds.length) ||
@@ -585,7 +603,7 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
                 <ComposerControl
                   type="button"
                   className="size-8 px-0"
-                  aria-label="Attach task files"
+                  aria-label={gt("Attach task files")}
                   disabled={
                     !permission ||
                     !uploads.available ||
@@ -603,7 +621,7 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
           </div>
           {!permission && (
             <p className="tasks-page-permission">
-              Chat permission is required to start or change tasks.
+              <T>Chat permission is required to start or change tasks.</T>
             </p>
           )}
           <div className="tasks-page-took-slot" aria-live="polite">
@@ -611,13 +629,13 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
               <div className="tasks-page-took">
                 <span>
                   {agents.find((item) => item.id === (pending?.agentId ?? took?.agentId))?.name}{" "}
-                  {pending?.phase === "attempted" ? "is confirming" : "took"} “
-                  {pending?.text || (pending?.fileIds.length ? "attached files" : took?.title)}”
+                  {pending?.phase === "attempted" ? gt("is confirming") : "took"} “
+                  {pending?.text || (pending?.fileIds.length ? gt("attached files") : took?.title)}”
                 </span>
                 {pending ? (
                   <>
                     <select
-                      aria-label="Pending task agent"
+                      aria-label={gt("Pending task agent")}
                       value={pending.agentId}
                       disabled={busy || uploads.busy || pending.phase === "attempted"}
                       onChange={(event) => void changeAgent(event.target.value)}
@@ -633,7 +651,7 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
                       disabled={busy || pending.phase !== "queued"}
                       onClick={undo}
                     >
-                      Undo
+                      <T>Undo</T>
                     </button>
                     <button
                       className="ui-button"
@@ -642,18 +660,18 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
                         void commit();
                       }}
                     >
-                      {pending.phase === "attempted" ? "Check original start" : "Start now"}
+                      {pending.phase === "attempted" ? gt("Check original start") : gt("Start now")}
                     </button>
                   </>
                 ) : (
                   took && (
                     <>
                       <button className="ui-button" onClick={() => selectTask(took.id)}>
-                        Open
+                        <T>Open</T>
                       </button>
                       <button
                         className="ui-icon-button"
-                        aria-label="Dismiss"
+                        aria-label={gt("Dismiss")}
                         onClick={() => setTook(null)}
                       >
                         <X size={14} />
@@ -704,7 +722,7 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
                                   : undefined
                             }
                           >
-                            {waitingFor(task) ? "Needs you" : taskStatus(task)}
+                            {waitingFor(task) ? gt("Needs you") : taskStatus(task)}
                           </span>
                           <BotAvatar
                             seed={
@@ -723,7 +741,9 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
                       aria-expanded={showClosed}
                       onClick={() => setShowClosed(!showClosed)}
                     >
-                      {showClosed ? "Show less" : `Show all ${section.count}`}
+                      {showClosed
+                        ? gt("Show less")
+                        : gt("Show all {count}", { count: section.count })}
                     </button>
                   )}
                 </section>
@@ -735,13 +755,16 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
       {selectedTask && (
         <div className="tasks-page-side" data-closing={closing ? "" : undefined}>
           <div className="tasks-page-side-content">
-            <aside className="browser-panel tasks-panel" aria-label={`Task: ${selectedTask.title}`}>
+            <aside
+              className="browser-panel tasks-panel"
+              aria-label={gt("Task: {title}", { title: selectedTask.title })}
+            >
               <header className="file-preview-header">
                 <h2>{selectedTask.title}</h2>
                 {selectedTask.state === "running" || selectedTask.state === "queued" ? (
                   <button
                     className="ui-icon-button"
-                    aria-label="Stop task"
+                    aria-label={gt("Stop task")}
                     disabled={!permission || busy}
                     onClick={() =>
                       void act({
@@ -756,7 +779,9 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
                 ) : (
                   <button
                     className="ui-icon-button"
-                    aria-label={selectedTask.state === "closed" ? "Restore task" : "Archive task"}
+                    aria-label={
+                      selectedTask.state === "closed" ? gt("Restore task") : gt("Archive task")
+                    }
                     disabled={!permission || busy}
                     onClick={() =>
                       void act({
@@ -775,7 +800,7 @@ function TasksBody({ environmentId, hostId, hostName = "", agents, onBack }: Tas
                 )}
                 <button
                   className="ui-icon-button"
-                  aria-label="Close task panel"
+                  aria-label={gt("Close task panel")}
                   onClick={() => selectTask(null)}
                 >
                   <X size={14} />

@@ -23,6 +23,7 @@ import {
 import "./server-mcp.css";
 import { MenuPopup } from "../OpenbotMenu";
 import { randomUUID } from "../../../../lib/utils";
+import { T, Var, useGT } from "gt-react";
 
 export interface ServerMcpPanelProps {
   servers: readonly McpServerConfig[] | null;
@@ -40,6 +41,7 @@ export interface ServerMcpPanelProps {
   signInApp?: (config: McpServerConfig) => ReactNode;
 }
 export function ServerMcpPanel(props: ServerMcpPanelProps) {
+  const gt = useGT();
   const [editing, setEditing] = useState<McpServerConfig | null>(null);
   const [openedInitial, setOpenedInitial] = useState(false);
   if ((props.initialServerId || props.initialCreate) && props.servers && !openedInitial) {
@@ -62,7 +64,7 @@ export function ServerMcpPanel(props: ServerMcpPanelProps) {
     const settled = await settlePromise(action);
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "Could not change the MCP server.");
+      setError(cause instanceof Error ? cause.message : gt("Could not change the MCP server."));
     }
     lock.current = false;
     setBusy(null);
@@ -83,14 +85,16 @@ export function ServerMcpPanel(props: ServerMcpPanelProps) {
   return (
     <div className="server-mcp-panel">
       <SettingsSection
-        title="MCP servers"
-        description="Model Context Protocol servers give this server’s agents extra tools. Claude and Codex agents get only the servers in this list; OpenCode and Grok agents can also start servers from their own configuration files."
+        title={gt("MCP servers")}
+        description={gt(
+          "Model Context Protocol servers give this server’s agents extra tools. Claude and Codex agents get only the servers in this list; OpenCode and Grok agents can also start servers from their own configuration files.",
+        )}
         actions={
           props.servers &&
           props.servers.length > 0 && (
             <SourceButton disabled={!props.canManage || busy !== null} onClick={() => open(null)}>
               <Plus aria-hidden="true" />
-              Connect a custom MCP
+              <T>Connect a custom MCP</T>
             </SourceButton>
           )
         }
@@ -107,9 +111,11 @@ export function ServerMcpPanel(props: ServerMcpPanelProps) {
         )}
         {props.servers === null ? (
           <p role={props.loadError ? "alert" : "status"}>
-            {props.loadError ?? "Loading MCP servers…"}
+            {props.loadError ?? gt("Loading MCP servers…")}
             {props.loadError && props.onRetryLoad && (
-              <SourceButton onClick={props.onRetryLoad}>Retry</SourceButton>
+              <SourceButton onClick={props.onRetryLoad}>
+                <T>Retry</T>
+              </SourceButton>
             )}
           </p>
         ) : props.servers.length === 0 ? (
@@ -119,11 +125,11 @@ export function ServerMcpPanel(props: ServerMcpPanelProps) {
             ) : (
               <>
                 <p className="ui-text" data-variant="caption" data-tone="muted">
-                  No MCP servers yet.
+                  <T>No MCP servers yet.</T>
                 </p>
                 <SourceButton disabled={!props.canManage} onClick={() => open(null)}>
                   <Plus aria-hidden="true" />
-                  Connect a custom MCP
+                  <T>Connect a custom MCP</T>
                 </SourceButton>
               </>
             )}
@@ -149,14 +155,14 @@ export function ServerMcpPanel(props: ServerMcpPanelProps) {
                         className={`z-badge z-badge-variant-${test ? (test.error ? "destructive-light" : "success-light") : "secondary"}`}
                       >
                         {busy === `test:${config.id}`
-                          ? "Connecting…"
+                          ? gt("Connecting…")
                           : test
                             ? test.error
-                              ? "Failed"
-                              : `Connected · ${test.toolCount} tools`
+                              ? gt("Failed")
+                              : gt("Connected · {toolCount} tools", { toolCount: test.toolCount })
                             : config.enabled
-                              ? "Enabled"
-                              : "Disabled"}
+                              ? gt("Enabled")
+                              : gt("Disabled")}
                       </span>
                     </div>
                     {test?.error && <div className="ui-item-description">{test.error}</div>}
@@ -164,7 +170,7 @@ export function ServerMcpPanel(props: ServerMcpPanelProps) {
                   </div>
                   <div className="ui-item-actions">
                     <SourceSwitch
-                      label={`Enable ${config.name}`}
+                      label={gt("Enable {name}", { name: config.name })}
                       checked={config.enabled}
                       disabled={!props.canManage || busy !== null}
                       onChange={(enabled) =>
@@ -174,7 +180,7 @@ export function ServerMcpPanel(props: ServerMcpPanelProps) {
                     <Menu.Root>
                       <Menu.Trigger
                         className="ui-button ui-button-variant-ghost ui-button-size-icon-sm"
-                        aria-label={`Actions for ${config.name}`}
+                        aria-label={gt("Actions for {name}", { name: config.name })}
                         disabled={!props.canManage || busy !== null}
                       >
                         <Ellipsis aria-hidden="true" />
@@ -192,11 +198,11 @@ export function ServerMcpPanel(props: ServerMcpPanelProps) {
                           }
                         >
                           <Plug aria-hidden="true" />
-                          Test connection
+                          <T>Test connection</T>
                         </Menu.Item>
                         <Menu.Item onClick={() => open(config)}>
                           <Pencil aria-hidden="true" />
-                          Edit
+                          <T>Edit</T>
                         </Menu.Item>
                         <Menu.Item
                           className="ui-action-menu-danger"
@@ -212,7 +218,7 @@ export function ServerMcpPanel(props: ServerMcpPanelProps) {
                           }
                         >
                           <Trash2 aria-hidden="true" />
-                          Remove
+                          <T>Remove</T>
                         </Menu.Item>
                       </MenuPopup>
                     </Menu.Root>
@@ -232,6 +238,7 @@ function McpForm({
   onBack,
   ...props
 }: ServerMcpPanelProps & { baseline: McpServerConfig; onBack: () => void }) {
+  const gt = useGT();
   const [draft, setDraft] = useState(() => mcpConfigDraft(baseline));
   const [newId] = useState(() => `mcp-${randomUUID()}`);
   const [busy, setBusy] = useState(false);
@@ -273,7 +280,7 @@ function McpForm({
     });
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "Could not save the MCP server.");
+      setError(cause instanceof Error ? cause.message : gt("Could not save the MCP server."));
     }
     lock.current = false;
     setBusy(false);
@@ -285,11 +292,11 @@ function McpForm({
     <div className="server-mcp-panel">
       <div className="server-mcp-form">
         <SourceButton variant="ghost" disabled={busy} onClick={() => void back()}>
-          Back
+          <T>Back</T>
         </SourceButton>
         <SettingsSection
-          title="Details"
-          description="Name this server and choose how OpenBot reaches it."
+          title={gt("Details")}
+          description={gt("Name this server and choose how OpenBot reaches it.")}
           actions={
             <OpenbotSlidingTabs
               value={draft.transport}
@@ -298,26 +305,28 @@ function McpForm({
               }}
               items={[
                 { value: "stdio", label: "STDIO" },
-                { value: "http", label: "Streamable HTTP" },
+                { value: "http", label: gt("Streamable HTTP") },
               ]}
-              label="Transport"
+              label={gt("Transport")}
             />
           }
         >
           <McpField
-            label="Name"
+            label={gt("Name")}
             value={draft.name}
-            placeholder="MCP server name"
+            placeholder={gt("MCP server name")}
             disabled={disabled}
             error={touched ? errors.name : undefined}
             onChange={(name) => patch({ name })}
           />
         </SettingsSection>
         {draft.transport === "stdio" ? (
-          <SettingsSection title="Launch">
+          <SettingsSection title={gt("Launch")}>
             <McpField
-              label="Command to launch"
-              description="The program only. The launch does not read this field as a command line, so a word such as serve-sqlite goes in Arguments below."
+              label={gt("Command to launch")}
+              description={gt(
+                "The program only. The launch does not read this field as a command line, so a word such as serve-sqlite goes in Arguments below.",
+              )}
               value={draft.command}
               disabled={disabled}
               error={touched ? errors.command : undefined}
@@ -334,43 +343,45 @@ function McpForm({
             {draft.retained?.args !== undefined && (
               <RetainedField
                 label="arguments"
-                summary={`${draft.retained.args} saved arguments`}
+                summary={gt("{args} saved arguments", { args: draft.retained.args })}
                 disabled={disabled}
                 onReplace={() => patch({ args: [] })}
               />
             )}
             <McpStringRows
-              label="Arguments"
-              addLabel="Add argument"
+              label={gt("Arguments")}
+              addLabel={gt("Add argument")}
               values={draft.args}
               disabled={disabled || draft.retained?.args !== undefined}
               onChange={(args) => patch({ args })}
             />
             {draft.retained?.env !== undefined && (
               <RetainedField
-                label="environment variables"
-                summary={draft.retained.env.join(", ") || "No saved environment variables"}
+                label={gt("environment variables")}
+                summary={draft.retained.env.join(", ") || gt("No saved environment variables")}
                 disabled={disabled}
                 onReplace={() => patch({ env: [] })}
               />
             )}
             <McpPairs
-              label="Environment variables"
-              addLabel="Add environment variable"
+              label={gt("Environment variables")}
+              addLabel={gt("Add environment variable")}
               values={draft.env}
               disabled={disabled || draft.retained?.env !== undefined}
               onChange={(env) => patch({ env })}
             />
             <McpStringRows
-              label="Environment variable passthrough"
-              addLabel="Add variable"
+              label={gt("Environment variable passthrough")}
+              addLabel={gt("Add variable")}
               values={draft.envPassthrough}
               disabled={disabled}
               onChange={(envPassthrough) => patch({ envPassthrough })}
             />
             <McpField
-              label="Working directory"
-              description="Claude and Codex agents and the connection test start the server here. Leave it empty to give this server to every provider: the other providers cannot set a directory, so they skip a server that names one."
+              label={gt("Working directory")}
+              description={gt(
+                "Claude and Codex agents and the connection test start the server here. Leave it empty to give this server to every provider: the other providers cannot set a directory, so they skip a server that names one.",
+              )}
               value={draft.workingDirectory}
               disabled={disabled}
               onChange={(workingDirectory) => patch({ workingDirectory })}
@@ -378,11 +389,11 @@ function McpForm({
           </SettingsSection>
         ) : (
           <SettingsSection
-            title="Endpoint"
-            description="Every provider can use an HTTP MCP server."
+            title={gt("Endpoint")}
+            description={gt("Every provider can use an HTTP MCP server.")}
           >
             <McpField
-              label="Server URL"
+              label={gt("Server URL")}
               type="url"
               value={draft.url}
               disabled={disabled}
@@ -392,14 +403,14 @@ function McpForm({
             {draft.retained?.headers !== undefined && (
               <RetainedField
                 label="headers"
-                summary={draft.retained.headers.join(", ") || "No saved headers"}
+                summary={draft.retained.headers.join(", ") || gt("No saved headers")}
                 disabled={disabled}
                 onReplace={() => patch({ headers: [] })}
               />
             )}
             <McpPairs
-              label="Headers"
-              addLabel="Add header"
+              label={gt("Headers")}
+              addLabel={gt("Add header")}
               values={draft.headers}
               disabled={disabled || draft.retained?.headers !== undefined}
               onChange={(headers) => patch({ headers })}
@@ -408,14 +419,16 @@ function McpForm({
           </SettingsSection>
         )}
         <SettingsSection
-          title="Test"
-          description="Connects once with these settings and reports the tools it offers. Nothing is saved or kept."
+          title={gt("Test")}
+          description={gt(
+            "Connects once with these settings and reports the tools it offers. Nothing is saved or kept.",
+          )}
           actions={
             <>
               <span>{props.signIn?.(draft)}</span>
               <SourceButton disabled={disabled || !props.onTest} onClick={() => void run(false)}>
                 <Plug aria-hidden="true" />
-                Test connection
+                <T>Test connection</T>
               </SourceButton>
             </>
           }
@@ -427,8 +440,9 @@ function McpForm({
             role="status"
           >
             {test?.signature === signature
-              ? (test.result.error ?? `Connected · ${test.result.toolCount} tools`)
-              : "Not tested yet."}
+              ? (test.result.error ??
+                gt("Connected · {toolCount} tools", { toolCount: test.result.toolCount }))
+              : gt("Not tested yet.")}
           </p>
         </SettingsSection>
         {error && (
@@ -439,7 +453,7 @@ function McpForm({
         {changed && (
           <footer className="settings-modal-footer">
             <p className="ui-text" data-variant="caption">
-              Changes not saved
+              <T>Changes not saved</T>
             </p>
             <SourceButton
               disabled={busy}
@@ -449,10 +463,10 @@ function McpForm({
                 setError(null);
               }}
             >
-              Reset
+              <T>Reset</T>
             </SourceButton>
             <SourceButton variant="default" disabled={disabled} onClick={() => void run(true)}>
-              {busy ? "Saving…" : "Save"}
+              {busy ? gt("Saving…") : gt("Save")}
             </SourceButton>
           </footer>
         )}
@@ -526,6 +540,7 @@ function McpStringRows({
   disabled: boolean;
   onChange: (values: string[]) => void;
 }) {
+  const gt = useGT();
   return (
     <fieldset className="server-mcp-repeat">
       <legend className="server-mcp-repeat-legend">{label}</legend>
@@ -543,7 +558,10 @@ function McpStringRows({
           />
           <SourceButton
             variant="ghost"
-            aria-label={`Remove ${label.toLowerCase()} ${index + 1}`}
+            aria-label={gt("Remove {value} {value2}", {
+              value: label.toLowerCase(),
+              value2: index + 1,
+            })}
             disabled={disabled}
             onClick={() => onChange(values.filter((_, i) => i !== index))}
           >
@@ -576,6 +594,7 @@ function McpPairs({
   disabled: boolean;
   onChange: (values: McpKeyValue[]) => void;
 }) {
+  const gt = useGT();
   return (
     <fieldset className="server-mcp-repeat">
       <legend className="server-mcp-repeat-legend">{label}</legend>
@@ -585,7 +604,7 @@ function McpPairs({
             className="ui-input"
             data-size="md"
             aria-label={`${label} ${index + 1} key`}
-            placeholder="Key"
+            placeholder={gt("Key")}
             value={value.key}
             disabled={disabled}
             onChange={(event) =>
@@ -603,7 +622,7 @@ function McpPairs({
             autoComplete="off"
             spellCheck={false}
             aria-label={`${label} ${index + 1} value`}
-            placeholder="Value"
+            placeholder={gt("Value")}
             value={value.value}
             disabled={disabled}
             onChange={(event) =>
@@ -616,7 +635,10 @@ function McpPairs({
           />
           <SourceButton
             variant="ghost"
-            aria-label={`Remove ${label.toLowerCase()} ${index + 1}`}
+            aria-label={gt("Remove {value} {value2}", {
+              value: label.toLowerCase(),
+              value2: index + 1,
+            })}
             disabled={disabled}
             onClick={() => onChange(values.filter((_, i) => i !== index))}
           >
@@ -651,10 +673,14 @@ function RetainedField({
   return (
     <div className="settings-field">
       <p className="ui-text" data-variant="caption" data-tone="muted">
-        {summary}. Values stay on the host until you replace them.
+        <T>
+          <Var>{summary}</Var>. Values stay on the host until you replace them.
+        </T>
       </p>
       <SourceButton variant="ghost" disabled={disabled} onClick={onReplace}>
-        Replace saved {label}
+        <T>
+          Replace saved <Var>{label}</Var>
+        </T>
       </SourceButton>
     </div>
   );

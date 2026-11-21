@@ -17,6 +17,7 @@ import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime
 import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { useGT } from "gt-react";
 export type ChannelGrantsProps = {
   environmentId: EnvironmentId;
   hostId: string;
@@ -24,6 +25,7 @@ export type ChannelGrantsProps = {
   agentId: string;
 };
 export function useBotChannelGrants(props: ChannelGrantsProps) {
+  const gt = useGT();
   const [kind, setKind] = useState<"routine" | "agent">("routine");
   const [requester, setRequester] = useState("");
   const [hours, setHours] = useState("24");
@@ -87,7 +89,7 @@ export function useBotChannelGrants(props: ChannelGrantsProps) {
       }
     });
     if (settled._tag === "Failure") {
-      setError("The permission request could not complete. Refresh before approving again.");
+      setError(gt("The permission request could not complete. Refresh before approving again."));
     }
     setBusy(false);
     lock.current = false;

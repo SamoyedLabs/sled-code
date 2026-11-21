@@ -86,6 +86,7 @@ export function routineViews(value: unknown) {
 }
 
 import type { OpenbotReadRequest } from "@t3tools/contracts";
+import { mFallback, msg } from "gt-i18n";
 export function botViewRequest(
   agentId: string,
   view: "conversation" | "task" | "memory" | "routine",
@@ -127,11 +128,11 @@ export function instructionView(value: unknown) {
 }
 
 export const sledToolAccessOptions = [
-  { value: "read-only", label: "Read only" },
-  { value: "approval-required", label: "Ask before actions" },
-  { value: "auto-accept-edits", label: "Allow edits" },
-  { value: "auto", label: "Automatic" },
-  { value: "full-access", label: "Full access" },
+  { value: "read-only", label: mFallback(msg("Read only")) },
+  { value: "approval-required", label: mFallback(msg("Ask before actions")) },
+  { value: "auto-accept-edits", label: mFallback(msg("Allow edits")) },
+  { value: "auto", label: mFallback(msg("Automatic")) },
+  { value: "full-access", label: mFallback(msg("Full access")) },
 ] as const;
 export {
   browserDisplay,

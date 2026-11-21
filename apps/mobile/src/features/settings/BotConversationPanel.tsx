@@ -16,6 +16,7 @@ import { BotConversationQueue } from "./BotConversationQueue";
 import { Button } from "../../components/ui/Button";
 import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
 import * as Dialog from "../../components/ui/Dialog";
+import { T, Var, useGT } from "gt-react-native";
 type Props = {
   environmentId: EnvironmentId;
   hostId: string;
@@ -31,6 +32,7 @@ export function BotConversationPanel(props: Props) {
   );
 }
 function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Props) {
+  const gt = useGT();
   const c = useBotConversationPanel(environmentId, hostId, agentId, taskId, Crypto.randomUUID);
   const markdown = useMarkdownPreviewStyles();
   const [title, setTitle] = useState("");
@@ -52,40 +54,52 @@ function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Pro
           taskId={taskId}
         />
       )}
-      <Button label="Refresh conversation" onPress={c.refresh} />
-      {c.loading && <Text>Loading conversation…</Text>}
+      <Button label={gt("Refresh conversation")} onPress={c.refresh} />
+      {c.loading && (
+        <Text>
+          <T>Loading conversation…</T>
+        </Text>
+      )}
       {c.error && <Text accessibilityRole="alert">{c.error}</Text>}
       {taskId && (
         <View className="gap-2">
           <AppTextInput
-            accessibilityLabel="Thread title"
+            accessibilityLabel={gt("Thread title")}
             maxLength={120}
             value={title}
             onChangeText={setTitle}
           />
           <Button
-            label="Rename thread"
+            label={gt("Rename thread")}
             disabled={disabled || !title.trim()}
             onPress={() => void c.act({ operation: "thread.rename", agentId, taskId, title })}
           />
           <Button
-            label="Delete thread"
+            label={gt("Delete thread")}
             disabled={disabled}
             onPress={() =>
-              Dialog.alert("Delete bot thread?", "This removes the thread and its conversation.", [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Delete",
-                  style: "destructive",
-                  onPress: () => void c.act({ operation: "thread.delete", agentId, taskId }),
-                },
-              ])
+              Dialog.alert(
+                gt("Delete bot thread?"),
+                gt("This removes the thread and its conversation."),
+                [
+                  { text: gt("Cancel"), style: "cancel" },
+                  {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: () => void c.act({ operation: "thread.delete", agentId, taskId }),
+                  },
+                ],
+              )
             }
           />
         </View>
       )}
       {c.hasOlder && !taskId && (
-        <Button label="Load older messages" disabled={c.busy} onPress={() => void c.older()} />
+        <Button
+          label={gt("Load older messages")}
+          disabled={c.busy}
+          onPress={() => void c.older()}
+        />
       )}
       {c.messages.map((message) => (
         <View key={message.id} className="gap-2 border-b border-border pb-3">
@@ -95,11 +109,15 @@ function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Pro
           </Text>
           {message.replyToMessageId && (
             <Text>
-              Reply to{" "}
-              {(
-                c.messages.find((m) => m.id === message.replyToMessageId) ??
-                c.references[message.replyToMessageId]
-              )?.text.slice(0, 200) ?? message.replyToMessageId}
+              <T>
+                Reply to<Var> </Var>
+                <Var>
+                  {(
+                    c.messages.find((m) => m.id === message.replyToMessageId) ??
+                    c.references[message.replyToMessageId]
+                  )?.text.slice(0, 200) ?? message.replyToMessageId}
+                </Var>
+              </T>
             </Text>
           )}
           <SelectableMarkdownText
@@ -113,7 +131,7 @@ function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Pro
             }}
             onLinkPress={(url) => {
               const quote = botQuoteReference(url);
-              if (quote) Dialog.alert("Quoted passage", quote.text);
+              if (quote) Dialog.alert(gt("Quoted passage"), quote.text);
               else void tryOpenExternalUrl(url, "markdown-link");
             }}
           />
@@ -130,9 +148,9 @@ function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Pro
             disabled={disabled}
             respond={c.act}
           />
-          <Button label="Reply" disabled={disabled} onPress={() => c.setReply(message.id)} />
+          <Button label={gt("Reply")} disabled={disabled} onPress={() => c.setReply(message.id)} />
           <Button
-            label="Branch here"
+            label={gt("Branch here")}
             disabled={
               disabled ||
               (message.author !== "assistant" && message.author !== "agent") ||
@@ -144,7 +162,7 @@ function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Pro
           {!taskId && (
             <>
               <Button
-                label="React 👍"
+                label={gt("React 👍")}
                 disabled={disabled}
                 onPress={() =>
                   void c.act({
@@ -156,7 +174,7 @@ function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Pro
                 }
               />
               <Button
-                label="Clear reaction"
+                label={gt("Clear reaction")}
                 disabled={disabled}
                 onPress={() =>
                   void c.act({
@@ -171,28 +189,36 @@ function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Pro
           )}
         </View>
       ))}
-      {c.snapshot?.readState && <Text>{c.snapshot.readState.unreadCount} unread messages</Text>}
+      {c.snapshot?.readState && (
+        <Text>
+          <T>
+            <Var>{c.snapshot.readState.unreadCount}</Var> unread messages
+          </T>
+        </Text>
+      )}
       {taskId && (
         <View className="gap-2">
           <Button
-            label="Close thread"
+            label={gt("Close thread")}
             disabled={disabled}
             onPress={() => void c.act({ operation: "task.close", agentId, taskId })}
           />
           <Button
-            label="Reopen thread"
+            label={gt("Reopen thread")}
             disabled={disabled}
             onPress={() => void c.act({ operation: "task.reopen", agentId, taskId })}
           />
           <Text>
-            Side threads expose the released recent snapshot; older paging is available in the main
-            conversation.
+            <T>
+              Side threads expose the released recent snapshot; older paging is available in the
+              main conversation.
+            </T>
           </Text>
         </View>
       )}
       {c.messages.length > 0 && (
         <Button
-          label="Mark read"
+          label={gt("Mark read")}
           disabled={disabled}
           onPress={() => {
             const throughMessageId = c.messages.at(-1)!.id;
@@ -206,18 +232,25 @@ function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Pro
       )}
       {!taskId && (
         <Button
-          label="Mark unread"
+          label={gt("Mark unread")}
           disabled={disabled}
           onPress={() => void c.act({ operation: "conversation.markUnread", agentId })}
         />
       )}
-      {c.reply && <Button label={`Cancel reply to ${c.reply}`} onPress={() => c.setReply(null)} />}
+      {c.reply && (
+        <Button
+          label={gt("Cancel reply to {reply}", { reply: c.reply })}
+          onPress={() => c.setReply(null)}
+        />
+      )}
       <Text>
-        Select up to 10 drafts from Files for one message, including replies. Selection is not
-        sending.
+        <T>
+          Select up to 10 drafts from Files for one message, including replies. Selection is not
+          sending.
+        </T>
       </Text>
       <Button
-        label="No file"
+        label={gt("No file")}
         disabled={c.busy || Boolean(c.fileAttempt)}
         onPress={() => c.setSelectedDraftId(null)}
       />
@@ -235,7 +268,7 @@ function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Pro
       ))}
       <AppTextInput
         editable={!c.fileAttempt && !voice.freezesEditor}
-        accessibilityLabel="Message to bot"
+        accessibilityLabel={gt("Message to bot")}
         multiline
         maxLength={100000}
         value={c.text}
@@ -243,7 +276,7 @@ function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Pro
       />
       <BotDictation voice={voice} disabled={c.busy || Boolean(c.fileAttempt) || !c.permission} />
       <Button
-        label="Send"
+        label={gt("Send")}
         disabled={
           c.busy ||
           voice.blocksSubmission ||
@@ -253,7 +286,7 @@ function ConversationBody({ environmentId, hostId, agentId, taskId = null }: Pro
       />
       {c.snapshot?.activeTurnId && (
         <Button
-          label="Stop turn"
+          label={gt("Stop turn")}
           disabled={disabled}
           onPress={() =>
             void c.act(

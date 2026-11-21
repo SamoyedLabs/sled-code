@@ -9,6 +9,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
 import { ThemedSwitch } from "../../components/ui/ThemedSwitch";
+import { T, Var, useGT } from "gt-react-native";
 
 export function BotModelVisibility({
   environmentId,
@@ -21,6 +22,7 @@ export function BotModelVisibility({
   provider: string;
   onChange: () => void;
 }) {
+  const gt = useGT();
   const allowed = useAtomValue(
     openbot.adminToHost.permissionAtom(environmentId, {
       hostId,
@@ -58,7 +60,7 @@ export function BotModelVisibility({
     if (result._tag === "Failure") setError(String(squashAtomCommandFailure(result)));
     else {
       const value = botModelVisibility(result.value, provider);
-      if (!value) setError("This engine returned unsupported model visibility settings.");
+      if (!value) setError(gt("This engine returned unsupported model visibility settings."));
       else {
         setSettings(value);
         setDraft(null);
@@ -70,9 +72,11 @@ export function BotModelVisibility({
   };
   return (
     <View className="gap-3">
-      <Text>Models shown in pickers</Text>
+      <Text>
+        <T>Models shown in pickers</T>
+      </Text>
       <Button
-        label="Load model visibility"
+        label={gt("Load model visibility")}
         tone="secondary"
         size="compact"
         disabled={!allowed || busy}
@@ -86,17 +90,19 @@ export function BotModelVisibility({
       {settings && (
         <>
           <Text className="text-foreground-muted">
-            {selected.length} selected · {settings.models.length} available. This changes this bot
-            host's model pickers.
+            <T>
+              <Var>{selected.length}</Var> selected · <Var>{settings.models.length}</Var> available.
+              This changes this bot host's model pickers.
+            </T>
           </Text>
           <AppTextInput
-            accessibilityLabel="Filter bot models"
+            accessibilityLabel={gt("Filter bot models")}
             value={search}
             onChangeText={(value) => {
               setSearch(value);
               setLimit(50);
             }}
-            placeholder="Filter by name or model ID"
+            placeholder={gt("Filter by name or model ID")}
             autoCapitalize="none"
             autoCorrect={false}
           />
@@ -109,7 +115,7 @@ export function BotModelVisibility({
                 </Text>
               </View>
               <ThemedSwitch
-                accessibilityLabel={`Show ${model.name}`}
+                accessibilityLabel={gt("Show {name}", { name: model.name })}
                 value={selected.includes(model.id)}
                 disabled={!allowed || busy}
                 onValueChange={(checked) =>
@@ -120,10 +126,14 @@ export function BotModelVisibility({
               />
             </View>
           ))}
-          {filtered.length === 0 && <Text className="text-foreground-muted">No models match.</Text>}
+          {filtered.length === 0 && (
+            <Text className="text-foreground-muted">
+              <T>No models match.</T>
+            </Text>
+          )}
           {filtered.length > limit && (
             <Button
-              label="Show more models"
+              label={gt("Show more models")}
               tone="secondary"
               size="compact"
               onPress={() => setLimit(limit + 50)}
@@ -131,19 +141,19 @@ export function BotModelVisibility({
           )}
           <View className="flex-row flex-wrap gap-2">
             <Button
-              label="Save model visibility"
+              label={gt("Save model visibility")}
               disabled={!allowed || busy || draft === null}
               onPress={() => void run(selected)}
             />
             <Button
-              label="Restore host defaults"
+              label={gt("Restore host defaults")}
               tone="secondary"
               disabled={!allowed || busy || !settings.changed}
               onPress={() => void run(null)}
             />
             {draft !== null && (
               <Button
-                label="Discard selection"
+                label={gt("Discard selection")}
                 tone="secondary"
                 disabled={busy}
                 onPress={() => setDraft(null)}

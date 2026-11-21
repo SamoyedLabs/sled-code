@@ -22,14 +22,16 @@ export function useOpenbotThreadTabLayout(scopeKey: string, initialIds: readonly
   };
   const [stored, setStored] = useState(() => ({ scopeKey, layout: initial() }));
   if (stored.scopeKey !== scopeKey) setStored({ scopeKey, layout: initial() });
-  const setLayout = useStableCallback((layout: OpenbotThreadTabLayout, destinationScope: string = scopeKey) => {
-    try {
-      writeThreadTabLayout(destinationScope, layout, window.localStorage);
-    } catch {
-      /* Storage can be disabled for this origin. */
-    }
-    setStored({ scopeKey: destinationScope, layout });
-  });
+  const setLayout = useStableCallback(
+    (layout: OpenbotThreadTabLayout, destinationScope: string = scopeKey) => {
+      try {
+        writeThreadTabLayout(destinationScope, layout, window.localStorage);
+      } catch {
+        /* Storage can be disabled for this origin. */
+      }
+      setStored({ scopeKey: destinationScope, layout });
+    },
+  );
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- This device preference follows other windows without changing host task state.
   useEffect(() => {
     const update = (event: StorageEvent) => {

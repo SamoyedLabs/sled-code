@@ -3,24 +3,32 @@ import { useBotChannelGrants, type ChannelGrantsProps } from "./useBotChannelGra
 import { Button } from "../../components/ui/Button";
 import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
 import { Picker } from "./BotConnectionControls";
+import { T, Var, useGT } from "gt-react-native";
 export function BotChannelGrants(props: ChannelGrantsProps) {
+  const gt = useGT();
   const vm = useBotChannelGrants(props);
   const disabled = vm.busy || !vm.canManage;
   return (
     <View
       className="gap-3 rounded-xl border border-border p-3"
-      accessibilityLabel="Background coding permission"
+      accessibilityLabel={gt("Background coding permission")}
     >
-      <Text className="font-t3-medium">Background coding permission</Text>
+      <Text className="font-t3-medium">
+        <T>Background coding permission</T>
+      </Text>
       <Text className="text-foreground-muted">
-        Allow this bot to delegate a specific channel routine or bot request to Sled while you are
-        away. It uses this bot's current coding destination, model and permission limits.
+        <T>
+          Allow this bot to delegate a specific channel routine or bot request to Sled while you are
+          away. It uses this bot's current coding destination, model and permission limits.
+        </T>
       </Text>
       {!vm.defaults && (
-        <Text>Configure this bot's coding delegation before approving background work.</Text>
+        <Text>
+          <T>Configure this bot's coding delegation before approving background work.</T>
+        </Text>
       )}
       <Picker
-        label="Request source"
+        label={gt("Request source")}
         value={vm.kind}
         disabled={disabled}
         options={[
@@ -32,26 +40,32 @@ export function BotChannelGrants(props: ChannelGrantsProps) {
         }}
       />
       <Picker
-        label={vm.kind === "routine" ? "Channel routine" : "Requesting bot"}
+        label={vm.kind === "routine" ? gt("Channel routine") : gt("Requesting bot")}
         value={vm.requester}
         disabled={disabled}
         options={vm.choices}
         onChange={vm.setRequester}
       />
-      <Text>Expires after hours (up to 720)</Text>
+      <Text>
+        <T>Expires after hours (up to 720)</T>
+      </Text>
       <AppTextInput
-        accessibilityLabel="Permission duration in hours"
+        accessibilityLabel={gt("Permission duration in hours")}
         keyboardType="numeric"
         value={vm.hours}
         editable={!disabled}
         onChangeText={vm.setHours}
       />
       <Button
-        label="Approve background coding"
+        label={gt("Approve background coding")}
         disabled={disabled || !vm.valid || !vm.defaults}
         onPress={vm.approve}
       />
-      <Button label="Refresh permissions" disabled={disabled} onPress={() => void vm.refresh()} />
+      <Button
+        label={gt("Refresh permissions")}
+        disabled={disabled}
+        onPress={() => void vm.refresh()}
+      />
       {vm.error && (
         <Text accessibilityRole="alert" className="text-danger">
           {vm.error}
@@ -61,14 +75,19 @@ export function BotChannelGrants(props: ChannelGrantsProps) {
         <View key={grant.id} className="gap-2">
           <Text>
             {grant.requesterKind}: {grant.requesterId} ·{" "}
-            {grant.revoked ? "Revoked" : `Expires ${new Date(grant.expiresAt).toLocaleString()}`}
+            {grant.revoked
+              ? gt("Revoked")
+              : gt("Expires {value}", { value: new Date(grant.expiresAt).toLocaleString() })}
           </Text>
           <Text className="text-foreground-muted">
-            Project {grant.defaults.projectId} · {grant.defaults.modelSelection.model} ·{" "}
-            {grant.defaults.runtimeMode}
+            <T>
+              Project <Var>{grant.defaults.projectId}</Var> ·{" "}
+              <Var>{grant.defaults.modelSelection.model}</Var> ·<Var> </Var>
+              <Var>{grant.defaults.runtimeMode}</Var>
+            </T>
           </Text>
           <Button
-            label="Revoke permission"
+            label={gt("Revoke permission")}
             disabled={disabled || grant.revoked}
             onPress={() => void vm.revoke(grant.id)}
           />

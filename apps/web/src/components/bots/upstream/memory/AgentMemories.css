@@ -369,8 +369,6 @@
     overflow: hidden;
   }
 
-
-
   .agent-memories-empty-item[data-age="1"] {
     opacity: 0.6;
   }
@@ -443,8 +441,6 @@
       var(--agent-memories-empty-delay) forwards;
   }
 
-
-
   /* In right-to-left text, each line writes itself from right to left. */
   :dir(rtl) .agent-memories-empty-hand {
     transform-origin: right top;
@@ -459,8 +455,6 @@
     animation: agent-memories-empty-show 360ms var(--openbot-ease-out)
       var(--agent-memories-empty-delay) forwards;
   }
-
-
 
   .agent-memories-empty-pitch {
     z-index: 1;
@@ -589,12 +583,6 @@
   .agent-memories-modal[data-ending-style] {
     animation: agent-dialog-content-out var(--openbot-duration-dialog) ease;
   }
-
-
-
-
-
-
 
   @media (max-width: 520px) {
     .agent-memories-modal {

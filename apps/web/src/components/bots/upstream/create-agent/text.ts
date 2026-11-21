@@ -1,4 +1,6 @@
 // Exact OpenBot 0.60.0 English agent setup messages.
+import { m } from "../../../../i18n/messages";
+import { msg } from "gt-react";
 const messages: Record<string, string> = {
   "agent.setup.nameFallback": "New agent",
   "agent.setup.titleAdditional": "Create a new agent",
@@ -10,7 +12,9 @@ const messages: Record<string, string> = {
   "agent.setup.faceOption": "Agent face {number}",
   "agent.setup.name": "Name",
   "agent.setup.purpose": "What should this agent help with?",
-  "agent.setup.purposePlaceholder": "Plan trips, compare options, or help with everyday work.",
+  "agent.setup.purposePlaceholder": m(
+    msg("Plan trips, compare options, or help with everyday work."),
+  ),
   "agent.description.tooLong":
     "Shorten the description to {limit} characters. A longer description is not saved.",
   "agent.instructions.length": "{length} / {limit}",

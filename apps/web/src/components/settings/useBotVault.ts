@@ -9,12 +9,14 @@ import {
   type OpenbotVaultRequest,
 } from "@t3tools/contracts";
 import type { VaultExecute } from "@t3tools/client-runtime/openbot/presentation";
+import { useGT } from "gt-react";
 const decodeVaultBitwardenStatus = Schema.decodeUnknownSync(OpenbotVaultBitwardenStatus);
 const decodeVaultImportResult = Schema.decodeUnknownSync(OpenbotVaultImportResult);
 const decodeVaultOnePasswordStatus = Schema.decodeUnknownSync(OpenbotVaultOnePasswordStatus);
 const decodeVaultSecret = Schema.decodeUnknownSync(OpenbotVaultSecret);
 const decodeVaultState = Schema.decodeUnknownSync(OpenbotVaultState);
 export function useBotVault(execute: VaultExecute) {
+  const gt = useGT();
   const [state, setState] = useState<OpenbotVaultState | null>(null);
   const [onepassword, setOnepassword] = useState<typeof OpenbotVaultOnePasswordStatus.Type | null>(
     null,
@@ -61,7 +63,10 @@ export function useBotVault(execute: VaultExecute) {
         else if (request.operation === "vault.import") {
           const counts = decodeVaultImportResult(result.value);
           setNotice(
-            `Imported ${counts.imported}; skipped ${counts.skipped}. Refresh the vault list.`,
+            gt("Imported {imported}; skipped {skipped}. Refresh the vault list.", {
+              imported: counts.imported,
+              skipped: counts.skipped,
+            }),
           );
         } else setState(decodeVaultState(result.value));
         return true;
@@ -69,7 +74,7 @@ export function useBotVault(execute: VaultExecute) {
       .catch(() => {
         if (generation === lifetime.current)
           setError(
-            "The vault request failed or returned unsupported data. Refresh before retrying.",
+            gt("The vault request failed or returned unsupported data. Refresh before retrying."),
           );
         return false;
       });

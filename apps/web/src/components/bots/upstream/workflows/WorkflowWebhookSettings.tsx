@@ -9,6 +9,7 @@ import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime
 import { openbot } from "../../../../state/openbot";
 import { readPreparedConnection, usePreparedConnection } from "../../../../state/session";
 import { useAtomCommand } from "../../../../state/use-atom-command";
+import { T, useGT } from "gt-react";
 
 const configuration = Schema.decodeUnknownSync(
   Schema.Struct({
@@ -55,6 +56,7 @@ function WebhookSettings({
   savedGraph,
   onChanged,
 }: Parameters<typeof WorkflowWebhookSettings>[0]) {
+  const gt = useGT();
   const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
   const connection = readPreparedConnection(environmentId);
   const [config, setConfig] = useState<ReturnType<typeof configuration> | null>(null);
@@ -120,7 +122,8 @@ function WebhookSettings({
       await load(() => mounted.current);
       if (current()) onChanged();
     });
-    if (settled._tag === "Failure" && current()) setError(String(squashAtomCommandFailure(settled)));
+    if (settled._tag === "Failure" && current())
+      setError(String(squashAtomCommandFailure(settled)));
     pending.current = false;
     if (current()) setBusy(false);
   };
@@ -130,11 +133,13 @@ function WebhookSettings({
     <>
       {config?.webhookUrl && (
         <div className="wfn-row">
-          <span>Address</span>
+          <span>
+            <T>Address</T>
+          </span>
           <code className="wfn-row-value wfn-row-code">{config.webhookUrl}</code>
           <button
             type="button"
-            aria-label="Copy webhook address"
+            aria-label={gt("Copy webhook address")}
             onClick={() => copy(config.webhookUrl!)}
           >
             <Copy size={13} />
@@ -143,7 +148,7 @@ function WebhookSettings({
       )}
       {config?.configured && !config.webhookUrl && (
         <p role="status">
-          Link this computer through Sled Connect to make its webhook address available.
+          <T>Link this computer through Sled Connect to make its webhook address available.</T>
         </p>
       )}
       <button
@@ -154,21 +159,27 @@ function WebhookSettings({
       >
         <RefreshCw size={13} />
         {!savedGraph
-          ? "Save changes to manage webhook"
+          ? gt("Save changes to manage webhook")
           : busy
-            ? "Creating signing secret…"
+            ? gt("Creating signing secret…")
             : config?.configured
-              ? "Regenerate signing secret"
-              : "Create webhook"}
+              ? gt("Regenerate signing secret")
+              : gt("Create webhook")}
       </button>
       {secret && (
         <div className="wfn-settings-block">
-          <p>Copy this signing secret now. It is shown once.</p>
+          <p>
+            <T>Copy this signing secret now. It is shown once.</T>
+          </p>
           <code>{secret}</code>
-          <button type="button" aria-label="Copy signing secret" onClick={() => copy(secret)}>
+          <button type="button" aria-label={gt("Copy signing secret")} onClick={() => copy(secret)}>
             <Copy size={13} />
           </button>
-          <button type="button" aria-label="Dismiss signing secret" onClick={() => setSecret(null)}>
+          <button
+            type="button"
+            aria-label={gt("Dismiss signing secret")}
+            onClick={() => setSecret(null)}
+          >
             <X size={13} />
           </button>
         </div>
@@ -182,7 +193,7 @@ function WebhookSettings({
             disabled={disabled || !savedGraph || busy}
             onClick={() => void load(() => mounted.current)}
           >
-            Retry webhook address
+            <T>Retry webhook address</T>
           </button>
         </>
       )}

@@ -1,4 +1,6 @@
 import { decodeOpenbotTrace as trace } from "@t3tools/client-runtime/openbot/rich-conversation";
+import { m } from "../../i18n/messages";
+import { msg } from "gt-react";
 
 export function botToolActivity(value: unknown) {
   const decoded = trace(value);
@@ -131,7 +133,7 @@ export function botTraceSpans(value: unknown, streaming = false): BotTraceSpan[]
       id: wait.id,
       parentId: "turn",
       name: "Bot reply",
-      detail: "Reply",
+      detail: m(msg("Reply")),
       kind: "waiting",
       start: Math.min(asked, answered, end ?? answered),
       end: Math.min(answered, end ?? answered),

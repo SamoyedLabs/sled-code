@@ -1,14 +1,16 @@
 import type { Action } from "expo-quick-actions";
 import { parseBotNotificationDeepLink } from "@t3tools/shared/agentAwareness";
 import * as Schema from "effect/Schema";
+import { m } from "../../i18n/messages";
+import { msg } from "gt-react-native";
 
 export const BOT_QUICK_ACTIONS = [
-  { kind: "latest", title: "Latest bot chat" },
-  { kind: "second", title: "Second latest bot chat" },
-  { kind: "routines", title: "Schedule" },
-  { kind: "search", title: "Search bots" },
-  { kind: "share", title: "Share Sled" },
-  { kind: "support", title: "Get support" },
+  { kind: "latest", title: m(msg("Latest bot chat")) },
+  { kind: "second", title: m(msg("Second latest bot chat")) },
+  { kind: "routines", title: m(msg("Schedule")) },
+  { kind: "search", title: m(msg("Search bots")) },
+  { kind: "share", title: m(msg("Share Sled")) },
+  { kind: "support", title: m(msg("Get support")) },
 ] as const;
 export type BotQuickActionKind = (typeof BOT_QUICK_ACTIONS)[number]["kind"];
 export const DEFAULT_BOT_QUICK_ACTIONS: readonly BotQuickActionKind[] = [
@@ -78,7 +80,7 @@ export function buildBotQuickActions(
         if (computer) show(kind, "Search bots", "search", SEARCH, computer.name);
         break;
       case "share":
-        actions.push({ id: SHARE, title: "Share Sled", icon: "share" });
+        actions.push({ id: SHARE, title: m(msg("Share Sled")), icon: "share" });
         break;
       case "support":
         show(kind, "Get support", "symbol:questionmark.circle", SUPPORT);

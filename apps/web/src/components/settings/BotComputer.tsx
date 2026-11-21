@@ -6,6 +6,7 @@ import { useStableCallback } from "../../hooks/useStableCallback";
 import { MonitorIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { useBotComputer } from "./useBotComputer";
+import { T, Var, useGT } from "gt-react";
 
 export function BotComputer({
   actions,
@@ -14,9 +15,10 @@ export function BotComputer({
   actions: ComputerActions;
   workspace?: boolean;
 }) {
+  const gt = useGT();
   const [expanded, setExpanded] = useState(false);
   return (
-    <section aria-label="Host computer" className="space-y-3">
+    <section aria-label={gt("Host computer")} className="space-y-3">
       {!workspace && (
         <Button
           variant="outline"
@@ -24,7 +26,7 @@ export function BotComputer({
           aria-expanded={expanded}
           onClick={() => setExpanded(!expanded)}
         >
-          Computer
+          <T>Computer</T>
         </Button>
       )}
       {(expanded || workspace) && <ComputerPanel actions={actions} workspace={workspace} />}
@@ -43,23 +45,27 @@ function ComputerPanel({ actions, workspace }: { actions: ComputerActions; works
       {workspace && (
         <div className="flex items-center gap-3">
           <MonitorIcon className="size-6 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">Computer</h2>
+          <h2 className="text-lg font-semibold">
+            <T>Computer</T>
+          </h2>
         </div>
       )}
       <p className="max-w-2xl text-sm text-muted-foreground">
-        Computer access controls the host desktop and affects every connected viewer. OS permissions
-        must be granted on the host.
+        <T>
+          Computer access controls the host desktop and affects every connected viewer. OS
+          permissions must be granted on the host.
+        </T>
       </p>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" disabled={computer.busy} onClick={computer.refresh}>
-          Refresh host capabilities
+          <T>Refresh host capabilities</T>
         </Button>
         <Button
           variant="outline"
           disabled={computer.busy || !actions.canCheckSetup}
           onClick={computer.checkSetup}
         >
-          Check host setup
+          <T>Check host setup</T>
         </Button>
       </div>
       {computer.error && <p role="alert">{computer.error}</p>}
@@ -77,11 +83,16 @@ function ComputerPanel({ actions, workspace }: { actions: ComputerActions; works
       {computer.capabilities && (
         <>
           <p>
-            {computer.capabilities.platform} · {computer.capabilities.activeSessions} /{" "}
-            {computer.capabilities.maxSessions} active sessions
+            <T>
+              <Var>{computer.capabilities.platform}</Var> ·{" "}
+              <Var>{computer.capabilities.activeSessions}</Var> /<Var> </Var>
+              <Var>{computer.capabilities.maxSessions}</Var> active sessions
+            </T>
           </p>
           <fieldset className="space-y-2 rounded-xl border p-4 text-sm" disabled={computer.busy}>
-            <legend>Display shared by all viewers</legend>
+            <legend>
+              <T>Display shared by all viewers</T>
+            </legend>
             {computer.capabilities.displays.map((display) => (
               <div key={display.id}>
                 <Button
@@ -102,18 +113,18 @@ function ComputerPanel({ actions, workspace }: { actions: ComputerActions; works
           disabled={computer.busy || !!computer.viewer || !actions.viewer?.canOpen}
           onClick={computer.openViewer}
         >
-          Start computer viewer
+          <T>Start computer viewer</T>
         </Button>
         <Button
           disabled={computer.busy || !computer.viewer?.canClose()}
           onClick={computer.closeViewer}
         >
-          Stop my viewer
+          <T>Stop my viewer</T>
         </Button>
       </div>
       {!actions.viewer?.canOpen && (
         <p role="status">
-          Computer control requires desktop access for this environment connection.
+          <T>Computer control requires desktop access for this environment connection.</T>
         </p>
       )}
       {computer.viewer && (

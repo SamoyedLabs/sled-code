@@ -15,6 +15,7 @@ import { ScribeRealtimeSession } from "./scribe-realtime";
 import { getBotTurnPause } from "./botTurnPause";
 import { speechNative } from "./speech-native";
 import { transcribeBotVoiceServerPcm, useBotVoiceServer } from "./botVoiceServer";
+import { useGT } from "gt-react-native";
 
 const MAX_CAPTURE_BYTES = 2 * 60 * 16_000 * 2;
 
@@ -177,6 +178,7 @@ function clearCapture(run: Run) {
 }
 
 export function useBotLiveVoice(input: Input) {
+  const gt = useGT();
   const [state, setState] = useState<State | null>(null);
   const run = useRef<Run | null>(null);
   const foreground = useAppForeground();
@@ -228,7 +230,7 @@ export function useBotLiveVoice(input: Input) {
     } else
       setState({
         phase: "error",
-        caption: "Could not confirm that the voice message was sent.",
+        caption: gt("Could not confirm that the voice message was sent."),
         retry: true,
       });
   }
@@ -371,7 +373,7 @@ export function useBotLiveVoice(input: Input) {
     const captureMode = audioStreaming ? "stream" : "transcribe";
     try {
       await native.startCapture(captureMode);
-      if (run.current === current) setState({ phase: "listening", caption: "Speak now" });
+      if (run.current === current) setState({ phase: "listening", caption: gt("Speak now") });
     } catch {
       if (run.current === current) {
         clearCapture(current);
@@ -425,43 +427,40 @@ export function useBotLiveVoice(input: Input) {
     });
   };
 
-  const follow = useEffectEvent(
-    (replyFor: typeof input.replyFor, currentState: State | null) => {
-      const current = run.current;
-      if (
-        !current ||
-        !current.messageId ||
-        (currentState?.phase !== "thinking" && currentState?.phase !== "speaking")
-      )
-        return;
-      const reply = replyFor(current.messageId);
-      current.turnId = reply.turnId;
-      current.interruptible = reply.interruptible;
-      if (reply.failed) {
-        if (current.reading) reading.stop();
-        report("The bot stopped before answering.");
-        return;
-      }
-      if (reply.text) current.replyText = reply.text;
-      if (!current.replyText) return;
-      if (!current.reading) {
-        current.reading = reading.stream(current.messageId, {
-          onStart: () => {
-            if (run.current === current)
-              setState({ phase: "speaking", caption: current.replyText });
-          },
-          onDone: () => {
-            if (run.current === current) void listen(current);
-          },
-          onError: () => {
-            if (run.current === current) report("Could not read the reply aloud.");
-          },
-        });
-      } else if (currentState.phase === "speaking" && currentState.caption !== current.replyText)
-        setState({ phase: "speaking", caption: current.replyText });
-      current.reading?.update(current.replyText, reply.complete);
-    },
-  );
+  const follow = useEffectEvent((replyFor: typeof input.replyFor, currentState: State | null) => {
+    const current = run.current;
+    if (
+      !current ||
+      !current.messageId ||
+      (currentState?.phase !== "thinking" && currentState?.phase !== "speaking")
+    )
+      return;
+    const reply = replyFor(current.messageId);
+    current.turnId = reply.turnId;
+    current.interruptible = reply.interruptible;
+    if (reply.failed) {
+      if (current.reading) reading.stop();
+      report("The bot stopped before answering.");
+      return;
+    }
+    if (reply.text) current.replyText = reply.text;
+    if (!current.replyText) return;
+    if (!current.reading) {
+      current.reading = reading.stream(current.messageId, {
+        onStart: () => {
+          if (run.current === current) setState({ phase: "speaking", caption: current.replyText });
+        },
+        onDone: () => {
+          if (run.current === current) void listen(current);
+        },
+        onError: () => {
+          if (run.current === current) report("Could not read the reply aloud.");
+        },
+      });
+    } else if (currentState.phase === "speaking" && currentState.caption !== current.replyText)
+      setState({ phase: "speaking", caption: current.replyText });
+    current.reading?.update(current.replyText, reply.complete);
+  });
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Only the voice session tied to this chat may follow its own turn.
   useEffect(() => follow(input.replyFor, state), [input.replyFor, state]);
   const closeHidden = useEffectEvent(() => end());
@@ -476,7 +475,15 @@ export function useBotLiveVoice(input: Input) {
     )
       closeHidden();
     return () => closeHidden();
-  }, [input.visible, foreground, selected, remoteListening, voiceServer, scribeListening, elevenLabs]);
+  }, [
+    input.visible,
+    foreground,
+    selected,
+    remoteListening,
+    voiceServer,
+    scribeListening,
+    elevenLabs,
+  ]);
 
   return {
     available,

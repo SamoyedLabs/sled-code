@@ -10,6 +10,7 @@ import { useStableCallback } from "../../hooks/useStableCallback";
 import { Button } from "../ui/button";
 import { ChevronRightIcon } from "lucide-react";
 import { BotToolActivity } from "./BotToolActivity";
+import { T, useGT } from "gt-react";
 
 export type BotTraceScope = {
   environmentId: EnvironmentId;
@@ -24,6 +25,7 @@ const decode = Schema.decodeUnknownResult(OpenbotConversationDetail);
 const MAX_TRACE_CHARS = 2 * 1024 * 1024;
 
 export function BotDeferredToolActivity({ scope }: { scope: BotTraceScope }) {
+  const gt = useGT();
   const read = useAtomQueryRunner(openbot.readFromHost, { reportFailure: false, refresh: true });
   const currentScope = useStableCallback(() => JSON.stringify(scope));
   const mounted = useRef(false);
@@ -126,12 +128,12 @@ export function BotDeferredToolActivity({ scope }: { scope: BotTraceScope }) {
         disabled={state.phase === "loading"}
         onClick={() => void load()}
       >
-        {state.phase === "loading" ? "Loading activity…" : "Activity"}
+        {state.phase === "loading" ? gt("Loading activity…") : gt("Activity")}
         <ChevronRightIcon className="size-3" aria-hidden="true" />
       </Button>
       {state.phase === "error" && (
         <p role="alert" className="text-destructive">
-          The trace changed or could not be read. Open Activity to retry.
+          <T>The trace changed or could not be read. Open Activity to retry.</T>
         </p>
       )}
     </div>

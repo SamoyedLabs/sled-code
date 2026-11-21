@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import * as Result from "effect/Result";
 import { OpenbotAdminRequest } from "@t3tools/contracts";
+import { mFallback, msg } from "gt-i18n";
 
 const Text = Schema.String;
 const Model = Schema.Struct({
@@ -144,12 +145,12 @@ const decodeRestart = Schema.decodeUnknownResult(
 export function customRuntimeNotice(value: unknown) {
   const result = decodeRestart(value);
   return Result.isSuccess(result) && result.success.restart === "skipped-busy"
-    ? "Saved. Busy bots will use the change after their current work finishes."
-    : "Saved. Refresh providers to see the current models.";
+    ? mFallback(msg("Saved. Busy bots will use the change after their current work finishes."))
+    : mFallback(msg("Saved. Refresh providers to see the current models."));
 }
 export function botProviderSetupMessage(provider: BotProvider) {
   return provider.state === "not-installed"
-    ? "Install this provider in Provider setup to continue."
+    ? mFallback(msg("Install this provider in Provider setup to continue."))
     : (provider.message?.replaceAll("in OpenBot", "in Provider setup") ?? null);
 }
 const Status = Schema.Struct({ providers: Schema.Array(Provider) });

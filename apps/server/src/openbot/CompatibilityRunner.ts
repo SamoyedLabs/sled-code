@@ -21,10 +21,12 @@ import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.t
 import * as ProcessRunner from "../processRunner.ts";
 import * as Profiles from "./ProfileRecovery.ts";
 import * as Packaging from "./CompatibilityPackaging.ts";
-export const CompatibilityBuildTools = Context.Reference<{ readonly bun: string; readonly managedBunRoot?: string }>(
-  "t3/openbot/CompatibilityRunner/CompatibilityBuildTools",
-  { defaultValue: () => ({ bun: "bun" }) },
-);
+export const CompatibilityBuildTools = Context.Reference<{
+  readonly bun: string;
+  readonly managedBunRoot?: string;
+}>("t3/openbot/CompatibilityRunner/CompatibilityBuildTools", {
+  defaultValue: () => ({ bun: "bun" }),
+});
 export class CompatibilityRunnerError extends Schema.TaggedError<CompatibilityRunnerError>()(
   "OpenbotCompatibilityRunnerError",
   {
@@ -95,8 +97,8 @@ const make = Effect.gen(function* () {
   const gate = yield* Semaphore.make(1);
   const environment = yield* HostProcess.Environment;
   const tools = yield* CompatibilityBuildTools;
-  const hostPlatform=yield* HostProcess.Platform;
-  const hostArchitecture=yield* HostProcess.Architecture;
+  const hostPlatform = yield* HostProcess.Platform;
+  const hostArchitecture = yield* HostProcess.Architecture;
   const mapped = (cause: unknown) =>
     isCompatibilityRunnerError(cause)
       ? cause
@@ -120,18 +122,37 @@ const make = Effect.gen(function* () {
       return yield* new CompatibilityRunnerError({ reason: "workspace" });
     return actual;
   });
-  const resolveBun=Effect.fn("CompatibilityRunner.resolveBun")(function*(){
-    if(tools.bun!=="bun"||tools.managedBunRoot===undefined)return tools.bun;
-    const platformRoot=path.join(tools.managedBunRoot,`${hostPlatform}-${hostArchitecture}`);
-    if(!(yield* fs.exists(platformRoot)))return tools.bun;
-    const canonical=yield* fs.realPath(platformRoot);
-    if(canonical!==path.resolve(platformRoot))return yield* new CompatibilityRunnerError({reason:"workspace"});
-    const versions=(yield* fs.readDirectory(platformRoot)).filter((version)=>/^\d+\.\d+\.\d+$/.test(version)).sort((left,right)=>{const a=left.split(".").map(Number),b=right.split(".").map(Number);return (b[0]??0)-(a[0]??0)||(b[1]??0)-(a[1]??0)||(b[2]??0)-(a[2]??0);});
-    for(const version of versions){
-      const executable=path.join(platformRoot,version,"bin",hostPlatform==="win32"?"bun.exe":"bun");
-      if(!(yield* fs.exists(executable)))continue;
-      const actual=yield* fs.realPath(executable),stat=yield* fs.stat(actual);
-      if(actual===executable&&stat.type==="File"&&stat.size>0n&&(hostPlatform==="win32"||(stat.mode&0o111)!==0))return actual;
+  const resolveBun = Effect.fn("CompatibilityRunner.resolveBun")(function* () {
+    if (tools.bun !== "bun" || tools.managedBunRoot === undefined) return tools.bun;
+    const platformRoot = path.join(tools.managedBunRoot, `${hostPlatform}-${hostArchitecture}`);
+    if (!(yield* fs.exists(platformRoot))) return tools.bun;
+    const canonical = yield* fs.realPath(platformRoot);
+    if (canonical !== path.resolve(platformRoot))
+      return yield* new CompatibilityRunnerError({ reason: "workspace" });
+    const versions = (yield* fs.readDirectory(platformRoot))
+      .filter((version) => /^\d+\.\d+\.\d+$/.test(version))
+      .sort((left, right) => {
+        const a = left.split(".").map(Number),
+          b = right.split(".").map(Number);
+        return (b[0] ?? 0) - (a[0] ?? 0) || (b[1] ?? 0) - (a[1] ?? 0) || (b[2] ?? 0) - (a[2] ?? 0);
+      });
+    for (const version of versions) {
+      const executable = path.join(
+        platformRoot,
+        version,
+        "bin",
+        hostPlatform === "win32" ? "bun.exe" : "bun",
+      );
+      if (!(yield* fs.exists(executable))) continue;
+      const actual = yield* fs.realPath(executable),
+        stat = yield* fs.stat(actual);
+      if (
+        actual === executable &&
+        stat.type === "File" &&
+        stat.size > 0n &&
+        (hostPlatform === "win32" || (stat.mode & 0o111) !== 0)
+      )
+        return actual;
     }
     return tools.bun;
   });
@@ -220,7 +241,13 @@ const make = Effect.gen(function* () {
         if (output.code !== 0)
           return yield* new CompatibilityRunnerError({
             reason: "check",
-            cause: new Error((output.stderr || output.stdout || `Command exited with code ${output.code}: ${command}`).slice(-4096)),
+            cause: new Error(
+              (
+                output.stderr ||
+                output.stdout ||
+                `Command exited with code ${output.code}: ${command}`
+              ).slice(-4096),
+            ),
           });
         return output.stdout.trim();
       });
@@ -274,7 +301,9 @@ const make = Effect.gen(function* () {
         const profileId = yield* hash(new TextEncoder().encode(input.runId));
         const profile = yield* profiles
           .get(profileId)
-          .pipe(Effect.catch(() => profiles.prepare({ id: profileId, identity: candidateIdentity })));
+          .pipe(
+            Effect.catch(() => profiles.prepare({ id: profileId, identity: candidateIdentity })),
+          );
         if (stableStringify(profile.identity) !== identity)
           return yield* new CompatibilityRunnerError({ reason: "identity" });
         const profileDirectory = path.join(yield* profiles.directory(profile.id), "working");

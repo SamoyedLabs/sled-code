@@ -11,6 +11,7 @@ import { useBotSettings } from "./useBotSettings";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { confirmed } from "./BotConnectionControls";
+import { T, useGT } from "gt-react";
 
 function initialRead(section: SettingSection) {
   return section.controls.find(
@@ -44,6 +45,7 @@ export function BotSettingsAdvanced({
   actions: SettingsActions;
   sectionIds?: readonly string[];
 }) {
+  const gt = useGT();
   const c = useBotSettings(actions);
   const id = useId();
   const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
@@ -114,19 +116,19 @@ export function BotSettingsAdvanced({
                   disabled={c.busy || !canRead}
                   onClick={() => void activate(read, section)}
                 >
-                  {loaded ? "Reload" : c.busy ? "Loading…" : "Retry"}
+                  {loaded ? gt("Reload") : c.busy ? gt("Loading…") : gt("Retry")}
                 </Button>
               )}
             </div>
             {!canRead ? (
               <p className="rounded-xl bg-muted/30 p-4 text-sm text-muted-foreground">
-                You need permission to read this section on the connected host.
+                <T>You need permission to read this section on the connected host.</T>
               </p>
             ) : !loaded ? (
               <p role="status" className="rounded-xl bg-muted/30 p-4 text-sm text-muted-foreground">
                 {c.busy
-                  ? "Loading settings…"
-                  : "This section hasn’t loaded. Try again to read it from the host."}
+                  ? gt("Loading settings…")
+                  : gt("This section hasn’t loaded. Try again to read it from the host.")}
               </p>
             ) : (
               <div className="space-y-3 rounded-xl bg-muted/30 p-4">
@@ -177,13 +179,13 @@ export function BotSettingsAdvanced({
                 ))}
                 {controls.length === 0 && (
                   <p className="text-sm text-muted-foreground">
-                    No entries are available on this host.
+                    <T>No entries are available on this host.</T>
                   </p>
                 )}
                 {writable.length > 0 &&
                   writable.every((control) => control.request && !actions.can(control.request)) && (
                     <p className="text-xs text-muted-foreground">
-                      You can view this section. Host permission is required to make changes.
+                      <T>You can view this section. Host permission is required to make changes.</T>
                     </p>
                   )}
               </div>

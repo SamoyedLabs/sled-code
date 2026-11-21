@@ -38,6 +38,7 @@ import {
 import { createOpenbotFileAtoms } from "./files.ts";
 import { createOpenbotComputerAtoms } from "./ComputerAtoms.ts";
 import { createOpenbotBrowserAtoms } from "./browserAtoms.ts";
+import { mFallback, msg } from "gt-i18n";
 
 export function createOpenbotAtoms<R, E>(
   runtime: Atom.AtomRuntime<HttpClient.HttpClient | EnvironmentRegistry.EnvironmentRegistry | R, E>,
@@ -108,7 +109,7 @@ export function createOpenbotAtoms<R, E>(
     ...createOpenbotContinuityAtoms(runtime, refreshTrigger),
     maintenance,
     maintenanceCommand: createEnvironmentRpcCommand(runtime, {
-      label: "Update upstream maintenance",
+      label: mFallback(msg("Update upstream maintenance")),
       tag: WS_METHODS.openbotMaintenanceCommand,
       onSuccess: ({ environmentId }, registry) =>
         Effect.sync(() => registry.refresh(maintenance({ environmentId, input: {} }))),
@@ -124,7 +125,7 @@ export function createOpenbotAtoms<R, E>(
     ),
     ...createOpenbotBrowserAtoms(runtime),
     liveVoiceCommand: createEnvironmentRpcCommand(runtime, {
-      label: "Bot live voice",
+      label: mFallback(msg("Bot live voice")),
       tag: WS_METHODS.openbotLiveVoiceCommand,
     }),
     ...createOpenbotComputerAtoms(runtime),
@@ -134,7 +135,7 @@ export function createOpenbotAtoms<R, E>(
     ...createOpenbotSettingsAtoms(runtime),
     codingPolicy,
     codingPolicyEnable: createEnvironmentRpcCommand(runtime, {
-      label: "Enable bot coding delegation",
+      label: mFallback(msg("Enable bot coding delegation")),
       tag: WS_METHODS.openbotCodingPolicyEnable,
       onSuccess: ({ environmentId, input }, registry) =>
         Effect.sync(() =>
@@ -151,7 +152,7 @@ export function createOpenbotAtoms<R, E>(
       },
     }),
     codingPolicyDisable: createEnvironmentRpcCommand(runtime, {
-      label: "Disable bot coding delegation",
+      label: mFallback(msg("Disable bot coding delegation")),
       tag: WS_METHODS.openbotCodingPolicyDisable,
       onSuccess: ({ environmentId, input }, registry) =>
         Effect.sync(() =>
@@ -170,35 +171,35 @@ export function createOpenbotAtoms<R, E>(
     changes,
     upstream,
     checkRuntime: createEnvironmentRpcCommand(runtime, {
-      label: "Check bot engine release",
+      label: mFallback(msg("Check bot engine release")),
       tag: WS_METHODS.openbotUpstreamCheck,
       onSuccess: ({ environmentId }, registry) =>
         Effect.sync(() => registry.refresh(upstream({ environmentId, input: {} }))),
       concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
     }),
     stageRuntime: createEnvironmentRpcCommand(runtime, {
-      label: "Download bot engine release",
+      label: mFallback(msg("Download bot engine release")),
       tag: WS_METHODS.openbotUpstreamStage,
       onSuccess: ({ environmentId }, registry) =>
         Effect.sync(() => registry.refresh(upstream({ environmentId, input: {} }))),
       concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
     }),
     installRuntime: createEnvironmentRpcCommand(runtime, {
-      label: "Install bot engine release",
+      label: mFallback(msg("Install bot engine release")),
       tag: WS_METHODS.openbotUpstreamInstall,
       onSuccess: ({ environmentId }, registry) =>
         Effect.sync(() => registry.refresh(upstream({ environmentId, input: {} }))),
       concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
     }),
     activateRuntime: createEnvironmentRpcCommand(runtime, {
-      label: "Activate bot engine release",
+      label: mFallback(msg("Activate bot engine release")),
       tag: WS_METHODS.openbotRuntimeActivate,
       onSuccess: ({ environmentId }, registry) =>
         Effect.sync(() => registry.refresh(upstream({ environmentId, input: {} }))),
       concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
     }),
     rollbackRuntime: createEnvironmentRpcCommand(runtime, {
-      label: "Roll back bot engine release",
+      label: mFallback(msg("Roll back bot engine release")),
       tag: WS_METHODS.openbotRuntimeRollback,
       onSuccess: ({ environmentId }, registry) =>
         Effect.sync(() => registry.refresh(upstream({ environmentId, input: {} }))),
@@ -206,7 +207,7 @@ export function createOpenbotAtoms<R, E>(
     }),
     attention,
     attentionRespond: createEnvironmentRpcCommand(runtime, {
-      label: "Respond to bot request",
+      label: mFallback(msg("Respond to bot request")),
       tag: WS_METHODS.openbotAttentionRespond,
       onSuccess: ({ environmentId }, registry) =>
         Effect.sync(() => registry.refresh(attention({ environmentId, input: {} }))),
@@ -238,12 +239,12 @@ export function createOpenbotAtoms<R, E>(
       refreshTrigger,
     }),
     connectSledTools: createEnvironmentRpcCommand(runtime, {
-      label: "Connect bots to Sled",
+      label: mFallback(msg("Connect bots to Sled")),
       tag: WS_METHODS.openbotSledToolsConnect,
       concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
     }),
     disconnectSledTools: createEnvironmentRpcCommand(runtime, {
-      label: "Disconnect bots from Sled",
+      label: mFallback(msg("Disconnect bots from Sled")),
       tag: WS_METHODS.openbotSledToolsDisconnect,
       concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
     }),
@@ -254,17 +255,17 @@ export function createOpenbotAtoms<R, E>(
       refreshTrigger: scopedRefresh(["tasks", "activity"]),
     }),
     write: createEnvironmentRpcCommand(runtime, {
-      label: "Update bot task",
+      label: mFallback(msg("Update bot task")),
       tag: WS_METHODS.openbotWrite,
       concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
     }),
     writeToHost: createEnvironmentRpcCommand(runtime, {
-      label: "Update bot conversation or task",
+      label: mFallback(msg("Update bot conversation or task")),
       tag: WS_METHODS.openbotWriteToHost,
       concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
     }),
     admin: createEnvironmentRpcCommand(runtime, {
-      label: "Update bot",
+      label: mFallback(msg("Update bot")),
       tag: WS_METHODS.openbotAdmin,
       onSuccess: ({ environmentId }, registry) =>
         Effect.sync(() => {
@@ -277,7 +278,7 @@ export function createOpenbotAtoms<R, E>(
       },
     }),
     adminToHost: createEnvironmentRpcCommand(runtime, {
-      label: "Update bot engine configuration",
+      label: mFallback(msg("Update bot engine configuration")),
       tag: WS_METHODS.openbotAdminToHost,
       onSuccess: ({ environmentId }, registry) =>
         Effect.sync(() => {
@@ -291,12 +292,12 @@ export function createOpenbotAtoms<R, E>(
       },
     }),
     start: createEnvironmentRpcCommand(runtime, {
-      label: "Start bot engine",
+      label: mFallback(msg("Start bot engine")),
       tag: WS_METHODS.openbotStart,
       concurrency: { mode: "singleFlight", key: ({ environmentId }) => environmentId },
     }),
     stop: createEnvironmentRpcCommand(runtime, {
-      label: "Stop bot engine",
+      label: mFallback(msg("Stop bot engine")),
       tag: WS_METHODS.openbotStop,
       concurrency: { mode: "singleFlight", key: ({ environmentId }) => environmentId },
     }),

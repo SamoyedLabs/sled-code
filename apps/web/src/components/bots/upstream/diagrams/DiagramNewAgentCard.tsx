@@ -21,6 +21,7 @@ import { useStableCallback } from "../../../../hooks/useStableCallback";
 import { observeResize } from "../../../../lib/observeResize";
 import type { FirstAgentSetup } from "../create-agent/FirstAgentSetup";
 import type { DiagramPoint } from "./diagram-model";
+import { T, useGT } from "gt-react";
 type Form = ComponentProps<typeof FirstAgentSetup>;
 export function DiagramNewAgentCard({
   environmentId,
@@ -48,6 +49,7 @@ export function DiagramNewAgentCard({
   );
 }
 function Card({ form, at }: { form: Form; at: DiagramPoint }) {
+  const gt = useGT();
   const element = useRef<HTMLFormElement>(null),
     name = useRef<HTMLInputElement>(null),
     [height, setHeight] = useState<number | null>(null);
@@ -85,7 +87,7 @@ function Card({ form, at }: { form: Form; at: DiagramPoint }) {
     <form
       ref={element}
       className="diagram-new-agent"
-      aria-label="New agent"
+      aria-label={gt("New agent")}
       data-diagram-overlay=""
       style={
         {
@@ -108,13 +110,15 @@ function Card({ form, at }: { form: Form; at: DiagramPoint }) {
     >
       <header className="diagram-new-agent-header">
         <BotAvatar seed={draft.avatarSeed} hue={draft.avatarHue} size={28} />
-        <span>New agent</span>
+        <span>
+          <T>New agent</T>
+        </span>
       </header>
       <input
         ref={name}
         className="ui-input"
-        aria-label="Agent name"
-        placeholder="Name"
+        aria-label={gt("Agent name")}
+        placeholder={gt("Name")}
         maxLength={120}
         value={draft.name}
         disabled={busy}
@@ -122,8 +126,8 @@ function Card({ form, at }: { form: Form; at: DiagramPoint }) {
       />
       <input
         className="ui-input"
-        aria-label="What the agent does"
-        placeholder="What should this agent do?"
+        aria-label={gt("What the agent does")}
+        placeholder={gt("What should this agent do?")}
         value={draft.purpose}
         disabled={busy}
         aria-invalid={draft.purpose.length > 2000}
@@ -135,7 +139,7 @@ function Card({ form, at }: { form: Form; at: DiagramPoint }) {
       {form.modelSupported && data?.status && (
         <BotModelPicker
           variant="field"
-          ariaLabel="Agent model"
+          ariaLabel={gt("Agent model")}
           provider={draft.provider}
           value={draft.model}
           modelOptions={data.modelOptions}
@@ -156,11 +160,11 @@ function Card({ form, at }: { form: Form; at: DiagramPoint }) {
       {form.error && <p role="alert">{form.error}</p>}
       <div className="diagram-new-agent-actions">
         <SourceButton variant="ghost" size="xs" disabled={form.busy} onClick={form.onCancel}>
-          Cancel
+          <T>Cancel</T>
         </SourceButton>
         {form.onOpenCreated ? (
           <SourceButton size="xs" disabled={form.busy} onClick={() => void form.onOpenCreated?.()}>
-            Place created agent
+            <T>Place created agent</T>
           </SourceButton>
         ) : (
           <SourceButton
@@ -168,7 +172,7 @@ function Card({ form, at }: { form: Form; at: DiagramPoint }) {
             size="xs"
             disabled={busy || !form.canCreate || !draft.name.trim() || draft.purpose.length > 2000}
           >
-            {form.busy ? "Creating…" : "Create"}
+            {form.busy ? gt("Creating…") : gt("Create")}
           </SourceButton>
         )}
       </div>

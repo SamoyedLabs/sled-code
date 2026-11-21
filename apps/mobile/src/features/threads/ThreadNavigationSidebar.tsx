@@ -647,7 +647,7 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
                 ListHeaderComponent={
                   <View className="px-4 py-2">
                     <Button
-                      label="Bots"
+                      label={gt("Bots")}
                       tone="secondary"
                       size="compact"
                       onPress={() => navigation.navigate("Bots")}

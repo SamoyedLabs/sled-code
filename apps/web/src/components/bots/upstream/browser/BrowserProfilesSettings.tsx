@@ -23,6 +23,8 @@ import { MenuPopup } from "../OpenbotMenu";
 import { SourceButton, SettingsCard, SettingsRow } from "../settings/SettingsParts";
 import { requestConfirmDialog } from "../../../../confirmDialog";
 import "./browser-profiles.css";
+import { m } from "../../../../i18n/messages";
+import { T, Var, msg, useGT } from "gt-react";
 
 type Profiles = NonNullable<ReturnType<typeof browserProfiles>>;
 const colors = [
@@ -58,6 +60,7 @@ function ProfilesEnvironment({
   environmentId: EnvironmentId;
   hostId: string;
 }) {
+  const gt = useGT();
   const connection = Option.getOrNull(usePreparedConnection(environmentId));
   const [snapshot, setSnapshot] = useState<{
     connection: typeof connection;
@@ -90,7 +93,9 @@ function ProfilesEnvironment({
     // oxlint-disable-next-line react/set-state-in-effect -- Both snapshot and failure updates occur after the awaited remote list request, not synchronously during the effect.
     void load(connection).catch((cause) => {
       if (readPreparedConnection(environmentId) === connection)
-        setError(cause instanceof Error ? cause.message : "Browser profiles could not be loaded.");
+        setError(
+          cause instanceof Error ? cause.message : m(msg("Browser profiles could not be loaded.")),
+        );
     });
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Mount and connection changes trigger the read; mutation refreshes are explicit below.
   }, [connection, canManage]);
@@ -106,7 +111,9 @@ function ProfilesEnvironment({
       const reloaded = await settlePromise(() => load(connection));
       if (reloaded._tag === "Failure") {
         setError(
-          "The profile change was confirmed, but the list could not refresh. Refresh to see the saved result.",
+          gt(
+            "The profile change was confirmed, but the list could not refresh. Refresh to see the saved result.",
+          ),
         );
       }
       return true;
@@ -119,7 +126,7 @@ function ProfilesEnvironment({
         setError(
           cause instanceof Error
             ? cause.message
-            : "The profile change could not be confirmed. Refresh before trying again.",
+            : gt("The profile change could not be confirmed. Refresh before trying again."),
         );
       }
       return false;
@@ -130,7 +137,9 @@ function ProfilesEnvironment({
     <BrowserProfilesPanel
       profiles={canManage && snapshot?.connection === connection ? snapshot.profiles : null}
       disabled={!canManage || busy}
-      error={canManage ? error : "Host settings permission is required to manage browser profiles."}
+      error={
+        canManage ? error : gt("Host settings permission is required to manage browser profiles.")
+      }
       onAction={act}
       onRefresh={() => {
         if (connection) void load(connection).catch((cause) => setError(String(cause)));
@@ -151,21 +160,31 @@ export function BrowserProfilesPanel({
   onAction: (request: Action) => Promise<boolean>;
   onRefresh: () => void;
 }) {
+  const gt = useGT();
   const [name, setName] = useState("");
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   return (
     <div className="browser-profiles-panel">
       {error && (
         <p role="alert" className="openbot-settings-error">
-          {error} <SourceButton onClick={onRefresh}>Refresh</SourceButton>
+          {error}{" "}
+          <SourceButton onClick={onRefresh}>
+            <T>Refresh</T>
+          </SourceButton>
         </p>
       )}
-      {!profiles && !error && <p role="status">Loading browser profiles…</p>}
+      {!profiles && !error && (
+        <p role="status">
+          <T>Loading browser profiles…</T>
+        </p>
+      )}
       {profiles && (
         <SettingsCard>
           <SettingsRow
-            title="Shared profile"
-            description="The default browser sign-ins shared by agents without a named profile."
+            title={gt("Shared profile")}
+            description={gt(
+              "The default browser sign-ins shared by agents without a named profile.",
+            )}
           />
           {profiles.map((profile) => (
             <div className="ui-item settings-modal-row" key={profile.id}>
@@ -178,7 +197,7 @@ export function BrowserProfilesPanel({
                         variant="ghost"
                         disabled={disabled}
                         className="browser-profile-color-trigger"
-                        aria-label={`Color for ${profile.name}`}
+                        aria-label={gt("Color for {name}", { name: profile.name })}
                       />
                     }
                   >
@@ -236,7 +255,7 @@ export function BrowserProfilesPanel({
                       <input
                         autoFocus
                         className="ui-input browser-profiles-name"
-                        aria-label={`Rename ${profile.name}`}
+                        aria-label={gt("Rename {name}", { name: profile.name })}
                         maxLength={60}
                         value={renaming.name}
                         onChange={(event) =>
@@ -250,7 +269,7 @@ export function BrowserProfilesPanel({
                         }}
                       />
                       <SourceButton type="submit" disabled={disabled || !renaming.name.trim()}>
-                        Save
+                        <T>Save</T>
                       </SourceButton>
                     </form>
                   ) : (
@@ -258,7 +277,9 @@ export function BrowserProfilesPanel({
                   )}
                 </div>
                 <div className="ui-item-description">
-                  {profile.agentIds.length} agents · {profile.tabCount} tabs
+                  <T>
+                    <Var>{profile.agentIds.length}</Var> agents · <Var>{profile.tabCount}</Var> tabs
+                  </T>
                 </div>
               </div>
               <div className="ui-item-actions">
@@ -268,7 +289,7 @@ export function BrowserProfilesPanel({
                       <SourceButton
                         variant="ghost"
                         disabled={disabled}
-                        aria-label={`Actions for ${profile.name}`}
+                        aria-label={gt("Actions for {name}", { name: profile.name })}
                       />
                     }
                   >
@@ -277,7 +298,7 @@ export function BrowserProfilesPanel({
                   <MenuPopup>
                     <MenuItem onClick={() => setRenaming({ id: profile.id, name: profile.name })}>
                       <PencilIcon />
-                      Rename
+                      <T>Rename</T>
                     </MenuItem>
                     <MenuItem
                       onClick={async () => {
@@ -294,7 +315,7 @@ export function BrowserProfilesPanel({
                       }}
                     >
                       <LogOutIcon />
-                      Clear sign-ins
+                      <T>Clear sign-ins</T>
                     </MenuItem>
                     <MenuItem
                       onClick={async () => {
@@ -311,7 +332,7 @@ export function BrowserProfilesPanel({
                       }}
                     >
                       <Trash2Icon />
-                      Delete profile
+                      <T>Delete profile</T>
                     </MenuItem>
                   </MenuPopup>
                 </Menu>
@@ -333,8 +354,8 @@ export function BrowserProfilesPanel({
       >
         <input
           className="ui-input browser-profiles-name"
-          aria-label="New profile name"
-          placeholder="New profile"
+          aria-label={gt("New profile name")}
+          placeholder={gt("New profile")}
           maxLength={60}
           disabled={disabled}
           value={name}
@@ -342,7 +363,7 @@ export function BrowserProfilesPanel({
         />
         <SourceButton type="submit" disabled={disabled || !name.trim()}>
           <PlusIcon size={16} />
-          New profile
+          <T>New profile</T>
         </SourceButton>
       </form>
     </div>

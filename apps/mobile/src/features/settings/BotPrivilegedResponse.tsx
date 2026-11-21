@@ -15,6 +15,7 @@ import type {
 } from "@t3tools/contracts/openbot-privileged-response";
 import { Button } from "../../components/ui/Button";
 import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
+import { T, Var, useGT } from "gt-react-native";
 type Props = {
   scope: PrivilegedResponseScope;
   spec: UiBlockSpec;
@@ -26,6 +27,7 @@ export function BotPrivilegedResponse(props: Props) {
   return <ResponseForm key={JSON.stringify(props.scope)} {...props} />;
 }
 function ResponseForm({ scope, spec, available, current, execute }: Props) {
+  const gt = useGT();
   const [controller] = useState(() =>
     createPrivilegedResponseController(scope, { current, execute }),
   );
@@ -47,21 +49,26 @@ function ResponseForm({ scope, spec, available, current, execute }: Props) {
       controller.close();
     };
   }, [controller]);
-  if (!available) return <Text>Secure response is unavailable for this connection.</Text>;
+  if (!available)
+    return (
+      <Text>
+        <T>Secure response is unavailable for this connection.</T>
+      </Text>
+    );
   const prepare = async () => {
     try {
       const opened = (await controller.prepare()) !== null;
       setReady(opened);
-      if (!opened) setStatus("This request is unavailable.");
+      if (!opened) setStatus(gt("This request is unavailable."));
     } catch {
-      setStatus("This request is unavailable.");
+      setStatus(gt("This request is unavailable."));
     }
   };
   const send = async () => {
     if (!action) return;
     const response = validateUiBlockResponse(spec, { actionId: action, values });
     if (!response) {
-      setStatus("Check the required fields.");
+      setStatus(gt("Check the required fields."));
       return;
     }
     setValues({});
@@ -70,17 +77,19 @@ function ResponseForm({ scope, spec, available, current, execute }: Props) {
     const result = await controller.submit(response);
     setStatus(
       result?.status === "answered"
-        ? "Response delivered."
-        : "Delivery is not confirmed. Check the result before taking further action.",
+        ? gt("Response delivered.")
+        : gt("Delivery is not confirmed. Check the result before taking further action."),
     );
   };
   return (
     <View>
       <Text>{spec.title}</Text>
       <Text>
-        For agent {scope.target.agentId}, thread {scope.target.threadId}.
+        <T>
+          For agent <Var>{scope.target.agentId}</Var>, thread <Var>{scope.target.threadId}</Var>.
+        </T>
       </Text>
-      {!ready && <Button label="Open secure response" onPress={() => void prepare()} />}
+      {!ready && <Button label={gt("Open secure response")} onPress={() => void prepare()} />}
       {ready && (
         <>
           {spec.type === "form" &&
@@ -130,11 +139,11 @@ function ResponseForm({ scope, spec, available, current, execute }: Props) {
               <Button key={item.id} label={item.label} onPress={() => setAction(item.id)} />
             ))
           ) : (
-            <Button label="Review submission" onPress={() => setAction("submit")} />
+            <Button label={gt("Review submission")} onPress={() => setAction("submit")} />
           )}
-          {action && <Button label="Confirm and submit" onPress={() => void send()} />}
+          {action && <Button label={gt("Confirm and submit")} onPress={() => void send()} />}
           <Button
-            label="Close and clear"
+            label={gt("Close and clear")}
             onPress={() => {
               setValues({});
               setReady(false);
@@ -147,18 +156,18 @@ function ResponseForm({ scope, spec, available, current, execute }: Props) {
       <Text accessibilityLiveRegion="polite">{status}</Text>
       {status !== "" && (
         <Button
-          label="Check result"
+          label={gt("Check result")}
           onPress={() =>
             void controller
               .result()
               .then((result) =>
                 setStatus(
                   result?.status === "answered"
-                    ? "Response delivered."
-                    : "Delivery is not confirmed.",
+                    ? gt("Response delivered.")
+                    : gt("Delivery is not confirmed."),
                 ),
               )
-              .catch(() => setStatus("Result unavailable."))
+              .catch(() => setStatus(gt("Result unavailable.")))
           }
         />
       )}

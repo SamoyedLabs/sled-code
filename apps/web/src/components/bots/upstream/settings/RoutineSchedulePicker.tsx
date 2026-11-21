@@ -30,6 +30,8 @@ import {
 } from "./routine-clock";
 import { RoutineYearlyDateField } from "./RoutineYearlyDateField";
 import "./routine-schedule.css";
+import { m } from "../../../../i18n/messages";
+import { T, Var, msg, useGT } from "gt-react";
 const weekday = (day: number, style: "long" | "short" | "narrow" = "short") =>
   new Intl.DateTimeFormat(undefined, { weekday: style }).format(new Date(2024, 0, 7 + day));
 export const clockLabel = (value: string) =>
@@ -39,11 +41,11 @@ export const clockLabel = (value: string) =>
   }).format(new Date(`2024-01-01T${value}:00`));
 export function daysLabel(days: readonly number[]) {
   return days.length === 7
-    ? "Every day"
+    ? m(msg("Every day"))
     : days.join(",") === "1,2,3,4,5"
-      ? "Weekdays"
+      ? m(msg("Weekdays"))
       : days.join(",") === "0,6"
-        ? "Weekends"
+        ? m(msg("Weekends"))
         : days.map((day) => weekday(day)).join(", ");
 }
 function Phrase({
@@ -173,16 +175,17 @@ function Weekdays({
   disabled: boolean;
   single?: boolean;
 }) {
+  const gt = useGT();
   return (
     <ChipPopover
-      label="Choose days"
+      label={gt("Choose days")}
       kind="routine-weekday-popover"
       disabled={disabled}
       content={
         single ? (
           <RadioGroup
             className="routine-weekday-strip"
-            aria-label="Day"
+            aria-label={gt("Day")}
             value={String(days[0])}
             onValueChange={(value) => onChange([Number(value)])}
           >
@@ -198,7 +201,7 @@ function Weekdays({
             ))}
           </RadioGroup>
         ) : (
-          <fieldset className="routine-weekday-strip" aria-label="Days">
+          <fieldset className="routine-weekday-strip" aria-label={gt("Days")}>
             {ROUTINE_EVERY_DAY.map((day) => (
               <SourceButton
                 key={day}
@@ -229,6 +232,7 @@ function ClockInput({
   value: string;
   onChange: (time: string) => void;
 }) {
+  const gt = useGT();
   const hour12 = Boolean(
     new Intl.DateTimeFormat(undefined, { hour: "numeric" }).resolvedOptions().hour12,
   );
@@ -300,7 +304,7 @@ function ClockInput({
       {hour12 && (
         <RadioGroup
           className="routine-segmented"
-          aria-label={`${label} AM or PM`}
+          aria-label={gt("{label} AM or PM", { label })}
           value={parts.meridiem}
           onValueChange={(value) => commit({ meridiem: value === "PM" ? "PM" : "AM" })}
         >
@@ -318,13 +322,15 @@ function Time({
   value,
   onChange,
   disabled,
-  label = "Time",
+  label: rawLabel,
 }: {
   value: string;
   onChange: (value: string) => void;
   disabled: boolean;
   label?: string;
 }) {
+  const gt = useGT();
+  const label = rawLabel ?? gt("Time");
   return (
     <ChipPopover
       label={label}
@@ -345,6 +351,7 @@ function Hours({
   onChange: (draft: RoutineScheduleDraft) => void;
   disabled: boolean;
 }) {
+  const gt = useGT();
   const previous = useRef({ start: "09:00", end: "18:00" });
   const choose = (kind: unknown) => {
     if (kind === "all-day") {
@@ -359,20 +366,20 @@ function Hours({
       : "All day";
   return (
     <ChipPopover
-      label="Choose hours"
+      label={gt("Choose hours")}
       kind="routine-window-menu"
       disabled={disabled}
       content={
         <>
           <RadioGroup
             className="routine-window-options"
-            aria-label="Hours"
+            aria-label={gt("Hours")}
             value={draft.window ? "between" : "all-day"}
             onValueChange={choose}
           >
             {[
-              { value: "all-day", label: "All day" },
-              { value: "between", label: "Between hours" },
+              { value: "all-day", label: gt("All day") },
+              { value: "between", label: gt("Between hours") },
             ].map((item) => (
               <Radio.Root
                 className="routine-window-option-control"
@@ -390,7 +397,7 @@ function Hours({
             <div className="routine-window-range">
               <div className="routine-window-range-times">
                 <Time
-                  label="Start time"
+                  label={gt("Start time")}
                   value={draft.window.start}
                   disabled={disabled}
                   onChange={(start) =>
@@ -399,7 +406,7 @@ function Hours({
                 />
                 <span>to</span>
                 <Time
-                  label="End time"
+                  label={gt("End time")}
                   value={draft.window.end}
                   disabled={disabled}
                   onChange={(end) =>
@@ -410,9 +417,11 @@ function Hours({
             </div>
           )}
           <div className="routine-window-repeat">
-            <span className="routine-window-repeat-label">Repeat every</span>
+            <span className="routine-window-repeat-label">
+              <T>Repeat every</T>
+            </span>
             <RoutineChipSelect
-              label="Repeat every"
+              label={gt("Repeat every")}
               value={String(draft.everyHours)}
               options={ROUTINE_EVERY_HOURS.map((value) => ({
                 value: String(value),
@@ -439,6 +448,7 @@ export function RoutineSchedulePicker({
   onChange: (draft: RoutineScheduleDraft) => void;
   disabled?: boolean;
 }) {
+  const gt = useGT();
   const root = useRef<HTMLDivElement>(null);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Measure rendered chip labels and keep the source fit levels synchronized with DOM widths and loaded fonts.
   useLayoutEffect(() => {
@@ -471,24 +481,24 @@ export function RoutineSchedulePicker({
   });
   return (
     <div ref={root} className="routine-schedule-picker" data-density="panel">
-      <fieldset className="routine-trigger-row" aria-label="Schedule">
+      <fieldset className="routine-trigger-row" aria-label={gt("Schedule")}>
         <span className="routine-trigger-icon" aria-hidden="true">
           <AlarmClock />
         </span>
         <span className="routine-trigger-chips">
           <RoutineChipSelect
-            label="Frequency"
+            label={gt("Frequency")}
             disabled={disabled}
             value={schedule.kind}
             valueLabel={
               schedule.kind === "hourly" && schedule.everyHours > 1
-                ? `Every ${schedule.everyHours}h`
+                ? gt("Every {everyHours}h", { everyHours: schedule.everyHours })
                 : undefined
             }
             options={(allowOnce ? ROUTINE_DRAFT_KIND_VALUES : ROUTINE_SAVED_DRAFT_KIND_VALUES).map(
               (value) => ({
                 value,
-                label: value === "custom" ? "Custom" : value[0]!.toUpperCase() + value.slice(1),
+                label: value === "custom" ? gt("Custom") : value[0]!.toUpperCase() + value.slice(1),
               }),
             )}
             onChange={(value) => {
@@ -518,7 +528,7 @@ export function RoutineSchedulePicker({
           {schedule.kind === "monthly" && (
             <Phrase word="on">
               <RoutineChipSelect
-                label="Day of month"
+                label={gt("Day of month")}
                 value={String(schedule.day)}
                 disabled={disabled}
                 options={Array.from({ length: 31 }, (_, i) => ({
@@ -534,7 +544,7 @@ export function RoutineSchedulePicker({
               <input
                 type="date"
                 className="ui-input routine-once-date"
-                aria-label="Run date"
+                aria-label={gt("Run date")}
                 disabled={disabled}
                 value={schedule.date}
                 onChange={(event) => onChange({ ...schedule, date: event.target.value })}
@@ -566,7 +576,7 @@ export function RoutineSchedulePicker({
           {schedule.kind === "custom" && (
             <input
               className="ui-input routine-cron-input"
-              aria-label="Cron expression"
+              aria-label={gt("Cron expression")}
               placeholder="0 9 * * 1-5"
               maxLength={255}
               disabled={disabled}
@@ -577,10 +587,16 @@ export function RoutineSchedulePicker({
         </span>
       </fieldset>
       {schedule.kind === "monthly" && schedule.day > 28 && (
-        <p className="routine-schedule-hint">Months without day {schedule.day} are skipped.</p>
+        <p className="routine-schedule-hint">
+          <T>
+            Months without day <Var>{schedule.day}</Var> are skipped.
+          </T>
+        </p>
       )}
       {schedule.kind === "custom" && (
-        <p className="routine-schedule-hint">Minute, hour, day of month, month, day of week.</p>
+        <p className="routine-schedule-hint">
+          <T>Minute, hour, day of month, month, day of week.</T>
+        </p>
       )}
     </div>
   );

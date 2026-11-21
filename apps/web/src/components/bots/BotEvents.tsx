@@ -3,6 +3,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { T, Var, useGT } from "gt-react";
 
 export function RoutineGroup({ children }: { children: ReactNode }) {
   return <div className="space-y-3">{children}</div>;
@@ -33,6 +34,7 @@ export function RoutineAction({
   );
 }
 export function RoutineDisclosure({ label, children }: { label: string; children: ReactNode }) {
+  const gt = useGT();
   const [expanded, setExpanded] = useState(false);
   const id = useId();
   return (
@@ -44,7 +46,7 @@ export function RoutineDisclosure({ label, children }: { label: string; children
         aria-controls={id}
         onClick={() => setExpanded(!expanded)}
       >
-        {expanded ? `Close ${label.toLowerCase()}` : label}
+        {expanded ? gt("Close {value}", { value: label.toLowerCase() }) : label}
       </Button>
       {expanded && <div id={id}>{children}</div>}
     </section>
@@ -96,6 +98,7 @@ export function RoutineChoice({
   disabled: boolean;
   onChange: (value: string) => void;
 }) {
+  const gt = useGT();
   return (
     <label className="block space-y-1 text-sm">
       <span>{label}</span>
@@ -108,12 +111,17 @@ export function RoutineChoice({
       >
         <SelectTrigger aria-label={label}>
           <SelectValue>
-            {options.find((option) => option.id === value)?.name ?? `Choose ${label.toLowerCase()}`}
+            {options.find((option) => option.id === value)?.name ??
+              gt("Choose {value}", { value: label.toLowerCase() })}
           </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {!options.some((option) => option.id === "") && (
-            <SelectItem value="__none">Choose {label.toLowerCase()}</SelectItem>
+            <SelectItem value="__none">
+              <T>
+                Choose <Var>{label.toLowerCase()}</Var>
+              </T>
+            </SelectItem>
           )}
           {options.map((option) => (
             <SelectItem key={option.id || "__none"} value={option.id || "__none"}>

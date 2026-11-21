@@ -9,6 +9,7 @@ import * as Schema from "effect/Schema";
 import { BotNotificationDestination } from "../components/bots/BotNotificationDestination";
 import { SidebarInset } from "../components/ui/sidebar";
 import { workspaceAreaProps } from "../lib/workspaceFocus";
+import { T } from "gt-react";
 const decodeTarget = Schema.decodeUnknownOption(OpenbotNotificationTarget);
 export const Route = createFileRoute("/_chat/bots/$")({ component: NotificationRoute });
 function NotificationRoute() {
@@ -21,9 +22,11 @@ function NotificationRoute() {
       className="h-[var(--workspace-shell-height,100dvh)] min-h-0 overflow-auto"
     >
       <header className="flex h-12 shrink-0 items-center gap-3 border-b px-5">
-        <h1 className="text-sm font-medium">Bot notification</h1>
+        <h1 className="text-sm font-medium">
+          <T>Bot notification</T>
+        </h1>
         <Link className="ml-auto text-sm" to="/bots">
-          All bots
+          <T>All bots</T>
         </Link>
       </header>
       <main className="space-y-4 p-5">
@@ -33,7 +36,9 @@ function NotificationRoute() {
             target={decoded.value}
           />
         ) : (
-          <p role="alert">This notification target is invalid.</p>
+          <p role="alert">
+            <T>This notification target is invalid.</T>
+          </p>
         )}
       </main>
     </SidebarInset>

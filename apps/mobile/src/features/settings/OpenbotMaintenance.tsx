@@ -21,15 +21,17 @@ import { serverEnvironment } from "../../state/server";
 import { Button } from "../../components/ui/Button";
 import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
 import { Picker } from "./BotConnectionControls";
+import { T, Var, useGT } from "gt-react-native";
 
 const decodePolicy = Schema.decodeUnknownResult(OpenbotMaintenancePolicy);
 
 export function OpenbotMaintenance({ environmentId }: { environmentId: EnvironmentId }) {
+  const gt = useGT();
   const [expanded, setExpanded] = useState(false);
   return (
     <View className="gap-3">
       <Button
-        label={expanded ? "Close upstream maintenance" : "Upstream maintenance"}
+        label={expanded ? gt("Close upstream maintenance") : gt("Upstream maintenance")}
         onPress={() => setExpanded(!expanded)}
       />
       {expanded && <MaintenancePanel key={environmentId} environmentId={environmentId} />}
@@ -37,16 +39,25 @@ export function OpenbotMaintenance({ environmentId }: { environmentId: Environme
   );
 }
 function MaintenancePanel({ environmentId }: { environmentId: EnvironmentId }) {
+  const gt = useGT();
   const query = useEnvironmentQuery(openbot.maintenance({ environmentId, input: {} }));
   return (
     <View className="gap-3">
-      <Text className="font-semibold">Upstream maintenance</Text>
+      <Text className="font-semibold">
+        <T>Upstream maintenance</T>
+      </Text>
       <OpenbotContinuity environmentId={environmentId} />
       <Text>
-        Review new bot engine releases in a separate workspace. Your decision is required before
-        staging; activation is separate.
+        <T>
+          Review new bot engine releases in a separate workspace. Your decision is required before
+          staging; activation is separate.
+        </T>
       </Text>
-      <Button label="Refresh maintenance" onPress={query.refresh} disabled={query.isPending} />
+      <Button
+        label={gt("Refresh maintenance")}
+        onPress={query.refresh}
+        disabled={query.isPending}
+      />
       {query.error && <Text accessibilityRole="alert">{query.error}</Text>}
       {query.data && (
         <MaintenanceForm
@@ -65,6 +76,7 @@ function MaintenanceForm({
   environmentId: EnvironmentId;
   state: OpenbotMaintenanceState;
 }) {
+  const gt = useGT();
   const navigation = useNavigation();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,7 +116,7 @@ function MaintenanceForm({
     });
     if (Result.isFailure(decoded)) {
       setError(
-        "Choose a project, provider, model, platform and check interval from 1 to 720 hours.",
+        gt("Choose a project, provider, model, platform and check interval from 1 to 720 hours."),
       );
       return;
     }
@@ -120,9 +132,11 @@ function MaintenanceForm({
   );
   return (
     <View className="gap-3">
-      <Text>Enable maintenance</Text>
+      <Text>
+        <T>Enable maintenance</T>
+      </Text>
       <Switch
-        accessibilityLabel="Enable maintenance"
+        accessibilityLabel={gt("Enable maintenance")}
         value={enabled}
         onValueChange={setEnabled}
         disabled={locked}
@@ -152,16 +166,20 @@ function MaintenanceForm({
           ?.models.map((m) => ({ id: m.slug, name: m.name })) ?? [],
         setModel,
       )}
-      <Text>Integration base branch</Text>
+      <Text>
+        <T>Integration base branch</T>
+      </Text>
       <AppTextInput
-        accessibilityLabel="Integration base branch"
+        accessibilityLabel={gt("Integration base branch")}
         value={baseRef}
         onChangeText={setBaseRef}
         editable={!locked}
       />
-      <Text>Check every (hours)</Text>
+      <Text>
+        <T>Check every (hours)</T>
+      </Text>
       <AppTextInput
-        accessibilityLabel="Check every (hours)"
+        accessibilityLabel={gt("Check every (hours)")}
         keyboardType="numeric"
         value={interval}
         onChangeText={setInterval}
@@ -187,18 +205,20 @@ function MaintenanceForm({
         setPlatform,
       )}
       <Text>
-        Reviews use plan mode and ask before actions. Source patches need a separate implementation
-        step. Reviews cannot authorize activation or profile changes.
+        <T>
+          Reviews use plan mode and ask before actions. Source patches need a separate
+          implementation step. Reviews cannot authorize activation or profile changes.
+        </T>
       </Text>
-      <Button label="Save policy" onPress={save} disabled={locked} />
+      <Button label={gt("Save policy")} onPress={save} disabled={locked} />
       <Button
-        label="Check now"
+        label={gt("Check now")}
         disabled={locked || !state.policy?.enabled}
         onPress={() => void send({ action: "check" })}
       />
       {state.policy && (
         <Button
-          label="Disable and clear policy"
+          label={gt("Disable and clear policy")}
           disabled={locked}
           onPress={() =>
             void send({ action: "configure", expectedRevision: state.revision, policy: null })
@@ -207,10 +227,18 @@ function MaintenanceForm({
       )}
       {error && <Text accessibilityRole="alert">{error}</Text>}
       {state.lastError && <Text accessibilityRole="alert">{state.lastError}</Text>}
-      {state.nextCheckAt && <Text>Next check: {state.nextCheckAt}</Text>}
-      <Text>Decision note</Text>
+      {state.nextCheckAt && (
+        <Text>
+          <T>
+            Next check: <Var>{state.nextCheckAt}</Var>
+          </T>
+        </Text>
+      )}
+      <Text>
+        <T>Decision note</T>
+      </Text>
       <AppTextInput
-        accessibilityLabel="Decision note"
+        accessibilityLabel={gt("Decision note")}
         value={note}
         onChangeText={setNote}
         editable={!locked}
@@ -220,16 +248,27 @@ function MaintenanceForm({
           <Text className="font-semibold">
             {p.release.version} · {openbotMaintenanceProgress(p)}
           </Text>
-          <Text selectable>Source: {p.release.releaseCommit}</Text>
           <Text selectable>
-            Download: {p.release.assets.find((a) => a.platform === p.platform)?.sha256}
+            <T>
+              Source: <Var>{p.release.releaseCommit}</Var>
+            </T>
+          </Text>
+          <Text selectable>
+            <T>
+              Download: <Var>{p.release.assets.find((a) => a.platform === p.platform)?.sha256}</Var>
+            </T>
           </Text>
           <Text>
-            Compatibility: {p.compatibility}. {p.stagedAt ? `Staged ${p.stagedAt}` : "Not staged"}
+            <T>
+              Compatibility: <Var>{p.compatibility}</Var>.{" "}
+              <Var>
+                {p.stagedAt ? gt("Staged {stagedAt}", { stagedAt: p.stagedAt }) : gt("Not staged")}
+              </Var>
+            </T>
           </Text>
           {p.reviewThreadId && (
             <Button
-              label="Open review thread"
+              label={gt("Open review thread")}
               onPress={() =>
                 navigation.dispatch(
                   StackActions.push("Thread", { environmentId, threadId: p.reviewThreadId }),
@@ -249,10 +288,16 @@ function MaintenanceForm({
               <Text>{p.report.decisionRequest}</Text>
             </>
           )}
-          {p.decision && <Text>Your decision: {p.decision.note}</Text>}
+          {p.decision && (
+            <Text>
+              <T>
+                Your decision: <Var>{p.decision.note}</Var>
+              </T>
+            </Text>
+          )}
           {(p.state === "proposed" || p.state === "review-queued") && (
             <Button
-              label={p.state === "proposed" ? "Review source" : "Retry review launch"}
+              label={p.state === "proposed" ? gt("Review source") : gt("Retry review launch")}
               disabled={locked || !state.policy?.enabled || state.policy.authority === "check"}
               onPress={() => void send({ action: "review", proposalId: p.id })}
             />
@@ -260,7 +305,7 @@ function MaintenanceForm({
           {p.state === "decision-required" && (
             <>
               <Button
-                label="Accept review"
+                label={gt("Accept review")}
                 disabled={locked || !note.trim()}
                 onPress={() =>
                   void send({
@@ -273,7 +318,7 @@ function MaintenanceForm({
                 }
               />
               <Button
-                label="Reject release"
+                label={gt("Reject release")}
                 disabled={locked || !note.trim()}
                 onPress={() =>
                   void send({
@@ -291,7 +336,9 @@ function MaintenanceForm({
             <>
               <Button
                 label={
-                  p.preparationThreadId ? "Resume source preparation" : "Prepare source and patches"
+                  p.preparationThreadId
+                    ? gt("Resume source preparation")
+                    : gt("Prepare source and patches")
                 }
                 disabled={locked || !state.policy?.enabled || state.policy.authority !== "stage"}
                 onPress={() => void send({ action: "prepare", proposalId: p.id })}
@@ -299,7 +346,7 @@ function MaintenanceForm({
               {p.preparationThreadId && (
                 <>
                   <Button
-                    label="Open preparation thread"
+                    label={gt("Open preparation thread")}
                     onPress={() =>
                       navigation.dispatch(
                         StackActions.push("Thread", {
@@ -310,7 +357,7 @@ function MaintenanceForm({
                     }
                   />
                   <Button
-                    label="Run compatibility checks"
+                    label={gt("Run compatibility checks")}
                     disabled={
                       locked || !state.policy?.enabled || state.policy.authority !== "stage"
                     }
@@ -322,7 +369,7 @@ function MaintenanceForm({
                 p.validationRunId &&
                 p.compatibility !== "validated" && (
                   <Button
-                    label="Accept verified artifact"
+                    label={gt("Accept verified artifact")}
                     disabled={
                       locked || !state.policy?.enabled || state.policy.authority !== "stage"
                     }
@@ -333,10 +380,20 @@ function MaintenanceForm({
                 )}
             </>
           )}
-          {p.validation?.state==="running"&&<Button label="Cancel compatibility checks" disabled={locked} onPress={()=>void send({action:"cancel-validation",proposalId:p.id})}/> }
+          {p.validation?.state === "running" && (
+            <Button
+              label={gt("Cancel compatibility checks")}
+              disabled={locked}
+              onPress={() => void send({ action: "cancel-validation", proposalId: p.id })}
+            />
+          )}
           {p.validation && (
             <View className="gap-1">
-              <Text>Checks: {p.validation.state}</Text>
+              <Text>
+                <T>
+                  Checks: <Var>{p.validation.state}</Var>
+                </T>
+              </Text>
               {p.validation.checks.map((check) => (
                 <Text key={`${check.kind}:${check.outcome}:${check.detail}`}>
                   {check.kind}: {check.outcome} · {check.detail}
@@ -346,7 +403,7 @@ function MaintenanceForm({
           )}
           {p.state === "accepted" && !p.stagedAt && (
             <Button
-              label="Stage reviewed release"
+              label={gt("Stage reviewed release")}
               disabled={locked || !state.policy?.enabled || state.policy.authority !== "stage"}
               onPress={() => void send({ action: "stage", proposalId: p.id })}
             />

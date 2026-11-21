@@ -5,6 +5,7 @@ import {
   OpenbotBrowserTab,
   type OpenbotAdminRequest,
 } from "@t3tools/contracts";
+import { mFallback, msg } from "gt-i18n";
 const displayDecoder = Schema.decodeUnknownResult(
   Schema.Struct({
     ...OpenbotBrowserDisplay.fields,
@@ -70,7 +71,7 @@ export function browserTabActions(
 }
 export function browserActionLabel(request: OpenbotAdminRequest) {
   if (request.operation === "browser.navigate")
-    return request.direction === "back" ? "Back" : "Forward";
+    return request.direction === "back" ? mFallback(msg("Back")) : mFallback(msg("Forward"));
   const names: Record<string, string> = {
     "browser.activate": "Show tab",
     "browser.take": "Take control",

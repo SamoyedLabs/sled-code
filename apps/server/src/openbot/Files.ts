@@ -924,10 +924,7 @@ const make = Effect.gen(function* () {
           )
             return yield* new OpenbotFilesError({ operation: "send", reason: "conflict" });
           const target = input.target ?? { kind: "main" as const };
-          if (
-            input.expectedThreadId !== undefined &&
-            target.kind === "new-task"
-          )
+          if (input.expectedThreadId !== undefined && target.kind === "new-task")
             return yield* new OpenbotFilesError({ operation: "send", reason: "conflict" });
           if (target.kind === "new-task" && input.replyToMessageId !== undefined)
             return yield* new OpenbotFilesError({ operation: "send", reason: "conflict" });

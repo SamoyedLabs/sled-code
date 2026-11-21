@@ -5,11 +5,14 @@ import { BotAvatar } from "../../avatar/BotAvatar";
 import { SourceButton, SettingsCard, SettingsSection } from "../settings/SettingsParts";
 import type { Listing, MarketplaceAgent } from "./marketplace-model";
 import { SkillGradient } from "./SkillGradient";
+import { T, useGT } from "gt-react";
 export function VerifiedMark({ on }: { on?: boolean | undefined }) {
   return on ? (
     <>
       <ShieldCheck className="marketplace-skill-verified" aria-hidden="true" />
-      <span className="marketplace-visually-hidden">Verified</span>
+      <span className="marketplace-visually-hidden">
+        <T>Verified</T>
+      </span>
     </>
   ) : null;
 }
@@ -76,13 +79,14 @@ export function ListingRow({
   onOpen: () => void;
   action?: ReactNode;
 }) {
+  const gt = useGT();
   const item = listing.value;
   return (
     <li className={`marketplace-app-row marketplace-${listing.kind}-row`}>
       <SourceButton
         variant="ghost"
         className="marketplace-app-row-hit"
-        aria-label={`Open ${item.name}`}
+        aria-label={gt("Open {name}", { name: item.name })}
         onClick={onOpen}
       />
       {listing.kind === "agent" ? (
@@ -117,6 +121,7 @@ export function FeaturedCard({
   action?: ReactNode;
   showInstalls?: boolean;
 }) {
+  const gt = useGT();
   const item = listing.value;
   return (
     <article
@@ -126,7 +131,7 @@ export function FeaturedCard({
       <SourceButton
         variant="ghost"
         className="marketplace-hitarea"
-        aria-label={`Open ${item.name}`}
+        aria-label={gt("Open {name}", { name: item.name })}
         onClick={onOpen}
       />
       {listing.kind === "skill" ? (
@@ -168,7 +173,10 @@ export function FeaturedCard({
           {listing.kind === "agent"
             ? `${listing.value.skillCount} skills${listing.value.routineCount ? ` · ${listing.value.routineCount} routines` : ""}`
             : showInstalls
-              ? `${item.creatorName} · ${item.installs.toLocaleString()} installs`
+              ? gt("{creatorName} · {value} installs", {
+                  creatorName: item.creatorName,
+                  value: item.installs.toLocaleString(),
+                })
               : item.creatorName}
         </span>
       </div>
@@ -182,8 +190,9 @@ export function Information({
   description: string;
   facts: readonly { label: string; value: ReactNode }[];
 }) {
+  const gt = useGT();
   return (
-    <SettingsSection title="Information">
+    <SettingsSection title={gt("Information")}>
       <SettingsCard>
         <div className="integration-card-body">
           <p className="ui-text" data-variant="body-sm">

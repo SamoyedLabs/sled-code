@@ -19,6 +19,7 @@ import { BotProviderChoice } from "./BotProviderChoice";
 import { View } from "react-native";
 import { AppText as Text } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
+import { T, Var, useGT } from "gt-react-native";
 
 export function BotProviderSettings({
   environmentId,
@@ -29,6 +30,7 @@ export function BotProviderSettings({
   hostId: string;
   agentId: string;
 }) {
+  const gt = useGT();
   const modelsQuery = useEnvironmentQuery(
     openbot.readFromHost({
       environmentId,
@@ -81,7 +83,7 @@ export function BotProviderSettings({
     else if (request.operation === "provider.accounts.list") {
       const value = providerAccounts(result.value);
       setAccounts(value);
-      if (!value) setError("This engine returned unsupported account settings.");
+      if (!value) setError(gt("This engine returned unsupported account settings."));
     } else {
       if (request.operation === "agent.update") setDraft(null);
       agentsQuery.refresh();
@@ -101,7 +103,9 @@ export function BotProviderSettings({
     accounts?.agents.find((agent) => agent.agentId === agentId)?.accountId ?? "default";
   return (
     <View className="gap-3 rounded-xl bg-grouped-card p-3">
-      <Text>Provider and model</Text>
+      <Text>
+        <T>Provider and model</T>
+      </Text>
       {(error || modelsQuery.error || statusQuery.error || agentsQuery.error) && (
         <Text accessibilityRole="alert" className="text-danger">
           {error ?? modelsQuery.error ?? statusQuery.error ?? agentsQuery.error}
@@ -111,7 +115,7 @@ export function BotProviderSettings({
         <>
           {current?.pendingRuntime && (
             <Text className="text-foreground-muted">
-              A runtime change is queued until this bot's current work ends.
+              <T>A runtime change is queued until this bot's current work ends.</T>
             </Text>
           )}
           <BotProviderChoice
@@ -122,7 +126,7 @@ export function BotProviderSettings({
             disabled={busy || !canEdit}
           />
           <Button
-            label="Save provider and model"
+            label={gt("Save provider and model")}
             disabled={busy || !canEdit || !draft || !validProviderChoice(models, providers, choice)}
             onPress={() => {
               const request = botProviderUpdateRequest(agentId, choice, models);
@@ -133,12 +137,12 @@ export function BotProviderSettings({
       ) : (
         <Text className="text-foreground-muted">
           {agentsQuery.isPending || modelsQuery.isPending || statusQuery.isPending
-            ? "Loading provider settings…"
-            : "Provider settings are unavailable. Refresh before editing."}
+            ? gt("Loading provider settings…")
+            : gt("Provider settings are unavailable. Refresh before editing.")}
         </Text>
       )}
       <Button
-        label="Refresh providers"
+        label={gt("Refresh providers")}
         tone="text"
         size="compact"
         onPress={() => {
@@ -147,9 +151,11 @@ export function BotProviderSettings({
           agentsQuery.refresh();
         }}
       />
-      <Text>Account for this bot</Text>
+      <Text>
+        <T>Account for this bot</T>
+      </Text>
       <Button
-        label="Load accounts"
+        label={gt("Load accounts")}
         tone="secondary"
         size="compact"
         disabled={busy || !canAccounts}
@@ -158,11 +164,13 @@ export function BotProviderSettings({
       {accounts && accountProvider && (
         <>
           <Text className="text-foreground-muted">
-            Accounts belong to {current?.provider ?? "this provider"}. Manage sign-ins from Provider
-            setup.
+            <T>
+              Accounts belong to <Var>{current?.provider ?? gt("this provider")}</Var>. Manage
+              sign-ins from Provider setup.
+            </T>
           </Text>
           <Button
-            label="Provider's own sign-in"
+            label={gt("Provider's own sign-in")}
             tone={assigned === "default" ? "primary" : "secondary"}
             disabled={busy || !canAccounts || Boolean(current?.pendingRuntime)}
             onPress={() =>

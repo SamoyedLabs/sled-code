@@ -30,6 +30,7 @@ import { useBotEnvironmentOnline } from "./botOfflineCache";
 import { BotIconButton } from "./upstream/BotChrome";
 import { OpenBotTypography } from "./upstream/OpenBotTypography";
 import { BotMessageComposer, useBotKeyboardAvoidance } from "./upstream/BotMessageComposer";
+import { T, useGT } from "gt-react-native";
 
 type Agent = {
   environmentId: EnvironmentId;
@@ -60,24 +61,27 @@ function BotThreadRenameSheet({
   onClose: () => void;
   onSave: (title: string) => Promise<void>;
 }) {
+  const gt = useGT();
   const [title, setTitle] = useState(initialTitle);
   const trimmed = title.trim();
   const canSave = !busy && trimmed.length > 0 && trimmed.length <= 120;
   return (
-    <Sheet title="Rename thread" onClose={onClose}>
+    <Sheet title={gt("Rename thread")} onClose={onClose}>
       <ScreenScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerClassName="gap-4 px-4 py-5"
         keyboardShouldPersistTaps="handled"
       >
         <View className="gap-2">
-          <Text className="text-sm text-foreground-muted">Thread title</Text>
+          <Text className="text-sm text-foreground-muted">
+            <T>Thread title</T>
+          </Text>
           <AppTextInput
-            accessibilityLabel="Thread title"
+            accessibilityLabel={gt("Thread title")}
             autoFocus
             editable={!busy}
             maxLength={120}
-            placeholder="Enter a thread title"
+            placeholder={gt("Enter a thread title")}
             returnKeyType="done"
             value={title}
             onChangeText={setTitle}
@@ -94,11 +98,11 @@ function BotThreadRenameSheet({
         ) : null}
         <View className="flex-row gap-3">
           <View className="flex-1">
-            <Button label="Cancel" tone="secondary" disabled={busy} onPress={onClose} />
+            <Button label={gt("Cancel")} tone="secondary" disabled={busy} onPress={onClose} />
           </View>
           <View className="flex-1">
             <Button
-              label={busy ? "Saving…" : "Save"}
+              label={busy ? gt("Saving…") : gt("Save")}
               tone="primary"
               disabled={!canSave}
               onPress={() => void onSave(trimmed)}
@@ -111,6 +115,7 @@ function BotThreadRenameSheet({
 }
 
 export function BotThreadsRoute({ route }: StaticScreenProps<Agent>) {
+  const gt = useGT();
   const navigation = useNavigation();
   const { environmentId, hostId, agentId } = route.params;
   const insets = useSafeAreaInsets();
@@ -148,14 +153,18 @@ export function BotThreadsRoute({ route }: StaticScreenProps<Agent>) {
         input: { hostId, request: { operation: "thread.rename", agentId, taskId, title } },
       });
       if (response._tag !== "Success") {
-        setManageError("Could not rename this thread. Check the host connection and try again.");
+        setManageError(
+          gt("Could not rename this thread. Check the host connection and try again."),
+        );
         return;
       }
       setRenaming(null);
       result.refresh();
     })()
       .catch(() => {
-        setManageError("Could not rename this thread. Check the host connection and try again.");
+        setManageError(
+          gt("Could not rename this thread. Check the host connection and try again."),
+        );
       })
       .finally(() => {
         setManageBusy(false);
@@ -164,9 +173,10 @@ export function BotThreadsRoute({ route }: StaticScreenProps<Agent>) {
   const deleteThread = (taskId: string) => {
     if (manageBusy || !canWrite) return;
     Dialog.confirm({
-      title: "Delete this thread?",
-      message:
+      title: gt("Delete this thread?"),
+      message: gt(
         "OpenBot deletes the thread, its messages and its files for good. The main chat does not change.",
+      ),
       confirmText: "Delete",
       destructive: true,
       onConfirm: () => {
@@ -177,13 +187,13 @@ export function BotThreadsRoute({ route }: StaticScreenProps<Agent>) {
             input: { hostId, request: { operation: "thread.delete", agentId, taskId } },
           });
           if (response._tag !== "Success") {
-            Dialog.alert("Could not delete thread", "The host refused the request.");
+            Dialog.alert(gt("Could not delete thread"), gt("The host refused the request."));
             return;
           }
           result.refresh();
         })()
           .catch(() => {
-            Dialog.alert("Could not delete thread", "The host refused the request.");
+            Dialog.alert(gt("Could not delete thread"), gt("The host refused the request."));
           })
           .finally(() => {
             setManageBusy(false);
@@ -231,10 +241,10 @@ export function BotThreadsRoute({ route }: StaticScreenProps<Agent>) {
             keyboardAvoidance,
           ]}
         >
-          <NativeStackScreenOptions options={{ title: "New thread" }} />
+          <NativeStackScreenOptions options={{ title: gt("New thread") }} />
           {failed && (
             <Text accessibilityRole="alert">
-              The host has not confirmed this thread. Send again to retry the same request.
+              <T>The host has not confirmed this thread. Send again to retry the same request.</T>
             </Text>
           )}
           <View
@@ -245,7 +255,7 @@ export function BotThreadsRoute({ route }: StaticScreenProps<Agent>) {
             }}
           >
             <BotMessageComposer
-              label="First message"
+              label={gt("First message")}
               text={text}
               onChangeText={setText}
               editable={!busy && !failed}
@@ -283,7 +293,7 @@ export function BotThreadsRoute({ route }: StaticScreenProps<Agent>) {
       <SettingsSection>
         <ListActionRow
           icon="plus"
-          label="New thread"
+          label={gt("New thread")}
           disabled={!canStart}
           onPress={() => setComposing(true)}
         />
@@ -320,10 +330,10 @@ export function BotThreadsRoute({ route }: StaticScreenProps<Agent>) {
                   {canWrite ? (
                     <Menu
                       actions={[
-                        { id: "rename", title: "Rename thread" },
+                        { id: "rename", title: gt("Rename thread") },
                         {
                           id: "delete",
-                          title: "Delete thread",
+                          title: gt("Delete thread"),
                           attributes: { destructive: true },
                         },
                       ]}
@@ -337,7 +347,7 @@ export function BotThreadsRoute({ route }: StaticScreenProps<Agent>) {
                     >
                       <View className="pe-2">
                         <BotIconButton
-                          label={`Thread actions for ${label}`}
+                          label={gt("Thread actions for {label}", { label })}
                           icon="ellipsis"
                           disabled={manageBusy}
                         />
@@ -353,10 +363,10 @@ export function BotThreadsRoute({ route }: StaticScreenProps<Agent>) {
         <Text className="p-4 text-foreground-muted">
           {result.error ??
             (result.isPending
-              ? "Loading threads…"
+              ? gt("Loading threads…")
               : rows
-                ? "No threads yet"
-                : "Threads unavailable")}
+                ? gt("No threads yet")
+                : gt("Threads unavailable"))}
         </Text>
       )}
     </ScreenScrollView>
@@ -364,6 +374,7 @@ export function BotThreadsRoute({ route }: StaticScreenProps<Agent>) {
 }
 
 export function BotAgentThreadRoute({ route }: StaticScreenProps<AgentThread>) {
+  const gt = useGT();
   const {
     environmentId,
     hostId,
@@ -401,14 +412,18 @@ export function BotAgentThreadRoute({ route }: StaticScreenProps<AgentThread>) {
         },
       });
       if (response._tag !== "Success") {
-        setManageError("Could not rename this thread. Check the host connection and try again.");
+        setManageError(
+          gt("Could not rename this thread. Check the host connection and try again."),
+        );
         return;
       }
       setTitle(nextTitle);
       setRenaming(false);
     })()
       .catch(() => {
-        setManageError("Could not rename this thread. Check the host connection and try again.");
+        setManageError(
+          gt("Could not rename this thread. Check the host connection and try again."),
+        );
       })
       .finally(() => {
         setManageBusy(false);
@@ -418,9 +433,10 @@ export function BotAgentThreadRoute({ route }: StaticScreenProps<AgentThread>) {
   const deleteThread = () => {
     if (!taskId || manageBusy || !canWrite) return;
     Dialog.confirm({
-      title: "Delete this thread?",
-      message:
+      title: gt("Delete this thread?"),
+      message: gt(
         "OpenBot deletes the thread, its messages and its files for good. The main chat does not change.",
+      ),
       confirmText: "Delete",
       destructive: true,
       onConfirm: () => {
@@ -431,13 +447,13 @@ export function BotAgentThreadRoute({ route }: StaticScreenProps<AgentThread>) {
             input: { hostId, request: { operation: "thread.delete", agentId, taskId } },
           });
           if (response._tag !== "Success") {
-            Dialog.alert("Could not delete thread", "The host refused the request.");
+            Dialog.alert(gt("Could not delete thread"), gt("The host refused the request."));
             return;
           }
           if (navigation.isFocused()) navigation.goBack();
         })()
           .catch(() => {
-            Dialog.alert("Could not delete thread", "The host refused the request.");
+            Dialog.alert(gt("Could not delete thread"), gt("The host refused the request."));
           })
           .finally(() => {
             setManageBusy(false);
@@ -452,7 +468,7 @@ export function BotAgentThreadRoute({ route }: StaticScreenProps<AgentThread>) {
       items.push(
         withNativeGlassHeaderItem({
           type: "button" as const,
-          label: "Pinned messages",
+          label: gt("Pinned messages"),
           icon: { name: "pin" as const, type: "sfSymbol" as const },
           onPress: () => navigation.navigate("BotPinnedMessages", route.params),
         }),
@@ -463,14 +479,14 @@ export function BotAgentThreadRoute({ route }: StaticScreenProps<AgentThread>) {
         withNativeGlassHeaderItem({
           type: "menu" as const,
           label: "",
-          accessibilityLabel: "Thread options",
+          accessibilityLabel: gt("Thread options"),
           icon: { name: "ellipsis" as const, type: "sfSymbol" as const },
           menu: {
-            title: "Thread",
+            title: gt("Thread"),
             items: [
               {
                 type: "action" as const,
-                label: "Rename thread",
+                label: gt("Rename thread"),
                 onPress: () => {
                   setManageError(null);
                   setRenaming(true);
@@ -478,7 +494,7 @@ export function BotAgentThreadRoute({ route }: StaticScreenProps<AgentThread>) {
               },
               {
                 type: "action" as const,
-                label: "Delete thread",
+                label: gt("Delete thread"),
                 destructive: true,
                 onPress: deleteThread,
               },
@@ -529,7 +545,7 @@ export function BotAgentThreadRoute({ route }: StaticScreenProps<AgentThread>) {
         </OpenBotTypography>
       ) : status.data?.state === "ready" ? (
         <Text className="p-4 text-foreground-muted">
-          Reconnect to this bot’s computer to see the thread.
+          <T>Reconnect to this bot’s computer to see the thread.</T>
         </Text>
       ) : (
         <OpenBotTypography>

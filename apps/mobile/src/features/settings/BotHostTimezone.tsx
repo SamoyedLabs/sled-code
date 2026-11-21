@@ -19,6 +19,7 @@ import {
   timeZoneLabel,
 } from "../bots/upstream/openbot-mobile/servers/time-zones";
 import { SettingsSection } from "./components/SettingsSection";
+import { T, useGT } from "gt-react-native";
 
 type Host = { environmentId: EnvironmentId; hostId: string };
 const readRequest = { operation: "settings.host-timezone.settings", parameters: {} } as const;
@@ -30,6 +31,7 @@ const readTimezone = Schema.decodeUnknownOption(TimezoneSettings);
 const matchLimit = 50;
 
 export function BotHostTimezone(host: Host) {
+  const gt = useGT();
   const { environmentId, hostId } = host;
   const [open, setOpen] = useState(false);
   const canRead = useAtomValue(
@@ -54,18 +56,18 @@ export function BotHostTimezone(host: Host) {
     <SettingsSection>
       <Pressable accessibilityRole="button" onPress={() => setOpen(true)}>
         <ListRowLayout
-          label="Time zone"
+          label={gt("Time zone")}
           detail={
             settings?.timezone
               ? timeZoneLabel(settings.timezone)
               : settings
-                ? "Automatic"
+                ? gt("Automatic")
                 : undefined
           }
         />
       </Pressable>
       {open && (
-        <Sheet title="Time zone" onClose={() => setOpen(false)}>
+        <Sheet title={gt("Time zone")} onClose={() => setOpen(false)}>
           <TimezonePicker
             {...host}
             settings={settings}
@@ -92,6 +94,7 @@ function TimezonePicker({
   loading: boolean;
   refresh: () => void;
 }) {
+  const gt = useGT();
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,7 +122,7 @@ function TimezonePicker({
           request: { operation: "settings.host-timezone.update", parameters: { timezone } },
         },
       });
-      if (result._tag === "Failure") setError("The bot computer did not save the time zone.");
+      if (result._tag === "Failure") setError(gt("The bot computer did not save the time zone."));
       refresh();
     })().finally(() => {
       saving.current = false;
@@ -158,8 +161,8 @@ function TimezonePicker({
     >
       {settings && (
         <AppTextInput
-          accessibilityLabel="Search time zones"
-          placeholder="Search time zones"
+          accessibilityLabel={gt("Search time zones")}
+          placeholder={gt("Search time zones")}
           value={search}
           onChangeText={setSearch}
           autoCapitalize="none"
@@ -169,7 +172,11 @@ function TimezonePicker({
         />
       )}
       {(error || loadError) && <Text accessibilityRole="alert">{error || loadError}</Text>}
-      {!settings && !loadError && <Text accessibilityRole="status">Loading time zone…</Text>}
+      {!settings && !loadError && (
+        <Text accessibilityRole="status">
+          <T>Loading time zone…</T>
+        </Text>
+      )}
       {settings && (
         <SettingsSection>
           {matches === null &&
@@ -184,14 +191,18 @@ function TimezonePicker({
         </SettingsSection>
       )}
       {matches?.length === 0 && (
-        <Text className="text-foreground-muted">No matching time zones.</Text>
+        <Text className="text-foreground-muted">
+          <T>No matching time zones.</T>
+        </Text>
       )}
       {matches?.length === matchLimit && (
-        <Text className="text-foreground-muted">Narrow your search to see more.</Text>
+        <Text className="text-foreground-muted">
+          <T>Narrow your search to see more.</T>
+        </Text>
       )}
       {settings && matches === null && (
         <Text className="text-foreground-muted">
-          Used when a bot creates a routine without specifying a time zone.
+          <T>Used when a bot creates a routine without specifying a time zone.</T>
         </Text>
       )}
     </ScreenScrollView>

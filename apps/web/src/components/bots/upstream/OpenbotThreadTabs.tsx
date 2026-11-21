@@ -37,6 +37,7 @@ import {
 } from "./openbotThreadTabLayout";
 import "./openbot-thread-tabs.css";
 import "./openbot-side-thread-tabs.css";
+import { T, useGT } from "gt-react";
 export { useOpenbotThreadTabLayout } from "./useOpenbotThreadTabLayout";
 export type { OpenbotThreadTabLayout } from "./openbotThreadTabLayout";
 export type OpenbotThreadTabsProps = {
@@ -78,6 +79,7 @@ export function ThreadTabGhost({ from }: { from: "chat" | "side" }) {
   );
 }
 export function OpenbotThreadTabs(props: OpenbotThreadTabsProps) {
+  const gt = useGT();
   const { tasks, selectedId, onSelect, onNew, onRename } = props;
   const newLabel = props.taskChats ? "New task chat" : "New thread";
   const allLabel = props.taskChats ? "All task chats" : "All threads";
@@ -215,7 +217,7 @@ export function OpenbotThreadTabs(props: OpenbotThreadTabsProps) {
       if (settled._tag === "Success" && settled.value) {
         setRename(null);
         finished = true;
-      } else setRenameError("The thread title could not be saved.");
+      } else setRenameError(gt("The thread title could not be saved."));
     }
     if (refocus && finished)
       requestAnimationFrame(() =>
@@ -267,7 +269,7 @@ export function OpenbotThreadTabs(props: OpenbotThreadTabsProps) {
             <div
               ref={list}
               role="tablist"
-              aria-label={props.taskChats ? "Open task chats" : "Open threads"}
+              aria-label={props.taskChats ? gt("Open task chats") : gt("Open threads")}
               className="agent-threads-tabs ui-sliding-tabs"
             >
               <span
@@ -289,7 +291,7 @@ export function OpenbotThreadTabs(props: OpenbotThreadTabsProps) {
                             : -1
                         }
                         aria-selected={task.id === selectedId}
-                        aria-label={task.title || "New task"}
+                        aria-label={task.title || gt("New task")}
                         aria-keyshortcuts="Delete F2"
                         className="agent-threads-tab ui-sliding-tabs-trigger"
                         data-selected={task.id === selectedId ? "" : undefined}
@@ -383,10 +385,10 @@ export function OpenbotThreadTabs(props: OpenbotThreadTabsProps) {
                       <XIcon className="agent-threads-tab-x" />
                     </span>
                     <span className="agent-threads-tab-title" dir="auto">
-                      {task.title || "New task"}
+                      {task.title || gt("New task")}
                     </span>
                   </TooltipTrigger>
-                  <TooltipPopup>{task.title || "New task"}</TooltipPopup>
+                  <TooltipPopup>{task.title || gt("New task")}</TooltipPopup>
                 </Tooltip>
               ))}
             </div>
@@ -396,7 +398,7 @@ export function OpenbotThreadTabs(props: OpenbotThreadTabsProps) {
               <ContextMenu.Popup
                 className="ui-action-menu agent-threads-tab-menu"
                 ref={menuMotionRef(undefined)}
-                aria-label="Thread actions"
+                aria-label={gt("Thread actions")}
               >
                 <ContextMenu.Item
                   disabled={!focusedTask}
@@ -405,7 +407,7 @@ export function OpenbotThreadTabs(props: OpenbotThreadTabsProps) {
                   }}
                 >
                   <PencilLine size={14} />
-                  Rename
+                  <T>Rename</T>
                 </ContextMenu.Item>
                 {canDock && (
                   <ContextMenu.Item
@@ -414,7 +416,7 @@ export function OpenbotThreadTabs(props: OpenbotThreadTabsProps) {
                     }}
                   >
                     <PanelRight size={14} />
-                    Move to side panel
+                    <T>Move to side panel</T>
                   </ContextMenu.Item>
                 )}
                 <ContextMenu.Separator />
@@ -424,18 +426,18 @@ export function OpenbotThreadTabs(props: OpenbotThreadTabsProps) {
                   }}
                 >
                   <XIcon size={14} />
-                  Close tab
+                  <T>Close tab</T>
                 </ContextMenu.Item>
                 <ContextMenu.Item disabled={visible.length < 2} onClick={closeOthers}>
                   <CircleX size={14} />
-                  Close other tabs
+                  <T>Close other tabs</T>
                 </ContextMenu.Item>
                 <ContextMenu.Item
                   disabled={targetIndex < 0 || targetIndex >= visible.length - 1}
                   onClick={closeRight}
                 >
                   <ArrowRightToLine size={14} />
-                  Close tabs to the right
+                  <T>Close tabs to the right</T>
                 </ContextMenu.Item>
                 {props.onArchive && (
                   <>
@@ -447,7 +449,7 @@ export function OpenbotThreadTabs(props: OpenbotThreadTabsProps) {
                       }}
                     >
                       <Archive size={14} />
-                      Archive thread
+                      <T>Archive thread</T>
                     </ContextMenu.Item>
                   </>
                 )}
@@ -462,7 +464,7 @@ export function OpenbotThreadTabs(props: OpenbotThreadTabsProps) {
                     }}
                   >
                     <Trash2 size={14} />
-                    Delete thread
+                    <T>Delete thread</T>
                   </ContextMenu.Item>
                 )}
               </ContextMenu.Popup>
@@ -479,7 +481,7 @@ export function OpenbotThreadTabs(props: OpenbotThreadTabsProps) {
               }
             }}
             className="agent-threads-rename ui-input"
-            aria-label="Thread title"
+            aria-label={gt("Thread title")}
             maxLength={120}
             style={{ left: rename.left, width: rename.width }}
             value={rename.title}
@@ -554,7 +556,7 @@ export function OpenbotThreadTabs(props: OpenbotThreadTabsProps) {
               <>
                 <ChatIcon size={14} />
                 <span className="agent-threads-switcher-title">
-                  {active?.title ?? (props.taskChats ? "Choose task chat" : "Threads")}
+                  {active?.title ?? (props.taskChats ? gt("Choose task chat") : gt("Threads"))}
                 </span>
                 <ChevronDown size={12} />
               </>
@@ -569,7 +571,8 @@ export function OpenbotThreadTabs(props: OpenbotThreadTabsProps) {
             <>
               <MenuItem onClick={() => choose(null)}>
                 <MessageSquareIcon size={14} />
-                Main chat{!selectedId && <Check size={12} />}
+                <T>Main chat</T>
+                {!selectedId && <Check size={12} />}
               </MenuItem>
               <MenuSeparator />
             </>
@@ -588,8 +591,12 @@ export function OpenbotThreadTabs(props: OpenbotThreadTabsProps) {
               }}
               disabled={task.state === "closed" && !props.onRestore}
             >
-              {task.title || "New task"}
-              {task.state === "closed" && <span>Archived</span>}
+              {task.title || gt("New task")}
+              {task.state === "closed" && (
+                <span>
+                  <T>Archived</T>
+                </span>
+              )}
               {task.id === selectedId && <Check size={12} />}
             </MenuItem>
           ))}

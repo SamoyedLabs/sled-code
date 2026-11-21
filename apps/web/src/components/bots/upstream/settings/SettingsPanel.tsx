@@ -6,13 +6,14 @@ import { cn } from "../../../../lib/utils";
 import { observeResize } from "../../../../lib/observeResize";
 import { SourceButton } from "./SettingsParts";
 import "./settings-panel.css";
+import { useGT } from "gt-react";
 
 export function SettingsPanelHeader({
   title,
   onBack,
-  backLabel = "Back",
+  backLabel: rawBackLabel,
   onClose,
-  closeLabel = "Close settings",
+  closeLabel: rawCloseLabel,
   paneRoot = false,
 }: {
   title: ReactNode;
@@ -22,6 +23,9 @@ export function SettingsPanelHeader({
   closeLabel?: string;
   paneRoot?: boolean;
 }) {
+  const gt = useGT();
+  const backLabel = rawBackLabel ?? gt("Back");
+  const closeLabel = rawCloseLabel ?? gt("Close settings");
   return (
     <header
       data-pane-root={paneRoot || undefined}

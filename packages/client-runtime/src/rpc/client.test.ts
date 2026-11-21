@@ -103,8 +103,12 @@ describe("environment RPC", () => {
       yield* SubscriptionRef.set(activeSession, Option.some(session(client)));
       yield* Effect.gen(function* () {
         expect(yield* requestGuarded(WS_METHODS.openbotStatus, {})).toEqual({ state: "stopped" });
-        expect(yield* requestGuarded(WS_METHODS.openbotContinuityStatus, {})).toEqual({ enabled: false });
-        expect(yield* requestGuarded(WS_METHODS.openbotMaintenanceStatus, {})).toEqual({ proposals: [] });
+        expect(yield* requestGuarded(WS_METHODS.openbotContinuityStatus, {})).toEqual({
+          enabled: false,
+        });
+        expect(yield* requestGuarded(WS_METHODS.openbotMaintenanceStatus, {})).toEqual({
+          proposals: [],
+        });
         expect((yield* Effect.flip(requestGuarded(WS_METHODS.openbotStart, {}))).message).toContain(
           "settings:write",
         );

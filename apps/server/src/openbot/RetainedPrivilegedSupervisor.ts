@@ -36,7 +36,11 @@ export class RetainedPrivilegedSupervisor {
       options.validateQueue,
     );
     this.#channel = this.#authority.bindChild(options.child, options.environmentId, options.hostId);
-    const transport = attachSupervisedPrivilegedCommitTransport(options.child, this.#channel, {environmentId:options.environmentId,hostId:options.hostId,allowed:options.activationAllowed ?? (() => false)});
+    const transport = attachSupervisedPrivilegedCommitTransport(options.child, this.#channel, {
+      environmentId: options.environmentId,
+      hostId: options.hostId,
+      allowed: options.activationAllowed ?? (() => false),
+    });
     const reconciled = this.#channel.exited.then(() =>
       options.onExited?.(this.#channel.incarnation),
     );

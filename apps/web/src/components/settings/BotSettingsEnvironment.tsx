@@ -10,6 +10,7 @@ import { BotConfiguration } from "./BotConfiguration";
 import { BotProviderSettings } from "./BotProviderSettings";
 import { BotCodingPolicy } from "./BotCodingPolicy";
 import { Button } from "../ui/button";
+import { T, Var } from "gt-react";
 
 export function BotSettingsEnvironment({
   environmentId,
@@ -45,10 +46,12 @@ export function BotSettingsEnvironment({
     return (
       <div role="alert" className="space-y-3 rounded-xl bg-muted/30 p-6">
         <p className="text-sm text-destructive">
-          Settings could not be loaded from this host. {compatibility.error}
+          <T>
+            Settings could not be loaded from this host. <Var>{compatibility.error}</Var>
+          </T>
         </p>
         <Button size="sm" variant="outline" onClick={compatibility.refresh}>
-          Try again
+          <T>Try again</T>
         </Button>
       </div>
     );
@@ -59,7 +62,9 @@ export function BotSettingsEnvironment({
         <div className="h-16 rounded-xl bg-muted/50" />
         <div className="h-16 rounded-xl bg-muted/50" />
         <p className="text-sm text-muted-foreground">
-          Loading {agentId ? "bot" : "host"} settings…
+          <T>
+            Loading <Var>{agentId ? "bot" : "host"}</Var> settings…
+          </T>
         </p>
       </div>
     );

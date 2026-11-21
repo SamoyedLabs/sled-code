@@ -15,6 +15,7 @@ import { confirmed } from "../../../settings/BotConnectionControls";
 import { namedClipboardTarget, useCopyToClipboard } from "../../../../hooks/useCopyToClipboard";
 import { Link } from "@tanstack/react-router";
 import { useAgentSettingsValue } from "../settings/agent-settings-api";
+import { T, useGT } from "gt-react";
 type Routine = (typeof OpenbotRoutineFlowCanvas.Type)["routines"][number]["routine"];
 const obj = (v: unknown): Record<string, unknown> | null =>
   v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
@@ -29,6 +30,7 @@ export function DiagramWebhookConfig({
   routine: Routine;
   onRefresh: () => void;
 }) {
+  const gt = useGT();
   const api = useSourceSettingsAdmin(environmentId, hostId),
     owner = { kind: "agent" as const, id: routine.agentId };
   const [eventType, setEventType] = useState(
@@ -93,44 +95,48 @@ export function DiagramWebhookConfig({
     });
     if (settled._tag === "Failure") {
       const e = squashAtomCommandFailure(settled);
-      setError(e instanceof Error ? e.message : "The webhook change failed.");
+      setError(e instanceof Error ? e.message : gt("The webhook change failed."));
     }
     setBusy(false);
   };
   return (
     <section className="diagram-inspector-section">
-      <h3 className="diagram-inspector-section-title">Webhook</h3>
+      <h3 className="diagram-inspector-section-title">
+        <T>Webhook</T>
+      </h3>
       <p className="diagram-inspector-muted">
         {endpoint.busy && !endpoint.value
-          ? "Checking connection…"
+          ? gt("Checking connection…")
           : usesSledConnect
             ? url
-              ? "Public webhook URL provided by Sled Connect."
-              : "Connect this hosting computer to Sled Connect to receive external webhooks."
-            : "Update this bot host to enable Sled Connect webhooks."}
+              ? gt("Public webhook URL provided by Sled Connect.")
+              : gt("Connect this hosting computer to Sled Connect to receive external webhooks.")
+            : gt("Update this bot host to enable Sled Connect webhooks.")}
       </p>
       {!url && (
         <p className="diagram-inspector-muted">
-          Scheduled routines and manual tests remain available.
+          <T>Scheduled routines and manual tests remain available.</T>
         </p>
       )}
       {usesSledConnect && !url && (
-        <Link to="/settings/connections">Open Sled Connect settings</Link>
+        <Link to="/settings/connections">
+          <T>Open Sled Connect settings</T>
+        </Link>
       )}
       <SourceButton
         variant="ghost"
         disabled={busy || endpoint.busy}
-        aria-label="Check webhook connection"
+        aria-label={gt("Check webhook connection")}
         onClick={() => void endpoint.refresh()}
       >
-        Check connection
+        <T>Check connection</T>
       </SourceButton>
       {url && (
         <div className="routine-connection-row">
           <code className="diagram-webhook-url">{url}</code>
           <SourceButton
             variant="ghost"
-            aria-label="Copy webhook URL"
+            aria-label={gt("Copy webhook URL")}
             onClick={() => copyToClipboard(url, undefined)}
           >
             <Copy />
@@ -138,11 +144,11 @@ export function DiagramWebhookConfig({
         </div>
       )}
       <label className="diagram-inspector-section">
-        Event type
+        <T>Event type</T>
         <input
           className="ui-input"
           value={eventType}
-          placeholder="Any event"
+          placeholder={gt("Any event")}
           disabled={busy}
           onChange={(e) => setEventType(e.target.value)}
         />
@@ -150,7 +156,7 @@ export function DiagramWebhookConfig({
       {filters.map((filter, index) => (
         <div className="diagram-inspector-section" key={index}>
           <label>
-            JSON pointer
+            <T>JSON pointer</T>
             <input
               className="ui-input"
               value={filter.pointer}
@@ -163,7 +169,7 @@ export function DiagramWebhookConfig({
             />
           </label>
           <label>
-            Value
+            <T>Value</T>
             <input
               className="ui-input"
               value={filter.value}
@@ -178,7 +184,7 @@ export function DiagramWebhookConfig({
           <SourceButton
             variant="ghost"
             disabled={busy}
-            aria-label="Remove filter"
+            aria-label={gt("Remove filter")}
             onClick={() => setFilters((old) => old.filter((_, i) => i !== index))}
           >
             <X />
@@ -191,7 +197,7 @@ export function DiagramWebhookConfig({
         onClick={() => setFilters((old) => [...old, { pointer: "", value: "" }])}
       >
         <Plus />
-        Add filter
+        <T>Add filter</T>
       </SourceButton>
       {changed && (
         <SourceButton
@@ -202,7 +208,7 @@ export function DiagramWebhookConfig({
           }
           onClick={() => void run(() => api.execute({ operation: "events.save", ...input }))}
         >
-          Save webhook
+          <T>Save webhook</T>
         </SourceButton>
       )}
       <SourceButton
@@ -225,20 +231,22 @@ export function DiagramWebhookConfig({
           })
         }
       >
-        Regenerate secret
+        <T>Regenerate secret</T>
       </SourceButton>
       {secret && (
         <div>
-          <p>Copy this secret now. The host will not return it again.</p>
+          <p>
+            <T>Copy this secret now. The host will not return it again.</T>
+          </p>
           <code>{secret}</code>
           <SourceButton
-            aria-label="Copy webhook secret"
+            aria-label={gt("Copy webhook secret")}
             onClick={() => copyToClipboard(secret, undefined)}
           >
-            Copy secret
+            <T>Copy secret</T>
           </SourceButton>
           <SourceButton variant="ghost" onClick={() => setSecret(null)}>
-            Dismiss secret
+            <T>Dismiss secret</T>
           </SourceButton>
         </div>
       )}

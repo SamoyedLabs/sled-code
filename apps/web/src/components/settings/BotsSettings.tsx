@@ -21,11 +21,13 @@ import { SourceAgentSettings } from "../bots/SourceAgentSettings";
 import { SourceHostAccount } from "../bots/SourceHostAccount";
 import { SourceProviderHost } from "../bots/SourceProviderEnvironment";
 import "../bots/upstream/openbot-react.css";
+import { T, Var, useGT } from "gt-react";
 const SourceHostSettings = lazy(() =>
   import("../bots/SourceHostEnvironment").then((m) => ({ default: m.SourceHostSettings })),
 );
 
 export function BotsSettings() {
+  const gt = useGT();
   const navigate = useNavigate();
   const { environment, connectedEnvironments } = useSettingsScope();
   const hash = useLocation({ select: (location) => location.hash });
@@ -46,7 +48,7 @@ export function BotsSettings() {
             }}
             items={BOT_HOST_SETTINGS.map((item) => ({ value: item.id, label: item.navLabel }))}
           >
-            <SelectTrigger aria-label="Bot settings section">
+            <SelectTrigger aria-label={gt("Bot settings section")}>
               <SelectValue />
             </SelectTrigger>
             <SelectPopup>
@@ -60,7 +62,9 @@ export function BotsSettings() {
         </div>
         {connectedEnvironments.length > 1 && !environment && (
           <div className="max-w-sm space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Computer</p>
+            <p className="text-xs font-medium text-muted-foreground">
+              <T>Computer</T>
+            </p>
             <Select
               value={target?.environmentId ?? ""}
               onValueChange={setChosen}
@@ -69,7 +73,7 @@ export function BotsSettings() {
                 label: item.label,
               }))}
             >
-              <SelectTrigger aria-label="Bot settings computer">
+              <SelectTrigger aria-label={gt("Bot settings computer")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectPopup>
@@ -95,12 +99,14 @@ export function BotsSettings() {
         ) : (
           <div className="flex flex-col items-start gap-3 rounded-xl border border-border/60 p-6">
             <ServerIcon aria-hidden className="size-6 text-muted-foreground" />
-            <h2 className="text-balance text-lg font-medium">Connect a computer</h2>
+            <h2 className="text-balance text-lg font-medium">
+              <T>Connect a computer</T>
+            </h2>
             <p className="text-pretty text-sm text-muted-foreground">
-              Choose a connected computer to manage its bot hosting and settings.
+              <T>Choose a connected computer to manage its bot hosting and settings.</T>
             </p>
             <Button variant="outline" render={<Link to="/settings/connections" />}>
-              Open connections
+              <T>Open connections</T>
             </Button>
           </div>
         )}
@@ -119,6 +125,7 @@ function BotHostPreferences({
   section: ReturnType<typeof botHostSettingsSection>;
   requestedAgent?: string | undefined;
 }) {
+  const gt = useGT();
   const host = useEnvironmentQuery(openbot.status({ environmentId, input: {} }));
   const canStart = useAtomValue(openbot.start.permissionAtom(environmentId));
   const canStop = useAtomValue(openbot.stop.permissionAtom(environmentId));
@@ -137,7 +144,7 @@ function BotHostPreferences({
       host.refresh();
     });
     if (settled._tag === "Failure") {
-      setError("Could not change bot hosting. Refresh and try again.");
+      setError(gt("Could not change bot hosting. Refresh and try again."));
     }
     setBusy(false);
   };
@@ -154,17 +161,21 @@ function BotHostPreferences({
         <SettingsGroup>
           <section className="flex flex-wrap items-center justify-between gap-4 p-4">
             <div className="min-w-0 flex-1 basis-60 space-y-1.5">
-              <h3 className="text-sm font-medium">Run bots on this computer</h3>
+              <h3 className="text-sm font-medium">
+                <T>Run bots on this computer</T>
+              </h3>
               <p className="max-w-xl text-pretty text-xs leading-relaxed text-muted-foreground">
-                Run bots locally, or leave hosting off and connect to another computer. Coding and
-                remote desktop settings are independent.
+                <T>
+                  Run bots locally, or leave hosting off and connect to another computer. Coding and
+                  remote desktop settings are independent.
+                </T>
               </p>
               <p role="status" className="text-xs text-muted-foreground">
                 {host.isPending
-                  ? "Checking hosting…"
+                  ? gt("Checking hosting…")
                   : running
-                    ? "Hosting is running"
-                    : `Hosting: ${host.data?.state ?? "unavailable"}`}
+                    ? gt("Hosting is running")
+                    : gt("Hosting: {value}", { value: host.data?.state ?? "unavailable" })}
               </p>
             </div>
             <Button
@@ -173,7 +184,7 @@ function BotHostPreferences({
               disabled={busy || host.isPending || (running ? !canStop : !canStart)}
               onClick={() => void change()}
             >
-              {busy ? "Updating…" : running ? "Stop hosting" : "Start hosting"}
+              {busy ? gt("Updating…") : running ? gt("Stop hosting") : gt("Start hosting")}
             </Button>
           </section>
         </SettingsGroup>
@@ -188,7 +199,7 @@ function BotHostPreferences({
           </p>
           <Button variant="outline" size="sm" onClick={host.refresh}>
             <RefreshCwIcon aria-hidden className="size-3.5" />
-            Try again
+            <T>Try again</T>
           </Button>
         </div>
       )}
@@ -226,12 +237,16 @@ function BotHostPreferences({
         !host.error && (
           <div className="flex flex-col items-start gap-3 rounded-xl border border-border/60 p-6">
             <ServerIcon aria-hidden className="size-6 text-muted-foreground" />
-            <h3 className="text-balance text-base font-medium">Bot hosting is off</h3>
+            <h3 className="text-balance text-base font-medium">
+              <T>Bot hosting is off</T>
+            </h3>
             <p className="text-pretty text-sm text-muted-foreground">
-              Start hosting on {label} to manage these settings.
+              <T>
+                Start hosting on <Var>{label}</Var> to manage these settings.
+              </T>
             </p>
             <Button variant="outline" disabled={busy || !canStart} onClick={() => void change()}>
-              {busy ? "Starting…" : "Start hosting"}
+              {busy ? gt("Starting…") : gt("Start hosting")}
             </Button>
           </div>
         )
@@ -249,6 +264,7 @@ function UnifiedBotPreferences({
   hostId: string;
   requestedAgent?: string | undefined;
 }) {
+  const gt = useGT();
   const agents = useEnvironmentQuery(openbot.agents({ environmentId, input: {} }));
   const [chosen, setChosen] = useState<string | null>(null);
   const targetId = chosen ?? requestedAgent;
@@ -264,9 +280,11 @@ function UnifiedBotPreferences({
         <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-border/60 bg-card/40 p-4">
           {selected && <SourceAgentAvatar agent={selected} size={36} />}
           <div className="min-w-0 flex-1 basis-40 space-y-1">
-            <p className="text-sm font-medium">Bot profile</p>
+            <p className="text-sm font-medium">
+              <T>Bot profile</T>
+            </p>
             <p className="text-pretty text-xs text-muted-foreground">
-              Choose a bot. Profile edits save automatically.
+              <T>Choose a bot. Profile edits save automatically.</T>
             </p>
           </div>
           <div className="w-60 max-w-full">
@@ -276,8 +294,8 @@ function UnifiedBotPreferences({
               disabled={!agents.data?.length}
               items={agents.data?.map((agent) => ({ value: agent.id, label: agent.name })) ?? []}
             >
-              <SelectTrigger aria-label="Bot preferences target">
-                <SelectValue placeholder="Choose a bot" />
+              <SelectTrigger aria-label={gt("Bot preferences target")}>
+                <SelectValue placeholder={gt("Choose a bot")} />
               </SelectTrigger>
               <SelectPopup>
                 {agents.data?.map((agent) => (
@@ -294,7 +312,7 @@ function UnifiedBotPreferences({
         <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-destructive">
           <p className="min-w-0 flex-1">{agents.error}</p>
           <Button size="sm" variant="outline" onClick={agents.refresh}>
-            Try again
+            <T>Try again</T>
           </Button>
         </div>
       )}
@@ -325,7 +343,7 @@ function UnifiedBotPreferences({
         !agents.error && (
           <div className="flex items-center gap-3 rounded-xl border border-border/60 p-5 text-sm text-muted-foreground">
             <BotIcon aria-hidden className="size-5" />
-            No bots on this computer yet. Create one from the Bots workspace.
+            <T>No bots on this computer yet. Create one from the Bots workspace.</T>
           </div>
         )
       )}
@@ -334,9 +352,12 @@ function UnifiedBotPreferences({
 }
 
 function BotSettingsLoading() {
+  const gt = useGT();
   return (
-    <div role="status" aria-label="Loading bot settings" className="space-y-4">
-      <span className="sr-only">Loading bot settings…</span>
+    <div role="status" aria-label={gt("Loading bot settings")} className="space-y-4">
+      <span className="sr-only">
+        <T>Loading bot settings…</T>
+      </span>
       <Skeleton className="h-5 w-40" />
       <div className="space-y-3 rounded-xl border border-border/60 p-4">
         <Skeleton className="h-4 w-2/3" />

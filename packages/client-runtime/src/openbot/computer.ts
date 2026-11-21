@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import * as Result from "effect/Result";
 import { OpenbotComputerCapabilities, OpenbotComputerSetup } from "@t3tools/contracts";
+import { mFallback, msg } from "gt-i18n";
 const decodeCapabilities = Schema.decodeUnknownResult(OpenbotComputerCapabilities);
 const decodeSetup = Schema.decodeUnknownResult(OpenbotComputerSetup);
 export function computerCapabilities(value: unknown) {
@@ -22,14 +23,17 @@ export function computerReadiness(
   capabilities: OpenbotComputerCapabilities | null,
   setup: OpenbotComputerSetup | null,
 ) {
-  if (!capabilities) return "Check host capabilities first.";
-  if (!capabilities.ready) return "Remote desktop runtime is unavailable on this host.";
-  if (!setup) return "Check host setup before connecting.";
-  if (setup.restartRequired) return "Restart the host application after granting OS permissions.";
+  if (!capabilities) return mFallback(msg("Check host capabilities first."));
+  if (!capabilities.ready)
+    return mFallback(msg("Remote desktop runtime is unavailable on this host."));
+  if (!setup) return mFallback(msg("Check host setup before connecting."));
+  if (setup.restartRequired)
+    return mFallback(msg("Restart the host application after granting OS permissions."));
   const blocked = computerChecks.filter(([key]) => setup[key] !== "allowed");
   if (blocked.length) return blocked.map(([key, label]) => `${label}: ${setup[key]}`).join(". ");
-  if (!capabilities.displays.length) return "No displays are available on this host.";
+  if (!capabilities.displays.length)
+    return mFallback(msg("No displays are available on this host."));
   if (capabilities.activeSessions >= capabilities.maxSessions)
-    return "The host has reached its remote desktop session limit.";
-  return "Host checks passed. Start the computer viewer to connect.";
+    return mFallback(msg("The host has reached its remote desktop session limit."));
+  return mFallback(msg("Host checks passed. Start the computer viewer to connect."));
 }

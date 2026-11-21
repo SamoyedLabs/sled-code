@@ -29,6 +29,7 @@ import {
   retainedCreateAttempt,
   retainCreateAttempt,
 } from "./upstream/create-agent/create-attempt";
+import { useGT } from "gt-react";
 const decodeCreate = Schema.decodeUnknownSync(OpenbotAdminRequest),
   decodeCreated = Schema.decodeUnknownSync(
     Schema.Struct({ id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)) }),
@@ -52,6 +53,7 @@ export function SourceCreateAgent(props: SourceCreateAgentProps) {
   return <CreateHost key={`${props.environmentId}:${props.hostId}:${session.epoch}`} {...props} />;
 }
 function CreateHost(props: SourceCreateAgentProps) {
+  const gt = useGT();
   const data = useSourceProviderData(),
     registry = useContext(RegistryContext),
     admin = useAtomCommand(openbot.adminToHost, { reportFailure: false }),
@@ -99,7 +101,7 @@ function CreateHost(props: SourceCreateAgentProps) {
     input: {
       name: "permission check",
       description: "",
-      initialMessage: "permission check",
+      initialMessage: gt("permission check"),
       avatarSeed: "first-bot",
       avatarHue: null,
     },
@@ -128,7 +130,7 @@ function CreateHost(props: SourceCreateAgentProps) {
       return;
     setError(null);
     if (!connection || readPreparedConnection(props.environmentId) !== connection) {
-      setError("Reconnect the original host session before creating an agent.");
+      setError(gt("Reconnect the original host session before creating an agent."));
       return;
     }
     let request: OpenbotAdminRequest;
@@ -141,7 +143,7 @@ function CreateHost(props: SourceCreateAgentProps) {
         input: creationInput(draft, supportsModel && Boolean(selected)),
       });
     } catch {
-      setError("Check the agent name, instructions, and model before creating.");
+      setError(gt("Check the agent name, instructions, and model before creating."));
       return;
     }
     if (
@@ -149,7 +151,7 @@ function CreateHost(props: SourceCreateAgentProps) {
         openbot.adminToHost.permissionAtom(props.environmentId, { hostId: props.hostId, request }),
       )
     ) {
-      setError("You do not have permission to create an agent.");
+      setError(gt("You do not have permission to create an agent."));
       return;
     }
     lock.current = true;
@@ -172,7 +174,10 @@ function CreateHost(props: SourceCreateAgentProps) {
       const cause = squashAtomCommandFailure(settled);
       setBlocked(true);
       setError(
-        `The creation could not be confirmed. Check the host’s agents before creating another. ${cause instanceof Error ? cause.message : ""}`,
+        gt(
+          "The creation could not be confirmed. Check the host’s agents before creating another. {value}",
+          { value: cause instanceof Error ? cause.message : "" },
+        ),
       );
     }
     lock.current = false;
@@ -188,7 +193,9 @@ function CreateHost(props: SourceCreateAgentProps) {
         });
         if (settled._tag === "Failure") {
           const cause = squashAtomCommandFailure(settled);
-          setError(cause instanceof Error ? cause.message : "Could not open the created agent.");
+          setError(
+            cause instanceof Error ? cause.message : gt("Could not open the created agent."),
+          );
         }
         if (alive.current) setBusy(false);
       }
@@ -200,7 +207,9 @@ function CreateHost(props: SourceCreateAgentProps) {
     blocked,
     error:
       previous?.agentId && blocked
-        ? "The agent was created, but the workspace could not open it. Open the created agent to continue."
+        ? gt(
+            "The agent was created, but the workspace could not open it. Open the created agent to continue.",
+          )
         : (error ?? data?.error ?? null),
     canCreate: allowed,
     modelSupported: supportsModel,
@@ -211,7 +220,11 @@ function CreateHost(props: SourceCreateAgentProps) {
     onCancel: props.onCancel,
     onManageProviders: props.onManageProviders,
   };
-  return props.render ? <CreateFormSlot render={props.render} form={form} /> : <FirstAgentSetup {...form} />;
+  return props.render ? (
+    <CreateFormSlot render={props.render} form={form} />
+  ) : (
+    <FirstAgentSetup {...form} />
+  );
 }
 
 function CreateFormSlot({

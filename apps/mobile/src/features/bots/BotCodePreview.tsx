@@ -12,6 +12,7 @@ import { BotIconButton, useBotPalette } from "./upstream/BotChrome";
 import { OpenBotText as Text } from "./upstream/OpenBotTypography";
 import HtmlPreview from "./upstream/openbot-mobile/chat-preview/HtmlPreview";
 import { useMermaidDiagram } from "./upstream/openbot-mobile/chat-preview/mermaid-diagrams";
+import { useGT } from "gt-react-native";
 
 export function BotCodePreview({
   preview,
@@ -20,6 +21,7 @@ export function BotCodePreview({
   preview: BotPreview;
   streaming: boolean;
 }) {
+  const gt = useGT();
   const p = useBotPalette();
   const { width } = useWindowDimensions();
   const [open, setOpen] = useState(false);
@@ -36,7 +38,7 @@ export function BotCodePreview({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={title}
-        accessibilityHint="Opens the preview"
+        accessibilityHint={gt("Opens the preview")}
         disabled={streaming}
         onPress={() => setOpen(true)}
         style={({ pressed }) => ({
@@ -78,7 +80,7 @@ export function BotCodePreview({
             numberOfLines={4}
             style={{ padding: 12, color: p.muted, fontFamily: "Menlo", fontSize: 12 }}
           >
-            {excerpt || "Preparing preview…"}
+            {excerpt || gt("Preparing preview…")}
           </Text>
         )}
       </Pressable>
@@ -96,6 +98,7 @@ function CodePreviewModal({
   title: string;
   onClose: () => void;
 }) {
+  const gt = useGT();
   const p = useBotPalette();
   const { width } = useWindowDimensions();
   const [mode, setMode] = useState<"preview" | "code">("preview");
@@ -106,7 +109,7 @@ function CodePreviewModal({
       <SafeAreaProvider>
         <SafeAreaView style={{ flex: 1, backgroundColor: p.canvas }}>
           <View className="min-h-12 flex-row items-center gap-2 px-3">
-            <BotIconButton label="Close preview" icon="xmark" onPress={onClose} />
+            <BotIconButton label={gt("Close preview")} icon="xmark" onPress={onClose} />
             <Text
               accessibilityRole="header"
               numberOfLines={1}
@@ -115,7 +118,7 @@ function CodePreviewModal({
               {title}
             </Text>
             <BotIconButton
-              label={copied ? "Code copied" : "Copy code"}
+              label={copied ? gt("Code copied") : gt("Copy code")}
               icon={copied ? "checkmark" : "doc.on.doc"}
               onPress={() =>
                 void setStringAsync(preview.body).then(
@@ -129,8 +132,8 @@ function CodePreviewModal({
             <SegmentedControl
               selected={mode}
               options={[
-                { label: "Preview", value: "preview" },
-                { label: "Code", value: "code" },
+                { label: gt("Preview"), value: "preview" },
+                { label: gt("Code"), value: "code" },
               ]}
               onSelect={setMode}
             />
@@ -160,7 +163,7 @@ function CodePreviewModal({
               <Image
                 source={{ uri: diagram.pngUrl ?? diagram.svgUrl }}
                 contentFit="contain"
-                accessibilityLabel="Rendered Mermaid diagram"
+                accessibilityLabel={gt("Rendered Mermaid diagram")}
                 style={{
                   width: width - 24,
                   aspectRatio: diagram.width / diagram.height || 1,
@@ -171,8 +174,8 @@ function CodePreviewModal({
           ) : (
             <Text accessibilityRole="alert" style={{ color: p.muted, padding: 16 }}>
               {diagram?.status === "failed"
-                ? "This diagram could not be drawn."
-                : "Drawing diagram…"}
+                ? gt("This diagram could not be drawn.")
+                : gt("Drawing diagram…")}
             </Text>
           )}
         </SafeAreaView>

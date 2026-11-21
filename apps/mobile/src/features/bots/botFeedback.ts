@@ -76,8 +76,7 @@ export const botReplyTick = (word: string, index: number) => {
   if (!snapshot().replyHaptics) return;
   const feedback = replyWordFeedback(word, index);
   if (feedback === "light") void impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  else if (feedback === "soft")
-    void impactAsync(Haptics.ImpactFeedbackStyle.Soft);
+  else if (feedback === "soft") void impactAsync(Haptics.ImpactFeedbackStyle.Soft);
   else void selectionAsync();
 };
 export { ImpactFeedbackStyle } from "expo-haptics";

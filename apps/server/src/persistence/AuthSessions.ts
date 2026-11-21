@@ -111,7 +111,9 @@ export type SetAuthSessionLastConnectedAtInput = typeof SetAuthSessionLastConnec
 export class AuthSessionRepository extends Context.Service<
   AuthSessionRepository,
   {
-    readonly awaitPrivilegedDrain: (input: GetAuthSessionByIdInput) => Effect.Effect<void, AuthSessionRepositoryError>;
+    readonly awaitPrivilegedDrain: (
+      input: GetAuthSessionByIdInput,
+    ) => Effect.Effect<void, AuthSessionRepositoryError>;
     readonly create: (
       input: CreateAuthSessionInput,
     ) => Effect.Effect<void, AuthSessionRepositoryError>;
@@ -576,9 +578,8 @@ export const make = Effect.gen(function* () {
     function* (input: GetAuthSessionByIdInput) {
       yield* sql`INSERT OR IGNORE INTO privileged_commit_closed(principal) VALUES (${input.sessionId})`;
       while (
-        (
-          yield* sql`SELECT permit FROM privileged_commit_grants WHERE principal=${input.sessionId} AND state='outstanding' LIMIT 1`
-        ).length
+        (yield* sql`SELECT permit FROM privileged_commit_grants WHERE principal=${input.sessionId} AND state='outstanding' LIMIT 1`)
+          .length
       ) {
         yield* Effect.sleep("25 millis");
       }

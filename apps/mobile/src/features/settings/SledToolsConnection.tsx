@@ -9,7 +9,9 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { View } from "react-native";
 import { AppText as Text } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
+import { T, Var, useGT } from "gt-react-native";
 export function SledToolsConnection({ environmentId }: { environmentId: EnvironmentId }) {
+  const gt = useGT();
   const query = useEnvironmentQuery(openbot.sledTools({ environmentId, input: {} }));
   const allowed = useAtomValue(openbot.connectSledTools.permissionAtom(environmentId));
   const connect = useAtomCommand(openbot.connectSledTools, { reportFailure: false });
@@ -31,39 +33,51 @@ export function SledToolsConnection({ environmentId }: { environmentId: Environm
   const status = query.data;
   return (
     <View className="gap-3 rounded-xl bg-grouped-card p-3">
-      <Text>Connect bots to Sled</Text>
+      <Text>
+        <T>Connect bots to Sled</T>
+      </Text>
       <Text className="text-foreground-muted">
-        Let this bot engine inspect Sled projects and delegate coding work. Choose its maximum
-        authority; each bot keeps its own permissions.
+        <T>
+          Let this bot engine inspect Sled projects and delegate coding work. Choose its maximum
+          authority; each bot keeps its own permissions.
+        </T>
       </Text>
       <Text>
         {query.isPending
-          ? "Checking connection…"
+          ? gt("Checking connection…")
           : status?.state === "connected"
-            ? "Connected"
+            ? gt("Connected")
             : status?.state === "expired"
-              ? "Access expired. Reconnect to renew it."
+              ? gt("Access expired. Reconnect to renew it.")
               : status?.state === "host-unavailable"
-                ? "Start the bot engine to connect."
+                ? gt("Start the bot engine to connect.")
                 : status?.state === "revocation-pending"
-                  ? "Access revocation is pending. Retry disconnect to complete it."
+                  ? gt("Access revocation is pending. Retry disconnect to complete it.")
                   : status?.state === "cleanup-pending"
-                    ? "Upstream configuration cleanup is pending."
-                    : "Not connected"}
+                    ? gt("Upstream configuration cleanup is pending.")
+                    : gt("Not connected")}
       </Text>
       {status?.access && (
         <Text>
-          Current ceiling:{" "}
-          {sledToolAccessOptions.find((item) => item.value === status.access)?.label ??
-            status.access}
+          <T>
+            Current ceiling:<Var> </Var>
+            <Var>
+              {sledToolAccessOptions.find((item) => item.value === status.access)?.label ??
+                status.access}
+            </Var>
+          </T>
         </Text>
       )}
       {status?.expiresAt && (
         <Text className="text-foreground-muted">
-          Expires: {new Date(status.expiresAt).toLocaleString()}
+          <T>
+            Expires: <Var>{new Date(status.expiresAt).toLocaleString()}</Var>
+          </T>
         </Text>
       )}
-      <Text>Authority to grant</Text>
+      <Text>
+        <T>Authority to grant</T>
+      </Text>
       <View className="flex-row flex-wrap gap-2">
         {sledToolAccessOptions.map((item) => (
           <Button
@@ -83,20 +97,20 @@ export function SledToolsConnection({ environmentId }: { environmentId: Environm
         </Text>
       )}
       <Button
-        label={status?.state === "connected" ? "Update connection" : "Connect Sled tools"}
+        label={status?.state === "connected" ? gt("Update connection") : gt("Connect Sled tools")}
         loading={busy}
         disabled={!allowed || status?.state === "host-unavailable" || query.isPending}
         onPress={() => void act(false)}
       />
       {status?.state !== "disconnected" && (
         <Button
-          label="Disconnect"
+          label={gt("Disconnect")}
           disabled={busy || !allowed || !status}
           onPress={() => void act(true)}
         />
       )}
       <Button
-        label="Refresh connection"
+        label={gt("Refresh connection")}
         size="compact"
         tone="text"
         onPress={query.refresh}

@@ -13,6 +13,7 @@ import {
   resolveRoutineAssistant,
   type AssistantAttempt,
 } from "./routineAssistant";
+import { useGT } from "gt-react";
 export interface CanvasChatMessage {
   id: string;
   author: "user" | "agent";
@@ -20,6 +21,7 @@ export interface CanvasChatMessage {
   message?: OpenbotConversationMessage;
 }
 export function useRoutineAssistant(environmentId: EnvironmentId, hostId: string, agentId: string) {
+  const gt = useGT();
   const [messages, setMessages] = useState<CanvasChatMessage[]>([]),
     [pending, setPending] = useState<AssistantAttempt | null>(null),
     [sending, setSending] = useState(false),
@@ -111,7 +113,7 @@ export function useRoutineAssistant(environmentId: EnvironmentId, hostId: string
     const body = text.trim();
     if (!body || lock.current || uncertain || !allowed) return;
     if (!current()) {
-      setError("Reconnect the original host session before sending.");
+      setError(gt("Reconnect the original host session before sending."));
       return;
     }
     lock.current = true;
@@ -136,7 +138,10 @@ export function useRoutineAssistant(environmentId: EnvironmentId, hostId: string
       const cause = squashAtomCommandFailure(settled);
       setUncertain(true);
       setError(
-        `The request outcome could not be confirmed. Open the agent conversation before sending again. ${cause instanceof Error ? cause.message : ""}`,
+        gt(
+          "The request outcome could not be confirmed. Open the agent conversation before sending again. {value}",
+          { value: cause instanceof Error ? cause.message : "" },
+        ),
       );
     }
     if (alive.current) setSending(false);

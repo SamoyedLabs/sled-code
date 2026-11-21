@@ -16,6 +16,7 @@ import type { useBotWorkflows } from "../../../settings/useBotWorkflows";
 import { decoded, GithubOptions, type WorkflowCatalogs } from "./useWorkflowCatalogs";
 import type { CanvasNode, Graph } from "./workflowCanvasModel";
 import { WorkflowSchedulePicker } from "./WorkflowSchedulePicker";
+import { T, useGT } from "gt-react";
 const GithubHistory = Schema.Struct({
   deliveries: Schema.Array(
     Schema.Struct({
@@ -43,6 +44,7 @@ export function WorkflowChoice({
   disabled: boolean;
   onChange: (value: string) => void;
 }) {
+  const gt = useGT();
   const [search, setSearch] = useState("");
   const selected = choices.find((choice) => choice.value === value);
   return (
@@ -52,16 +54,18 @@ export function WorkflowChoice({
       }}
     >
       <Menu.Trigger className="wfn-row-value wfn-row-choice" disabled={disabled} aria-label={label}>
-        <span>{selected?.label ?? (value || `Choose ${label.toLowerCase()}`)}</span>
+        <span>
+          {selected?.label ?? (value || gt("Choose {value}", { value: label.toLowerCase() }))}
+        </span>
         <ChevronDown size={12} />
       </Menu.Trigger>
       <MenuPopup align="end">
         <div data-wfn-portal="">
           <input
             className="wfn-picker-search"
-            aria-label={`Search ${label}`}
+            aria-label={gt("Search {label}", { label })}
             value={search}
-            placeholder="Search…"
+            placeholder={gt("Search…")}
             onChange={(event) => setSearch(event.target.value)}
           />
           {choices
@@ -77,7 +81,11 @@ export function WorkflowChoice({
                 {choice.value === value && <Check size={12} />}
               </Menu.Item>
             ))}
-          {choices.length === 0 && <p role="status">No choices available.</p>}
+          {choices.length === 0 && (
+            <p role="status">
+              <T>No choices available.</T>
+            </p>
+          )}
         </div>
       </MenuPopup>
     </Menu.Root>
@@ -161,6 +169,7 @@ export function WorkflowFields({
   savedGraph: boolean;
   onRunAccepted: () => void;
 }) {
+  const gt = useGT();
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null);
   const pending = useRef(false),
@@ -317,7 +326,7 @@ export function WorkflowFields({
   );
   const modelPill = (
     <WorkflowChoice
-      label="Model"
+      label={gt("Model")}
       value={JSON.stringify([field("provider"), field("model")])}
       choices={offeredModels.map((item) => ({
         value: JSON.stringify([item.provider, item.id]),
@@ -387,9 +396,9 @@ export function WorkflowFields({
             aria-label={primary}
             placeholder={
               node.kind === "agent"
-                ? "What should this agent do?"
+                ? gt("What should this agent do?")
                 : node.kind === "prompt"
-                  ? "Write a prompt…"
+                  ? gt("Write a prompt…")
                   : primary
             }
             value={field(primary)}
@@ -410,7 +419,7 @@ export function WorkflowFields({
             <div className="wfn-field-foot">
               <BotAvatar seed={field("agentId", node.id)} size={20} />
               <WorkflowChoice
-                label="Agent"
+                label={gt("Agent")}
                 value={field("agentId")}
                 choices={agents.map((agent) => ({ value: agent.id, label: agent.name }))}
                 disabled={disabled}
@@ -426,7 +435,7 @@ export function WorkflowFields({
             <div className="wfn-field-foot">
               {modelPill}
               <WorkflowChoice
-                label="Effort"
+                label={gt("Effort")}
                 value={field("effort")}
                 choices={choices(model?.supportedReasoningEfforts ?? [])}
                 disabled={disabled || !model?.supportedReasoningEfforts.length}
@@ -440,8 +449,8 @@ export function WorkflowFields({
         <div className="wfn-field wfn-field-system">
           <textarea
             className="wfn-input"
-            aria-label="System prompt"
-            placeholder="Optional system prompt…"
+            aria-label={gt("System prompt")}
+            placeholder={gt("Optional system prompt…")}
             value={field("system")}
             disabled={disabled}
             maxLength={20000}
@@ -547,7 +556,7 @@ export function WorkflowFields({
               {label(
                 "Channel",
                 <WorkflowChoice
-                  label="Channel"
+                  label={gt("Channel")}
                   value={JSON.stringify([field("connectionId"), field("placeId")])}
                   choices={catalogs.connections.flatMap((connection) =>
                     connection.places.map((place) => ({
@@ -576,7 +585,9 @@ export function WorkflowFields({
                 "repository",
                 "Repository",
                 [
-                  ...(node.kind === "output" ? [{ value: "trigger", label: "From trigger" }] : []),
+                  ...(node.kind === "output"
+                    ? [{ value: "trigger", label: gt("From trigger") }]
+                    : []),
                   ...(catalogs.github?.repositories.map((item) => ({
                     value: item.fullName,
                     label: item.fullName,
@@ -607,10 +618,12 @@ export function WorkflowFields({
                     disabled={!canRun || busy || !repository}
                     onClick={() => void runGithub()}
                   >
-                    Run last matching event
+                    <T>Run last matching event</T>
                   </button>
                   <div className="wfn-settings-block">
-                    <h4>Recent events</h4>
+                    <h4>
+                      <T>Recent events</T>
+                    </h4>
                     {history.slice(0, 10).map((item) => (
                       <p key={item.id}>
                         {item.event} · {item.outcome}
@@ -618,7 +631,11 @@ export function WorkflowFields({
                         <time>{new Date(item.receivedAt).toLocaleString()}</time>
                       </p>
                     ))}
-                    {!history.length && <p>No matching events yet.</p>}
+                    {!history.length && (
+                      <p>
+                        <T>No matching events yet.</T>
+                      </p>
+                    )}
                   </div>
                 </>
               ) : (
@@ -639,7 +656,9 @@ export function WorkflowFields({
                     pick("reason", "Reason", choices(["completed", "notPlanned"]), "completed")}
                   {!upstream &&
                     (field("repository") === "trigger" || field("item", "event") === "event") && (
-                      <p role="status">Connect a GitHub trigger to use its repository or item.</p>
+                      <p role="status">
+                        <T>Connect a GitHub trigger to use its repository or item.</T>
+                      </p>
                     )}
                 </>
               )}
@@ -652,7 +671,9 @@ export function WorkflowFields({
           )}
           {integrationUnavailable && (
             <>
-              <p role="status">These settings are managed on the host computer.</p>
+              <p role="status">
+                <T>These settings are managed on the host computer.</T>
+              </p>
               {Object.entries(node.fields)
                 .filter(([key]) => !["trigger", "target"].includes(key))
                 .map(([key, value]) => (

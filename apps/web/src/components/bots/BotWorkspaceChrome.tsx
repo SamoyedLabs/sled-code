@@ -29,6 +29,7 @@ import { OpenbotSidebar } from "./upstream/OpenbotSidebar";
 import { OpenbotThreadTabs, type OpenbotThreadTabLayout } from "./upstream/OpenbotThreadTabs";
 import "./upstream/openbot-react.css";
 import "./sled-bots.css";
+import { T, useGT } from "gt-react";
 export type BotWorkspaceSection =
   | "direct"
   | "chats"
@@ -127,6 +128,7 @@ export function BotWorkspaceChrome({
   onForward: () => void;
   children: ReactNode;
 }) {
+  const gt = useGT();
   const [localWidth, setLocalWidth] = useState(288);
   const sharedSize = useContext(WorkspaceSidebarSizeContext);
   const width = sharedSize?.width ?? localWidth;
@@ -179,7 +181,7 @@ export function BotWorkspaceChrome({
         )}
       >
         <aside
-          aria-label="Bot chats"
+          aria-label={gt("Bot chats")}
           className="relative flex min-w-[200px] shrink-0 flex-col border-r bg-sidebar"
           style={{ width }}
         >
@@ -189,11 +191,13 @@ export function BotWorkspaceChrome({
               <button
                 type="button"
                 className="flex h-8 w-full cursor-text items-center gap-2 rounded-md px-2 text-sm text-muted-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                aria-label="Search conversations"
+                aria-label={gt("Search conversations")}
                 onClick={onOpenSearch}
               >
                 <SearchIcon className="size-4 shrink-0" />
-                <span className="flex-1 text-left">Search</span>
+                <span className="flex-1 text-left">
+                  <T>Search</T>
+                </span>
                 <span className="text-2xs text-muted-foreground/60" aria-hidden>
                   ⌘K
                 </span>
@@ -203,7 +207,7 @@ export function BotWorkspaceChrome({
               <Button
                 variant="ghost-muted"
                 size="icon-micro"
-                aria-label="Previous chat"
+                aria-label={gt("Previous chat")}
                 disabled={!canBack}
                 onClick={onBack}
               >
@@ -212,7 +216,7 @@ export function BotWorkspaceChrome({
               <Button
                 variant="ghost-muted"
                 size="icon-micro"
-                aria-label="Next chat"
+                aria-label={gt("Next chat")}
                 disabled={!canForward}
                 onClick={onForward}
               >
@@ -222,14 +226,14 @@ export function BotWorkspaceChrome({
             <Button
               variant="ghost-muted"
               size="icon-sm"
-              aria-label="Create"
+              aria-label={gt("Create")}
               onClick={() => openCommandPalette({ open: "new-bot-chat" })}
             >
               <SquarePenIcon />
             </Button>
           </div>
           <div className="flex shrink-0 items-center justify-between px-4 pb-1.5 text-xs font-medium text-muted-foreground">
-            <span>{section === "flows" ? "Routines" : "Conversations"}</span>
+            <span>{section === "flows" ? gt("Routines") : gt("Conversations")}</span>
             <span className="text-2xs font-normal tabular-nums">
               {agents.length + (section === "flows" ? 0 : channels.length)}
             </span>
@@ -250,7 +254,7 @@ export function BotWorkspaceChrome({
             />
             {loading && !agents.length && (
               <p role="status" className="p-3 text-xs">
-                Loading…
+                <T>Loading…</T>
               </p>
             )}
           </div>
@@ -272,11 +276,11 @@ export function BotWorkspaceChrome({
               <MenuPopup align="start" side="top">
                 <MenuItem onClick={() => onSection("host-settings")}>
                   <SettingsIcon />
-                  Host settings
+                  <T>Host settings</T>
                 </MenuItem>
                 <MenuItem onClick={onRefresh}>
                   <RefreshCwIcon />
-                  Refresh connection
+                  <T>Refresh connection</T>
                 </MenuItem>
               </MenuPopup>
             </Menu>
@@ -284,7 +288,7 @@ export function BotWorkspaceChrome({
           <div
             role="separator"
             tabIndex={0}
-            aria-label="Sidebar width"
+            aria-label={gt("Sidebar width")}
             aria-orientation="vertical"
             aria-valuemin={200}
             aria-valuemax={440}
@@ -314,7 +318,7 @@ export function BotWorkspaceChrome({
           />
         </aside>
         <main
-          aria-label="Bot workspace content"
+          aria-label={gt("Bot workspace content")}
           className="ob-content conversation-panel"
           data-side-panel-header={sidePanelHeader ? "" : undefined}
           data-panel-maximized={sidePanelMaximized ? "" : undefined}
@@ -331,16 +335,19 @@ export function BotWorkspaceChrome({
                 <h1 className="truncate text-sm font-medium">{heading}</h1>
               </div>
               {section === "chats" && bot && (
-                <nav aria-label="Conversation tools" className="flex shrink-0 items-center gap-1">
+                <nav
+                  aria-label={gt("Conversation tools")}
+                  className="flex shrink-0 items-center gap-1"
+                >
                   <ToolButton
-                    label="Bot tasks"
+                    label={gt("Bot tasks")}
                     pressed={view === "Tasks"}
                     onClick={() => chooseTool(view === "Tasks" ? "Chat" : "Tasks")}
                   >
                     <ListTodoIcon />
                   </ToolButton>
                   <ToolButton
-                    label="Files"
+                    label={gt("Files")}
                     pressed={view === "Files"}
                     onClick={() => chooseTool(view === "Files" ? "Chat" : "Files")}
                   >
@@ -352,7 +359,7 @@ export function BotWorkspaceChrome({
                         <Button
                           variant="ghost-muted"
                           size="icon-sm"
-                          aria-label="More conversation tools"
+                          aria-label={gt("More conversation tools")}
                         />
                       }
                     >
@@ -378,7 +385,7 @@ export function BotWorkspaceChrome({
                   </Menu>
                   <div className="mx-1 h-4 border-l" />
                   <ToolButton
-                    label={sidePanelHeader ? "Close side panel" : "Open side panel"}
+                    label={sidePanelHeader ? gt("Close side panel") : gt("Open side panel")}
                     pressed={Boolean(sidePanelHeader)}
                     onClick={onTogglePanel}
                   >
@@ -390,7 +397,7 @@ export function BotWorkspaceChrome({
           )}
           {section === "chats" && bot && view !== "Tasks" && (
             <nav
-              aria-label="Bot conversations"
+              aria-label={gt("Bot conversations")}
               className="conversation-header h-10! gap-4 border-b! border-border! pl-5!"
             >
               <div className="flex shrink-0 items-center">
@@ -404,11 +411,13 @@ export function BotWorkspaceChrome({
                   }}
                 >
                   <MessageCircleIcon />
-                  Main chat
+                  <T>Main chat</T>
                 </Button>
               </div>
               <div className="flex min-w-0 flex-1 items-center gap-2">
-                <span className="shrink-0 text-xs text-muted-foreground">Task chats</span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  <T>Task chats</T>
+                </span>
                 <div className="min-w-0 flex-1">
                   <OpenbotThreadTabs
                     key={bot.id}
@@ -423,7 +432,11 @@ export function BotWorkspaceChrome({
                     taskChats
                   />
                 </div>
-                {newThread && <span className="shrink-0 text-xs font-medium">New task chat</span>}
+                {newThread && (
+                  <span className="shrink-0 text-xs font-medium">
+                    <T>New task chat</T>
+                  </span>
+                )}
               </div>
             </nav>
           )}

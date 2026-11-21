@@ -1,4 +1,6 @@
 import { t as common } from "../data/source-text";
+import { m } from "../../../../i18n/messages";
+import { msg } from "gt-react";
 const messages: Record<string, string | { one: string; other: string }> = {
   "vault.items.title": "Saved items",
   "vault.items.description":
@@ -45,8 +47,8 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "vault.failed": "Could not change the Vault.",
   "vault.revealFailed": "Could not show the saved value.",
   "vault.copyFailed": "Could not copy the value.",
-  "vault.deleteTitle": "Delete {name}?",
-  "vault.deleteDescription": "Agents can no longer use it. You cannot undo this.",
+  "vault.deleteTitle": m(msg("Delete '{'name'}'?")),
+  "vault.deleteDescription": m(msg("Agents can no longer use it. You cannot undo this.")),
   "vault.field.website": "Website",
   "vault.field.username": "Username or email",
   "vault.field.password": "Password",
@@ -68,13 +70,16 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "vault.field.phone": "Phone",
   "vault.field.email": "Email address",
   "vault.field.variableName": "Variable name",
-  "vault.variableNameHint":
-    "The environment variable that a program reads, such as OPENAI_API_KEY. Agents find the key by this name.",
+  "vault.variableNameHint": m(
+    msg(
+      "The environment variable that a program reads, such as OPENAI_API_KEY. Agents find the key by this name.",
+    ),
+  ),
   "vault.field.apiKey": "API key",
   "vault.removeSite": "Remove {site}",
   "vault.placeholder.website": "example.com",
   "vault.placeholder.username": "name@example.com",
-  "vault.placeholder.cardLabel": "Company card",
+  "vault.placeholder.cardLabel": m(msg("Company card")),
   "vault.placeholder.contactLabel": "Home",
   "vault.placeholder.variableName": "OPENAI_API_KEY",
   "vault.placeholder.expiry": "MM/YY",
@@ -90,17 +95,26 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "vault.showKey": "Show API key",
   "vault.hideKey": "Hide API key",
   "vault.importMenu": "Import from CSV",
-  "vault.importTitle": "Import from a CSV file",
-  "vault.importDescription":
-    "Import logins from a CSV file that 1Password, Bitwarden, Chrome, Edge, Firefox, Safari, Apple Passwords or LastPass exports. OpenBot reads the file on this computer and does not upload it.",
+  "vault.importTitle": m(msg("Import from a CSV file")),
+  "vault.importDescription": m(
+    msg(
+      "Import logins from a CSV file that 1Password, Bitwarden, Chrome, Edge, Firefox, Safari, Apple Passwords or LastPass exports. OpenBot reads the file on this computer and does not upload it.",
+    ),
+  ),
   "vault.importChoose": "Choose CSV file",
   "vault.importDone": "Imported: {imported}. Skipped: {skipped}.",
-  "vault.unavailableTitle": "This computer cannot keep secrets",
-  "vault.unavailableDescription":
-    "OpenBot encrypts the Vault with the secret storage of the system. Set up a keyring, then open this page again.",
-  "vault.unreadableTitle": "OpenBot cannot read the Vault",
-  "vault.unreadableDescription":
-    "The Vault file is on this computer, but OpenBot cannot decrypt it. This can occur when the system keychain changes. Reset the Vault to start again with no items.",
+  "vault.unavailableTitle": m(msg("This computer cannot keep secrets")),
+  "vault.unavailableDescription": m(
+    msg(
+      "OpenBot encrypts the Vault with the secret storage of the system. Set up a keyring, then open this page again.",
+    ),
+  ),
+  "vault.unreadableTitle": m(msg("OpenBot cannot read the Vault")),
+  "vault.unreadableDescription": m(
+    msg(
+      "The Vault file is on this computer, but OpenBot cannot decrypt it. This can occur when the system keychain changes. Reset the Vault to start again with no items.",
+    ),
+  ),
   "vault.link.group": "Payment accounts",
   "vault.link.name": "Link",
   "vault.link.connect": "Connect",
@@ -109,13 +123,17 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "vault.link.actions": "Link actions",
   "vault.link.disconnect": "Disconnect",
   "vault.link.failed": "Could not change the Link connection.",
-  "vault.link.disconnectTitle": "Disconnect Link?",
-  "vault.link.disconnectDescription":
-    "Agents can no longer ask to pay with Link. Your Link account and its cards stay as they are.",
+  "vault.link.disconnectTitle": m(msg("Disconnect Link?")),
+  "vault.link.disconnectDescription": m(
+    msg(
+      "Agents can no longer ask to pay with Link. Your Link account and its cards stay as they are.",
+    ),
+  ),
   "vault.reset": "Reset Vault",
-  "vault.resetTitle": "Reset the Vault?",
-  "vault.resetDescription":
-    "OpenBot deletes the Vault file and all items in it. You cannot undo this.",
+  "vault.resetTitle": m(msg("Reset the Vault?")),
+  "vault.resetDescription": m(
+    msg("OpenBot deletes the Vault file and all items in it. You cannot undo this."),
+  ),
   // Chat card: an agent asks the user to add a Vault item. The agent never sees its secrets.
   "vault.request.private": "Goes to your Vault. {agent} never sees it.",
   "vault.request.privateUnnamed": "Goes to your Vault. The agent never sees it.",

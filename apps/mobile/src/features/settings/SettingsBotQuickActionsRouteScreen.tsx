@@ -8,23 +8,25 @@ import { setBotQuickAction, useBotQuickActionChoices } from "../shortcuts/botQui
 import { AppText as Text } from "../../components/ui/AppText";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { SettingsSection } from "./components/SettingsSection";
+import { T, useGT } from "gt-react-native";
 
 export function SettingsBotQuickActionsRouteScreen() {
+  const gt = useGT();
   const choices = useBotQuickActionChoices();
   const [failed, setFailed] = useState(false);
   return (
-    <SettingsScreen title="Quick actions">
+    <SettingsScreen title={gt("Quick actions")}>
       <ScreenScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerClassName="gap-5 px-5 py-4"
       >
         {failed && (
           <Text accessibilityRole="alert" className="text-destructive">
-            Could not save quick actions.
+            <T>Could not save quick actions.</T>
           </Text>
         )}
         <SettingsSection
-          title="App icon"
+          title={gt("App icon")}
           footer="Touch and hold the Sled app icon to use these shortcuts. iOS shows up to four."
         >
           {BOT_QUICK_ACTIONS.map(({ kind, title }) => {

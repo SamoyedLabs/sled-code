@@ -6,6 +6,7 @@ import {
   OpenbotRoutineTriggerInput,
   type OpenbotEventAdminRequest,
 } from "@t3tools/contracts";
+import { mFallback, msg } from "gt-i18n";
 
 const decodeInput = Schema.decodeUnknownResult(OpenbotEventRoutineInput);
 const decodeCanvas = Schema.decodeUnknownResult(OpenbotRoutineFlowCanvas);
@@ -75,8 +76,8 @@ export function routineRows(value: unknown): readonly Record<string, unknown>[] 
 }
 export function routineTriggerDescription(value: unknown) {
   const result = decodeTrigger(value);
-  if (!Result.isSuccess(result)) return "Unsupported trigger";
+  if (!Result.isSuccess(result)) return mFallback(msg("Unsupported trigger"));
   return result.success.kind === "webhook"
-    ? `Webhook: ${result.success.eventType ?? "any event"}`
-    : `Schedule: ${JSON.stringify(result.success.schedule)}`;
+    ? mFallback(msg("Webhook: {value}", { value: result.success.eventType ?? "any event" }))
+    : mFallback(msg("Schedule: {value}", { value: JSON.stringify(result.success.schedule) }));
 }

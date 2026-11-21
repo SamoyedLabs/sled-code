@@ -85,8 +85,11 @@ const decodeEndpoint = Schema.decodeUnknownSync(
 );
 type Routine = typeof OpenbotEventRoutine.Type;
 import { draftFor, routineDraftInput, type Input, type Draft } from "./routine-editor-model";
+import { m } from "../../../../i18n/messages";
+import { T, Var, msg, useGT } from "gt-react";
 function summary(routine: Routine) {
-  if (routine.trigger.kind === "webhook") return routine.trigger.eventType || "Any webhook event";
+  if (routine.trigger.kind === "webhook")
+    return routine.trigger.eventType || m(msg("Any webhook event"));
   const schedule = routineScheduleToDraft(
     JSON.parse(JSON.stringify(routine.trigger.schedule)) as RoutineSchedule,
   );
@@ -96,11 +99,22 @@ function summary(routine: Routine) {
     case "weekly":
       return `${daysLabel([schedule.weekday])} at ${clockLabel(schedule.time)}`;
     case "monthly":
-      return `Day ${schedule.day} at ${clockLabel(schedule.time)}`;
+      return m(
+        msg("Day {day} at {clockLabel}", {
+          day: schedule.day,
+          clockLabel: clockLabel(schedule.time),
+        }),
+      );
     case "yearly":
       return `${schedule.month}/${schedule.day} at ${clockLabel(schedule.time)}`;
     case "hourly":
-      return `Every ${schedule.everyHours} ${schedule.everyHours === 1 ? "hour" : "hours"} · ${daysLabel(schedule.days)}`;
+      return m(
+        msg("Every {everyHours} {value} · {daysLabel}", {
+          everyHours: schedule.everyHours,
+          value: schedule.everyHours === 1 ? "hour" : "hours",
+          daysLabel: daysLabel(schedule.days),
+        }),
+      );
     case "custom":
       return schedule.expression;
     case "once":
@@ -139,6 +153,7 @@ function Routines({
   onOpenRun,
   initialRoutineId,
 }: AgentRoutinesSettingsProps) {
+  const gt = useGT();
   const host = useSourceSettingsAdmin(environmentId, hostId),
     owner = { kind: "agent" as const, id: agentId };
   const compatibility = useEnvironmentQuery(
@@ -271,7 +286,7 @@ function Routines({
       setError(
         cause instanceof Error
           ? cause.message
-          : "The request could not complete. Reload before retrying.",
+          : gt("The request could not complete. Reload before retrying."),
       );
     }
     lock.current = false;
@@ -357,7 +372,7 @@ function Routines({
   return (
     <div className="agent-routines-settings">
       <SettingsPanelHeader
-        title="Routine"
+        title={gt("Routine")}
         onBack={() => void leave(list)}
         onClose={() => void leave(onClose)}
       />
@@ -366,12 +381,12 @@ function Routines({
           <div className="agent-routine-editor-actions">
             <label className="agent-routine-active-toggle">
               <SourceSwitch
-                label={draft.input.active ? "Active" : "Paused"}
+                label={draft.input.active ? gt("Active") : gt("Paused")}
                 checked={draft.input.active}
                 disabled={busy || !canSave || uncertain}
                 onChange={(active) => patch({ active })}
               />
-              {draft.input.active ? "Active" : "Paused"}
+              {draft.input.active ? gt("Active") : gt("Paused")}
             </label>
             <div className="agent-routine-action-buttons">
               {confirmDelete ? (
@@ -390,14 +405,14 @@ function Routines({
                       })
                     }
                   >
-                    Delete now
+                    <T>Delete now</T>
                   </SourceButton>
                   <SourceButton
                     variant="secondary"
                     disabled={busy}
                     onClick={() => setConfirmDelete(false)}
                   >
-                    Cancel
+                    <T>Cancel</T>
                   </SourceButton>
                 </>
               ) : (
@@ -411,7 +426,7 @@ function Routines({
                   </SourceButton>
                   {dirty ? (
                     <SourceButton disabled={busy || !canSave || uncertain} onClick={save}>
-                      {busy ? "Saving…" : "Save"}
+                      {busy ? gt("Saving…") : gt("Save")}
                     </SourceButton>
                   ) : (
                     <SourceButton
@@ -433,7 +448,7 @@ function Routines({
                         }, true)
                       }
                     >
-                      {busy ? "Starting…" : "Test run"}
+                      {busy ? gt("Starting…") : gt("Test run")}
                     </SourceButton>
                   )}
                 </>
@@ -441,27 +456,35 @@ function Routines({
             </div>
           </div>
           <label className="settings-field">
-            <span>Name</span>
+            <span>
+              <T>Name</T>
+            </span>
             <input
               className="ui-input"
               value={draft.input.name}
               maxLength={80}
-              placeholder="Morning briefing"
+              placeholder={gt("Morning briefing")}
               disabled={busy || uncertain || !canSave}
               aria-invalid={showErrors && !draft.input.name.trim()}
               onChange={(event) => patch({ name: event.target.value })}
             />
             {showErrors && !draft.input.name.trim() && (
-              <p className="agent-routine-field-error">Enter a name.</p>
+              <p className="agent-routine-field-error">
+                <T>Enter a name.</T>
+              </p>
             )}
           </label>
           <section className="agent-routine-when" aria-labelledby="agent-routine-when-heading">
-            <h3 id="agent-routine-when-heading">When to run</h3>
+            <h3 id="agent-routine-when-heading">
+              <T>When to run</T>
+            </h3>
             <fieldset
               className="agent-routine-trigger-kind"
               disabled={busy || uncertain || !canSave}
             >
-              <legend className="sr-only">Trigger</legend>
+              <legend className="sr-only">
+                <T>Trigger</T>
+              </legend>
               {["schedule", "webhook"].map((kind) => (
                 <SourceButton
                   key={kind}
@@ -487,7 +510,7 @@ function Routines({
                   ) : (
                     <Webhook className="agent-routine-trigger-kind-icon" />
                   )}
-                  {kind === "schedule" ? "Schedule" : "Webhook"}
+                  {kind === "schedule" ? gt("Schedule") : gt("Webhook")}
                 </SourceButton>
               ))}
             </fieldset>
@@ -535,12 +558,14 @@ function Routines({
             )}
           </section>
           <label className="settings-field agent-routine-instruction-field">
-            <span>Instruction</span>
+            <span>
+              <T>Instruction</T>
+            </span>
             <textarea
               className="ui-textarea"
               value={draft.input.instruction}
               maxLength={100000}
-              placeholder="Describe what this agent should do."
+              placeholder={gt("Describe what this agent should do.")}
               disabled={busy || uncertain || !canSave}
               aria-invalid={showErrors && !draft.input.instruction.trim()}
               onChange={(event) => patch({ instruction: event.target.value })}
@@ -589,13 +614,21 @@ function Routines({
           {hasResults && results.error && (
             <p role="alert">
               {results.error}
-              <SourceButton onClick={() => void results.refresh()}>Retry</SourceButton>
+              <SourceButton onClick={() => void results.refresh()}>
+                <T>Retry</T>
+              </SourceButton>
             </p>
           )}
           <p className="ui-text" data-variant="caption" data-tone="muted">
-            Times use {draft.input.timezone}.
+            <T>
+              Times use <Var>{draft.input.timezone}</Var>.
+            </T>
           </p>
-          {started && <p role="status">The test run has started.</p>}
+          {started && (
+            <p role="status">
+              <T>The test run has started.</T>
+            </p>
+          )}
           {error && (
             <p role="alert" className="agent-routine-field-error">
               {error}
@@ -603,8 +636,10 @@ function Routines({
           )}
           {uncertain && (
             <p role="alert">
-              The outcome is uncertain. Review the host’s routines before trying again.
-              <SourceButton onClick={list}>Reload routines</SourceButton>
+              <T>The outcome is uncertain. Review the host’s routines before trying again.</T>
+              <SourceButton onClick={list}>
+                <T>Reload routines</T>
+              </SourceButton>
             </p>
           )}
           {draft.input.id && (
@@ -671,7 +706,9 @@ function RoutineHistory({
       {c.error && (
         <p role="alert">
           {c.error}
-          <SourceButton onClick={() => void c.refresh()}>Retry</SourceButton>
+          <SourceButton onClick={() => void c.refresh()}>
+            <T>Retry</T>
+          </SourceButton>
         </p>
       )}
       <div className="agent-routine-run-list">
@@ -750,7 +787,11 @@ function RoutineHistory({
             </div>
           );
         })}
-        {c.value && entries.length === 0 && <p className="agent-routines-empty">No runs yet.</p>}
+        {c.value && entries.length === 0 && (
+          <p className="agent-routines-empty">
+            <T>No runs yet.</T>
+          </p>
+        )}
       </div>
     </section>
   );
@@ -780,6 +821,7 @@ function WebhookEditor({
   onRotate: () => void;
   execute: (request: OpenbotAdminRequest) => Promise<unknown>;
 }) {
+  const gt = useGT();
   const [eventsOpen, setEventsOpen] = useState(false),
     [copied, setCopied] = useState<ReadonlySet<string>>(new Set()),
     [test, setTest] = useState<string | null>(null),
@@ -816,7 +858,7 @@ function WebhookEditor({
       await navigator.clipboard.writeText(value);
       setCopied((current) => new Set([...current, kind]));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not copy.");
+      setError(cause instanceof Error ? cause.message : gt("Could not copy."));
     }
   };
   const send = async () => {
@@ -836,7 +878,7 @@ function WebhookEditor({
     });
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "Could not send the test.");
+      setError(cause instanceof Error ? cause.message : gt("Could not send the test."));
     }
     lock.current = false;
     setTesting(false);
@@ -878,7 +920,7 @@ function WebhookEditor({
                     ) : (
                       <span className="routine-webhook-value" role="status">
                         {endpoint.value?.usesSledConnect
-                          ? "Link this host to Sled Connect for a public URL."
+                          ? gt("Link this host to Sled Connect for a public URL.")
                           : rt(
                               endpoint.value?.connected === false
                                 ? "routine.webhook.urlPendingOffline"
@@ -891,7 +933,9 @@ function WebhookEditor({
                 {endpoint.error && (
                   <p role="alert">
                     {endpoint.error}
-                    <SourceButton onClick={() => void endpoint.refresh()}>Retry</SourceButton>
+                    <SourceButton onClick={() => void endpoint.refresh()}>
+                      <T>Retry</T>
+                    </SourceButton>
                   </p>
                 )}
                 <p
@@ -900,7 +944,9 @@ function WebhookEditor({
                   data-tone={endpoint.value?.connected === false ? "warning" : "muted"}
                 >
                   {endpoint.value?.usesSledConnect
-                    ? "Public webhook delivery uses Sled Connect. Local tests do not require a cloud account."
+                    ? gt(
+                        "Public webhook delivery uses Sled Connect. Local tests do not require a cloud account.",
+                      )
                     : rt(
                         endpoint.value?.connected === false
                           ? "routine.webhook.relayOffline"
@@ -965,7 +1011,7 @@ function WebhookEditor({
                           {rt("routine.webhook.secretWarning")}
                         </span>
                         <SourceButton variant="ghost" size="xs" onClick={onDismissSecret}>
-                          Done
+                          <T>Done</T>
                         </SourceButton>
                       </div>
                     )}
@@ -983,7 +1029,7 @@ function WebhookEditor({
                   disabled={disabled || testing || !input.id}
                   onClick={() => void send()}
                 >
-                  {testing ? "Sending…" : "Send test event"}
+                  {testing ? gt("Sending…") : gt("Send test event")}
                 </SourceButton>
                 {test && <p role="status">{test}</p>}
               </>
@@ -1011,10 +1057,12 @@ function WebhookEditor({
           aria-expanded={eventsOpen}
           onClick={() => setEventsOpen(!eventsOpen)}
         >
-          <span className="routine-webhook-label">Events</span>
+          <span className="routine-webhook-label">
+            <T>Events</T>
+          </span>
           <span className="routine-webhook-value">
-            {eventType || "All events"}
-            {filters.length ? ` · ${filters.length} filters` : ""}
+            {eventType || gt("All events")}
+            {filters.length ? gt(" · {length} filters", { length: filters.length }) : ""}
           </span>
           {eventsOpen ? <ChevronDown /> : <ChevronRight />}
         </SourceButton>
@@ -1028,13 +1076,15 @@ function WebhookEditor({
           }}
         >
           <SlidersHorizontal />
-          Filter events
+          <T>Filter events</T>
         </SourceButton>
       )}
       {eventsOpen && (
         <div className="routine-webhook-events">
           <label className="settings-field">
-            <span>Event type</span>
+            <span>
+              <T>Event type</T>
+            </span>
             <input
               ref={inputRef}
               className="ui-input"
@@ -1045,13 +1095,15 @@ function WebhookEditor({
             />
           </label>
           <div className="settings-field">
-            <span>Filters</span>
+            <span>
+              <T>Filters</T>
+            </span>
             {filters.map((filter, index) => (
               <div className="routine-webhook-filter" key={index}>
                 <div className="agent-routine-event-filter">
                   <input
                     className="ui-input"
-                    aria-label="JSON pointer"
+                    aria-label={gt("JSON pointer")}
                     placeholder="/data/order/status"
                     aria-invalid={!eventFilterPointerValid(filter.pointer)}
                     value={filter.pointer}
@@ -1066,7 +1118,7 @@ function WebhookEditor({
                   />
                   <input
                     className="ui-input"
-                    aria-label="Filter value"
+                    aria-label={gt("Filter value")}
                     value={filter.value}
                     disabled={disabled}
                     onChange={(event) =>
@@ -1079,7 +1131,7 @@ function WebhookEditor({
                   />
                   <SourceButton
                     variant="ghost"
-                    aria-label="Remove filter"
+                    aria-label={gt("Remove filter")}
                     disabled={disabled}
                     onClick={() => onFiltersChange(filters.filter((_, i) => i !== index))}
                   >
@@ -1094,7 +1146,7 @@ function WebhookEditor({
               onClick={() => onFiltersChange([...filters, { pointer: "", value: "" }])}
             >
               <Plus />
-              Add filter
+              <T>Add filter</T>
             </SourceButton>
           </div>
         </div>

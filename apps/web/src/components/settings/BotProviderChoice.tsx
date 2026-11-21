@@ -9,6 +9,7 @@ import {
   botProviderSetupMessage,
 } from "@t3tools/client-runtime/openbot/presentation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { T, Var, useGT } from "gt-react";
 
 const HOST_DEFAULT = "__host_default__";
 export function BotProviderChoice({
@@ -24,6 +25,7 @@ export function BotProviderChoice({
   providers: readonly BotProvider[];
   disabled?: boolean;
 }) {
+  const gt = useGT();
   const options = providerOptions(models, providers);
   const modelOptions = models.filter((model) => model.provider === value.provider);
   const selected = selectedProviderModel(models, value);
@@ -31,7 +33,9 @@ export function BotProviderChoice({
   return (
     <div className="space-y-3">
       <div className="space-y-1">
-        <p className="text-sm">Provider</p>
+        <p className="text-sm">
+          <T>Provider</T>
+        </p>
         <Select
           value={value.provider || null}
           disabled={disabled}
@@ -39,8 +43,8 @@ export function BotProviderChoice({
             if (provider) onChange({ provider, model: "", reasoningEffort: null });
           }}
         >
-          <SelectTrigger aria-label="Bot provider">
-            <SelectValue placeholder="Choose a provider" />
+          <SelectTrigger aria-label={gt("Bot provider")}>
+            <SelectValue placeholder={gt("Choose a provider")} />
           </SelectTrigger>
           <SelectContent>
             {options.map((option) => (
@@ -58,7 +62,9 @@ export function BotProviderChoice({
         </p>
       )}
       <div className="space-y-1">
-        <p className="text-sm">Model</p>
+        <p className="text-sm">
+          <T>Model</T>
+        </p>
         <Select
           value={value.model || null}
           disabled={disabled || !value.provider || modelOptions.length === 0}
@@ -66,8 +72,8 @@ export function BotProviderChoice({
             if (model) onChange({ ...value, model, reasoningEffort: null });
           }}
         >
-          <SelectTrigger aria-label="Bot model">
-            <SelectValue placeholder="Choose a model" />
+          <SelectTrigger aria-label={gt("Bot model")}>
+            <SelectValue placeholder={gt("Choose a model")} />
           </SelectTrigger>
           <SelectContent>
             {modelOptions.map((model) => (
@@ -80,7 +86,7 @@ export function BotProviderChoice({
       </div>
       {value.provider && modelOptions.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          No models are available. Complete this provider's setup, then refresh.
+          <T>No models are available. Complete this provider's setup, then refresh.</T>
         </p>
       )}
       {selected?.description && (
@@ -88,7 +94,9 @@ export function BotProviderChoice({
       )}
       {selected && selected.supportedReasoningEfforts.length > 1 && (
         <div className="space-y-1">
-          <p className="text-sm">Reasoning effort</p>
+          <p className="text-sm">
+            <T>Reasoning effort</T>
+          </p>
           <Select
             value={value.reasoningEffort ?? HOST_DEFAULT}
             disabled={disabled}
@@ -97,12 +105,14 @@ export function BotProviderChoice({
                 onChange({ ...value, reasoningEffort: effort === HOST_DEFAULT ? null : effort });
             }}
           >
-            <SelectTrigger aria-label="Bot reasoning effort">
+            <SelectTrigger aria-label={gt("Bot reasoning effort")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={HOST_DEFAULT}>
-                Host default ({selected.defaultReasoningEffort})
+                <T>
+                  Host default (<Var>{selected.defaultReasoningEffort}</Var>)
+                </T>
               </SelectItem>
               {selected.supportedReasoningEfforts.map((effort) => (
                 <SelectItem key={effort} value={effort}>

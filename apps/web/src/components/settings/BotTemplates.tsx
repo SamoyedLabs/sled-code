@@ -12,6 +12,7 @@ import { Input } from "../ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../ui/select";
 import { confirmed } from "./BotConnectionControls";
 import { randomUUID } from "../../lib/utils";
+import { T, Var, useGT } from "gt-react";
 export function BotTemplates({
   actions,
   scopeKey,
@@ -27,6 +28,7 @@ export function BotTemplates({
   reviewAvailable?: boolean;
   adoptionAvailable?: boolean;
 }) {
+  const gt = useGT();
   const c = useBotTemplates(scopeKey, actions, adoptionAvailable);
   const [source, setSource] = useState("template");
   const [sourceId, setSourceId] = useState("");
@@ -36,13 +38,22 @@ export function BotTemplates({
   const selected = agents.find((agent) => agent.id === agentId);
   const detail = c.state.review?.detail;
   const preview = c.state.preview?.agentId === agentId ? c.state.preview : null;
-  const install = adoptionAvailable ? templateInstall(c.state, timezone, receipt, undefined, true) : null;
-  const update = adoptionAvailable && selected?.listingId
-    ? templateInstall(c.state, timezone, receipt, {
-        agentId: selected.id,
-        listingId: selected.listingId,
-      }, adoptionAvailable)
+  const install = adoptionAvailable
+    ? templateInstall(c.state, timezone, receipt, undefined, true)
     : null;
+  const update =
+    adoptionAvailable && selected?.listingId
+      ? templateInstall(
+          c.state,
+          timezone,
+          receipt,
+          {
+            agentId: selected.id,
+            listingId: selected.listingId,
+          },
+          adoptionAvailable,
+        )
+      : null;
   const disabled = (request: TemplateRequest) =>
     c.busy || c.state.uncertain || !actions.can(request);
   const mutate = async (request: TemplateRequest) => {
@@ -60,20 +71,26 @@ export function BotTemplates({
       ? { operation: "templates.detail", templateId: sourceId }
       : { operation: "templates.listing", listingId: sourceId };
   return (
-    <section aria-label="Agent templates" aria-busy={c.busy} className="space-y-3">
-      <h3>Agent templates</h3>
+    <section aria-label={gt("Agent templates")} aria-busy={c.busy} className="space-y-3">
+      <h3>
+        <T>Agent templates</T>
+      </h3>
       <p>
-        Destination: {hostLabel}. Downloads and publication use the account signed in on this host.
-        Sled never copies account credentials. Host provider, coding and approval settings remain
-        authoritative.
+        <T>
+          Destination: <Var>{hostLabel}</Var>. Downloads and publication use the account signed in
+          on this host. Sled never copies account credentials. Host provider, coding and approval
+          settings remain authoritative.
+        </T>
       </p>
       <p>
-        A template copies instructions, skills and routines. Choose provider/model settings in this
-        host’s Bots settings after adding. Publication shares this content through a link; it does
-        not share workspace files or memories.
+        <T>
+          A template copies instructions, skills and routines. Choose provider/model settings in
+          this host’s Bots settings after adding. Publication shares this content through a link; it
+          does not share workspace files or memories.
+        </T>
       </p>
       <label>
-        Source
+        <T>Source</T>
         <Select
           value={source}
           onValueChange={(value) => {
@@ -84,13 +101,17 @@ export function BotTemplates({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="template">Shared template</SelectItem>
-            <SelectItem value="marketplace">Marketplace listing</SelectItem>
+            <SelectItem value="template">
+              <T>Shared template</T>
+            </SelectItem>
+            <SelectItem value="marketplace">
+              <T>Marketplace listing</T>
+            </SelectItem>
           </SelectContent>
         </Select>
       </label>
       <label>
-        Template or listing ID
+        <T>Template or listing ID</T>
         <Input
           value={sourceId}
           maxLength={128}
@@ -98,7 +119,7 @@ export function BotTemplates({
         />
       </label>
       <label>
-        Routine timezone
+        <T>Routine timezone</T>
         <Input
           value={timezone}
           maxLength={255}
@@ -107,7 +128,10 @@ export function BotTemplates({
       </label>
       {!reviewAvailable && (
         <p>
-          Source review is unavailable on this host. Update its bot engine to review shared agents.
+          <T>
+            Source review is unavailable on this host. Update its bot engine to review shared
+            agents.
+          </T>
         </p>
       )}
       <Button
@@ -117,7 +141,7 @@ export function BotTemplates({
           void c.run(readRequest);
         }}
       >
-        {"Review source"}
+        {gt("Review source")}
       </Button>
       {detail && (
         <div className="space-y-2">
@@ -125,18 +149,29 @@ export function BotTemplates({
             {detail.name} · {detail.title}
           </h3>
           <p>
-            {c.state.review?.kind} · {detail.id} · by {detail.creatorName} · revision{" "}
-            {detail.updatedAt} · version {detail.version ?? "shared template"} ·{" "}
-            {detail.versionId ?? ""}
+            <T>
+              <Var>{c.state.review?.kind}</Var> · <Var>{detail.id}</Var> · by{" "}
+              <Var>{detail.creatorName}</Var> · revision<Var> </Var>
+              <Var>{detail.updatedAt}</Var> · version{" "}
+              <Var>{detail.version ?? gt("shared template")}</Var> ·<Var> </Var>
+              <Var>{detail.versionId ?? ""}</Var>
+            </T>
           </p>
-          {detail.pending && <p>This listing is pending review. Adding is disabled.</p>}
+          {detail.pending && (
+            <p>
+              <T>This listing is pending review. Adding is disabled.</T>
+            </p>
+          )}
           <p>{detail.description}</p>
           {detail.skills.map((skill) => (
             <p key={skill.slug}>
               {skill.name} · {skill.kind} ·{" "}
               {skill.kind === "embedded"
                 ? skill.markdown
-                : `version ${skill.version} (${skill.versionId})`}
+                : gt("version {version} ({versionId})", {
+                    version: skill.version,
+                    versionId: skill.versionId,
+                  })}
             </p>
           ))}
           {detail.routines.map((routine) => (
@@ -146,8 +181,10 @@ export function BotTemplates({
             </p>
           ))}
           <p>
-            Name on destination: {detail.name}. Routine timezone: {timezone}. Adding refuses a
-            changed source version and saves the original result for recovery.
+            <T>
+              Name on destination: <Var>{detail.name}</Var>. Routine timezone: <Var>{timezone}</Var>
+              . Adding refuses a changed source version and saves the original result for recovery.
+            </T>
           </p>
           <Button
             variant="outline"
@@ -156,7 +193,7 @@ export function BotTemplates({
               if (install) void mutate(install);
             }}
           >
-            {"Add agent"}
+            {gt("Add agent")}
           </Button>
           <Button
             variant="outline"
@@ -165,12 +202,12 @@ export function BotTemplates({
               if (update) void mutate(update);
             }}
           >
-            {"Update selected agent from this listing"}
+            {gt("Update selected agent from this listing")}
           </Button>
         </div>
       )}
       <label>
-        Destination agent for publication or update
+        <T>Destination agent for publication or update</T>
         <Select
           value={agentId}
           onValueChange={(value) => {
@@ -196,11 +233,15 @@ export function BotTemplates({
           void c.run({ operation: "templates.preview", agentId });
         }}
       >
-        {"Preview publication"}
+        {gt("Preview publication")}
       </Button>
       {preview && (
         <div className="space-y-2">
-          <h3>Publication review: {preview.name}</h3>
+          <h3>
+            <T>
+              Publication review: <Var>{preview.name}</Var>
+            </T>
+          </h3>
           <p>{preview.title}</p>
           <p>{preview.description}</p>
           {preview.skills.map((skill) => (
@@ -208,7 +249,10 @@ export function BotTemplates({
               {skill.name} · {skill.kind} ·{" "}
               {skill.kind === "embedded"
                 ? skill.markdown
-                : `version ${skill.version} (${skill.versionId})`}
+                : gt("version {version} ({versionId})", {
+                    version: skill.version,
+                    versionId: skill.versionId,
+                  })}
             </p>
           ))}
           {preview.routines.map((routine) => (
@@ -220,12 +264,19 @@ export function BotTemplates({
           {preview.skillsError && <p>{preview.skillsError}</p>}
           <p>
             {preview.publication
-              ? `Host reports published at ${preview.publication.publishedAt}: ${preview.publication.shareUrl}`
-              : "Publication unknown or absent. A signed-out or offline host also returns no publication."}
+              ? gt("Host reports published at {publishedAt}: {shareUrl}", {
+                  publishedAt: preview.publication.publishedAt,
+                  shareUrl: preview.publication.shareUrl,
+                })
+              : gt(
+                  "Publication unknown or absent. A signed-out or offline host also returns no publication.",
+                )}
           </p>
           <p>
-            Publishing rereads current host content and checks secrets. The released API cannot pin
-            publication to this preview revision. No share card is uploaded.
+            <T>
+              Publishing rereads current host content and checks secrets. The released API cannot
+              pin publication to this preview revision. No share card is uploaded.
+            </T>
           </p>
           <Button
             variant="outline"
@@ -236,7 +287,7 @@ export function BotTemplates({
               void mutate({ operation: "templates.publish", agentId });
             }}
           >
-            {preview.publication ? "Update publication" : "Publish link-only template"}
+            {preview.publication ? gt("Update publication") : gt("Publish link-only template")}
           </Button>
           <Button
             variant="outline"
@@ -245,20 +296,74 @@ export function BotTemplates({
               void mutate({ operation: "templates.unpublish", agentId });
             }}
           >
-            {"Unpublish template"}
+            {gt("Unpublish template")}
           </Button>
         </div>
       )}
-      {reviewAvailable && <Button variant="outline" disabled={c.busy || !selected || !actions.can({ operation: "templates.publication", agentId })} onClick={() => { void c.run({ operation: "templates.publication", agentId }); }}>Check publication status</Button>}
-      {c.state.publication?.agentId === agentId && <p role="status">{c.state.publication.value ? `Published: ${c.state.publication.value.shareUrl}` : "Not published"}</p>}
-      {adoptionAvailable && <Button variant="outline" disabled={c.busy || !actions.can(templateHistoryRequest(c.state))} onClick={() => { void c.run(templateHistoryRequest(c.state)); }}>Refresh installation history</Button>}
-      {c.state.adoptions.map(item => <div key={item.operationId} className="space-y-2"><p>{item.name ?? item.sourceId} · {item.state}{item.agentId ? ` · ${item.agentId}` : ""}</p>{(item.state === "interrupted" || item.state === "failed") && item.agentId && !c.state.acknowledged.includes(item.operationId) && <Button variant="outline" disabled={c.busy} onClick={() => { void confirmed(`Have you inspected retained agent ${item.agentId} on ${hostLabel}? It and its work will remain on the host. This does not retry the original change.`).then(ok => { if (ok) c.acknowledge(item.operationId); }); }}>I inspected this retained agent</Button>}</div>)}
+      {reviewAvailable && (
+        <Button
+          variant="outline"
+          disabled={
+            c.busy || !selected || !actions.can({ operation: "templates.publication", agentId })
+          }
+          onClick={() => {
+            void c.run({ operation: "templates.publication", agentId });
+          }}
+        >
+          <T>Check publication status</T>
+        </Button>
+      )}
+      {c.state.publication?.agentId === agentId && (
+        <p role="status">
+          {c.state.publication.value
+            ? gt("Published: {shareUrl}", { shareUrl: c.state.publication.value.shareUrl })
+            : gt("Not published")}
+        </p>
+      )}
+      {adoptionAvailable && (
+        <Button
+          variant="outline"
+          disabled={c.busy || !actions.can(templateHistoryRequest(c.state))}
+          onClick={() => {
+            void c.run(templateHistoryRequest(c.state));
+          }}
+        >
+          <T>Refresh installation history</T>
+        </Button>
+      )}
+      {c.state.adoptions.map((item) => (
+        <div key={item.operationId} className="space-y-2">
+          <p>
+            {item.name ?? item.sourceId} · {item.state}
+            {item.agentId ? ` · ${item.agentId}` : ""}
+          </p>
+          {(item.state === "interrupted" || item.state === "failed") &&
+            item.agentId &&
+            !c.state.acknowledged.includes(item.operationId) && (
+              <Button
+                variant="outline"
+                disabled={c.busy}
+                onClick={() => {
+                  void confirmed(
+                    `Have you inspected retained agent ${item.agentId} on ${hostLabel}? It and its work will remain on the host. This does not retry the original change.`,
+                  ).then((ok) => {
+                    if (ok) c.acknowledge(item.operationId);
+                  });
+                }}
+              >
+                <T>I inspected this retained agent</T>
+              </Button>
+            )}
+        </div>
+      ))}
       {c.error && <p role="alert">{c.error}</p>}
       {c.state.notice && <p role="status">{c.state.notice}</p>}
       {c.state.uncertain && (
         <p>
-          Refresh installation history to recover the original outcome. An interrupted agent and
-          its work remain on the destination host for inspection.
+          <T>
+            Refresh installation history to recover the original outcome. An interrupted agent and
+            its work remain on the destination host for inspection.
+          </T>
         </p>
       )}
     </section>

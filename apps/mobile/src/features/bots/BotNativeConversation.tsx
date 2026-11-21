@@ -19,16 +19,21 @@ import { useRememberAgentChat } from "./BotOfflineHistory";
 import { BotPendingMessages, useEditingBotOutbox } from "./BotPendingMessages";
 import { botChatCanvas, botMessageColors, useBotChatAppearance } from "./botChatAppearance";
 import { BotAvatar, botAvatarHeadColor } from "./upstream/BotAvatar";
-import { Fragment, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Keyboard, Pressable, ScrollView, View, type ScrollViewInstance } from "react-native";
 import { StackActions, useIsFocused, useNavigation } from "@react-navigation/native";
 import Animated, { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Crypto from "expo-crypto";
-import {
-  OPENBOT_MESSAGE_DELETE_CAPABILITY,
-  type EnvironmentId,
-} from "@t3tools/contracts";
+import { OPENBOT_MESSAGE_DELETE_CAPABILITY, type EnvironmentId } from "@t3tools/contracts";
 import { settingsCapabilities } from "@t3tools/client-runtime/openbot/settings";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { useEnvironmentQuery } from "../../state/query";
@@ -53,10 +58,7 @@ import { useAppActive } from "../../lib/appState";
 import { openbot } from "../../state/openbot";
 import { useAtomCommand } from "../../state/use-atom-command";
 import * as Dialog from "../../components/ui/Dialog";
-import {
-  botMessageSections,
-  taskViews,
-} from "@t3tools/client-runtime/openbot/presentation";
+import { botMessageSections, taskViews } from "@t3tools/client-runtime/openbot/presentation";
 import { useBotConversationPanel } from "../settings/useBotConversationPanel";
 import { BotConversationQueue } from "../settings/BotConversationQueue";
 import { useBotFileUpload, type BotFilePicker } from "../settings/useBotFileUpload";
@@ -80,6 +82,8 @@ import {
   botMessageReactions,
   ownBotMessageReaction,
 } from "./BotMessageActions";
+import { m as i18nMessage } from "../../i18n/messages";
+import { T, msg, useGT } from "gt-react-native";
 
 type Props = {
   environmentId: EnvironmentId;
@@ -122,6 +126,7 @@ function ConversationBody({
   forwardGesture,
   visible = true,
 }: Props) {
+  const gt = useGT();
   const [anchor, setAnchor] = useState(initialMessageId);
   const positioned = useRef(false);
   const editingQueued = useEditingBotOutbox({
@@ -186,16 +191,13 @@ function ConversationBody({
         })
       : null,
   );
-  const branches = useMemo(
-    () => decodeBotThreadBranches(branchesQuery.data),
-    [branchesQuery.data],
-  );
+  const branches = useMemo(() => decodeBotThreadBranches(branchesQuery.data), [branchesQuery.data]);
   const taskTitlesById = useMemo(
     () => new Map((taskViews(tasksQuery.data) ?? []).map((task) => [task.id, task.title])),
     [tasksQuery.data],
   );
   const currentBranch = useMemo(
-    () => (taskId ? branches.find((branch) => branch.taskId === taskId) ?? null : null),
+    () => (taskId ? (branches.find((branch) => branch.taskId === taskId) ?? null) : null),
     [branches, taskId],
   );
   const branchPoints = useMemo(
@@ -208,7 +210,7 @@ function ConversationBody({
   );
   const branchSourceLabel = useMemo(() => {
     if (!currentBranch) return null;
-    if (currentBranch.sourceTaskId === null) return name ?? "Chat";
+    if (currentBranch.sourceTaskId === null) return name ?? i18nMessage(msg("Chat"));
     return taskTitlesById.get(currentBranch.sourceTaskId) ?? currentBranch.sourceTitle;
   }, [currentBranch, name, taskTitlesById]);
   const selectedPinned = Boolean(
@@ -299,12 +301,17 @@ function ConversationBody({
       const layout = fileLayouts.current.get(message.id);
       if (!layout || layout.y >= top + height || layout.y + layout.height <= top) continue;
       const file = firstLargeBotAttachment(message.attachments);
-      if (file) attachmentPreview.prefetch(agentId, {
-        kind: "attachment",
-        messageId: message.id,
-        attachmentId: file.id,
-        ...(taskId ? { taskId } : {}),
-      }, file.size);
+      if (file)
+        attachmentPreview.prefetch(
+          agentId,
+          {
+            kind: "attachment",
+            messageId: message.id,
+            attachmentId: file.id,
+            ...(taskId ? { taskId } : {}),
+          },
+          file.size,
+        );
     }
   };
   const resumeVisibleDownloads = useEffectEvent(() => {
@@ -324,7 +331,7 @@ function ConversationBody({
         taskId,
       );
       if (!source) {
-        Dialog.alert("Quoted attachment unavailable", text);
+        Dialog.alert(gt("Quoted attachment unavailable"), text);
         return;
       }
       await attachmentPreview.open(agentId, source);
@@ -332,7 +339,7 @@ function ConversationBody({
     }
     const y = positions.current.get(id);
     if (y === undefined) {
-      Dialog.alert("Quoted passage", text);
+      Dialog.alert(gt("Quoted passage"), text);
       return;
     }
     followLatest.current = false;
@@ -436,7 +443,7 @@ function ConversationBody({
       hostId,
       agentId,
       taskId: branch.taskId,
-      title: taskTitlesById.get(branch.taskId) || "Thread",
+      title: taskTitlesById.get(branch.taskId) || gt("Thread"),
       name: name ?? "Bot",
       avatarSeed,
       avatarHue,
@@ -473,8 +480,8 @@ function ConversationBody({
     });
     if (!ok) {
       Dialog.alert(
-        "Could not delete message",
-        "The host refused the request or the message is still running.",
+        gt("Could not delete message"),
+        gt("The host refused the request or the message is still running."),
       );
     }
   };
@@ -492,8 +499,8 @@ function ConversationBody({
       draft = await fileUpload.pick(agentId, source);
     } catch {
       Dialog.alert(
-        "Could not attach the file",
-        "Try a supported file and check the host connection.",
+        gt("Could not attach the file"),
+        gt("Try a supported file and check the host connection."),
       );
       return;
     }
@@ -573,7 +580,11 @@ function ConversationBody({
             taskId={taskId}
           />
         )}
-        {c.loading && <Text style={{ fontSize: 14, color: p.muted }}>Loading conversation…</Text>}
+        {c.loading && (
+          <Text style={{ fontSize: 14, color: p.muted }}>
+            <T>Loading conversation…</T>
+          </Text>
+        )}
         {c.error && (
           <Text accessibilityRole="alert" style={{ fontSize: 14, color: p.muted }}>
             {c.error}
@@ -588,13 +599,15 @@ function ConversationBody({
             }}
           >
             <Text style={{ fontSize: 13, textAlign: "center", color: p.muted }}>
-              Earlier messages
+              <T>Earlier messages</T>
             </Text>
           </Pressable>
         )}
         {!c.loading && !c.messages.length && (
           <View style={{ paddingTop: 60, alignItems: "center" }}>
-            <Text style={{ fontSize: 16, color: p.muted }}>Start a conversation</Text>
+            <Text style={{ fontSize: 16, color: p.muted }}>
+              <T>Start a conversation</T>
+            </Text>
           </View>
         )}
         {c.messages.map((message) => {
@@ -615,8 +628,14 @@ function ConversationBody({
           const deferredWorkers =
             appearance.showSubagents && message.deferredFields?.includes("subagents") === true;
           const deferredMemory =
-            appearance.showMemoryChanges && message.deferredFields?.includes("memoryChanges") === true;
-          const notes = !!(workers.length || memories.length || deferredWorkers || deferredMemory) && (
+            appearance.showMemoryChanges &&
+            message.deferredFields?.includes("memoryChanges") === true;
+          const notes = !!(
+            workers.length ||
+            memories.length ||
+            deferredWorkers ||
+            deferredMemory
+          ) && (
             <BotMessageNotes
               scope={{ environmentId, hostId, agentId, taskId, messageId: message.id }}
               agentName={name}
@@ -658,13 +677,16 @@ function ConversationBody({
                 timeOffset={timeOffset}
                 forwardGesture={forwardGesture}
                 onReply={!disabled && !streaming ? () => c.setReply(message.id) : undefined}
-                actions={showMessageActionButtons && !streaming && (
-                  <BotIconButton
-                    label="Message actions"
-                    icon="ellipsis"
-                    onPress={() => setActionsId(message.id)}
-                  />
-                )}
+                actions={
+                  showMessageActionButtons &&
+                  !streaming && (
+                    <BotIconButton
+                      label={gt("Message actions")}
+                      icon="ellipsis"
+                      onPress={() => setActionsId(message.id)}
+                    />
+                  )
+                }
                 onLayout={({ nativeEvent }) => {
                   positions.current.set(message.id, nativeEvent.layout.y);
                   if (firstLargeBotAttachment(message.attachments)) {
@@ -715,7 +737,7 @@ function ConversationBody({
                         {(
                           c.messages.find((m) => m.id === message.replyToMessageId) ??
                           c.references[message.replyToMessageId]
-                        )?.text.slice(0, 200) ?? "Reply"}
+                        )?.text.slice(0, 200) ?? gt("Reply")}
                       </Text>
                     )}
                     {streaming && !message.text && <BotTypingBubble />}
@@ -808,7 +830,7 @@ function ConversationBody({
                       <Pressable
                         key={branch.taskId}
                         accessibilityRole="link"
-                        accessibilityLabel={`Open branch ${label}`}
+                        accessibilityLabel={gt("Open branch {label}", { label })}
                         onPress={() => openExistingBranch(branch)}
                         style={({ pressed }) => ({
                           flexDirection: "row",
@@ -822,7 +844,10 @@ function ConversationBody({
                         })}
                       >
                         <SymbolView name="arrow.branch" tintColor={p.muted} size={12} />
-                        <Text numberOfLines={1} style={{ color: p.muted, fontSize: 12, maxWidth: 220 }}>
+                        <Text
+                          numberOfLines={1}
+                          style={{ color: p.muted, fontSize: 12, maxWidth: 220 }}
+                        >
                           {label}
                         </Text>
                       </Pressable>
@@ -875,9 +900,7 @@ function ConversationBody({
           onClose={() => setActionsId(null)}
           onReply={disabled ? undefined : () => c.setReply(actionMessage.id)}
           onBranch={
-            disabled ||
-            Boolean(c.snapshot?.activeTurnId) ||
-            !branchPoints.has(actionMessage.id)
+            disabled || Boolean(c.snapshot?.activeTurnId) || !branchPoints.has(actionMessage.id)
               ? undefined
               : () => void openBranch(actionMessage.id)
           }
@@ -916,7 +939,7 @@ function ConversationBody({
         />
         {anchor && (
           <Button
-            label="Back to latest messages"
+            label={gt("Back to latest messages")}
             onPress={() => {
               followLatest.current = true;
               setHighlightedQuote(null);
@@ -937,7 +960,7 @@ function ConversationBody({
             {c.reply && (
               <Pressable accessibilityRole="button" onPress={() => c.setReply(null)}>
                 <Text style={{ fontSize: 13, color: p.muted, paddingHorizontal: 12 }}>
-                  Replying · Cancel
+                  <T>Replying · Cancel</T>
                 </Text>
               </Pressable>
             )}
@@ -952,7 +975,9 @@ function ConversationBody({
                 keyboardShouldPersistTaps="handled"
               >
                 <Pressable onPress={() => c.setSelectedDraftId(null)}>
-                  <Text style={{ color: p.text, padding: 8 }}>Clear file selection</Text>
+                  <Text style={{ color: p.text, padding: 8 }}>
+                    <T>Clear file selection</T>
+                  </Text>
                 </Pressable>
                 {c.fileDrafts.map((d) => (
                   <Pressable
@@ -976,7 +1001,7 @@ function ConversationBody({
             )}
             {fileUpload.busy && (
               <Text accessibilityRole="status" style={{ color: p.muted }}>
-                Attaching…
+                <T>Attaching…</T>
               </Text>
             )}
             {c.selectedDraftIds.length > 0 && (
@@ -987,7 +1012,7 @@ function ConversationBody({
                     <Pressable
                       key={attachment.id}
                       accessibilityRole="button"
-                      accessibilityLabel={`Remove attachment ${attachment.name}`}
+                      accessibilityLabel={gt("Remove attachment {name}", { name: attachment.name })}
                       disabled={Boolean(c.fileAttempt) || c.busy || fileUpload.busy}
                       onPress={() => c.toggleDraft(attachment.id)}
                       style={{
@@ -1011,35 +1036,51 @@ function ConversationBody({
               <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8 }}>
                 <Menu
                   actions={[
-                    { id: "attach-files", title: "Files", attributes: { disabled: !canAttach } },
-                    { id: "attach-photos", title: "Photos", attributes: { disabled: !canAttach } },
-                    { id: "attach-camera", title: "Camera", attributes: { disabled: !canAttach } },
-                    ...(onFiles ? [{ id: "files", title: "Browse bot files" }] : []),
+                    {
+                      id: "attach-files",
+                      title: gt("Files"),
+                      attributes: { disabled: !canAttach },
+                    },
+                    {
+                      id: "attach-photos",
+                      title: gt("Photos"),
+                      attributes: { disabled: !canAttach },
+                    },
+                    {
+                      id: "attach-camera",
+                      title: gt("Camera"),
+                      attributes: { disabled: !canAttach },
+                    },
+                    ...(onFiles ? [{ id: "files", title: gt("Browse bot files") }] : []),
                     ...(hasContextActions
                       ? [
                           {
                             id: "context",
                             title: usage
-                              ? `Context · ${Math.round(contextShare * 100)}% used`
-                              : "Context",
+                              ? gt("Context · {value}% used", {
+                                  value: Math.round(contextShare * 100),
+                                })
+                              : gt("Context"),
                           },
                         ]
                       : []),
                     {
                       id: "queue",
-                      title: toolsOpen ? "Hide attachments and queue" : "Attachments and queue",
+                      title: toolsOpen
+                        ? gt("Hide attachments and queue")
+                        : gt("Attachments and queue"),
                     },
-                    { id: "refresh", title: "Refresh conversation" },
+                    { id: "refresh", title: gt("Refresh conversation") },
                     {
                       id: "read",
-                      title: "Mark read",
+                      title: gt("Mark read"),
                       attributes: { disabled: disabled || !c.messages.length },
                     },
                     ...(!taskId
-                      ? [{ id: "unread", title: "Mark unread", attributes: { disabled } }]
+                      ? [{ id: "unread", title: gt("Mark unread"), attributes: { disabled } }]
                       : []),
                     ...(voice.isAvailable
-                      ? [{ id: "dictate", title: "Dictate message", attributes: { disabled } }]
+                      ? [{ id: "dictate", title: gt("Dictate message"), attributes: { disabled } }]
                       : []),
                   ]}
                   onPressAction={({ nativeEvent }) => {
@@ -1054,9 +1095,11 @@ function ConversationBody({
                     if (id === "dictate") voice.start();
                     if (id === "unread") {
                       keepUnread.current = true;
-                      void c.act({ operation: "conversation.markUnread", agentId }).then((marked) => {
-                        if (!marked) keepUnread.current = false;
-                      });
+                      void c
+                        .act({ operation: "conversation.markUnread", agentId })
+                        .then((marked) => {
+                          if (!marked) keepUnread.current = false;
+                        });
                     }
                     if (id === "read") {
                       const throughMessageId = c.messages.at(-1)?.id;
@@ -1070,7 +1113,7 @@ function ConversationBody({
                   }}
                 >
                   <BotGlass>
-                    <BotIconButton label="Add to message" icon="plus" />
+                    <BotIconButton label={gt("Add to message")} icon="plus" />
                     {contextWarning && (
                       <View
                         pointerEvents="none"
@@ -1088,7 +1131,7 @@ function ConversationBody({
                   </BotGlass>
                 </Menu>
                 <BotMessageComposer
-                  label="Message to bot"
+                  label={gt("Message to bot")}
                   text={c.text}
                   onChangeText={c.setText}
                   editable={!c.fileAttempt && !voice.freezesEditor}
@@ -1098,7 +1141,7 @@ function ConversationBody({
                   showVoiceControl={
                     !voice.isBusy && !disabled && !fileUpload.busy && !c.selectedDraftId
                   }
-                  voiceLabel={live.available ? "Start voice conversation" : undefined}
+                  voiceLabel={live.available ? gt("Start voice conversation") : undefined}
                   onDictate={
                     live.available
                       ? () => void live.start()

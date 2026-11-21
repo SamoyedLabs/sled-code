@@ -17,6 +17,7 @@ import { Dialog, DialogPopup, DialogTitle, DialogHeader } from "../ui/dialog";
 import { openbot } from "../../state/openbot";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { botSharedFilePath } from "./botSharedFileLink";
+import { useGT } from "gt-react";
 
 const STATIC_BOT_REMARK_PLUGINS = [botQuoteReferencesPlugin];
 const renderBotCodeBlock: NonNullable<ComponentProps<typeof ChatMarkdown>["renderCodeBlock"]> = (
@@ -71,6 +72,7 @@ function SharedFileLink({
   path,
   children,
 }: Scope & { agentId: string; path: string; children: ReactNode }) {
+  const gt = useGT();
   const materialize = useAtomCommand(openbot.fileMaterialize, { reportFailure: false });
   const canRead = useAtomValue(openbot.fileMaterialize.permissionAtom(environmentId));
   const [file, setFile] = useState<OpenbotMaterializedFile | null>(null);
@@ -90,7 +92,7 @@ function SharedFileLink({
     });
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "Could not open this file.");
+      setError(cause instanceof Error ? cause.message : gt("Could not open this file."));
     }
     setBusy(false);
   };
@@ -102,7 +104,7 @@ function SharedFileLink({
         disabled={!canRead || busy}
         onClick={() => void open()}
       >
-        {busy ? "Opening…" : children}
+        {busy ? gt("Opening…") : children}
       </button>
       {error && (
         <span role="alert" className="ml-2 text-xs text-destructive">
@@ -117,7 +119,7 @@ function SharedFileLink({
       >
         <DialogPopup className="max-w-3xl" bottomStickOnMobile={false}>
           <DialogHeader>
-            <DialogTitle>{file?.name ?? "File preview"}</DialogTitle>
+            <DialogTitle>{file?.name ?? gt("File preview")}</DialogTitle>
           </DialogHeader>
           {file && (
             <BotFilePreview
@@ -144,6 +146,7 @@ function QuoteReference({
   text: string;
   onOpen?: ((id: string, text: string) => void) | undefined;
 }) {
+  const gt = useGT();
   const content = (
     <>
       <span className="reference-chip-icon" aria-hidden="true">
@@ -163,7 +166,7 @@ function QuoteReference({
               type="button"
               className="reference-chip message-reference-chip message-quote-tag"
               data-kind="quote"
-              aria-label={`Show quoted text: ${text}`}
+              aria-label={gt("Show quoted text: {text}", { text })}
               onClick={() => onOpen(id, text)}
             />
           ) : (

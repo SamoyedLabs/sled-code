@@ -55,5 +55,8 @@ const settings: AdminDecoder = fields({ backupModels, usageLimitReturn });
 
 export const AGENT_BACKUP_MODELS_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   [AGENT_BACKUP_MODELS_ROUTES.settings, adminRoute(fields({ agentId: identifier }), settings)],
-  [AGENT_BACKUP_MODELS_ROUTES.update, adminRoute(fields({ agentId: identifier, backupModels }), settings)],
+  [
+    AGENT_BACKUP_MODELS_ROUTES.update,
+    adminRoute(fields({ agentId: identifier, backupModels }), settings),
+  ],
 ]);

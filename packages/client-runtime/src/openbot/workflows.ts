@@ -11,6 +11,7 @@ import {
   OpenbotWorkflowSaveResult,
   type OpenbotWorkflowAdminRequest,
 } from "@t3tools/contracts";
+import { mFallback, msg } from "gt-i18n";
 
 const decodeAgents = Schema.decodeUnknownResult(OpenbotAgentList);
 export function workflowAgents(value: unknown) {
@@ -226,7 +227,7 @@ export function workflowNodeTitle(graph: OpenbotWorkflowGraph, nodeId: string) {
   const node = graph.nodes[index];
   return node
     ? `${index + 1}. ${node.kind === "llm" ? "Model" : node.kind === "agent" ? "Bot" : node.kind}`
-    : "Removed step";
+    : mFallback(msg("Removed step"));
 }
 export function workflowRunCanStop(status: string) {
   return ["running", "approval", "stopping"].includes(status);
@@ -259,12 +260,12 @@ export function workflowFieldLabel(field: string) {
     target: "Output destination",
     trigger: "Trigger",
     timezone: "Time zone",
-    text: "Text",
+    text: mFallback(msg("Text")),
     file: "File",
     connectionId: "Connection",
     placeId: "Channel",
     repository: "Repository",
-    titleText: "Title filter",
+    titleText: mFallback(msg("Title filter")),
     labelsFrom: "Label source",
   };
   return (

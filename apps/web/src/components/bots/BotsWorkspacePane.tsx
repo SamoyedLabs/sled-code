@@ -3,8 +3,10 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import { ReactBotWorkspace } from "./ReactBotWorkspace";
 import { SettingsScopeProvider } from "../settings/SettingsScopeContext";
 import { validateSettingsRouteSearch } from "../settings/settingsScopeNavigation";
+import { useGT } from "gt-react";
 
 export function BotsWorkspacePane({ active }: { active: boolean }) {
+  const gt = useGT();
   const location = useLocation();
   const navigate = useNavigate();
   const [retainedSearch, setRetainedSearch] = useState(location.search);
@@ -15,7 +17,7 @@ export function BotsWorkspacePane({ active }: { active: boolean }) {
   );
   return (
     <section
-      aria-label="Bot workspace"
+      aria-label={gt("Bot workspace")}
       className="absolute inset-0 flex min-h-0 flex-col bg-background"
       style={{ display: active ? undefined : "none" }}
       inert={!active}

@@ -27,6 +27,8 @@ import {
   type BotRosterSection,
   type useBotRosterOrganization,
 } from "./useBotRosterOrganization";
+import { m } from "../../i18n/messages";
+import { T, msg, useGT } from "gt-react-native";
 
 type Organization = ReturnType<typeof useBotRosterOrganization>;
 export type BotRosterPresentation = {
@@ -46,10 +48,10 @@ export function requestBotRosterSection(
 ) {
   const section = action.section;
   Dialog.prompt({
-    title: section ? "Rename section" : "New section",
+    title: section ? m(msg("Rename section")) : m(msg("New section")),
     initialValue: section?.name ?? "",
-    placeholder: "Section name",
-    confirmText: section ? "Save" : "Create",
+    placeholder: m(msg("Section name")),
+    confirmText: section ? m(msg("Save")) : m(msg("Create")),
     onConfirm: (value) => {
       const name = value.trim().slice(0, 40);
       if (!name) return;
@@ -75,6 +77,7 @@ export function BotRosterGroups({
   dragging: boolean;
   scroll: RosterDragScroll;
 }) {
+  const gt = useGT();
   const p = useBotPalette();
   const shown = items.filter(({ pin }) => !organization.hidden.has(botRosterItemKey(pin)));
   if (filtered) return shown.map((item) => item.row);
@@ -135,12 +138,14 @@ export function BotRosterGroups({
             {section && organization.canEditSections && (
               <Menu
                 actions={[
-                  { id: "rename", title: "Rename" },
-                  ...(ancestorIds.length < 2 ? [{ id: "subfolder", title: "Add subsection" }] : []),
-                  { id: "up", title: "Move up" },
-                  { id: "down", title: "Move down" },
-                  ...(parentId ? [{ id: "top", title: "Move to top level" }] : []),
-                  { id: "delete", title: "Delete section", attributes: { destructive: true } },
+                  { id: "rename", title: gt("Rename") },
+                  ...(ancestorIds.length < 2
+                    ? [{ id: "subfolder", title: gt("Add subsection") }]
+                    : []),
+                  { id: "up", title: gt("Move up") },
+                  { id: "down", title: gt("Move down") },
+                  ...(parentId ? [{ id: "top", title: gt("Move to top level") }] : []),
+                  { id: "delete", title: gt("Delete section"), attributes: { destructive: true } },
                 ]}
                 onPressAction={({ nativeEvent }) => {
                   switch (nativeEvent.event) {
@@ -168,9 +173,9 @@ export function BotRosterGroups({
                       break;
                     case "delete":
                       Dialog.confirm({
-                        title: "Delete this section?",
-                        message: "The chats in this section stay on this server.",
-                        confirmText: "Delete section",
+                        title: gt("Delete this section?"),
+                        message: gt("The chats in this section stay on this server."),
+                        confirmText: gt("Delete section"),
                         destructive: true,
                         onConfirm: () =>
                           void organization.editSection({ type: "delete", sectionId: id }),
@@ -179,7 +184,10 @@ export function BotRosterGroups({
                   }
                 }}
               >
-                <BotIconButton label={`${section.name} section menu`} icon="ellipsis" />
+                <BotIconButton
+                  label={gt("{name} section menu", { name: section.name })}
+                  icon="ellipsis"
+                />
               </Menu>
             )}
           </View>
@@ -207,11 +215,13 @@ export function BotRosterGroups({
         <RosterDropArea target={pinDropKey}>
           <>
             <Text style={{ color: p.muted, fontSize: 13, marginHorizontal: 20, marginTop: 8 }}>
-              Pinned
+              <T>Pinned</T>
             </Text>
             <View className="flex-row flex-wrap px-4 py-2">
               {!pinned.length && (
-                <Text style={{ color: p.muted, padding: 12 }}>Drop here to pin</Text>
+                <Text style={{ color: p.muted, padding: 12 }}>
+                  <T>Drop here to pin</T>
+                </Text>
               )}
               {pinned.map((item) => (
                 <View key={botRosterItemKey(item.pin)} className="w-1/4">
@@ -229,7 +239,7 @@ export function BotRosterGroups({
                       actions={[
                         {
                           id: "unpin",
-                          title: "Unpin chat",
+                          title: gt("Unpin chat"),
                           attributes: { disabled: !organization.canPin },
                         },
                       ]}
@@ -237,7 +247,7 @@ export function BotRosterGroups({
                     >
                       <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel={`${item.name}, pinned`}
+                        accessibilityLabel={gt("{name}, pinned", { name: item.name })}
                         onPress={item.open}
                         className="min-h-20 items-center gap-1.5 px-1 py-2 active:opacity-60"
                       >
@@ -290,7 +300,9 @@ function RosterStatusHeader({ count, waiting = false }: { count: number; waiting
         className="h-5 min-w-5 items-center justify-center rounded-full px-1.5"
         style={{ backgroundColor: waiting ? p.warning : p.control }}
       >
-        <Text style={{ ...typeScale.small, color: waiting ? p.canvas : p.muted, fontWeight: "600" }}>
+        <Text
+          style={{ ...typeScale.small, color: waiting ? p.canvas : p.muted, fontWeight: "600" }}
+        >
           {formattedCount}
         </Text>
       </View>
@@ -307,10 +319,11 @@ export function BotHiddenChats({
   organization: Organization;
   onClose: () => void;
 }) {
+  const gt = useGT();
   const p = useBotPalette();
   const hidden = items.filter(({ pin }) => organization.hidden.has(botRosterItemKey(pin)));
   return (
-    <Sheet title="Hidden chats" onClose={onClose}>
+    <Sheet title={gt("Hidden chats")} onClose={onClose}>
       <ScreenScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerClassName="gap-4 px-5 pb-6 pt-4"
@@ -320,7 +333,11 @@ export function BotHiddenChats({
             {organization.error}
           </Text>
         )}
-        {hidden.length === 0 && <Text style={{ color: p.muted }}>No hidden chats</Text>}
+        {hidden.length === 0 && (
+          <Text style={{ color: p.muted }}>
+            <T>No hidden chats</T>
+          </Text>
+        )}
         {hidden.map((item) => (
           <View
             key={botRosterItemKey(item.pin)}
@@ -329,7 +346,7 @@ export function BotHiddenChats({
           >
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Open ${item.name}`}
+              accessibilityLabel={gt("Open {name}", { name: item.name })}
               className="min-h-14 min-w-0 flex-1 flex-row items-center gap-2"
               onPress={() => {
                 onClose();
@@ -343,7 +360,7 @@ export function BotHiddenChats({
             </Pressable>
             {organization.canHide(item.pin) && (
               <BotIconButton
-                label={`Show ${item.name}`}
+                label={gt("Show {name}", { name: item.name })}
                 icon="eye"
                 onPress={() => void organization.setHidden(item.pin, false)}
               />

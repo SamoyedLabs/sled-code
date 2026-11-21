@@ -68,7 +68,10 @@ const folderChange = byOutcome({
   covered: fields({
     outcome: oneOf("covered"),
     path,
-    coverage: fields({ reason: oneOf("already-added", "in-workspace", "in-shared", "in-folder"), folder: path }),
+    coverage: fields({
+      reason: oneOf("already-added", "in-workspace", "in-shared", "in-folder"),
+      folder: path,
+    }),
     list: folderList,
   }),
   refused: fields({
@@ -92,11 +95,17 @@ const exclusionChange = byOutcome({
 const folderInput = exact(["agentId", "path"], fields({ agentId: identifier, path }));
 
 export const AGENT_FOLDERS_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
-  [AGENT_FOLDERS_ROUTES.read, adminRoute(exact(["agentId"], fields({ agentId: identifier })), folderList)],
+  [
+    AGENT_FOLDERS_ROUTES.read,
+    adminRoute(exact(["agentId"], fields({ agentId: identifier })), folderList),
+  ],
   [
     AGENT_FOLDERS_ROUTES.add,
     adminRoute(
-      exact(["agentId", "path", "replace"], fields({ agentId: identifier, path }, { replace: path })),
+      exact(
+        ["agentId", "path", "replace"],
+        fields({ agentId: identifier, path }, { replace: path }),
+      ),
       folderChange,
     ),
   ],

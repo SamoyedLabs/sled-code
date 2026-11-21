@@ -2,6 +2,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { Check, Circle } from "lucide-react";
 import { BotAvatar } from "../../avatar/BotAvatar";
+import { useGT } from "gt-react";
 const samples = [
   ["Summarise the open hiring loops for the design lead role", "Reading hiring-tracker.md"],
   ["Find recent papers on retrieval for long documents", "Searching arxiv.org"],
@@ -15,6 +16,7 @@ export function TasksEmptyBoard({
 }: {
   agents: readonly { id: string; avatarSeed?: string | undefined }[];
 }) {
+  const gt = useGT();
   const [step, setStep] = useState(2);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Advance the upstream decorative task illustration, respecting the system motion preference.
   useEffect(() => {
@@ -51,7 +53,7 @@ export function TasksEmptyBoard({
                 className="tasks-page-status"
                 data-tone={age === 1 ? "working" : age >= 2 ? "attention" : undefined}
               >
-                {age === 0 ? "Waiting" : age === 1 ? sample[1] : "Answered"}
+                {age === 0 ? gt("Waiting") : age === 1 ? sample[1] : gt("Answered")}
               </span>
               <BotAvatar
                 seed={

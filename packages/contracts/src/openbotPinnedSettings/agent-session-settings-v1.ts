@@ -27,10 +27,14 @@ const value: AdminDecoder = (input) => (typeof input === "boolean" ? input : str
 const list =
   (decode: AdminDecoder, maximum: number): AdminDecoder =>
   (input) => {
-    if (!Array.isArray(input) || input.length > maximum) throw new Error("Invalid session settings list.");
+    if (!Array.isArray(input) || input.length > maximum)
+      throw new Error("Invalid session settings list.");
     return input.map(decode);
   };
-const choice = fields({ value: string(4096), name: string(4096) }, { description: string(16384), group: string(4096) });
+const choice = fields(
+  { value: string(4096), name: string(4096) },
+  { description: string(16384), group: string(4096) },
+);
 const option: AdminDecoder = (input) => {
   if (!isDynamicRecord(input) || (input.type !== "boolean" && input.type !== "select"))
     throw new Error("Invalid session setting.");
@@ -49,7 +53,8 @@ const option: AdminDecoder = (input) => {
       };
 };
 const overrides: AdminDecoder = (input) => {
-  if (!isDynamicRecord(input) || Object.keys(input).length > 64) throw new Error("Invalid session setting overrides.");
+  if (!isDynamicRecord(input) || Object.keys(input).length > 64)
+    throw new Error("Invalid session setting overrides.");
   return Object.fromEntries(
     Object.entries(input).map(([id, entry]) => {
       settingId(id);
@@ -72,14 +77,23 @@ const exact =
     return decode(input);
   };
 export const AGENT_SESSION_SETTINGS_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
-  [AGENT_SESSION_SETTINGS_ROUTES.read, adminRoute(exact(["agentId"], fields({ agentId: identifier })), response)],
+  [
+    AGENT_SESSION_SETTINGS_ROUTES.read,
+    adminRoute(exact(["agentId"], fields({ agentId: identifier })), response),
+  ],
   [
     AGENT_SESSION_SETTINGS_ROUTES.set,
-    adminRoute(exact(["agentId", "settingId", "value"], fields({ agentId: identifier, settingId, value })), response),
+    adminRoute(
+      exact(["agentId", "settingId", "value"], fields({ agentId: identifier, settingId, value })),
+      response,
+    ),
   ],
   [
     AGENT_SESSION_SETTINGS_ROUTES.reset,
-    adminRoute(exact(["agentId", "settingId"], fields({ agentId: identifier, settingId })), response),
+    adminRoute(
+      exact(["agentId", "settingId"], fields({ agentId: identifier, settingId })),
+      response,
+    ),
   ],
 ]);
 export type AgentSessionSettingsEvent = { type: "agent-session-settings-changed"; agentId: string };

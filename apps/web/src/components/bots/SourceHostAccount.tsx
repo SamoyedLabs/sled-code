@@ -22,6 +22,7 @@ import {
   type HostAccountView,
 } from "./upstream/settings/account-model";
 import "./upstream/settings/account-auth.css";
+import { T, Var, useGT } from "gt-react";
 
 export function SourceHostAccount(props: {
   environmentId: EnvironmentId;
@@ -48,6 +49,7 @@ function HostAccount({
   hostId: string;
   hostName: string;
 }) {
+  const gt = useGT();
   const { actions, capabilities } = useSourceSettingsActions(environmentId, hostId);
   const [view, setView] = useState<HostAccountView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +87,7 @@ function HostAccount({
         return;
       const request = settingRequest(`settings.host-account.${action}`, parameters);
       if (!request || !actions.can(request)) {
-        setError("Account-management permission is required on this host.");
+        setError(gt("Account-management permission is required on this host."));
         return;
       }
       lock.current = true;
@@ -105,7 +107,7 @@ function HostAccount({
         setError(
           cause instanceof Error
             ? cause.message
-            : "The account request could not complete. Check its status before retrying.",
+            : gt("The account request could not complete. Check its status before retrying."),
         );
       }
       lock.current = false;
@@ -143,9 +145,11 @@ function HostAccount({
   }, [state?.status, run]);
   if (!canRead)
     return (
-      <SettingsSection title="OpenBot account">
+      <SettingsSection title={gt("OpenBot account")}>
         <p>
-          This host does not expose account settings, or account-management permission is missing.
+          <T>
+            This host does not expose account settings, or account-management permission is missing.
+          </T>
         </p>
       </SettingsSection>
     );
@@ -180,7 +184,9 @@ function HostAccount({
   return (
     <div className="host-account-settings">
       <p className="ui-text" data-variant="caption" data-tone="muted">
-        OpenBot account on {hostName}
+        <T>
+          OpenBot account on <Var>{hostName}</Var>
+        </T>
       </p>
       <div className="account-login-screen">
         <div className="account-login-shell">
@@ -232,7 +238,7 @@ function HostAccount({
                 disabled={!!pending}
                 onClick={() => void run("retry")}
               >
-                Try again
+                <T>Try again</T>
               </SourceButton>
             ) : company ? (
               <div className="account-login-form" data-auth-panel="company">
@@ -247,7 +253,7 @@ function HostAccount({
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    Open sign-in page
+                    <T>Open sign-in page</T>
                   </a>
                 )}
                 {flow && (
@@ -264,13 +270,15 @@ function HostAccount({
                       event.preventDefault();
                       const query = accountCallbackQuery(callbackAddress, flow.callback!);
                       if (!query) {
-                        setError("Use the exact return address from this sign-in page.");
+                        setError(gt("Use the exact return address from this sign-in page."));
                         return;
                       }
                       void run("companyComplete", { flowId: flow.id, callbackQuery: query });
                     }}
                   >
-                    <label htmlFor="account-callback">Return address</label>
+                    <label htmlFor="account-callback">
+                      <T>Return address</T>
+                    </label>
                     <input
                       id="account-callback"
                       className="ui-input"
@@ -280,11 +288,13 @@ function HostAccount({
                       autoComplete="off"
                     />
                     <p className="ui-text" data-variant="caption">
-                      If this host is on another device, paste the final localhost address here
-                      after signing in.
+                      <T>
+                        If this host is on another device, paste the final localhost address here
+                        after signing in.
+                      </T>
                     </p>
                     <SourceButton type="submit" disabled={!!pending || !callbackAddress}>
-                      Complete sign-in
+                      <T>Complete sign-in</T>
                     </SourceButton>
                   </form>
                 )}

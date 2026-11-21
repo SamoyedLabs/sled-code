@@ -13,6 +13,7 @@ import {
   type RoutineDraftKind,
 } from "./routineScheduleDraft";
 import { decoded } from "./useWorkflowCatalogs";
+import { T, useGT } from "gt-react";
 const Schedule = Schema.Union([
   OpenbotRoutineSchedule,
   Schema.Struct({ kind: Schema.Literal("once"), date: Schema.String, time: Schema.String }),
@@ -27,6 +28,7 @@ export function WorkflowSchedulePicker({
   disabled: boolean;
   onChange: (schedule: Schema.Json) => void;
 }) {
+  const gt = useGT();
   const saved = decoded(Schedule, value) ?? { kind: "daily" as const, time: "09:00" };
   const [edited, setEdited] = useState<RoutineScheduleDraft | null>(null);
   const draft =
@@ -48,7 +50,7 @@ export function WorkflowSchedulePicker({
       {row(
         "Repeat",
         <select
-          aria-label="Repeat"
+          aria-label={gt("Repeat")}
           className="wfn-row-value"
           disabled={disabled}
           value={draft.kind}
@@ -58,7 +60,7 @@ export function WorkflowSchedulePicker({
         >
           {["once", "hourly", "daily", "weekly", "monthly", "yearly", "custom"].map((kind) => (
             <option key={kind} value={kind}>
-              {kind === "once" ? "Once" : kind[0]?.toUpperCase() + kind.slice(1)}
+              {kind === "once" ? gt("Once") : kind[0]?.toUpperCase() + kind.slice(1)}
             </option>
           ))}
         </select>,
@@ -101,8 +103,12 @@ export function WorkflowSchedulePicker({
                 })
               }
             >
-              <option value="all">All day</option>
-              <option value="window">Between</option>
+              <option value="all">
+                <T>All day</T>
+              </option>
+              <option value="window">
+                <T>Between</T>
+              </option>
             </select>,
           )}
           {draft.window ? (
@@ -152,7 +158,9 @@ export function WorkflowSchedulePicker({
       )}
       {(draft.kind === "hourly" || draft.kind === "daily") && (
         <div className="wfn-row">
-          <span className="wfn-row-name">On</span>
+          <span className="wfn-row-name">
+            <T>On</T>
+          </span>
           <div className="wfn-row-value">
             {DAYS.map((day, index) => (
               <button

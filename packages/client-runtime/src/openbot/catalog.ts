@@ -10,6 +10,7 @@ import {
   type OpenbotCatalogRequest,
   type OpenbotCatalogAdminRequest as Admin,
 } from "@t3tools/contracts/openbot-catalog";
+import { mFallback, msg } from "gt-i18n";
 const decodeEntries = Schema.decodeUnknownResult(OpenbotRegistryEntries);
 const decodeInstalled = Schema.decodeUnknownResult(OpenbotRegistryInstalled);
 const decodeStatus = Schema.decodeUnknownResult(OpenbotRegistryStatus);
@@ -62,8 +63,17 @@ export function catalogResult(
           status: null,
           notice:
             result.success.restart === "skipped-busy"
-              ? "Registry request accepted. Provider restart skipped because it is busy. Refresh host status and installed agents."
-              : `Registry request accepted (${result.success.restart}). Refresh host status and installed agents.`,
+              ? mFallback(
+                  msg(
+                    "Registry request accepted. Provider restart skipped because it is busy. Refresh host status and installed agents.",
+                  ),
+                )
+              : mFallback(
+                  msg(
+                    "Registry request accepted ({restart}). Refresh host status and installed agents.",
+                    { restart: result.success.restart },
+                  ),
+                ),
         }
       : null;
   }
@@ -74,7 +84,7 @@ export function catalogResult(
         entries: null,
         installed: null,
         status: null,
-        notice: "Request accepted. Refresh to check the host outcome.",
+        notice: mFallback(msg("Request accepted. Refresh to check the host outcome.")),
       }
     : null;
 }
@@ -102,10 +112,29 @@ export function catalogRequestValid(request: OpenbotCatalogRequest) {
 }
 export function registryConfirmation(request: Admin) {
   return request.operation === "registry.install"
-    ? `Install or update ${request.registryId} as ${request.customAgentId} on this host using ${request.distribution ?? "the host default"}? The host downloads packages or binaries and may run the installed command and restart providers. Existing coding and approval settings stay authoritative.`
+    ? mFallback(
+        msg(
+          "Install or update {registryId} as {customAgentId} on this host using {value}? The host downloads packages or binaries and may run the installed command and restart providers. Existing coding and approval settings stay authoritative.",
+          {
+            registryId: request.registryId,
+            customAgentId: request.customAgentId,
+            value: request.distribution ?? "the host default",
+          },
+        ),
+      )
     : request.operation === "registry.remove"
-      ? `Remove registry provider ${request.registryId} from this host? This affects every client connected to this host.`
-      : `Cancel the installation of ${request.registryId} on this host? Refresh afterward to check the outcome.`;
+      ? mFallback(
+          msg(
+            "Remove registry provider {registryId} from this host? This affects every client connected to this host.",
+            { registryId: request.registryId },
+          ),
+        )
+      : mFallback(
+          msg(
+            "Cancel the installation of {registryId} on this host? Refresh afterward to check the outcome.",
+            { registryId: request.registryId },
+          ),
+        );
 }
 
 export function catalogRecovered(state: CatalogState) {

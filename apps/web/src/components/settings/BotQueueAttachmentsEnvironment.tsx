@@ -22,6 +22,7 @@ import type { useBotConversationPanel } from "./useBotConversationPanel";
 import { appAtomRegistry } from "../../rpc/atomRegistry";
 import { Button } from "../ui/button";
 import { randomUUID as newId } from "../../lib/utils";
+import { T, Var, useGT } from "gt-react";
 const storage = {
   getItem: (key: string) => localStorage.getItem(key),
   setItem: (key: string, value: string) => localStorage.setItem(key, value),
@@ -48,6 +49,7 @@ export function BotQueueAttachmentsEnvironment({
   legacyEditing,
   onActiveChange,
 }: Props) {
+  const gt = useGT();
   const canEdit = useAtomValue(openbot.queueAttachmentSave.permissionAtom(c.environmentId));
   const allowed = c.permission && canEdit;
   const fileContext = useAtomQueryRunner(openbot.fileContext, {
@@ -253,7 +255,9 @@ export function BotQueueAttachmentsEnvironment({
     });
     if (opened._tag === "Failure")
       setNotice(
-        "File edit unavailable or unconfirmed. Resume or release the original edit before continuing.",
+        gt(
+          "File edit unavailable or unconfirmed. Resume or release the original edit before continuing.",
+        ),
       );
     setBusy(false);
   };
@@ -267,7 +271,7 @@ export function BotQueueAttachmentsEnvironment({
       c.taskId !== pending.taskId ||
       c.snapshot?.threadId !== pending.threadId
     ) {
-      setNotice("Return to the original conversation to release this edit.");
+      setNotice(gt("Return to the original conversation to release this edit."));
       return;
     }
     setBusy(true);
@@ -280,7 +284,7 @@ export function BotQueueAttachmentsEnvironment({
       fresh.value.value.principalId !== pending.principal
     ) {
       setBusy(false);
-      setNotice("Original session unavailable.");
+      setNotice(gt("Original session unavailable."));
       return;
     }
     if (
@@ -301,12 +305,12 @@ export function BotQueueAttachmentsEnvironment({
       );
       setPending(null);
       onActiveChange(false);
-      setNotice("Edit released.");
+      setNotice(gt("Edit released."));
     }
     setBusy(false);
   };
   return (
-    <section aria-label="Edit queue with files" className="space-y-2">
+    <section aria-label={gt("Edit queue with files")} className="space-y-2">
       {panel ? (
         <BotQueueAttachments
           initial={panel.initial}
@@ -322,7 +326,7 @@ export function BotQueueAttachmentsEnvironment({
       ) : (
         <>
           <Button disabled={!allowed || busy || legacyEditing} onClick={() => void open()}>
-            Resume file edit
+            <T>Resume file edit</T>
           </Button>
           {!pending &&
             choices.map((d) => (
@@ -333,13 +337,15 @@ export function BotQueueAttachmentsEnvironment({
                 onClick={() => void open(d.id)}
               >
                 <span className="min-w-0 truncate">
-                  Edit with files: {d.text || "Queued message"}
+                  <T>
+                    Edit with files: <Var>{d.text || gt("Queued message")}</Var>
+                  </T>
                 </span>
               </Button>
             ))}
           {pending && (
             <Button disabled={!allowed || busy} onClick={() => void release()}>
-              Release unconfirmed file edit
+              <T>Release unconfirmed file edit</T>
             </Button>
           )}
         </>

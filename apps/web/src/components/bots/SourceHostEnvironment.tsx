@@ -27,6 +27,7 @@ import { DataEnvironment } from "../settings/DataEnvironment";
 import { ComputerEnvironment } from "../settings/ComputerEnvironment";
 import { BotRoutineFlows } from "./BotRoutineFlows";
 import { TemplateEnvironment } from "../settings/TemplateEnvironment";
+import { useGT } from "gt-react";
 type MarketplaceScope = {
   environmentId: EnvironmentId;
   hostId: string;
@@ -64,13 +65,16 @@ function MarketplaceHost({
   activeAgentId?: string | undefined;
   onCompose?: ((agentId: string, text: string) => boolean) | undefined;
 }) {
+  const gt = useGT();
   const connection = Option.getOrNull(usePreparedConnection(environmentId));
   const [draftRequest, setDraftRequest] = useState<MarketplaceDraftRequest | null>(null);
   const requestDraft = onCompose ? setDraftRequest : undefined;
   const apps = useSourceMarketplaceApps({
     environmentId,
     hostId,
-    ...(requestDraft ? { onPrompt: (text) => requestDraft({ title: "Try this app", text }) } : {}),
+    ...(requestDraft
+      ? { onPrompt: (text) => requestDraft({ title: gt("Try this app"), text }) }
+      : {}),
   });
   const { actions, capabilities } = useSourceSettingsActions(environmentId, hostId),
     registry = useContext(RegistryContext);

@@ -19,26 +19,28 @@ import {
   QWEN3_ASR_MODEL_FILES,
 } from "./speech-models";
 import { hasVerifiedSpeechModel, verifySpeechFiles } from "./verified-speech-model";
+import { m } from "../../../../i18n/messages";
+import { msg } from "gt-react-native";
 
 export const BOT_RECOGNITION_MODELS = [
   {
     id: "parakeet",
     name: "Parakeet v3",
-    detail: "25 European languages",
+    detail: m(msg("25 European languages")),
     directory: PARAKEET_MODEL_DIRECTORY,
     files: PARAKEET_MODEL_FILES,
   },
   {
     id: "parakeet-unified",
     name: "Parakeet Unified",
-    detail: "English",
+    detail: m(msg("English")),
     directory: PARAKEET_UNIFIED_MODEL_DIRECTORY,
     files: PARAKEET_UNIFIED_MODEL_FILES,
   },
   {
     id: "qwen3-asr",
     name: "Qwen3-ASR",
-    detail: "30 languages, including mixed Chinese and English",
+    detail: m(msg("30 languages, including mixed Chinese and English")),
     directory: QWEN3_ASR_MODEL_DIRECTORY,
     files: QWEN3_ASR_MODEL_FILES,
   },

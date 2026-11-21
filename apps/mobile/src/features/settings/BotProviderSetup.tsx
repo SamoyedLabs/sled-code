@@ -29,6 +29,7 @@ import { Button } from "../../components/ui/Button";
 import { Menu } from "../../components/ui/Menu";
 import { ControlPill } from "../../components/ui/ControlPill";
 import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
+import { T, Var, useGT } from "gt-react-native";
 
 export function BotProviderSetup({
   environmentId,
@@ -37,6 +38,7 @@ export function BotProviderSetup({
   environmentId: EnvironmentId;
   hostId: string;
 }) {
+  const gt = useGT();
   const modelsQuery = useEnvironmentQuery(
     openbot.readFromHost({
       environmentId,
@@ -123,7 +125,7 @@ export function BotProviderSetup({
     for (const input of requests) {
       const request = providerAdminRequest(input);
       if (!request) {
-        setError("This provider does not support that setup action.");
+        setError(gt("This provider does not support that setup action."));
         break;
       }
       const result = await admin({ environmentId, input: { hostId, request } });
@@ -193,14 +195,14 @@ export function BotProviderSetup({
     );
   const remove = (signOut: boolean) => {
     Dialog.alert(
-      signOut ? "Sign provider out?" : "Remove account?",
+      signOut ? gt("Sign provider out?") : gt("Remove account?"),
       signOut
-        ? "Its bots may need to reconnect before continuing."
-        : "Its bots will move to the provider's own sign-in.",
+        ? gt("Its bots may need to reconnect before continuing.")
+        : gt("Its bots will move to the provider's own sign-in."),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: gt("Cancel"), style: "cancel" },
         {
-          text: signOut ? "Sign out" : "Remove",
+          text: signOut ? gt("Sign out") : gt("Remove"),
           style: "destructive",
           onPress: () =>
             void runMany([
@@ -217,15 +219,15 @@ export function BotProviderSetup({
   const challenge = setup.codeSignIn;
   const hostSignIn = setup.hostSignIn;
   const openPage = (address: string) =>
-    void Linking.openURL(address).catch(() => setError("Could not open the sign-in page."));
+    void Linking.openURL(address).catch(() => setError(gt("Could not open the sign-in page.")));
   return (
     <View className="gap-4">
       <Text className="text-foreground-muted">
-        Choose a provider to manage its sign-in and accounts on this bot engine.
+        <T>Choose a provider to manage its sign-in and accounts on this bot engine.</T>
       </Text>
       {!allowed && (
         <Text className="text-foreground-muted">
-          Provider management and settings permissions are required to change this setup.
+          <T>Provider management and settings permissions are required to change this setup.</T>
         </Text>
       )}
       <BotProviderChoice
@@ -247,13 +249,13 @@ export function BotProviderSetup({
         }}
       />
       <Button
-        label="Load setup"
+        label={gt("Load setup")}
         tone="secondary"
         disabled={busy || !allowed || active}
         onPress={load}
       />
       <Button
-        label="Refresh providers"
+        label={gt("Refresh providers")}
         tone="text"
         size="compact"
         onPress={() => {
@@ -270,14 +272,14 @@ export function BotProviderSetup({
         <>
           {capability.relay && (
             <Button
-              label="Sign in on this device"
+              label={gt("Sign in on this device")}
               disabled={busy || !allowed || active}
               onPress={() => run({ operation: "provider.signInRelay.start", provider })}
             />
           )}
           {capability.codeSignIn && (
             <Button
-              label="Sign in with a code"
+              label={gt("Sign in with a code")}
               tone="secondary"
               disabled={busy || !allowed || active}
               onPress={() => run({ operation: "provider.codeLogin.start", provider })}
@@ -285,7 +287,7 @@ export function BotProviderSetup({
           )}
           {capability.hostSignIn && (
             <Button
-              label="Sign in on the host"
+              label={gt("Sign in on the host")}
               tone="secondary"
               disabled={busy || !allowed || active}
               onPress={() => run({ operation: "provider.hostSignIn.start", provider })}
@@ -293,7 +295,7 @@ export function BotProviderSetup({
           )}
           {capability.signOut && (
             <Button
-              label="Sign out"
+              label={gt("Sign out")}
               tone="secondary"
               disabled={busy || !allowed || active}
               onPress={() => remove(true)}
@@ -303,12 +305,12 @@ export function BotProviderSetup({
             <View className="gap-2 rounded-xl bg-grouped-card p-3">
               <Text>
                 {relay.status?.result
-                  ? (relay.status.result.error ?? "Sign-in completed.")
-                  : "Open the provider's sign-in page, then check its status."}
+                  ? (relay.status.result.error ?? gt("Sign-in completed."))
+                  : gt("Open the provider's sign-in page, then check its status.")}
               </Text>
               {relay.status?.authorizeUrl && (
                 <Button
-                  label="Open sign-in page"
+                  label={gt("Open sign-in page")}
                   tone="text"
                   onPress={() => {
                     if (relay.status?.authorizeUrl) openPage(relay.status.authorizeUrl);
@@ -317,7 +319,7 @@ export function BotProviderSetup({
               )}
               {!relay.status?.result && (
                 <Button
-                  label="Check sign-in"
+                  label={gt("Check sign-in")}
                   tone="secondary"
                   disabled={busy}
                   onPress={() =>
@@ -327,10 +329,12 @@ export function BotProviderSetup({
               )}
               {relay.status?.callback && !relay.status.result && (
                 <>
-                  <Text>Return address from sign-in</Text>
+                  <Text>
+                    <T>Return address from sign-in</T>
+                  </Text>
                   <AppTextInput
                     key={`callback:${privateRevision}`}
-                    accessibilityLabel="Return address from sign-in"
+                    accessibilityLabel={gt("Return address from sign-in")}
                     secureTextEntry
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -342,16 +346,18 @@ export function BotProviderSetup({
                     className="min-h-12 rounded-xl bg-background p-3"
                   />
                   <Text className="text-foreground-muted">
-                    If the browser cannot reach the return page, copy its full address here.
+                    <T>If the browser cannot reach the return page, copy its full address here.</T>
                   </Text>
                   <Button
-                    label="Complete sign-in"
+                    label={gt("Complete sign-in")}
                     disabled={busy || !callback.trim()}
                     onPress={() => {
                       const query = providerRelayCallbackQuery(callback, relay.status!.callback!);
                       if (query === null)
                         setError(
-                          "That address does not match this sign-in. Copy the full return address from the browser.",
+                          gt(
+                            "That address does not match this sign-in. Copy the full return address from the browser.",
+                          ),
                         );
                       else
                         run({
@@ -368,24 +374,36 @@ export function BotProviderSetup({
           {challenge && (
             <View className="gap-2 rounded-xl bg-grouped-card p-3">
               {challenge.kind === "connected" || providerState === "available" ? (
-                <Text>Provider is signed in.</Text>
+                <Text>
+                  <T>Provider is signed in.</T>
+                </Text>
               ) : (
                 <>
                   <Button
-                    label="Open sign-in page"
+                    label={gt("Open sign-in page")}
                     tone="text"
                     onPress={() => openPage(challenge.verificationUrl)}
                   />
-                  {challenge.kind === "code" && <Text selectable>Code: {challenge.userCode}</Text>}
+                  {challenge.kind === "code" && (
+                    <Text selectable>
+                      <T>
+                        Code: <Var>{challenge.userCode}</Var>
+                      </T>
+                    </Text>
+                  )}
                   <Text className="text-foreground-muted">
-                    Expires: {new Date(challenge.expiresAt).toLocaleString()}
+                    <T>
+                      Expires: <Var>{new Date(challenge.expiresAt).toLocaleString()}</Var>
+                    </T>
                   </Text>
                   {challenge.kind === "paste" && (
                     <>
-                      <Text>Code from sign-in page</Text>
+                      <Text>
+                        <T>Code from sign-in page</T>
+                      </Text>
                       <AppTextInput
                         key={`code:${privateRevision}`}
-                        accessibilityLabel="Code from sign-in page"
+                        accessibilityLabel={gt("Code from sign-in page")}
                         secureTextEntry
                         autoCapitalize="none"
                         autoCorrect={false}
@@ -397,7 +415,7 @@ export function BotProviderSetup({
                         className="min-h-12 rounded-xl bg-background p-3"
                       />
                       <Button
-                        label="Submit sign-in code"
+                        label={gt("Submit sign-in code")}
                         disabled={busy || !code.trim()}
                         onPress={() =>
                           run({
@@ -410,7 +428,7 @@ export function BotProviderSetup({
                     </>
                   )}
                   <Button
-                    label="Refresh sign-in status"
+                    label={gt("Refresh sign-in status")}
                     tone="secondary"
                     onPress={() => {
                       modelsQuery.refresh();
@@ -425,11 +443,11 @@ export function BotProviderSetup({
             <View className="gap-2 rounded-xl bg-grouped-card p-3">
               <Text>
                 {hostSignIn.result
-                  ? (hostSignIn.result.error ?? "Sign-in completed.")
-                  : "Continue in the browser on the bot host."}
+                  ? (hostSignIn.result.error ?? gt("Sign-in completed."))
+                  : gt("Continue in the browser on the bot host.")}
               </Text>
               <Button
-                label="Check host sign-in"
+                label={gt("Check host sign-in")}
                 tone="secondary"
                 disabled={busy}
                 onPress={() =>
@@ -444,7 +462,7 @@ export function BotProviderSetup({
               />
               {hostSignIn.tabId && (
                 <Button
-                  label="Show sign-in tab on host"
+                  label={gt("Show sign-in tab on host")}
                   tone="secondary"
                   disabled={busy}
                   onPress={() => run({ operation: "browser.activate", tabId: hostSignIn.tabId! })}
@@ -453,17 +471,26 @@ export function BotProviderSetup({
             </View>
           )}
           {active && (
-            <Button label="Cancel sign-in" tone="secondary" disabled={busy} onPress={cancel} />
+            <Button
+              label={gt("Cancel sign-in")}
+              tone="secondary"
+              disabled={busy}
+              onPress={cancel}
+            />
           )}
           {capability.apiKey && (
             <View className="gap-2 rounded-xl bg-grouped-card p-3">
-              <Text>API key</Text>
+              <Text>
+                <T>API key</T>
+              </Text>
               <Text className="text-foreground-muted">
-                {setup.keyState ? `Key status: ${setup.keyState}` : "The saved key is never shown."}
+                {setup.keyState
+                  ? gt("Key status: {keyState}", { keyState: setup.keyState })
+                  : gt("The saved key is never shown.")}
               </Text>
               <AppTextInput
                 key={`key:${privateRevision}`}
-                accessibilityLabel="Provider API key"
+                accessibilityLabel={gt("Provider API key")}
                 secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -475,7 +502,7 @@ export function BotProviderSetup({
                 className="min-h-12 rounded-xl bg-background p-3"
               />
               <Button
-                label="Save key"
+                label={gt("Save key")}
                 disabled={busy || !allowed || active || !apiKey.trim()}
                 onPress={() =>
                   void runMany([
@@ -485,7 +512,7 @@ export function BotProviderSetup({
                 }
               />
               <Button
-                label="Clear key"
+                label={gt("Clear key")}
                 tone="secondary"
                 disabled={busy || !allowed || active}
                 onPress={() =>
@@ -496,7 +523,7 @@ export function BotProviderSetup({
                 }
               />
               <Button
-                label="Check key status"
+                label={gt("Check key status")}
                 tone="text"
                 disabled={busy || !allowed}
                 onPress={() => run({ operation: "provider.apiKey.state", provider })}
@@ -506,24 +533,26 @@ export function BotProviderSetup({
           {capability.managed && (
             <View className="gap-2 rounded-xl bg-grouped-card p-3">
               <Text>
-                Runtime: {runtime?.phase}
-                {runtime?.version ? ` · ${runtime.version}` : ""}
-                {runtime?.message ? ` · ${runtime.message}` : ""}
+                <T>
+                  Runtime: <Var>{runtime?.phase}</Var>
+                  <Var>{runtime?.version ? ` · ${runtime.version}` : ""}</Var>
+                  <Var>{runtime?.message ? ` · ${runtime.message}` : ""}</Var>
+                </T>
               </Text>
               <Button
-                label="Download or update runtime"
+                label={gt("Download or update runtime")}
                 tone="secondary"
                 disabled={busy || !allowed || active}
                 onPress={() => run({ operation: "provider.runtimes.download", provider })}
               />
               <Button
-                label="Cancel download"
+                label={gt("Cancel download")}
                 tone="secondary"
                 disabled={busy || !allowed || runtime?.phase !== "downloading"}
                 onPress={() => run({ operation: "provider.runtimes.cancel", provider })}
               />
               <Button
-                label="Check runtime updates"
+                label={gt("Check runtime updates")}
                 tone="text"
                 disabled={busy || !allowed}
                 onPress={() => run({ operation: "provider.runtimes.check" })}
@@ -532,10 +561,12 @@ export function BotProviderSetup({
           )}
           {capability.multipleAccounts && (
             <View className="gap-2 rounded-xl bg-grouped-card p-3">
-              <Text>Accounts</Text>
+              <Text>
+                <T>Accounts</T>
+              </Text>
               <Menu
-                title="Provider account"
-                accessibilityLabel="Choose provider account"
+                title={gt("Provider account")}
+                accessibilityLabel={gt("Choose provider account")}
                 actions={accountOptions.map((account) => ({
                   id: account.id,
                   title: `${account.label ?? account.email ?? (account.id === "default" ? "Provider's own sign-in" : account.id)} · ${account.state}`,
@@ -557,24 +588,26 @@ export function BotProviderSetup({
                   label={
                     accountOptions.find((account) => account.id === accountId)?.label ??
                     accountOptions.find((account) => account.id === accountId)?.email ??
-                    "Choose an account"
+                    gt("Choose an account")
                   }
                   variant="pill"
                   disabled={busy || active}
                 />
               </Menu>
               <Button
-                label="Add account"
+                label={gt("Add account")}
                 tone="secondary"
                 disabled={busy || !allowed || active}
                 onPress={() => reconnectAccount(null)}
               />
               {accountId && (
                 <>
-                  <Text>Account label</Text>
+                  <Text>
+                    <T>Account label</T>
+                  </Text>
                   <AppTextInput
                     key={`label:${provider}:${accountId}`}
-                    accessibilityLabel="Account label"
+                    accessibilityLabel={gt("Account label")}
                     defaultValue={label}
                     onChangeText={setLabel}
                     maxLength={60}
@@ -582,7 +615,7 @@ export function BotProviderSetup({
                     className="min-h-12 rounded-xl bg-background p-3"
                   />
                   <Button
-                    label="Save label"
+                    label={gt("Save label")}
                     disabled={busy || !allowed || active}
                     onPress={() =>
                       void runMany([
@@ -597,14 +630,14 @@ export function BotProviderSetup({
                     }
                   />
                   <Button
-                    label="Reconnect account"
+                    label={gt("Reconnect account")}
                     tone="secondary"
                     disabled={busy || !allowed || active}
                     onPress={() => reconnectAccount(accountId)}
                   />
                   {accountId !== "default" && (
                     <Button
-                      label="Remove account"
+                      label={gt("Remove account")}
                       tone="secondary"
                       disabled={busy || !allowed || active}
                       onPress={() => remove(false)}
@@ -616,12 +649,14 @@ export function BotProviderSetup({
           )}
           {setup.defaults && (
             <Text className="text-foreground-muted">
-              Engine default: {setup.defaults.provider ?? "Host default"}
-              {setup.defaults.model ? ` · ${setup.defaults.model}` : ""}
+              <T>
+                Engine default: <Var>{setup.defaults.provider ?? gt("Host default")}</Var>
+                <Var>{setup.defaults.model ? ` · ${setup.defaults.model}` : ""}</Var>
+              </T>
             </Text>
           )}
           <Button
-            label="Set selected model as engine default"
+            label={gt("Set selected model as engine default")}
             tone="secondary"
             disabled={busy || !allowed || active || !choice.model}
             onPress={() =>
@@ -641,7 +676,11 @@ export function BotProviderSetup({
         </>
       )}
       <BotConnections environmentId={environmentId} hostId={hostId} />
-      <BotSettingsEnvironment key={`settings:${environmentId}:${hostId}`} environmentId={environmentId} hostId={hostId} />
+      <BotSettingsEnvironment
+        key={`settings:${environmentId}:${hostId}`}
+        environmentId={environmentId}
+        hostId={hostId}
+      />
       <TemplateEnvironment
         key={`templates:${environmentId}:${hostId}`}
         environmentId={environmentId}

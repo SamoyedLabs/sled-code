@@ -48,6 +48,7 @@ import {
 } from "./types";
 import "./ProviderModelPicker.css";
 import "./SourceControls.css";
+import { useGT } from "gt-react";
 
 export interface OpenbotProviderModelPickerProps {
   provider: string;
@@ -184,6 +185,7 @@ function SwapLabel({ value }: { value: string }) {
 
 /** React translation of ProviderModelPicker.tsx; the host owns catalog and selection state. */
 export function OpenbotProviderModelPicker(props: OpenbotProviderModelPickerProps) {
+  const gt = useGT();
   const trigger = useRef<HTMLButtonElement>(null);
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -444,7 +446,11 @@ export function OpenbotProviderModelPicker(props: OpenbotProviderModelPickerProp
           <TooltipPopup side="bottom">
             {props.disabledReason ??
               (foreign
-                ? `${props.agentStatus.providers?.find((status) => status.id === foreign)?.displayName ?? foreign} requires a newer version of OpenBot.`
+                ? gt("{value} requires a newer version of OpenBot.", {
+                    value:
+                      props.agentStatus.providers?.find((status) => status.id === foreign)
+                        ?.displayName ?? foreign,
+                  })
                 : summary)}
           </TooltipPopup>
         </Tooltip>
@@ -601,6 +607,7 @@ function PickerPanel({
   trigger: import("react").RefObject<HTMLButtonElement | null>;
   customAgentCount: number;
 }) {
+  const gt = useGT();
   const [olderOpen, setOlderOpen] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
@@ -902,7 +909,9 @@ function PickerPanel({
             <small className="provider-model-limit">
               {usageWindowLabel(headingSpent.windowDurationMins)} limit
               {formatUsageReset(headingSpent.resetsAt)
-                ? ` · Resets ${formatUsageReset(headingSpent.resetsAt)}`
+                ? gt(" · Resets {formatUsageReset}", {
+                    formatUsageReset: formatUsageReset(headingSpent.resetsAt),
+                  })
                 : ""}
             </small>
           )}
@@ -950,7 +959,7 @@ function PickerPanel({
                     setConnectError(
                       error instanceof Error
                         ? error.message
-                        : "The provider action failed. Try again.",
+                        : gt("The provider action failed. Try again."),
                     ),
                   );
               }}

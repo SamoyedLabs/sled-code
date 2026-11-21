@@ -18,6 +18,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { T, useGT } from "gt-react";
 
 type Props = {
   scope: PrivilegedResponseScope;
@@ -30,6 +31,7 @@ export function BotPrivilegedResponse(props: Props) {
   return <ResponseForm key={JSON.stringify(props.scope)} {...props} />;
 }
 function ResponseForm({ scope, spec, available, current, execute }: Props) {
+  const gt = useGT();
   const [binding] = useState(() => ({ scope, current, execute }));
   const controller = useRef<ReturnType<typeof createPrivilegedResponseController> | null>(null);
   const inFlight = useRef(false);
@@ -64,7 +66,12 @@ function ResponseForm({ scope, spec, available, current, execute }: Props) {
       if (controller.current === active) controller.current = null;
     };
   }, [binding]);
-  if (!available) return <p>Secure response is unavailable for this connection.</p>;
+  if (!available)
+    return (
+      <p>
+        <T>Secure response is unavailable for this connection.</T>
+      </p>
+    );
   const disabled = phase !== "editing";
   const send = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -75,7 +82,7 @@ function ResponseForm({ scope, spec, available, current, execute }: Props) {
       values,
     });
     if (!response) {
-      setStatus("Check the required fields.");
+      setStatus(gt("Check the required fields."));
       return;
     }
     inFlight.current = true;
@@ -86,22 +93,22 @@ function ResponseForm({ scope, spec, available, current, execute }: Props) {
     let attempted = false;
     const settled = await settlePromise(async () => {
       if (!(await active.prepare())) {
-        setStatus("This request is no longer available. Reopen the current request.");
+        setStatus(gt("This request is no longer available. Reopen the current request."));
         return;
       }
       attempted = true;
       const result = await active.submit(response);
       setStatus(
         result?.status === "answered"
-          ? "Response delivered."
-          : "Delivery is not confirmed. Check the result before taking further action.",
+          ? gt("Response delivered.")
+          : gt("Delivery is not confirmed. Check the result before taking further action."),
       );
     });
     if (settled._tag === "Failure") {
       setStatus(
         attempted
-          ? "Delivery is not confirmed. Check the result before taking further action."
-          : "This request is unavailable. Your fields were cleared.",
+          ? gt("Delivery is not confirmed. Check the result before taking further action.")
+          : gt("This request is unavailable. Your fields were cleared."),
       );
     }
     inFlight.current = false;
@@ -114,7 +121,7 @@ function ResponseForm({ scope, spec, available, current, execute }: Props) {
       onValueChange={(value) => setValues((old) => ({ ...old, [id]: value ?? "" }))}
     >
       <SelectTrigger id={`${inputId}-${id}`} aria-label={label}>
-        <SelectValue placeholder="Choose…" />
+        <SelectValue placeholder={gt("Choose…")} />
       </SelectTrigger>
       <SelectContent>
         {entries.map((option) => (
@@ -127,14 +134,16 @@ function ResponseForm({ scope, spec, available, current, execute }: Props) {
   );
   return (
     <form
-      aria-label="Secure response"
+      aria-label={gt("Secure response")}
       className="flex min-w-0 max-w-lg flex-col gap-3 rounded-xl border border-border/60 bg-card p-4"
       onSubmit={send}
       autoComplete="off"
     >
       <div className="flex min-w-0 flex-col gap-1">
         <p className="text-sm font-medium text-foreground">{spec.title}</p>
-        <p className="text-sm text-muted-foreground">Fill in each field below.</p>
+        <p className="text-sm text-muted-foreground">
+          <T>Fill in each field below.</T>
+        </p>
       </div>
       {spec.type === "form" &&
         spec.fields.map((field) => {
@@ -226,20 +235,20 @@ function ResponseForm({ scope, spec, available, current, execute }: Props) {
               controller.current?.clearForm();
             }}
           >
-            Clear
+            <T>Clear</T>
           </Button>
         )}
         <Button type="submit" disabled={disabled || (spec.type === "confirm" && !action)}>
           {phase === "submitting"
-            ? "Sending…"
+            ? gt("Sending…")
             : spec.type === "form"
-              ? (spec.submit ?? "Save securely")
-              : "Confirm and submit"}
+              ? (spec.submit ?? gt("Save securely"))
+              : gt("Confirm and submit")}
         </Button>
       </div>
       <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
         <ShieldCheckIcon className="size-3.5 shrink-0" aria-hidden />
-        Private response · not posted as a chat message.
+        <T>Private response · not posted as a chat message.</T>
       </p>
       <p role="status" className="text-xs text-muted-foreground">
         {status}
@@ -254,14 +263,14 @@ function ResponseForm({ scope, spec, available, current, execute }: Props) {
               .then((result) =>
                 setStatus(
                   result?.status === "answered"
-                    ? "Response delivered."
-                    : "Delivery is not confirmed.",
+                    ? gt("Response delivered.")
+                    : gt("Delivery is not confirmed."),
                 ),
               )
-              .catch(() => setStatus("Result unavailable."))
+              .catch(() => setStatus(gt("Result unavailable.")))
           }
         >
-          Check result
+          <T>Check result</T>
         </Button>
       )}
     </form>

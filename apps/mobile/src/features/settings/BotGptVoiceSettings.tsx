@@ -9,26 +9,29 @@ import {
 } from "../bots/upstream/voice/botGptVoice";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
+import { m } from "../../i18n/messages";
+import { T, msg, useGT } from "gt-react-native";
 
 const choices = [
-  { id: "automatic", title: "Automatic" },
+  { id: "automatic", title: m(msg("Automatic")) },
   ...OPENBOT_LIVE_VOICES.map((id) => ({ id, title: id[0]!.toUpperCase() + id.slice(1) })),
 ];
 
 export function BotGptVoiceSettings({ disabled }: { disabled: boolean }) {
+  const gt = useGT();
   const settings = useBotGptVoiceSettings();
   function save(next: typeof settings) {
     try {
       saveBotGptVoiceSettings(next);
     } catch {
-      Dialog.alert("Could not save GPT live voice settings", "Try again.");
+      Dialog.alert(gt("Could not save GPT live voice settings"), gt("Try again."));
     }
   }
   return (
     <SettingsSection footer="Uses the Codex sign-in on your bot computer for live voice in direct bot chats.">
       <SettingsSwitchRow
         icon="mic"
-        label="GPT live voice"
+        label={gt("GPT live voice")}
         value={settings.enabled}
         disabled={disabled}
         onValueChange={(enabled) => save({ ...settings, enabled })}
@@ -47,13 +50,15 @@ export function BotGptVoiceSettings({ disabled }: { disabled: boolean }) {
         >
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="GPT live voice selection"
+            accessibilityLabel={gt("GPT live voice selection")}
             disabled={disabled}
             className="min-h-11 flex-row items-center justify-between px-4"
           >
-            <AppText>Voice</AppText>
+            <AppText>
+              <T>Voice</T>
+            </AppText>
             <AppText className="text-foreground-muted">
-              {choices.find((choice) => choice.id === settings.voice)?.title ?? "Automatic"}
+              {choices.find((choice) => choice.id === settings.voice)?.title ?? gt("Automatic")}
             </AppText>
           </Pressable>
         </Menu>

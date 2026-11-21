@@ -196,7 +196,15 @@ it("binds GitHub trigger actions and side answers to the read identity and never
   const values = {
     "settings.workflows-github.history": {
       deliveries: [
-        { id: "older", nodeId: "trigger", event: "opened", outcome: "skipped", reason: null, item: null, receivedAt: "2026-11-03T00:00:00Z" },
+        {
+          id: "older",
+          nodeId: "trigger",
+          event: "opened",
+          outcome: "skipped",
+          reason: null,
+          item: null,
+          receivedAt: "2026-11-03T00:00:00Z",
+        },
         {
           id: "delivery",
           receivedAt: "2026-11-04T00:00:00Z",
@@ -225,7 +233,11 @@ it("binds GitHub trigger actions and side answers to the read identity and never
   const current = settingsAdvanced("first", ["workflows-github-v1", "side-question-v1"], values, {
     githubWorkflow: "first",
   });
-  expect(current.flatMap(s => s.controls).filter(c => c.request?.operation === "settings.workflows-github.runLastEvent")).toHaveLength(1);
+  expect(
+    current
+      .flatMap((s) => s.controls)
+      .filter((c) => c.request?.operation === "settings.workflows-github.runLastEvent"),
+  ).toHaveLength(1);
   expect(
     current
       .flatMap((s) => s.controls)

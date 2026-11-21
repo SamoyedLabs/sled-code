@@ -9,6 +9,8 @@ import type {
   ProviderRuntimeStatus,
   AgentProviderId,
 } from "./upstream/provider/types";
+import { m } from "../../i18n/messages";
+import { msg } from "gt-react";
 
 /** UI-only provider entries. They never route a Threads request to a bot host. */
 export function botModelPickerCatalog(input: {
@@ -89,7 +91,7 @@ export function botModelPickerCatalog(input: {
                   : [
                       {
                         id: "reasoningEffort",
-                        label: "Reasoning effort",
+                        label: m(msg("Reasoning effort")),
                         type: "select" as const,
                         role: "reasoning" as const,
                         options: model.supportedReasoningEfforts.map((id) => ({

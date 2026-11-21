@@ -28,6 +28,7 @@ import { PluginAppPage, type AppConnection } from "./upstream/marketplace-apps/P
 import { AppConnectDialog } from "./upstream/marketplace-apps/AppConnectDialog";
 import { VaultConnectorEnvironment } from "./upstream/vault/VaultConnectorEnvironment";
 import { OnePasswordMark } from "./upstream/vault/OnePasswordMark";
+import { useGT } from "gt-react";
 const decodeRows = Schema.decodeUnknownSync(
   Schema.Array(
     Schema.Struct({
@@ -95,6 +96,7 @@ export function useSourceMarketplaceApps({
   hostName?: string;
   onPrompt?: ((prompt: string) => void) | undefined;
 }) {
+  const gt = useGT();
   const registry = useContext(RegistryContext),
     admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
   const connection = readPreparedConnection(environmentId),
@@ -192,7 +194,7 @@ export function useSourceMarketplaceApps({
       setHeld({ scope, connection, rows, connections });
       setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not load app connections.");
+      setError(cause instanceof Error ? cause.message : gt("Could not load app connections."));
     }
   };
   const load = useEffectEvent(async () => {
@@ -247,7 +249,10 @@ export function useSourceMarketplaceApps({
         current.rows.some((row) => row.name.toLowerCase() === app.server.name.toLowerCase())
       ) {
         setError(
-          `Another connection already uses the name ${app.server.name}. Rename it in MCP settings before connecting this app.`,
+          gt(
+            "Another connection already uses the name {name}. Rename it in MCP settings before connecting this app.",
+            { name: app.server.name },
+          ),
         );
         return;
       }
@@ -267,7 +272,7 @@ export function useSourceMarketplaceApps({
           status={status}
           connections={current?.connections ?? {}}
           canManage={canManage && Boolean(current)}
-          error={!canManage ? "You do not have permission to manage apps." : error}
+          error={!canManage ? gt("You do not have permission to manage apps.") : error}
           onConnect={connect}
           onRefresh={refresh}
           onPrompt={onPrompt}
@@ -381,8 +386,8 @@ export function useSourceMarketplaceApps({
         {builtins.overlay}
         {createCustom && (
           <Wizard
-            title="Add app"
-            description="Connect a custom MCP server to this host."
+            title={gt("Add app")}
+            description={gt("Connect a custom MCP server to this host.")}
             close={() => {
               setCreateCustom(false);
               void refresh();

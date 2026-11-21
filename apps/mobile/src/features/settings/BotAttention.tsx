@@ -14,6 +14,7 @@ import { ThemedSwitch } from "../../components/ui/ThemedSwitch";
 import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { T, Var, useGT } from "gt-react-native";
 
 export function BotAttention({
   environmentId,
@@ -22,6 +23,7 @@ export function BotAttention({
   environmentId: EnvironmentId;
   agentId?: string;
 }) {
+  const gt = useGT();
   const query = useEnvironmentQuery(openbot.attention({ environmentId, input: {} }));
   const changes = useEnvironmentQuery(openbot.changes({ environmentId, input: {} }));
   const agents = useEnvironmentQuery(openbot.agents({ environmentId, input: {} }));
@@ -32,7 +34,9 @@ export function BotAttention({
   const ready = snapshot?.state === "ready" && !query.error && !changes.error && !query.isPending;
   return (
     <View className="gap-3">
-      <Text textRole="headline">Needs your input</Text>
+      <Text textRole="headline">
+        <T>Needs your input</T>
+      </Text>
       {(query.error || changes.error) && (
         <Text accessibilityRole="alert" className="text-danger">
           {query.error ?? changes.error}
@@ -41,8 +45,8 @@ export function BotAttention({
       {(!snapshot || snapshot.state !== "ready") && (
         <Text accessibilityLiveRegion="polite" className="text-foreground-muted">
           {snapshot?.state === "disconnected"
-            ? "Bot requests are unavailable while the engine is offline."
-            : "Connecting to live bot requests…"}
+            ? gt("Bot requests are unavailable while the engine is offline.")
+            : gt("Connecting to live bot requests…")}
         </Text>
       )}
       {snapshot?.state === "ready" && !snapshot.complete && (
@@ -51,15 +55,20 @@ export function BotAttention({
           textRole="footnote"
           className="text-foreground-muted"
         >
-          Showing a partial set of requests. More may be waiting; this list updates as you respond.
+          <T>
+            Showing a partial set of requests. More may be waiting; this list updates as you
+            respond.
+          </T>
         </Text>
       )}
       {ready && snapshot.complete && requests.length === 0 && (
-        <Text className="text-foreground-muted">No bot requests are waiting.</Text>
+        <Text className="text-foreground-muted">
+          <T>No bot requests are waiting.</T>
+        </Text>
       )}
       {!canRespond && (
         <Text textRole="footnote" className="text-foreground-muted">
-          Settings permission is required to respond to bot requests.
+          <T>Settings permission is required to respond to bot requests.</T>
         </Text>
       )}
       {requests.map((request) => (
@@ -91,6 +100,7 @@ function AttentionRequest({
   agentName: string;
   disabled: boolean;
 }) {
+  const gt = useGT();
   const admin = useAtomCommand(openbot.admin, { reportFailure: false });
   const answerRequest = useAtomCommand(openbot.attentionRespond, { reportFailure: false });
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
@@ -129,12 +139,12 @@ function AttentionRequest({
         {request.kind === "approval"
           ? `${request.approvalKind ?? "Action"} approval`
           : request.kind === "prompt"
-            ? "Question"
-            : "Browser help"}
+            ? gt("Question")
+            : gt("Browser help")}
       </Text>
       {(busy || submitted) && (
         <Text accessibilityLiveRegion="polite" textRole="footnote">
-          {busy ? "Sending response…" : "Response sent. Waiting for the bot…"}
+          {busy ? gt("Sending response…") : gt("Response sent. Waiting for the bot…")}
         </Text>
       )}
       {error && (
@@ -146,32 +156,62 @@ function AttentionRequest({
         <>
           {approval ? (
             <View className="gap-2">
-              {approval.command && <Text selectable>Command: {approval.command}</Text>}
-              {approval.cwd && <Text selectable>Working directory: {approval.cwd}</Text>}
-              {approval.reason && <Text selectable>Reason: {approval.reason}</Text>}
-              {approval.grantRoot && <Text selectable>Access root: {approval.grantRoot}</Text>}
+              {approval.command && (
+                <Text selectable>
+                  <T>
+                    Command: <Var>{approval.command}</Var>
+                  </T>
+                </Text>
+              )}
+              {approval.cwd && (
+                <Text selectable>
+                  <T>
+                    Working directory: <Var>{approval.cwd}</Var>
+                  </T>
+                </Text>
+              )}
+              {approval.reason && (
+                <Text selectable>
+                  <T>
+                    Reason: <Var>{approval.reason}</Var>
+                  </T>
+                </Text>
+              )}
+              {approval.grantRoot && (
+                <Text selectable>
+                  <T>
+                    Access root: <Var>{approval.grantRoot}</Var>
+                  </T>
+                </Text>
+              )}
               {approval.permissions && (
                 <Text selectable>
-                  Read: {approval.permissions.fileSystem.read.join(", ") || "None"}
-                  {"\n"}Write: {approval.permissions.fileSystem.write.join(", ") || "None"}
-                  {"\n"}Network: {approval.permissions.network ? "Allowed" : "Not requested"}
+                  <T>
+                    Read: <Var>{approval.permissions.fileSystem.read.join(", ") || gt("None")}</Var>
+                    <Var>{"\n"}</Var>Write:{" "}
+                    <Var>{approval.permissions.fileSystem.write.join(", ") || gt("None")}</Var>
+                    <Var>{"\n"}</Var>Network:{" "}
+                    <Var>{approval.permissions.network ? gt("Allowed") : gt("Not requested")}</Var>
+                  </T>
                 </Text>
               )}
             </View>
           ) : (
             <Text className="text-foreground-muted">
-              Approval details are unavailable. Review this request on the host.
+              <T>Approval details are unavailable. Review this request on the host.</T>
             </Text>
           )}
           {approval?.truncated && (
             <Text textRole="footnote" className="text-foreground-muted">
-              These details were shortened by the engine. Review the complete request on the host
-              before approving.
+              <T>
+                These details were shortened by the engine. Review the complete request on the host
+                before approving.
+              </T>
             </Text>
           )}
           <View className="flex-row flex-wrap gap-2">
             <Button
-              label="Approve once"
+              label={gt("Approve once")}
               disabled={unavailable || !approval || approval.truncated}
               onPress={() =>
                 void respond({
@@ -182,7 +222,7 @@ function AttentionRequest({
               }
             />
             <Button
-              label="Decline"
+              label={gt("Decline")}
               disabled={unavailable}
               onPress={() =>
                 void respond({
@@ -199,7 +239,7 @@ function AttentionRequest({
         <View className="gap-3">
           {request.questions?.map((question) => (
             <View key={question.id} className="gap-2">
-              <Text textRole="headline">{question.header || "Question"}</Text>
+              <Text textRole="headline">{question.header || gt("Question")}</Text>
               <Text selectable>{question.question}</Text>
               {!question.isSecret && question.options?.length ? (
                 <View className="gap-2">
@@ -252,14 +292,14 @@ function AttentionRequest({
           ))}
           <View className="flex-row flex-wrap gap-2">
             <Button
-              label="Send answer"
+              label={gt("Send answer")}
               disabled={unavailable || !answer}
               onPress={() => {
                 if (answer) void respond(answer);
               }}
             />
             <Button
-              label="Cancel request"
+              label={gt("Cancel request")}
               disabled={unavailable}
               onPress={() =>
                 void respond({
@@ -276,38 +316,42 @@ function AttentionRequest({
         <>
           <Text>
             {request.takeoverReason === "sign-in-blocked"
-              ? "The website blocked sign-in. Finish signing in using the bot’s browser on its host."
-              : "This bot needs you to finish a step in its browser on the host."}
+              ? gt(
+                  "The website blocked sign-in. Finish signing in using the bot’s browser on its host.",
+                )
+              : gt("This bot needs you to finish a step in its browser on the host.")}
           </Text>
           {request.browserSecret && (
             <Text textRole="footnote" className="text-foreground-muted">
               {request.browserSecret.origin} ·{" "}
               {request.browserSecret.method === "password"
-                ? "Password required"
-                : "Verification code required"}
+                ? gt("Password required")
+                : gt("Verification code required")}
             </Text>
           )}
           {tabId && (
             <Button
-              label="Show tab on host"
+              label={gt("Show tab on host")}
               disabled={unavailable}
               onPress={() => void respond({ operation: "browser.activate", tabId })}
             />
           )}
           <View className="flex-row items-center gap-3">
             <ThemedSwitch
-              accessibilityLabel="I finished the browser step on the host"
+              accessibilityLabel={gt("I finished the browser step on the host")}
               value={reviewed}
               disabled={unavailable}
               onValueChange={setReviewed}
             />
             <View className="flex-1">
-              <Text>I finished the browser step on the host</Text>
+              <Text>
+                <T>I finished the browser step on the host</T>
+              </Text>
             </View>
           </View>
           <View className="flex-row flex-wrap gap-2">
             <Button
-              label="Resume bot"
+              label={gt("Resume bot")}
               disabled={unavailable || !reviewed}
               onPress={() =>
                 void respond({
@@ -318,7 +362,7 @@ function AttentionRequest({
               }
             />
             <Button
-              label="Cancel request"
+              label={gt("Cancel request")}
               disabled={unavailable}
               onPress={() =>
                 void respond({

@@ -95,12 +95,10 @@ it("searches group routines through the released group-capable endpoint when bot
   using _permission = vi
     .spyOn(openbot.adminToHost, "permissionAtom")
     .mockReturnValue(Atom.make(true));
-  transport.read
-    .mockReset()
-    .mockResolvedValue({
-      _tag: "Success",
-      value: { capabilities: ["sled-once-routines-v1", "routine-recovery-v1"] },
-    });
+  transport.read.mockReset().mockResolvedValue({
+    _tag: "Success",
+    value: { capabilities: ["sled-once-routines-v1", "routine-recovery-v1"] },
+  });
   transport.command.mockReset().mockImplementation(async ({ input }) => {
     const request = input.request;
     if (request.owner.kind === "channel" && request.includeOneTime) return { _tag: "Failure" };
@@ -125,7 +123,9 @@ it("searches group routines through the released group-capable endpoint when bot
     { router: false },
   );
   await expect.element(view.getByLabelText("Pending")).toHaveTextContent("ready");
-  await expect.element(view.getByLabelText("Routines")).toHaveTextContent("Bot once check|Group check");
+  await expect
+    .element(view.getByLabelText("Routines"))
+    .toHaveTextContent("Bot once check|Group check");
   await expect.element(view.getByLabelText("Failed")).toHaveTextContent("false");
 });
 it("discards delayed results when the search closes or its authenticated connection changes", async () => {

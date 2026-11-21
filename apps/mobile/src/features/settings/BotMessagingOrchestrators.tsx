@@ -11,6 +11,7 @@ import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { Button } from "../../components/ui/Button";
 import { AppText as Text } from "../../components/ui/AppText";
+import { T, useGT } from "gt-react-native";
 
 export function MessagingOrchestrators({
   controller: { state, run, busy, setError },
@@ -23,6 +24,7 @@ export function MessagingOrchestrators({
   hostId: string;
   platform: BotMessagingPlatform;
 }) {
+  const gt = useGT();
   const query = useEnvironmentQuery(
     openbot.readFromHost({
       environmentId,
@@ -43,7 +45,7 @@ export function MessagingOrchestrators({
     if (!needsAgent) return;
     const request = botMessagingOrchestratorRequest(platform, needsAgent.row.workspaceId);
     if (!request) {
-      setError("Refresh this connection before setting up its orchestrator.");
+      setError(gt("Refresh this connection before setting up its orchestrator."));
       return;
     }
     if (await run([request, { operation: "connector.messaging.overview", platform }]))
@@ -51,17 +53,25 @@ export function MessagingOrchestrators({
   };
   return (
     <View className="gap-2 border-t border-border pt-3">
-      <Text className="font-t3-medium">Orchestrator bots</Text>
+      <Text className="font-t3-medium">
+        <T>Orchestrator bots</T>
+      </Text>
       <Text className="text-foreground-muted">
-        An orchestrator answers connected places on this host. Setup reuses a platform's existing
-        bot, or creates one with the host's default provider and model.
+        <T>
+          An orchestrator answers connected places on this host. Setup reuses a platform's existing
+          bot, or creates one with the host's default provider and model.
+        </T>
       </Text>
       <Button
-        label="Refresh orchestrators"
+        label={gt("Refresh orchestrators")}
         disabled={busy || query.isPending}
         onPress={query.refresh}
       />
-      {query.isPending && <Text accessibilityLiveRegion="polite">Loading orchestrators…</Text>}
+      {query.isPending && (
+        <Text accessibilityLiveRegion="polite">
+          <T>Loading orchestrators…</T>
+        </Text>
+      )}
       {query.error && (
         <Text accessibilityRole="alert" className="text-danger">
           {query.error}
@@ -70,12 +80,12 @@ export function MessagingOrchestrators({
       {assignments.map(({ row, agent }) => (
         <Text key={row.workspaceId}>
           {row.workspaceName}:{" "}
-          {agent ? `${agent.name} · ${agent.provider} (${agent.id})` : "No orchestrator"}
+          {agent ? `${agent.name} · ${agent.provider} (${agent.id})` : gt("No orchestrator")}
         </Text>
       ))}
       {needsAgent && (
         <Button
-          label={hasAgent ? "Use existing orchestrator" : "Create orchestrator"}
+          label={hasAgent ? gt("Use existing orchestrator") : gt("Create orchestrator")}
           disabled={!allowed || busy || query.isPending}
           onPress={() => void setup()}
         />

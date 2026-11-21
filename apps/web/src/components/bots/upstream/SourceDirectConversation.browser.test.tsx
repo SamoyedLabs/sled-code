@@ -119,7 +119,15 @@ it("keeps long direct histories bounded while preserving the latest original mes
   });
   await expect.element(screen.getByText("Original message 299", { exact: true })).toBeVisible();
   const log = screen.getByRole("log", { name: "Direct messages" }).element();
-  expect(log.scrollTop, JSON.stringify({height: log.scrollHeight, viewport: log.clientHeight, total: log.querySelector(".virtual-chat-list")?.getAttribute("style"), rows: log.querySelectorAll("article").length})).toBeGreaterThan(0);
+  expect(
+    log.scrollTop,
+    JSON.stringify({
+      height: log.scrollHeight,
+      viewport: log.clientHeight,
+      total: log.querySelector(".virtual-chat-list")?.getAttribute("style"),
+      rows: log.querySelectorAll("article").length,
+    }),
+  ).toBeGreaterThan(0);
 });
 
 it("opens the exact unloaded unread message before marking read and can return to latest", async () => {

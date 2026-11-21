@@ -1,3 +1,5 @@
+import { m } from "../../../../i18n/messages";
+import { msg } from "gt-react";
 const messages: Record<string, string | { one: string; other: string }> = {
   "routine.kind.once": "Once",
   "routine.kind.hourly": "Hourly",
@@ -60,7 +62,7 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "routine.hours.windowSameHalf": "{start}–{end} {meridiem}",
   "routine.hours.everyShort": "Every {hours}h",
   "routine.hours.runsPerDay": { one: "Once a day", other: "{count} times a day" },
-  "routine.hours.chipLabel": "Hours: {hours}",
+  "routine.hours.chipLabel": m(msg("Hours: '{'hours'}'")),
   "routine.hours.choose": "Choose hours",
   "routine.hours.label": "Hours",
   "routine.hours.between": "Between hours",
@@ -74,17 +76,17 @@ const messages: Record<string, string | { one: string; other: string }> = {
 
   "routine.chip.select": "Select",
 
-  "routine.date.chipLabel": "Date: {date}",
+  "routine.date.chipLabel": m(msg("Date: '{'date'}'")),
   "routine.date.choose": "Choose date",
   "routine.date.previousMonth": "Previous month",
   "routine.date.nextMonth": "Next month",
 
-  "routine.time.chipLabel": "{label}: {time}",
+  "routine.time.chipLabel": m(msg("'{'label'}': '{'time'}'")),
   "routine.time.hour": "{label} hour",
   "routine.time.minute": "{label} minute",
   "routine.time.meridiem": "{label} AM or PM",
 
-  "routine.weekday.chipLabel": "Days: {days}",
+  "routine.weekday.chipLabel": m(msg("Days: '{'days'}'")),
   "routine.weekday.choose": "Choose days",
   "routine.weekday.days": "Days",
   "routine.weekday.day": "Day",
@@ -98,7 +100,7 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "routine.picker.dayOfMonth": "Day of month",
   "routine.picker.cronExpression": "Cron expression",
   "routine.picker.lateMonthDay": "Skipped in months without day {day}.",
-  "routine.picker.cronHint": "Five fields: minute, hour, day of month, month, day of week.",
+  "routine.picker.cronHint": m(msg("Five fields: minute, hour, day of month, month, day of week.")),
 
   "routine.history.title": "History",
   "routine.history.empty": "No runs yet.",
@@ -136,7 +138,7 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "routine.delivery.sent": "Sent to {place}",
   "routine.delivery.failed": "Not sent to {place}",
   "routine.delivery.uncertain": "May be incomplete in {place}",
-  "routine.delivery.withReason": "{status}: {why}",
+  "routine.delivery.withReason": m(msg("'{'status'}': '{'why'}'")),
   "routine.delivery.reason.expired": "the connection was off for a day",
   "routine.delivery.reason.connectionGone": "the connection is off or removed",
   "routine.delivery.reason.refused": "cannot post in this place",
@@ -201,7 +203,7 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "routine.calendar.range": "{start} – {end}",
   "routine.calendar.clockChange": "Clocks change on {day}. Routines keep their local time.",
   "routine.calendar.openDay": "Show {day}",
-  "routine.calendar.runLabel": "{name}, {time}, {status}",
+  "routine.calendar.runLabel": m(msg("'{'name'}', '{'time'}', '{'status'}'")),
   "routine.calendar.more": { one: "+{count} more", other: "+{count} more" },
   "routine.calendar.showAll": {
     one: "Show the run on {day}",
@@ -211,7 +213,7 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "routine.calendar.upcomingEmpty": "No upcoming runs.",
   "routine.calendar.dayEmpty": "No runs on this day.",
   "routine.calendar.emptyLead": "Set it once.",
-  "routine.calendar.emptyTitle": "Wake up to it {done}.",
+  "routine.calendar.emptyTitle": m(msg("Wake up to it '{'done'}'.")),
   "routine.calendar.emptyDone": "done",
   "routine.calendar.emptySchedule": "Your agents keep their own schedule.",
   "routine.calendar.emptyNote": "Each run leaves a note.",
@@ -261,7 +263,7 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "routine.settings.runCommandCopied": "Run command copied",
   "routine.settings.copyRunCommandFailed": "Could not copy the run command.",
   "routine.settings.name": "Name",
-  "routine.settings.namePlaceholder": "Morning brief",
+  "routine.settings.namePlaceholder": m(msg("Morning brief")),
   "routine.settings.whenToRun": "When to run",
   "routine.settings.nameRequired": "Give the routine a name.",
   "routine.settings.instructionRequired": "Describe what to do when the routine runs.",
@@ -272,14 +274,14 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "routine.trigger.change": "Change trigger",
   "routine.trigger.groupSchedule": "Schedule",
   "routine.trigger.kind": "What starts the routine",
-  "routine.trigger.onceDescription": "On a chosen date and time",
-  "routine.trigger.hourlyDescription": "Every hour within chosen hours",
-  "routine.trigger.dailyDescription": "Every day at a chosen time",
-  "routine.trigger.weeklyDescription": "Every week on a chosen day",
-  "routine.trigger.monthlyDescription": "Every month on a chosen day",
-  "routine.trigger.yearlyDescription": "Every year on a chosen date",
-  "routine.trigger.customDescription": "On a cron schedule",
-  "routine.trigger.webhookDescription": "When this webhook receives a request",
+  "routine.trigger.onceDescription": m(msg("On a chosen date and time")),
+  "routine.trigger.hourlyDescription": m(msg("Every hour within chosen hours")),
+  "routine.trigger.dailyDescription": m(msg("Every day at a chosen time")),
+  "routine.trigger.weeklyDescription": m(msg("Every week on a chosen day")),
+  "routine.trigger.monthlyDescription": m(msg("Every month on a chosen day")),
+  "routine.trigger.yearlyDescription": m(msg("Every year on a chosen date")),
+  "routine.trigger.customDescription": m(msg("On a cron schedule")),
+  "routine.trigger.webhookDescription": m(msg("When this webhook receives a request")),
 
   "routine.webhook.url": "Endpoint",
   "routine.webhook.copyUrl": "Copy endpoint",
@@ -294,40 +296,54 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "routine.webhook.filterCount": { one: "{count} filter", other: "{count} filters" },
   "routine.webhook.eventType": "Event type",
   "routine.webhook.eventTypePlaceholder": "orders.created",
-  "routine.webhook.eventTypeHint": "Leave empty to start the routine for all event types.",
+  "routine.webhook.eventTypeHint": m(msg("Leave empty to start the routine for all event types.")),
   "routine.webhook.filters": "Filters",
-  "routine.webhook.filtersHint":
-    "Each filter compares one JSON Pointer in the request data with a value. All filters must match.",
+  "routine.webhook.filtersHint": m(
+    msg(
+      "Each filter compares one JSON Pointer in the request data with a value. All filters must match.",
+    ),
+  ),
   "routine.webhook.filterPointer": "JSON Pointer",
   "routine.webhook.filterPointerPlaceholder": "/order/status",
   "routine.webhook.filterValue": "Value",
   "routine.webhook.addFilter": "Add filter",
   "routine.webhook.removeFilter": "Remove filter",
-  "routine.webhook.secretTitle": "Signing secret",
+  "routine.webhook.secretTitle": m(msg("Signing secret")),
   "routine.webhook.secretWarning": "Copy this secret now. It is not shown again.",
   "routine.webhook.secretHidden": "Hidden",
   "routine.webhook.copySecret": "Copy secret",
   "routine.webhook.regenerateSecret": "Regenerate signing secret",
-  "routine.webhook.regenerateTitle": "Regenerate the signing secret?",
-  "routine.webhook.regenerateDescription":
-    "The current secret stops working immediately. Requests signed with it are rejected until the sender uses the new secret.",
+  "routine.webhook.regenerateTitle": m(msg("Regenerate the signing secret?")),
+  "routine.webhook.regenerateDescription": m(
+    msg(
+      "The current secret stops working immediately. Requests signed with it are rejected until the sender uses the new secret.",
+    ),
+  ),
   "routine.webhook.regenerateConfirm": "Regenerate",
   "routine.webhook.regenerateFailed": "Could not regenerate the signing secret.",
   "routine.webhook.statusFailed": "Could not check whether the host is connected to the relay.",
   "routine.webhook.stepDone": "Done",
   "routine.webhook.stepUrl": "Copy the endpoint into the sending service",
-  "routine.webhook.stepUrlHint":
-    "The sender makes a POST request with a JSON body of at most 64 KiB.",
+  "routine.webhook.stepUrlHint": m(
+    msg("The sender makes a POST request with a JSON body of at most 64 KiB."),
+  ),
   "routine.webhook.saveForUrl": "Save and get the endpoint",
   "routine.webhook.stepSecret": "Add the signing secret to the sender",
-  "routine.webhook.stepSecretHint":
-    "The sender signs each request with this secret. OpenBot rejects a request without a valid signature.",
+  "routine.webhook.stepSecretHint": m(
+    msg(
+      "The sender signs each request with this secret. OpenBot rejects a request without a valid signature.",
+    ),
+  ),
   "routine.webhook.howToSign": "How to sign a request",
-  "routine.webhook.howToSignHint":
-    "Keep the secret in OPENBOT_WEBHOOK_SECRET on the sender. Do not put it in code.",
+  "routine.webhook.howToSignHint": m(
+    msg("Keep the secret in OPENBOT_WEBHOOK_SECRET on the sender. Do not put it in code."),
+  ),
   "routine.webhook.stepTest": "Send a test event",
-  "routine.webhook.stepTestHint":
-    "OpenBot signs an event that matches this routine and receives it as a real request. The routine runs one time.",
+  "routine.webhook.stepTestHint": m(
+    msg(
+      "OpenBot signs an event that matches this routine and receives it as a real request. The routine runs one time.",
+    ),
+  ),
   "routine.webhook.sendTest": "Send test event",
   "routine.webhook.sendingTest": "Sending…",
   "routine.webhook.testStarted":
@@ -344,8 +360,9 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "routine.settings.instruction": "Instruction",
   "routine.settings.instructionPlaceholderAgent": "Describe what this agent should do.",
   "routine.settings.instructionPlaceholderChannel": "Describe what this channel should do.",
-  "routine.settings.instructionNoUpdateHint":
-    "To stay silent when there is nothing to report, ask the agent to answer [[no-update]].",
+  "routine.settings.instructionNoUpdateHint": m(
+    msg("To stay silent when there is nothing to report, ask the agent to answer [[no-update]]."),
+  ),
   "routine.settings.limitPolicy": "If the account is at its limit",
   "routine.settings.limitPolicy.wait": "Wait and run after the reset",
   "routine.settings.limitPolicy.skip": "Skip this run",
@@ -360,8 +377,10 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "routine.settings.resultDestination.loadFailed": "Could not load the messaging places.",
   "routine.settings.resultDestination.saveFailed":
     "The routine is saved, but its messaging place is not. Try again.",
-  "routine.settings.discardTitle": "Discard changes?",
-  "routine.settings.discardDescription": "Your unsaved changes to this routine will be lost.",
+  "routine.settings.discardTitle": m(msg("Discard changes?")),
+  "routine.settings.discardDescription": m(
+    msg("Your unsaved changes to this routine will be lost."),
+  ),
   "routine.settings.discardConfirm": "Discard changes",
   "routine.settings.keepEditing": "Keep editing",
 };

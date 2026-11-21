@@ -19,6 +19,7 @@ import {
   type StoredFileRow,
   type StoredFileAction,
 } from "./types";
+import { useGT } from "gt-react";
 export interface FilesEnvironmentProps {
   environmentId: EnvironmentId;
   hostId: string;
@@ -42,6 +43,7 @@ export function FilesEnvironment(props: FilesEnvironmentProps) {
   );
 }
 function FilesHost(props: FilesEnvironmentProps) {
+  const gt = useGT();
   const { environmentId, hostId, agentId } = props;
   const registry = useContext(RegistryContext);
   const read = useAtomCommand(openbot.settingsRead, { reportFailure: false });
@@ -106,7 +108,7 @@ function FilesHost(props: FilesEnvironmentProps) {
     });
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "Could not load the files.");
+      setError(cause instanceof Error ? cause.message : gt("Could not load the files."));
     }
     setLoading(false);
   });
@@ -193,7 +195,7 @@ function FilesHost(props: FilesEnvironmentProps) {
   const common = {
     files: canRead ? (usage?.files ?? []) : [],
     loading: loading && !usage,
-    error: canRead ? error : "You don’t have permission to view this host’s files.",
+    error: canRead ? error : gt("You don’t have permission to view this host’s files."),
     onRetry: () => setRevision((value) => value + 1),
     canDelete,
     onClose: props.onClose,

@@ -81,6 +81,7 @@ import { createSidebarDragMotion } from "./openbotSidebarDragMotion";
 import { SidebarDeleteDialog } from "./OpenbotSidebarDeleteDialog";
 import type { OpenbotSettingsAdminRequest } from "@t3tools/contracts/openbot-settings";
 import "./OpenbotSidebar.css";
+import { T, useGT } from "gt-react";
 
 export type OpenbotSidebarProps = {
   environmentId: EnvironmentId;
@@ -151,6 +152,7 @@ function SidebarContextPopup({ children }: { children: ReactNode }) {
   );
 }
 export function OpenbotSidebar(props: OpenbotSidebarProps) {
+  const gt = useGT();
   return props.hostId ? (
     <HostSidebar
       key={JSON.stringify([props.environmentId, props.hostId])}
@@ -158,14 +160,15 @@ export function OpenbotSidebar(props: OpenbotSidebarProps) {
       hostId={props.hostId}
     />
   ) : (
-    <nav className="agent-list" aria-label="Chats">
+    <nav className="agent-list" aria-label={gt("Chats")}>
       <p className="ob-sidebar-notice" role="status">
-        Choose a host to view chats.
+        <T>Choose a host to view chats.</T>
       </p>
     </nav>
   );
 }
 function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
+  const gt = useGT();
   const { environmentId, hostId } = props;
   const [peopleOrder, setPeopleOrder] = useState<readonly string[]>(() => {
     try {
@@ -421,7 +424,7 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
       return false;
     const connection = readPreparedConnection(environmentId);
     if (!connection) {
-      setNotice("Reconnect this host to arrange chats.");
+      setNotice(gt("Reconnect this host to arrange chats."));
       return false;
     }
     lock.current = true;
@@ -433,7 +436,9 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
     if (!mounted.current) return false;
     setBusy(false);
     if (readPreparedConnection(environmentId) !== connection) {
-      setNotice("The connection changed before the host confirmed this move. Refresh the sidebar.");
+      setNotice(
+        gt("The connection changed before the host confirmed this move. Refresh the sidebar."),
+      );
       refreshSidebar();
       return false;
     }
@@ -444,7 +449,7 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
     }
     const next = parseSidebarLayout(result.value);
     if (!next || next.revision < layout.revision) {
-      setNotice("The host returned an outdated layout. Refresh before moving chats again.");
+      setNotice(gt("The host returned an outdated layout. Refresh before moving chats again."));
       refreshSidebar();
       return false;
     }
@@ -467,7 +472,7 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
       return false;
     const connection = readPreparedConnection(environmentId);
     if (!connection) {
-      setNotice("Reconnect this host to update chats.");
+      setNotice(gt("Reconnect this host to update chats."));
       return false;
     }
     lock.current = true;
@@ -482,7 +487,7 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
     setBusy(false);
     if (readPreparedConnection(environmentId) !== connection) {
       setNotice(
-        "The connection changed before the host confirmed this update. Refresh the sidebar.",
+        gt("The connection changed before the host confirmed this update. Refresh the sidebar."),
       );
       pins.refresh();
       hidden.refresh();
@@ -496,7 +501,7 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
     }
     const value = settingResult(request.operation, result.value);
     if (value === null) {
-      setNotice("The host returned an invalid sidebar update. Refresh before trying again.");
+      setNotice(gt("The host returned an invalid sidebar update. Refresh before trying again."));
       if (request.operation === "settings.sidebar-pins.set") pins.refresh();
       else hidden.refresh();
       return false;
@@ -526,13 +531,13 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
           }
         >
           {pinKeys.includes(sidebarChatKey(chat)) ? <PinOffIcon /> : <PinIcon />}
-          {pinKeys.includes(sidebarChatKey(chat)) ? "Unpin" : "Pin"}
+          {pinKeys.includes(sidebarChatKey(chat)) ? gt("Unpin") : gt("Pin")}
         </MenuItem>
       )}
       {canHide && chat.kind === "agent" && (
         <MenuItem onClick={() => void runPreference(sidebarHideRequest(chat.id, !isHidden))}>
           {isHidden ? <RotateCcwIcon /> : <MoonIcon />}
-          {isHidden ? "Restore" : "Hide"}
+          {isHidden ? gt("Restore") : gt("Hide")}
         </MenuItem>
       )}
     </>
@@ -712,16 +717,16 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
               <>
                 <MenuItem onClick={() => moveChat(chat, -1)}>
                   <ArrowUpIcon />
-                  Move up
+                  <T>Move up</T>
                 </MenuItem>
                 <MenuItem onClick={() => moveChat(chat, 1)}>
                   <ArrowDownIcon />
-                  Move down
+                  <T>Move down</T>
                 </MenuItem>
                 <MenuSub>
                   <MenuSubTrigger>
                     <FolderIcon />
-                    Move to
+                    <T>Move to</T>
                   </MenuSubTrigger>
                   <MenuSubPopup>
                     <MenuItem
@@ -734,7 +739,7 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
                         })
                       }
                     >
-                      Unassigned
+                      <T>Unassigned</T>
                     </MenuItem>
                     {layout.order
                       .filter((id) => folders.has(id))
@@ -788,7 +793,7 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
           }
         >
           <PencilIcon />
-          Rename
+          <T>Rename</T>
         </MenuItem>
         <MenuItem
           disabled={sidebarFolderAncestors(parents, id).length >= 2}
@@ -798,21 +803,21 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
           }}
         >
           <FolderPlusIcon />
-          New folder inside
+          <T>New folder inside</T>
         </MenuItem>
         <MenuSeparator />
         <MenuItem disabled={index <= 0} onClick={() => move(-1)}>
           <ArrowUpIcon />
-          Move up
+          <T>Move up</T>
         </MenuItem>
         <MenuItem disabled={index === siblings.length - 1} onClick={() => move(1)}>
           <ArrowDownIcon />
-          Move down
+          <T>Move down</T>
         </MenuItem>
         <MenuSub>
           <MenuSubTrigger>
             <FolderIcon />
-            Move to
+            <T>Move to</T>
           </MenuSubTrigger>
           <MenuSubPopup>
             <MenuItem
@@ -821,7 +826,7 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
                 void run({ type: "nest", sectionId: id, parentId: null, beforeSectionId: null })
               }
             >
-              Top level
+              <T>Top level</T>
             </MenuItem>
             {layout.order
               .filter((target) => sidebarCanNest(layout, id, target))
@@ -861,7 +866,7 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
     <nav
       ref={list}
       className="agent-list"
-      aria-label="Chats"
+      aria-label={gt("Chats")}
       aria-busy={busy}
       data-sidebar-dragging={dragView?.source.kind}
       onDragOver={dragOver}
@@ -884,7 +889,7 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
             <button
               type="button"
               className="sidebar-icon-button"
-              aria-label="Refresh sidebar"
+              aria-label={gt("Refresh sidebar")}
               onClick={refreshSidebar}
             >
               <RefreshCwIcon />
@@ -893,7 +898,7 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
         </p>
       )}
       {pinnedChats.length > 0 && (
-        <section className="sidebar-pinned-group" aria-label="Pinned chats">
+        <section className="sidebar-pinned-group" aria-label={gt("Pinned chats")}>
           <ul className="sidebar-pinned-list">
             {pinnedChats.map((chat) => (
               <li
@@ -928,7 +933,9 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
                     <span className="agent-row-copy sidebar-pinned-copy">
                       <strong className="sidebar-pinned-name">{sidebarChatName(chat)}</strong>
                       {waitingIds.has(chat.id) && (
-                        <span className="agent-row-wait-chip">Needs you</span>
+                        <span className="agent-row-wait-chip">
+                          <T>Needs you</T>
+                        </span>
                       )}
                     </span>
                   </ContextMenu.Trigger>
@@ -942,9 +949,11 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
         </section>
       )}
       {waitingChats.length > 0 && (
-        <section className="sidebar-chat-group sidebar-waiting-group" aria-label="Needs you">
+        <section className="sidebar-chat-group sidebar-waiting-group" aria-label={gt("Needs you")}>
           <header>
-            <span className="sidebar-waiting-group-name">Needs you</span>
+            <span className="sidebar-waiting-group-name">
+              <T>Needs you</T>
+            </span>
             <span className="sidebar-waiting-group-count">{waitingChats.length}</span>
           </header>
           {waitingChats.map((chat) => row(chat, "waiting"))}
@@ -987,7 +996,7 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
         ),
       )}
       {hiddenChats.length > 0 && (
-        <section className="sidebar-chat-group" aria-label="Hidden">
+        <section className="sidebar-chat-group" aria-label={gt("Hidden")}>
           <header>
             <button
               type="button"
@@ -995,7 +1004,9 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
               aria-expanded={!collapsed.has("hidden")}
               onClick={() => toggle("hidden")}
             >
-              <span className="sidebar-section-name">Hidden</span>
+              <span className="sidebar-section-name">
+                <T>Hidden</T>
+              </span>
               <ChevronDownIcon
                 className={`sidebar-section-chevron${collapsed.has("hidden") ? " sidebar-section-chevron-collapsed" : ""}`}
               />
@@ -1049,11 +1060,15 @@ function HostSidebar(props: OpenbotSidebarProps & { hostId: string }) {
           onClick={() => setEditor({ type: "create" })}
         >
           <FolderPlusIcon className="sidebar-folder-icon" />
-          <span>New folder</span>
+          <span>
+            <T>New folder</T>
+          </span>
         </button>
       )}
       {shownChats.length === 0 && hiddenChats.length === 0 && (
-        <p className="ob-sidebar-notice">{search ? "No matching chats." : "No chats yet."}</p>
+        <p className="ob-sidebar-notice">
+          {search ? gt("No matching chats.") : gt("No chats yet.")}
+        </p>
       )}
     </nav>
   );
@@ -1120,6 +1135,7 @@ function SidebarRow({
   onKeyboardMove: (direction: -1 | 1) => void;
   menu: ReactNode;
 }) {
+  const gt = useGT();
   const dragging = dragView?.source.kind === "chat" && dragView.source.id === chat.id;
   const offset = dragView?.offsets[chat.id]?.y ?? 0;
   const date = chat.kind === "agent" ? chat.agent.updatedAt : chat.channel.lastMessage?.at;
@@ -1166,7 +1182,9 @@ function SidebarRow({
                 )}
               </span>
               {waiting ? (
-                <span className="agent-row-wait-chip">Needs you</span>
+                <span className="agent-row-wait-chip">
+                  <T>Needs you</T>
+                </span>
               ) : (
                 !hidden && (
                   <time className="agent-row-time" dateTime={date ?? undefined}>
@@ -1176,7 +1194,7 @@ function SidebarRow({
               )}
             </span>
             <span className="agent-row-preview" dir="auto">
-              {preview || "No messages yet"}
+              {preview || gt("No messages yet")}
             </span>
           </span>
           {chat.kind === "channel" && chat.channel.unreadCount > 0 && (
@@ -1292,6 +1310,7 @@ function SidebarEditor({
   onCancel: () => void;
   onSave: (name: string) => Promise<void>;
 }) {
+  const gt = useGT();
   const [name, setName] = useState(editor.type === "rename" ? editor.name : "");
   return (
     <form
@@ -1304,7 +1323,7 @@ function SidebarEditor({
       <input
         autoFocus
         className="sidebar-section-editor"
-        aria-label="Folder name"
+        aria-label={gt("Folder name")}
         value={name}
         maxLength={40}
         onChange={(event) => setName(event.target.value)}
@@ -1312,13 +1331,13 @@ function SidebarEditor({
           if (event.key === "Escape") onCancel();
         }}
         disabled={busy}
-        placeholder="Folder name"
+        placeholder={gt("Folder name")}
       />
       <button type="submit" disabled={!name.trim() || busy}>
-        Save
+        <T>Save</T>
       </button>
       <button type="button" onClick={onCancel} disabled={busy}>
-        Cancel
+        <T>Cancel</T>
       </button>
     </form>
   );

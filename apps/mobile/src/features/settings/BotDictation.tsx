@@ -6,12 +6,14 @@ import { resolveVoiceComposerPresentation } from "../voice-input/voiceInputPrese
 import { Button } from "../../components/ui/Button";
 import { AppText as Text } from "../../components/ui/AppText";
 import { useBotVoiceRecognizerAvailable } from "../bots/upstream/voice/botRecognition";
+import { T, useGT } from "gt-react-native";
 export function useBotDictation(
   ownerKey: string,
   value: string,
   onChange: (value: string) => void,
   disabled: boolean,
 ) {
+  const gt = useGT();
   const { session } = useGlobalVoiceInput();
   const recognizerAvailable = useBotVoiceRecognizerAvailable();
   const draft = useRef<string | null>(value);
@@ -29,7 +31,7 @@ export function useBotDictation(
   );
   return useVoiceInputController({
     ownerKey,
-    label: "Bot message",
+    label: gt("Bot message"),
     readDraftMessage: () => draft.current,
     selection: { start: value.length, end: value.length },
     disabled,
@@ -47,36 +49,40 @@ export function BotDictation({
   voice: ReturnType<typeof useBotDictation>;
   disabled: boolean;
 }) {
+  const gt = useGT();
   const presentation = resolveVoiceComposerPresentation(voice.state, voice.elapsedSeconds);
   return (
     <View className="gap-2">
       {!voice.isBusy && (
         <Button
-          label="Dictate message"
+          label={gt("Dictate message")}
           disabled={disabled || !voice.isAvailable}
           onPress={voice.start}
         />
       )}
       {!voice.isAvailable && !voice.isBusy && (
         <Text>
-          Local dictation is unavailable on this device. Configure voice input in Settings.
+          <T>Local dictation is unavailable on this device. Configure voice input in Settings.</T>
         </Text>
       )}
       {voice.isBusy && (
         <>
           <Button
-            label="Stop and transcribe"
+            label={gt("Stop and transcribe")}
             disabled={!presentation.confirmationEnabled}
             onPress={() => void voice.stop()}
           />
-          <Button label="Cancel dictation" onPress={() => void voice.cancel()} />
+          <Button label={gt("Cancel dictation")} onPress={() => void voice.cancel()} />
         </>
       )}
       {presentation.statusLabel && (
         <Text accessibilityLiveRegion="polite">{presentation.statusLabel}</Text>
       )}
       {voice.state.errorAction === "settings" && (
-        <Button label="Open microphone settings" onPress={() => void Linking.openSettings()} />
+        <Button
+          label={gt("Open microphone settings")}
+          onPress={() => void Linking.openSettings()}
+        />
       )}
     </View>
   );

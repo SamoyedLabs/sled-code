@@ -8,6 +8,8 @@ import {
   sidebarFolderParents,
 } from "./openbotSidebarFolders";
 import type { SidebarDragSource, SidebarDropTarget } from "./openbotSidebarDrag";
+import { m } from "../../../i18n/messages";
+import { msg } from "gt-react";
 
 export const SIDEBAR_PEOPLE_SECTION_ID = "people";
 export const SIDEBAR_UNASSIGNED_SECTION_ID = "unassigned";
@@ -83,7 +85,7 @@ export function projectSidebarLayout(
     error:
       core.error ??
       (core.data !== null && !baseline
-        ? "The host sidebar layout is incomplete. All chats remain available below."
+        ? m(msg("The host sidebar layout is incomplete. All chats remain available below."))
         : null),
   };
 }

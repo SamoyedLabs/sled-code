@@ -6,6 +6,8 @@ import { openbot } from "../../state/openbot";
 import { randomUUID } from "../../lib/utils";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { useWorkspaceFiles, WorkspaceUploadRecord } from "../bots/upstream/useWorkspaceFiles";
+import { m } from "../../i18n/messages";
+import { msg, useGT } from "gt-react";
 
 export type ComposerUpload = {
   key: string;
@@ -38,6 +40,7 @@ export function useBotComposerUploads(props: {
   selectedCount: number;
   onReady: (id: string, beforeId?: string) => void;
 }) {
+  const gt = useGT();
   const permission = useAtomValue(openbot.fileOriginalUpload.permissionAtom(props.environmentId));
   const action = useWorkspaceFiles(props.environmentId, props.hostId);
   const perform = useStableCallback(action);
@@ -94,7 +97,7 @@ export function useBotComposerUploads(props: {
                 key,
                 name: record.identity.name,
                 size: record.identity.size,
-                error: "Upload interrupted. Retry to recover the original file.",
+                error: m(msg("Upload interrupted. Retry to recover the original file.")),
                 removing: false,
               },
             ]);
@@ -161,7 +164,7 @@ export function useBotComposerUploads(props: {
     add: (files: File[]) => {
       if (!available || !files.length) return;
       if (props.selectedCount + jobs.current.size + files.length > 10) {
-        setError("Choose up to 10 files per message.");
+        setError(gt("Choose up to 10 files per message."));
         return;
       }
       setError(null);

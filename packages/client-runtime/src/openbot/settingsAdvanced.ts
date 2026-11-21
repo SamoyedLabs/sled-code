@@ -1,6 +1,7 @@
 import type { Json } from "effect/Schema";
 import { settingRecord, settingRequest } from "./settings.ts";
 import type { OpenbotSettingsRequest } from "@t3tools/contracts/openbot-settings";
+import { mFallback, msg } from "gt-i18n";
 export type SettingControl = {
   readonly id: string;
   readonly kind: "text" | "input" | "button";
@@ -102,7 +103,7 @@ export function settingsAdvanced(
         controls.push({
           id: "previous",
           kind: "button",
-          label: "Previous 25 files",
+          label: mFallback(msg("Previous 25 files")),
           inputKey: "storageOffset",
           value: String(Math.max(0, offset - 25)),
         });
@@ -110,7 +111,7 @@ export function settingsAdvanced(
         controls.push({
           id: "next",
           kind: "button",
-          label: "Next 25 files",
+          label: mFallback(msg("Next 25 files")),
           inputKey: "storageOffset",
           value: String(offset + 25),
         });
@@ -128,7 +129,7 @@ export function settingsAdvanced(
         ),
       );
     }
-    sections.push({ id: "storage", title: "Host storage", controls });
+    sections.push({ id: "storage", title: mFallback(msg("Host storage")), controls });
   }
   if (capabilities.includes("conversation-unread")) {
     const reads = settingRecord(values["settings.conversation-reads.read"]);
@@ -150,7 +151,7 @@ export function settingsAdvanced(
       controls.push({
         id: "previous",
         kind: "button",
-        label: "Previous 25 agents",
+        label: mFallback(msg("Previous 25 agents")),
         inputKey: "readsOffset",
         value: String(Math.max(0, offset - 25)),
       });
@@ -158,11 +159,15 @@ export function settingsAdvanced(
       controls.push({
         id: "next",
         kind: "button",
-        label: "Next 25 agents",
+        label: mFallback(msg("Next 25 agents")),
         inputKey: "readsOffset",
         value: String(offset + 25),
       });
-    sections.push({ id: "conversation-reads", title: "Conversation read states", controls });
+    sections.push({
+      id: "conversation-reads",
+      title: mFallback(msg("Conversation read states")),
+      controls,
+    });
   }
   if (has("sidebar-folders")) {
     const data = settingRecord(value("settings.sidebar-folders.read"));
@@ -204,7 +209,9 @@ export function settingsAdvanced(
         controls.push({
           id: `parent:${folder.id}`,
           kind: "button",
-          label: `Use ${String(folder.name)} as destination folder`,
+          label: mFallback(
+            msg("Use {String} as destination folder", { String: String(folder.name) }),
+          ),
           inputKey: "sidebarParent",
           value: folder.id,
         });
@@ -283,7 +290,7 @@ export function settingsAdvanced(
           { type: "assign", agentId, sectionId: null },
         ),
       );
-    sections.push({ id: "sidebar-folders", title: "Sidebar folders", controls });
+    sections.push({ id: "sidebar-folders", title: mFallback(msg("Sidebar folders")), controls });
   }
   if (agentId && has("side-question")) {
     const answer = settingRecord(values["settings.side-question.ask"]);
@@ -329,7 +336,7 @@ export function settingsAdvanced(
         );
       }
     }
-    sections.push({ id: "side-question", title: "Side question", controls });
+    sections.push({ id: "side-question", title: mFallback(msg("Side question")), controls });
   }
   if (has("workflows-github")) {
     const workflowId = drafts.githubWorkflow ?? "";
@@ -369,7 +376,7 @@ export function settingsAdvanced(
         controls.push({
           id: `${key}:prev`,
           kind: "button",
-          label: `Previous 25 ${label}`,
+          label: mFallback(msg("Previous 25 {label}", { label })),
           inputKey: key,
           value: String(Math.max(0, offset - 25)),
         });
@@ -377,7 +384,7 @@ export function settingsAdvanced(
         controls.push({
           id: `${key}:next`,
           kind: "button",
-          label: `Next 25 ${label}`,
+          label: mFallback(msg("Next 25 {label}", { label })),
           inputKey: key,
           value: String(offset + 25),
         });
@@ -442,7 +449,11 @@ export function settingsAdvanced(
     const run = settingRecord(settingRecord(values["settings.workflows-github.runLastEvent"]).run);
     if (run.id)
       controls.push(text("run", `Run ${String(run.id)}: ${String(run.status ?? "accepted")}`));
-    sections.push({ id: "workflows-github", title: "GitHub workflow events", controls });
+    sections.push({
+      id: "workflows-github",
+      title: mFallback(msg("GitHub workflow events")),
+      controls,
+    });
   }
   if (agentId && has("agent-fast-mode")) {
     const controls: SettingControl[] = [
@@ -455,7 +466,7 @@ export function settingsAdvanced(
           `${String(model.provider)} · ${String(model.id)} · ${String(model.fastServiceTier)}`,
         ),
       );
-    sections.push({ id: "fast-models", title: "Available fast models", controls });
+    sections.push({ id: "fast-models", title: mFallback(msg("Available fast models")), controls });
   }
   if (agentId && has("agent-hidden")) {
     const hidden = rows(settingRecord(value("settings.agent-hidden.read")).agents).some(
@@ -463,7 +474,7 @@ export function settingsAdvanced(
     );
     sections.push({
       id: "hidden",
-      title: "Agent visibility",
+      title: mFallback(msg("Agent visibility")),
       controls: [
         text("state", hidden ? "Hidden: new messages and routines are paused" : "Visible"),
         button("refresh", "Refresh visibility", "settings.agent-hidden.read", {}),
@@ -513,7 +524,11 @@ export function settingsAdvanced(
           true,
         ),
       );
-    sections.push({ id: "folders", title: "Additional workspace folders", controls });
+    sections.push({
+      id: "folders",
+      title: mFallback(msg("Additional workspace folders")),
+      controls,
+    });
   }
   if (agentId && has("agent-backup-models")) {
     const data = settingRecord(value("settings.agent-backup-models.settings"));
@@ -576,7 +591,7 @@ export function settingsAdvanced(
         }
       });
     }
-    sections.push({ id: "backups", title: "Backup models", controls });
+    sections.push({ id: "backups", title: mFallback(msg("Backup models")), controls });
   }
   if (agentId && has("agent-session-settings")) {
     const data = settingRecord(value("settings.agent-session-settings.read"));
@@ -617,7 +632,7 @@ export function settingsAdvanced(
           ),
         );
       }
-    sections.push({ id: "session", title: "Provider session settings", controls });
+    sections.push({ id: "session", title: mFallback(msg("Provider session settings")), controls });
   }
   if (agentId && has("agent-memories")) {
     const selection = settingRecord(values["settings.agent-memories.selection"]);
@@ -661,7 +676,7 @@ export function settingsAdvanced(
       controls.push({
         id: "previous-entries",
         kind: "button",
-        label: "Previous 25 memories",
+        label: mFallback(msg("Previous 25 memories")),
         inputKey: "memoryOffset",
         value: String(Math.max(0, offset - 25)),
       });
@@ -669,7 +684,7 @@ export function settingsAdvanced(
       controls.push({
         id: "next-entries",
         kind: "button",
-        label: "Next 25 memories",
+        label: mFallback(msg("Next 25 memories")),
         inputKey: "memoryOffset",
         value: String(offset + 25),
       });
@@ -697,7 +712,7 @@ export function settingsAdvanced(
       controls.push({
         id: "previous-text",
         kind: "button",
-        label: "Previous 25 texts",
+        label: mFallback(msg("Previous 25 texts")),
         inputKey: "memoryTextOffset",
         value: String(Math.max(0, memoryOffset - 25)),
       });
@@ -705,7 +720,7 @@ export function settingsAdvanced(
       controls.push({
         id: "next-text",
         kind: "button",
-        label: "Next 25 texts",
+        label: mFallback(msg("Next 25 texts")),
         inputKey: "memoryTextOffset",
         value: String(memoryOffset + 25),
       });
@@ -716,7 +731,7 @@ export function settingsAdvanced(
           after: page.nextCursor,
         }),
       );
-    sections.push({ id: "memories", title: "Memory inclusion", controls });
+    sections.push({ id: "memories", title: mFallback(msg("Memory inclusion")), controls });
   }
   if (has("agent-notification-levels")) {
     const controls: SettingControl[] = [
@@ -740,7 +755,7 @@ export function settingsAdvanced(
       );
     sections.push({
       id: "notifications",
-      title: "Notifications for the connected host member",
+      title: mFallback(msg("Notifications for the connected host member")),
       controls,
     });
   }
@@ -779,7 +794,7 @@ export function settingsAdvanced(
           true,
         ),
       );
-    sections.push({ id: "context", title: "Conversation context", controls });
+    sections.push({ id: "context", title: mFallback(msg("Conversation context")), controls });
   }
   if (agentId && has("sidebar-pins")) {
     const data = settingRecord(value("settings.sidebar-pins.read"));
@@ -787,7 +802,7 @@ export function settingsAdvanced(
     const pinned = items.some((item) => item.kind === "agent" && item.id === agentId);
     sections.push({
       id: "pins",
-      title: "Pinned chats",
+      title: mFallback(msg("Pinned chats")),
       controls: [
         button("read", "Refresh pinned chats", "settings.sidebar-pins.read", {}),
         ...(Array.isArray(data.items)
@@ -922,7 +937,7 @@ export function settingsAdvanced(
           );
         }
     }
-    sections.push({ id: "access", title: "Roles and agent access", controls });
+    sections.push({ id: "access", title: mFallback(msg("Roles and agent access")), controls });
   }
   if (!agentId && has("discord-access")) {
     const workspaceId = drafts.discordWorkspace ?? "";
@@ -964,7 +979,7 @@ export function settingsAdvanced(
           ),
         );
       }
-    sections.push({ id: "discord", title: "Discord role access", controls });
+    sections.push({ id: "discord", title: mFallback(msg("Discord role access")), controls });
   }
   if (agentId && has("routine-results")) {
     const routineId = drafts.resultRoutine ?? "";
@@ -1044,7 +1059,7 @@ export function settingsAdvanced(
         controls.push({
           id: "previous-places",
           kind: "button",
-          label: "Previous destinations",
+          label: mFallback(msg("Previous destinations")),
           inputKey: "resultPlaceOffset",
           value: String(Math.max(0, offset - 25)),
         });
@@ -1052,12 +1067,16 @@ export function settingsAdvanced(
         controls.push({
           id: "next-places",
           kind: "button",
-          label: "More destinations",
+          label: mFallback(msg("More destinations")),
           inputKey: "resultPlaceOffset",
           value: String(offset + 25),
         });
     }
-    sections.push({ id: "routine-results", title: "Routine answer delivery", controls });
+    sections.push({
+      id: "routine-results",
+      title: mFallback(msg("Routine answer delivery")),
+      controls,
+    });
   }
   if (agentId && has("skills-admin")) {
     const installed =
@@ -1114,7 +1133,7 @@ export function settingsAdvanced(
         "Locally modified skills are protected. Refresh installed skills after an interrupted change before deciding what to do next.",
       ),
     );
-    sections.push({ id: "installed-skills", title: "Installed skills", controls });
+    sections.push({ id: "installed-skills", title: mFallback(msg("Installed skills")), controls });
   }
   if (capabilities.includes("local-skill-catalog-v1")) {
     const controls: SettingControl[] = [
@@ -1225,7 +1244,11 @@ export function settingsAdvanced(
         "A local skill name is unique. If a save loses its response, refresh the library and read the saved revision before another create. Bundle downloads are available in Files.",
       ),
     );
-    sections.push({ id: "catalog", title: "Marketplace and local skill library", controls });
+    sections.push({
+      id: "catalog",
+      title: mFallback(msg("Marketplace and local skill library")),
+      controls,
+    });
   }
   return sections;
 }

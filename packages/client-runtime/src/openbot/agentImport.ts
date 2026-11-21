@@ -4,6 +4,7 @@ import {
   type ImportRequest,
   type ImportReceipt,
 } from "@t3tools/contracts/openbot-agent-import";
+import { mFallback, msg } from "gt-i18n";
 export type ImportActions = {
   readonly execute: (request: ImportRequest) => Promise<unknown>;
   readonly upload: (file: {
@@ -46,14 +47,21 @@ export function createAgentImport(hostId: string, actions: ImportActions) {
         ...(changed ? { keys: [], channelKeys: [] } : {}),
         notice:
           receipt?.state === "uncertain"
-            ? "Import outcome is uncertain. Inspect host agents and channels; this import will not be replayed."
+            ? mFallback(
+                msg(
+                  "Import outcome is uncertain. Inspect host agents and channels; this import will not be replayed.",
+                ),
+              )
             : "",
       });
     } catch {
       update({
         uncertain: true,
-        notice:
-          "Connection or request failed. Refresh import status before continuing. Do not upload or apply again.",
+        notice: mFallback(
+          msg(
+            "Connection or request failed. Refresh import status before continuing. Do not upload or apply again.",
+          ),
+        ),
       });
     } finally {
       update({ busy: false });
@@ -77,10 +85,10 @@ export function createAgentImport(hostId: string, actions: ImportActions) {
         file.size > IMPORT_MAX_BYTES ||
         !file.name.toLowerCase().endsWith(".zip")
       ) {
-        update({ notice: "Choose a ZIP archive up to 100 MiB." });
+        update({ notice: mFallback(msg("Choose a ZIP archive up to 100 MiB.")) });
         return;
       }
-      update({ busy: true, notice: "Uploading archive…" });
+      update({ busy: true, notice: mFallback(msg("Uploading archive…")) });
       try {
         const upload = await actions.upload(file);
         update({ busy: false });
@@ -89,7 +97,9 @@ export function createAgentImport(hostId: string, actions: ImportActions) {
         update({
           busy: false,
           uncertain: true,
-          notice: "Upload interrupted. Refresh status before choosing the archive again.",
+          notice: mFallback(
+            msg("Upload interrupted. Refresh status before choosing the archive again."),
+          ),
         });
       }
     },

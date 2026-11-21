@@ -9,7 +9,13 @@ import {
   templateResult,
   type TemplateActions,
 } from "@t3tools/client-runtime/openbot/templates";
-export function useBotTemplates(scopeKey: string, actions: TemplateActions, adoptionAvailable = false) {
+import { useGT } from "gt-react";
+export function useBotTemplates(
+  scopeKey: string,
+  actions: TemplateActions,
+  adoptionAvailable = false,
+) {
+  const gt = useGT();
   const registry = useContext(RegistryContext);
   const atom = templateState(scopeKey);
   const state = useAtomValue(atom);
@@ -33,8 +39,12 @@ export function useBotTemplates(scopeKey: string, actions: TemplateActions, adop
     if (!next)
       setError(
         templateIsRead(request)
-          ? "Review unavailable. The host may lack this API, admin authority, or a signed-in account. No installation or publication was requested."
-          : "Host outcome unknown. Reconcile on the destination host before another change. The original request remains retained in this client session.",
+          ? gt(
+              "Review unavailable. The host may lack this API, admin authority, or a signed-in account. No installation or publication was requested.",
+            )
+          : gt(
+              "Host outcome unknown. Reconcile on the destination host before another change. The original request remains retained in this client session.",
+            ),
       );
     lock.current = false;
     setBusy(false);
@@ -54,6 +64,7 @@ export function useBotTemplates(scopeKey: string, actions: TemplateActions, adop
       mounted = false;
     };
   }, [scopeKey, adoptionAvailable]);
-  const acknowledge = (operationId: string) => registry.set(atom, templateAcknowledge(registry.get(atom), operationId));
+  const acknowledge = (operationId: string) =>
+    registry.set(atom, templateAcknowledge(registry.get(atom), operationId));
   return { state, busy, error, run, acknowledge };
 }

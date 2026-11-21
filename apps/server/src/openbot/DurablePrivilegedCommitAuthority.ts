@@ -144,7 +144,14 @@ export class DurablePrivilegedCommitAuthority {
         this.#db.prepare("SELECT 1 FROM auth_sessions LIMIT 0").get();
         this.#db.prepare("SELECT 1 FROM privileged_commit_grants LIMIT 0").get();
         this.#db.prepare("SELECT 1 FROM privileged_commit_closed LIMIT 0").get();
-        return !exited && this.#db.prepare("SELECT 1 FROM privileged_commit_children WHERE incarnation=? AND state='alive'").get(incarnation) !== undefined;
+        return (
+          !exited &&
+          this.#db
+            .prepare(
+              "SELECT 1 FROM privileged_commit_children WHERE incarnation=? AND state='alive'",
+            )
+            .get(incarnation) !== undefined
+        );
       },
       incarnation,
       deadline: (permit: string) => this.deadline(permit),

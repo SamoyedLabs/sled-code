@@ -2952,7 +2952,21 @@ it.live(
         for await (const chunk of request) text += chunk;
         calls.push(JSON.parse(text));
         response.end(
-          JSON.stringify(request.url === "/v1/sled/channels/trace" ? {messageId:"message",field:"trace",offset:0,nextOffset:null,totalLength:2,version:"a".repeat(64),value:"{}"} : request.url?.endsWith("configuration") ? { routeId: "route" } : { status: 401 }),
+          JSON.stringify(
+            request.url === "/v1/sled/channels/trace"
+              ? {
+                  messageId: "message",
+                  field: "trace",
+                  offset: 0,
+                  nextOffset: null,
+                  totalLength: 2,
+                  version: "a".repeat(64),
+                  value: "{}",
+                }
+              : request.url?.endsWith("configuration")
+                ? { routeId: "route" }
+                : { status: 401 },
+          ),
         );
       });
       const session = yield* (yield* TeamClient.TeamClient).connect({
@@ -2974,8 +2988,22 @@ it.live(
           body: new Uint8Array([0, 255, 7]),
         }),
       ).toEqual({ status: 401 });
-      expect(yield* session.apiAdmin({operation:"workflow.webhookConfiguration",workflowId:"workflow",nodeId:"trigger"})).toEqual({routeId:"route"});
-      expect(yield* session.apiRead({operation:"channel.trace",channelId:"group",messageId:"message",offset:0,version:null})).toMatchObject({messageId:"message",field:"trace",value:"{}"});
+      expect(
+        yield* session.apiAdmin({
+          operation: "workflow.webhookConfiguration",
+          workflowId: "workflow",
+          nodeId: "trigger",
+        }),
+      ).toEqual({ routeId: "route" });
+      expect(
+        yield* session.apiRead({
+          operation: "channel.trace",
+          channelId: "group",
+          messageId: "message",
+          offset: 0,
+          version: null,
+        }),
+      ).toMatchObject({ messageId: "message", field: "trace", value: "{}" });
       expect(calls).toEqual([
         { owner: { kind: "agent", id: "a" }, id: "r" },
         {
@@ -2985,8 +3013,8 @@ it.live(
           signature: "signature",
           bodyBase64: "AP8H",
         },
-        {workflowId:"workflow",nodeId:"trigger"},
-        {channelId:"group",messageId:"message",offset:0,version:null},
+        { workflowId: "workflow", nodeId: "trigger" },
+        { channelId: "group", messageId: "message", offset: 0, version: null },
       ]);
       expect(
         yield* session.connectWebhooks!.receive({
@@ -3057,7 +3085,9 @@ it.live("advertises exact pins support alongside the existing capabilities", () 
       response.setHeader("content-type", "application/json");
       const path = request.url ?? "";
       if (path === "/v1/auth/login") {
-        response.end(JSON.stringify({ sessionToken: "fixture-owner", sessionExpiresAt: "2099-01-01" }));
+        response.end(
+          JSON.stringify({ sessionToken: "fixture-owner", sessionExpiresAt: "2099-01-01" }),
+        );
         return;
       }
       if (path === "/v1/auth/logout") {
@@ -3102,7 +3132,12 @@ it.live("advertises exact pins support alongside the existing capabilities", () 
       },
     ]);
     for (const item of seen)
-      expect(item.capabilities).toEqual(expect.arrayContaining(["message-pins-v1", "agent-tasks-v1"]));
+      expect(item.capabilities).toEqual(
+        expect.arrayContaining(["message-pins-v1", "agent-tasks-v1"]),
+      );
     yield* session.close;
-  }).pipe(Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))), Effect.scoped),
+  }).pipe(
+    Effect.provide(TeamClient.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+    Effect.scoped,
+  ),
 );

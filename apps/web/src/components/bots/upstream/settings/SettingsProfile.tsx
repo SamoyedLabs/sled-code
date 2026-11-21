@@ -5,6 +5,7 @@ import { Pencil, UserRound } from "lucide-react";
 import { confirmed } from "../../../settings/BotConnectionControls";
 import { SettingsCard, SettingsRow, SettingsSection, SourceButton } from "./SettingsParts";
 import "./profile.css";
+import { T, useGT } from "gt-react";
 export type ProfileSession = {
   readonly id: string;
   readonly name: string;
@@ -38,6 +39,7 @@ export function SettingsProfile({
   onEdit?: () => void;
   onSignOut?: () => Promise<void>;
 }) {
+  const gt = useGT();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const run = async (key: string, action: () => Promise<void>) => {
@@ -47,14 +49,14 @@ export function SettingsProfile({
     const settled = await settlePromise(action);
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "This account action failed.");
+      setError(cause instanceof Error ? cause.message : gt("This account action failed."));
     }
     setBusy(null);
   };
   const name = account.name?.trim() || account.email.split("@")[0] || account.email;
   return (
     <>
-      <section className="profile-hero" aria-label="Profile">
+      <section className="profile-hero" aria-label={gt("Profile")}>
         <span className="profile-hero-avatar">
           {account.avatarUrl ? (
             <img src={account.avatarUrl} alt="" />
@@ -69,19 +71,19 @@ export function SettingsProfile({
           <div className="profile-hero-actions">
             <SourceButton onClick={onEdit}>
               <Pencil size={14} className="profile-icon-edit" aria-hidden="true" />
-              Edit profile
+              <T>Edit profile</T>
             </SourceButton>
           </div>
         )}
       </section>
       {activity}
-      <SettingsSection title="Account">
+      <SettingsSection title={gt("Account")}>
         <SettingsCard>
-          <SettingsRow title="Email" description="Used to sign in to OpenBot.">
+          <SettingsRow title={gt("Email")} description={gt("Used to sign in to OpenBot.")}>
             <span className="settings-modal-readonly-value">{account.email}</span>
             {onSignOut && (
               <SourceButton disabled={busy !== null} onClick={() => void run("signout", onSignOut)}>
-                {busy === "signout" ? "Signing out…" : "Sign out"}
+                {busy === "signout" ? gt("Signing out…") : gt("Sign out")}
               </SourceButton>
             )}
           </SettingsRow>
@@ -89,14 +91,14 @@ export function SettingsProfile({
       </SettingsSection>
       {sessions !== undefined && (
         <SettingsSection
-          title="Signed-in devices"
+          title={gt("Signed-in devices")}
           actions={
             onRefreshSessions && (
               <SourceButton
                 disabled={sessionsLoading || busy !== null}
                 onClick={() => void run("sessions", onRefreshSessions)}
               >
-                {sessionsLoading ? "Loading…" : "Refresh"}
+                {sessionsLoading ? gt("Loading…") : gt("Refresh")}
               </SourceButton>
             )
           }
@@ -106,7 +108,11 @@ export function SettingsProfile({
               <SettingsRow
                 key={session.id}
                 title={`${session.name}${session.current ? " · This device" : ""}`}
-                description={`${session.kind} · Signed in ${new Date(session.connectedAt).toLocaleString()} · Last active ${new Date(session.lastActiveAt).toLocaleString()}`}
+                description={gt("{kind} · Signed in {value} · Last active {value2}", {
+                  kind: session.kind,
+                  value: new Date(session.connectedAt).toLocaleString(),
+                  value2: new Date(session.lastActiveAt).toLocaleString(),
+                })}
               >
                 {!session.current && onRevokeSession && (
                   <SourceButton
@@ -119,7 +125,7 @@ export function SettingsProfile({
                       })
                     }
                   >
-                    Disconnect
+                    <T>Disconnect</T>
                   </SourceButton>
                 )}
               </SettingsRow>

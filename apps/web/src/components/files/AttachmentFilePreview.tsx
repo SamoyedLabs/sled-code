@@ -438,8 +438,8 @@ export function AttachmentFilePreview(props: {
     if (!copy) {
       toastManager.add({
         type: "error",
-        title: "Could not copy file",
-        description: "Wait for the file to finish loading before copying.",
+        title: gt("Could not copy file"),
+        description: gt("Wait for the file to finish loading before copying."),
       });
       return;
     }
@@ -448,8 +448,8 @@ export function AttachmentFilePreview(props: {
       .catch((cause: unknown) =>
         toastManager.add({
           type: "error",
-          title: "Could not copy file",
-          description: cause instanceof Error ? cause.message : "Try again.",
+          title: gt("Could not copy file"),
+          description: cause instanceof Error ? cause.message : gt("Try again."),
         }),
       );
   });

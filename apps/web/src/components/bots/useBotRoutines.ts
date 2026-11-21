@@ -13,6 +13,7 @@ import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { useGT } from "gt-react";
 
 export function useBotRoutineDiscovery(environmentId: EnvironmentId, hostId: string) {
   const agents = useEnvironmentQuery(
@@ -39,6 +40,7 @@ export function useBotRoutineDiscovery(environmentId: EnvironmentId, hostId: str
 }
 
 export function useBotRoutineFlows(environmentId: EnvironmentId, hostId: string, agentId: string) {
+  const gt = useGT();
   const compatibility = useEnvironmentQuery(
     openbot.readFromHost({
       environmentId,
@@ -85,7 +87,9 @@ export function useBotRoutineFlows(environmentId: EnvironmentId, hostId: string,
             throw new Error("The change was sent, but the refreshed canvas could not be read.");
         });
         if (settled._tag === "Failure")
-          setError("The flow change could not be confirmed. Refresh the canvas before continuing.");
+          setError(
+            gt("The flow change could not be confirmed. Refresh the canvas before continuing."),
+          );
         return settled._tag === "Success";
       })
       .finally(() => {

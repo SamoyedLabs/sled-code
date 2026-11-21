@@ -8,6 +8,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../../components/ui/Button";
 import { View } from "react-native";
 import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
+import { T, Var, useGT } from "gt-react-native";
 export function BotConfiguration({
   environmentId,
   agentId,
@@ -17,6 +18,7 @@ export function BotConfiguration({
   agentId: string;
   hostId: string;
 }) {
+  const gt = useGT();
   const canAdmin = useAtomValue(openbot.adminToHost.permissionAtom(environmentId));
   const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
   const [busy, setBusy] = useState(false);
@@ -42,14 +44,14 @@ export function BotConfiguration({
     else {
       const value = permissionView(permissionResult.value);
       setPermissions(value);
-      if (value === null) setError("This host returned unsupported permission settings.");
+      if (value === null) setError(gt("This host returned unsupported permission settings."));
     }
     if (instructionResult._tag === "Failure")
       setError(String(squashAtomCommandFailure(instructionResult)));
     else {
       const value = instructionView(instructionResult.value);
       setInstructions(value);
-      if (value === null) setError("This host returned unsupported instructions.");
+      if (value === null) setError(gt("This host returned unsupported instructions."));
       else {
         setText(value.text);
         setRevision((value) => value + 1);
@@ -66,20 +68,22 @@ export function BotConfiguration({
     else if (input.operation === "agent.permissions.update") {
       const value = permissionView(result.value);
       setPermissions(value);
-      if (value === null) setError("Reload settings before making another change.");
+      if (value === null) setError(gt("Reload settings before making another change."));
     } else if (input.operation === "agent.instructions.save") {
       const value = instructionView(result.value);
       setInstructions(value);
-      if (value === null) setError("Reload instructions before making another change.");
+      if (value === null) setError(gt("Reload instructions before making another change."));
     }
     setBusy(false);
   };
 
   return (
     <View className="gap-3 rounded-xl bg-grouped-card p-3">
-      <Text>Permissions and instructions</Text>
+      <Text>
+        <T>Permissions and instructions</T>
+      </Text>
       <Button
-        label="Load settings"
+        label={gt("Load settings")}
         size="compact"
         disabled={busy || !canAdmin}
         onPress={() => void load()}
@@ -92,24 +96,32 @@ export function BotConfiguration({
       {permissions && (
         <View className="gap-2">
           <Text>
-            Access:{" "}
-            {permissions.access === "workspace"
-              ? "Workspace only"
-              : permissions.autoApprove
-                ? "Full access"
-                : "Ask first"}
+            <T>
+              Access:<Var> </Var>
+              <Var>
+                {permissions.access === "workspace"
+                  ? gt("Workspace only")
+                  : permissions.autoApprove
+                    ? gt("Full access")
+                    : gt("Ask first")}
+              </Var>
+            </T>
           </Text>
-          {permissions.autoApproveLocked && <Text>Approval settings are locked by this host.</Text>}
+          {permissions.autoApproveLocked && (
+            <Text>
+              <T>Approval settings are locked by this host.</T>
+            </Text>
+          )}
           <View className="flex-row flex-wrap gap-2">
             {(["workspace", "ask", "full"] as const).map((level) => (
               <Button
                 key={level}
                 label={
                   level === "workspace"
-                    ? "Workspace only"
+                    ? gt("Workspace only")
                     : level === "ask"
-                      ? "Ask first"
-                      : "Full access"
+                      ? gt("Ask first")
+                      : gt("Full access")
                 }
                 size="compact"
                 tone="secondary"
@@ -130,10 +142,12 @@ export function BotConfiguration({
       )}
       {instructions && (
         <View className="gap-2">
-          <Text>Instructions</Text>
+          <Text>
+            <T>Instructions</T>
+          </Text>
           <AppTextInput
             key={revision}
-            accessibilityLabel="Bot instructions"
+            accessibilityLabel={gt("Bot instructions")}
             defaultValue={text}
             onChangeText={setText}
             multiline
@@ -143,7 +157,7 @@ export function BotConfiguration({
             className="min-h-32 rounded-xl bg-grouped-card p-3"
           />
           <Button
-            label="Save instructions"
+            label={gt("Save instructions")}
             disabled={busy || !canAdmin || text === instructions.text}
             onPress={() =>
               void update({

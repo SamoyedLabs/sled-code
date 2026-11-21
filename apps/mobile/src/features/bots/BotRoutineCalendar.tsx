@@ -40,10 +40,12 @@ import { SettingsRow } from "../settings/components/SettingsRow";
 import { SettingsSection } from "../settings/components/SettingsSection";
 import { EventPanel } from "./BotEvents";
 import type { BotRoutineEditTarget } from "./useBotRoutines";
+import { m } from "../../i18n/messages";
+import { T, Var, msg, useGT } from "gt-react-native";
 
 const modes = [
-  { value: "week", label: "Week" },
-  { value: "day", label: "Day" },
+  { value: "week", label: m(msg("Week")) },
+  { value: "day", label: m(msg("Day")) },
 ] as const;
 const weekDayLimit = 4;
 const upcomingLimit = 6;
@@ -151,6 +153,7 @@ async function loadCalendar(
 }
 
 export function BotRoutineCalendar({ environmentId, hostId }: Host) {
+  const gt = useGT();
   const [zone] = useState(() => new Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [today] = useState(() => calendarDayOf(new Date(), zone));
   const [day, setDay] = useState(today);
@@ -194,7 +197,7 @@ export function BotRoutineCalendar({ environmentId, hostId }: Host) {
             key,
             entries: [],
             loadedAt,
-            error: cause instanceof Error ? cause.message : "Could not load routines.",
+            error: cause instanceof Error ? cause.message : m(msg("Could not load routines.")),
           });
       },
     );
@@ -268,13 +271,13 @@ export function BotRoutineCalendar({ environmentId, hostId }: Host) {
       <SegmentedControl options={modes} selected={view} onSelect={setView} />
       <View className="flex-row items-center justify-between gap-2">
         <Button
-          label="Previous"
+          label={gt("Previous")}
           tone="secondary"
           onPress={() => setDay(addCalendarDays(day, view === "week" ? -7 : -1))}
         />
-        <Button label="Today" tone="secondary" onPress={() => setDay(today)} />
+        <Button label={gt("Today")} tone="secondary" onPress={() => setDay(today)} />
         <Button
-          label="Next"
+          label={gt("Next")}
           tone="secondary"
           onPress={() => setDay(addCalendarDays(day, view === "week" ? 7 : 1))}
         />
@@ -298,11 +301,13 @@ export function BotRoutineCalendar({ environmentId, hostId }: Host) {
         })}
       </View>
       {selected === null ? (
-        <Text accessibilityRole="status">Loading routines…</Text>
+        <Text accessibilityRole="status">
+          <T>Loading routines…</T>
+        </Text>
       ) : selected.error ? (
         <View className="gap-2">
           <Text accessibilityRole="alert">{selected.error}</Text>
-          <Button label="Retry" onPress={() => setRetry((count) => count + 1)} />
+          <Button label={gt("Retry")} onPress={() => setRetry((count) => count + 1)} />
         </View>
       ) : (
         <>
@@ -315,14 +320,16 @@ export function BotRoutineCalendar({ environmentId, hostId }: Host) {
                 key={date}
                 title={
                   date === today
-                    ? "Today"
+                    ? gt("Today")
                     : `${dayName.format(calendarDayDate(date))}, ${dateName.format(calendarDayDate(date))}`
                 }
               >
                 {shown.length > 0 ? (
                   shown.map((entry) => renderEntry(entry))
                 ) : (
-                  <Text className="px-4 py-3 text-foreground-muted">No scheduled runs.</Text>
+                  <Text className="px-4 py-3 text-foreground-muted">
+                    <T>No scheduled runs.</T>
+                  </Text>
                 )}
                 {hidden > 0 && (
                   <SettingsRow
@@ -335,16 +342,20 @@ export function BotRoutineCalendar({ environmentId, hostId }: Host) {
             );
           })}
           {upcoming && (
-            <SettingsSection title="Upcoming">
+            <SettingsSection title={gt("Upcoming")}>
               {upcoming.length > 0 ? (
                 upcoming.map((entry) => renderEntry(entry, true))
               ) : (
-                <Text className="px-4 py-3 text-foreground-muted">No upcoming runs.</Text>
+                <Text className="px-4 py-3 text-foreground-muted">
+                  <T>No upcoming runs.</T>
+                </Text>
               )}
             </SettingsSection>
           )}
           <Text className="px-1 text-xs text-foreground-muted">
-            Times in {zone.replaceAll("_", " ")}
+            <T>
+              Times in <Var>{zone.replaceAll("_", " ")}</Var>
+            </T>
           </Text>
         </>
       )}

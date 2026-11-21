@@ -175,7 +175,8 @@ function UsageModelDialogHost({
 }
 
 function UsageSurface({ embedded, children }: { embedded: boolean; children: ReactNode }) {
-  return embedded ? <>{children}</> : <AppRouteModal label="Usage">{children}</AppRouteModal>;
+  const gt = useGT();
+  return embedded ? <>{children}</> : <AppRouteModal label={gt("Usage")}>{children}</AppRouteModal>;
 }
 
 export function UsagePage({

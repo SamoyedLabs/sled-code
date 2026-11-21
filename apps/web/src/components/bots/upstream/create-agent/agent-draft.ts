@@ -7,6 +7,8 @@ import type { ExpressionId } from "../../avatar/vendor/bloub-engine";
 import { defaultProviderModel, PICKER_PROVIDERS, type AgentProviderId } from "../provider/identity";
 import type { AgentReasoningEffort, AgentStatus, ClientAgentModelOption } from "../provider/types";
 import { t } from "./text";
+import { m } from "../../../../i18n/messages";
+import { msg } from "gt-react";
 export interface FirstAgentDraft {
   name: string;
   purpose: string;
@@ -153,7 +155,9 @@ export function applySuggestion(
 }
 export function createAgentInitialMessage(draft: Pick<FirstAgentDraft, "purpose">) {
   const purpose = draft.purpose.trim();
-  return purpose ? `Your ongoing role is: ${purpose}` : "Greet me briefly.";
+  return purpose
+    ? m(msg("Your ongoing role is: {purpose}", { purpose }))
+    : m(msg("Greet me briefly."));
 }
 export function creationInput(draft: FirstAgentDraft, supportsModel: boolean) {
   return {

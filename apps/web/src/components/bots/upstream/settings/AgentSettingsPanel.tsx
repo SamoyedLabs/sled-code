@@ -14,6 +14,7 @@ import {
 import "./agent-settings.css";
 import { ResizableTextarea } from "./ResizableTextarea";
 import { cn } from "../../../../lib/utils";
+import { T, useGT } from "gt-react";
 
 export interface AgentProfileSettings extends AgentAvatarValue {
   name: string;
@@ -76,6 +77,7 @@ function AgentSettingsContents({
   sections = [],
   detail,
 }: AgentSettingsPanelProps) {
+  const gt = useGT();
   const [fields, setFields] = useState<TextFields>({
     name: agent.name,
     title: agent.title,
@@ -111,7 +113,7 @@ function AgentSettingsContents({
       });
       if (settled._tag === "Failure" && !disposed.current) {
         const cause = squashAtomCommandFailure(settled);
-        setError(cause instanceof Error ? cause.message : "Could not save the agent settings.");
+        setError(cause instanceof Error ? cause.message : gt("Could not save the agent settings."));
       }
       active.current = null;
     }
@@ -198,7 +200,7 @@ function AgentSettingsContents({
     <>
       {(layout === "panel" || current) && (
         <SettingsPanelHeader
-          title={current?.label ?? "Bot settings"}
+          title={current?.label ?? gt("Bot settings")}
           onBack={current ? back : undefined}
           onClose={close}
           paneRoot={!current}
@@ -230,16 +232,20 @@ function AgentSettingsContents({
                     }
                   />
                   {layout === "page" && (
-                    <p className="mt-2 text-center text-xs text-muted-foreground">Bot avatar</p>
+                    <p className="mt-2 text-center text-xs text-muted-foreground">
+                      <T>Bot avatar</T>
+                    </p>
                   )}
                 </div>
                 <div className="min-w-0 space-y-4 [&>.settings-field]:m-0">
                   <label className="settings-field" htmlFor={`${id}-name`}>
-                    <span>Name</span>
+                    <span>
+                      <T>Name</T>
+                    </span>
                     <input
                       id={`${id}-name`}
                       className="ui-input"
-                      aria-label="Agent name"
+                      aria-label={gt("Agent name")}
                       maxLength={80}
                       value={fields.name}
                       readOnly={!onUpdateAgent}
@@ -248,12 +254,14 @@ function AgentSettingsContents({
                     />
                   </label>
                   <label className="settings-field" htmlFor={`${id}-title`}>
-                    <span>Title</span>
+                    <span>
+                      <T>Title</T>
+                    </span>
                     <input
                       id={`${id}-title`}
                       className="ui-input"
-                      aria-label="Agent title"
-                      placeholder="Describe what your agent does"
+                      aria-label={gt("Agent title")}
+                      placeholder={gt("Describe what your agent does")}
                       maxLength={120}
                       value={fields.title}
                       readOnly={!onUpdateAgent}
@@ -262,14 +270,16 @@ function AgentSettingsContents({
                     />
                   </label>
                   <label className="settings-field" htmlFor={`${id}-description`}>
-                    <span>Description</span>
+                    <span>
+                      <T>Description</T>
+                    </span>
                     <ResizableTextarea
-                      resizeLabel="Resize description"
+                      resizeLabel={gt("Resize description")}
                       id={`${id}-description`}
                       className="ui-textarea settings-instructions-input settings-description-input"
                       rows={3}
-                      aria-label="Agent description"
-                      placeholder="What this agent is for"
+                      aria-label={gt("Agent description")}
+                      placeholder={gt("What this agent is for")}
                       aria-invalid={fields.description.length > 2000}
                       value={fields.description}
                       readOnly={!onUpdateAgent}
@@ -277,7 +287,9 @@ function AgentSettingsContents({
                       onBlur={() => blur("description")}
                     />
                     {fields.description.length > 2000 && (
-                      <span role="alert">Description must be 2,000 characters or fewer.</span>
+                      <span role="alert">
+                        <T>Description must be 2,000 characters or fewer.</T>
+                      </span>
                     )}
                   </label>
                 </div>
@@ -291,7 +303,11 @@ function AgentSettingsContents({
                 {(brain ||
                   backupModels ||
                   sections.some((section) => section.group === "Brain")) && (
-                  <SettingsLinkGroup title="Brain" inset className="agent-settings-runtime-rows">
+                  <SettingsLinkGroup
+                    title={gt("Brain")}
+                    inset
+                    className="agent-settings-runtime-rows"
+                  >
                     {brain}
                     {backupModels}
                     {sections

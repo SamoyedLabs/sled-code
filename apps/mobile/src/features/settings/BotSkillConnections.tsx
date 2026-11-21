@@ -9,6 +9,7 @@ import { useEnvironmentQuery } from "../../state/query";
 import { openbot } from "../../state/openbot";
 import { AppTextInput } from "../../components/ui/AppText";
 import { confirm, Picker } from "./BotConnectionControls";
+import { T, useGT } from "gt-react-native";
 
 export function SkillsPanel({
   controller: { state, run, busy, clearSkills },
@@ -16,6 +17,7 @@ export function SkillsPanel({
   environmentId,
   hostId,
 }: PanelProps & { environmentId: EnvironmentId; hostId: string }) {
+  const gt = useGT();
   const query = useEnvironmentQuery(
     openbot.readFromHost({
       environmentId,
@@ -29,8 +31,8 @@ export function SkillsPanel({
   const remove = (id: string, modified: boolean) =>
     confirm(
       modified
-        ? "Remove this skill, including its local modifications?"
-        : "Remove this skill from the bot?",
+        ? gt("Remove this skill, including its local modifications?")
+        : gt("Remove this skill from the bot?"),
       () =>
         void run([
           {
@@ -44,7 +46,7 @@ export function SkillsPanel({
     );
   return (
     <View className="gap-3">
-      <Button label="Refresh bots" disabled={busy} onPress={query.refresh} />
+      <Button label={gt("Refresh bots")} disabled={busy} onPress={query.refresh} />
       {query.error && (
         <Text accessibilityRole="alert" className="text-danger">
           {query.error}
@@ -52,7 +54,7 @@ export function SkillsPanel({
       )}
       {agents && (
         <Picker
-          label="Bot for skills"
+          label={gt("Bot for skills")}
           value={agentId}
           options={agents.map((agent) => ({ id: agent.id, name: agent.name }))}
           disabled={busy}
@@ -64,21 +66,23 @@ export function SkillsPanel({
         />
       )}
       <Button
-        label="Load installed skills"
+        label={gt("Load installed skills")}
         disabled={!allowed || busy || !agentId}
         onPress={() => void run([{ operation: "skill.list", agentId }])}
       />
       {agentId && (
         <View className="gap-2">
-          <Text>Marketplace skill ID</Text>
+          <Text>
+            <T>Marketplace skill ID</T>
+          </Text>
           <AppTextInput
-            accessibilityLabel="Marketplace skill ID"
+            accessibilityLabel={gt("Marketplace skill ID")}
             value={skillId}
             editable={!busy && allowed}
             onChangeText={setSkillId}
           />
           <Button
-            label="Install skill"
+            label={gt("Install skill")}
             disabled={!allowed || busy || !skillId.trim()}
             onPress={() =>
               void run([
@@ -90,7 +94,9 @@ export function SkillsPanel({
         </View>
       )}
       {state.skills?.length === 0 && (
-        <Text className="text-foreground-muted">No installed skills for this bot.</Text>
+        <Text className="text-foreground-muted">
+          <T>No installed skills for this bot.</T>
+        </Text>
       )}
       {state.skills?.slice(0, visible).map((skill) => (
         <View key={skill.skillId} className="gap-2 border-t border-border pt-3">
@@ -105,12 +111,12 @@ export function SkillsPanel({
           )}
           {skill.origin === "workspace" ? (
             <Text className="text-foreground-muted">
-              Workspace skills are managed in the bot's files.
+              <T>Workspace skills are managed in the bot's files.</T>
             </Text>
           ) : (
             <View className="flex-row flex-wrap gap-2">
               <Button
-                label={skill.enabled === false ? "Enable" : "Disable"}
+                label={skill.enabled === false ? gt("Enable") : gt("Disable")}
                 disabled={!allowed || busy}
                 onPress={() =>
                   void run([
@@ -126,7 +132,7 @@ export function SkillsPanel({
               />
               {skill.state === "update-available" && (
                 <Button
-                  label="Update skill"
+                  label={gt("Update skill")}
                   disabled={!allowed || busy}
                   onPress={() =>
                     void run([
@@ -137,7 +143,7 @@ export function SkillsPanel({
                 />
               )}
               <Button
-                label="Uninstall"
+                label={gt("Uninstall")}
                 tone="danger"
                 disabled={!allowed || busy}
                 onPress={() => remove(skill.skillId, skill.state === "modified")}
@@ -147,7 +153,7 @@ export function SkillsPanel({
         </View>
       ))}
       {state.skills && state.skills.length > visible && (
-        <Button label="Show more skills" onPress={() => setVisible(visible + 40)} />
+        <Button label={gt("Show more skills")} onPress={() => setVisible(visible + 40)} />
       )}
     </View>
   );

@@ -66,6 +66,7 @@ import { MenuPopup } from "../bots/upstream/OpenbotMenu";
 import { Dialog, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "../ui/dialog";
 import { requestConfirmDialog } from "../../confirmDialog";
 import "./bot-conversation.css";
+import { useGT, T, Var } from "gt-react";
 
 type Props = {
   environmentId: EnvironmentId;
@@ -136,6 +137,7 @@ function ConversationBody({
   onDraftChange,
   focusMessageId,
 }: Props) {
+  const gt = useGT();
   const c = useBotConversationPanel(
     environmentId,
     hostId,
@@ -304,7 +306,7 @@ function ConversationBody({
       : [],
   );
   const shownSections = c.hasOlder
-    ? [{ key: "", label: "Earlier messages", start: 0 }, ...railSections]
+    ? [{ key: "", label: gt("Earlier messages"), start: 0 }, ...railSections]
     : railSections;
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Around-page navigation must reveal its original row after the new virtualized range commits, including a quote outside the mounted viewport.
@@ -345,7 +347,7 @@ function ConversationBody({
       taskId,
     );
     if (!source) {
-      setCopyError("The quoted attachment is unavailable in this conversation.");
+      setCopyError(gt("The quoted attachment is unavailable in this conversation."));
       return;
     }
     const settled = await settlePromise(async () => {
@@ -359,7 +361,9 @@ function ConversationBody({
     });
     if (settled._tag === "Failure" && request === quoteRequest.current) {
       const cause = squashAtomCommandFailure(settled);
-      setCopyError(cause instanceof Error ? cause.message : "The quoted file could not be opened.");
+      setCopyError(
+        cause instanceof Error ? cause.message : gt("The quoted file could not be opened."),
+      );
     }
   };
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Cancel quote observers and reject late file reads when this identity-scoped chat leaves the workspace.
@@ -386,7 +390,7 @@ function ConversationBody({
       if (editor.current?.insertQuote(id, text)) {
         if (!botFileQuoteTarget(id)) c.setReply(id);
         setCopyError(null);
-      } else setCopyError("This quote would exceed the message length limit.");
+      } else setCopyError(gt("This quote would exceed the message length limit."));
     },
   };
   usePublishBotFileSelection(publishFileSelection, fileSelection);
@@ -403,7 +407,7 @@ function ConversationBody({
   return (
     <BotFileSelectionContext value={fileSelection}>
       <section
-        aria-label="Bot conversation"
+        aria-label={gt("Bot conversation")}
         className={cn("ob-chat", composerAccessory && "[--conversation-column-width:800px]!")}
         data-workspace={workspace || undefined}
       >
@@ -415,13 +419,21 @@ function ConversationBody({
             </button>
           )}
           <Menu>
-            <MenuTrigger className="ob-chat-action-button" aria-label="Conversation actions">
+            <MenuTrigger className="ob-chat-action-button" aria-label={gt("Conversation actions")}>
               <MoreHorizontalIcon />
             </MenuTrigger>
             <MenuPopup className="ob-chat-menu" align="end">
-              <MenuItem onClick={c.refresh}>Refresh conversation</MenuItem>
-              <MenuItem onClick={() => setPanel("queue")}>Queue</MenuItem>
-              {taskId && <MenuItem onClick={() => setPanel("thread")}>Thread settings</MenuItem>}
+              <MenuItem onClick={c.refresh}>
+                <T>Refresh conversation</T>
+              </MenuItem>
+              <MenuItem onClick={() => setPanel("queue")}>
+                <T>Queue</T>
+              </MenuItem>
+              {taskId && (
+                <MenuItem onClick={() => setPanel("thread")}>
+                  <T>Thread settings</T>
+                </MenuItem>
+              )}
               {c.messages.length > 0 && (
                 <MenuItem
                   disabled={disabled}
@@ -434,7 +446,7 @@ function ConversationBody({
                     );
                   }}
                 >
-                  Mark read
+                  <T>Mark read</T>
                 </MenuItem>
               )}
               {!taskId && (
@@ -442,7 +454,7 @@ function ConversationBody({
                   disabled={disabled}
                   onClick={() => void c.act({ operation: "conversation.markUnread", agentId })}
                 >
-                  Mark unread
+                  <T>Mark unread</T>
                 </MenuItem>
               )}
             </MenuPopup>
@@ -516,13 +528,13 @@ function ConversationBody({
                   });
                 }}
               >
-                Load older messages
+                <T>Load older messages</T>
               </Button>
             </li>
           )}
           {c.loading && (
             <li className="ob-chat-history-status" role="status">
-              Loading conversation…
+              <T>Loading conversation…</T>
             </li>
           )}
           <li role="presentation" style={{ listStyle: "none" }}>
@@ -606,7 +618,7 @@ function ConversationBody({
                               <button
                                 type="button"
                                 className="ob-chat-reply-quote"
-                                aria-label="Show replied message"
+                                aria-label={gt("Show replied message")}
                                 onClick={() => {
                                   const id = message.replyToMessageId;
                                   if (!id) return;
@@ -618,11 +630,13 @@ function ConversationBody({
                                 {(
                                   c.messages.find((m) => m.id === message.replyToMessageId) ??
                                   c.references[message.replyToMessageId]
-                                )?.text.slice(0, 200) ?? "Earlier message"}
+                                )?.text.slice(0, 200) ?? gt("Earlier message")}
                               </button>
                             )}
                             {!message.text && message.status === "streaming" && (
-                              <BotTypingIndicator label={`${agentName ?? "Bot"} is typing`} />
+                              <BotTypingIndicator
+                                label={gt("{value} is typing", { value: agentName ?? "Bot" })}
+                              />
                             )}
                             {message.text && (
                               <BotStreamingMessage
@@ -681,12 +695,12 @@ function ConversationBody({
                       <div
                         className="ob-chat-message-actions"
                         role="toolbar"
-                        aria-label="Message actions"
+                        aria-label={gt("Message actions")}
                       >
                         <button
                           type="button"
                           className="ob-chat-action-button"
-                          aria-label={copiedId === message.id ? "Copied" : "Copy message"}
+                          aria-label={copiedId === message.id ? gt("Copied") : gt("Copy message")}
                           onClick={() => {
                             void writeTextToClipboard(
                               message.text,
@@ -696,7 +710,7 @@ function ConversationBody({
                                 setCopiedId(message.id);
                                 setCopyError(null);
                               },
-                              () => setCopyError("Could not copy this message."),
+                              () => setCopyError(gt("Could not copy this message.")),
                             );
                           }}
                         >
@@ -706,7 +720,7 @@ function ConversationBody({
                           <Menu>
                             <MenuTrigger
                               className="ob-chat-action-button"
-                              aria-label="Add reaction"
+                              aria-label={gt("Add reaction")}
                               disabled={disabled}
                             >
                               <MessageGlyph kind="reaction" />
@@ -716,7 +730,7 @@ function ConversationBody({
                                 {["👍", "👎", "❤️", "😂", "🎉", "😮"].map((emoji) => (
                                   <MenuItem
                                     key={emoji}
-                                    aria-label={`React ${emoji}`}
+                                    aria-label={gt("React {emoji}", { emoji })}
                                     onClick={() =>
                                       void c.act({
                                         operation: "conversation.react",
@@ -731,7 +745,7 @@ function ConversationBody({
                                 ))}
                                 <MenuItem
                                   closeOnClick={false}
-                                  aria-label="More emoji"
+                                  aria-label={gt("More emoji")}
                                   onClick={() => setExpandedReactions(message.id)}
                                 >
                                   <PlusIcon />
@@ -742,7 +756,7 @@ function ConversationBody({
                                   {["🔥", "👏", "🙏", "🤔", "👀", "✅", "🚀", "💯"].map((emoji) => (
                                     <MenuItem
                                       key={emoji}
-                                      aria-label={`React ${emoji}`}
+                                      aria-label={gt("React {emoji}", { emoji })}
                                       onClick={() =>
                                         void c.act({
                                           operation: "conversation.react",
@@ -767,7 +781,7 @@ function ConversationBody({
                                   })
                                 }
                               >
-                                Clear reaction
+                                <T>Clear reaction</T>
                               </MenuItem>
                             </MenuPopup>
                           </Menu>
@@ -775,7 +789,7 @@ function ConversationBody({
                         <button
                           type="button"
                           className="ob-chat-action-button"
-                          aria-label="Reply"
+                          aria-label={gt("Reply")}
                           disabled={disabled || Boolean(c.fileAttempt)}
                           onClick={() => {
                             c.setReply(message.id);
@@ -788,7 +802,7 @@ function ConversationBody({
                           <button
                             type="button"
                             className="ob-chat-action-button"
-                            aria-label="Branch here"
+                            aria-label={gt("Branch here")}
                             disabled={
                               disabled ||
                               message.status === "streaming" ||
@@ -802,13 +816,13 @@ function ConversationBody({
                         <Menu>
                           <MenuTrigger
                             className="ob-chat-action-button"
-                            aria-label="More message actions"
+                            aria-label={gt("More message actions")}
                           >
                             <MoreHorizontalIcon />
                           </MenuTrigger>
                           <MenuPopup className="ob-chat-menu" align="start">
                             <MenuItem onClick={() => setDetailsId(message.id)}>
-                              Message details
+                              <T>Message details</T>
                             </MenuItem>
                           </MenuPopup>
                         </Menu>
@@ -818,7 +832,7 @@ function ConversationBody({
                       </time>
                       {(message.status === "failed" || message.status === "interrupted") && (
                         <span className="ob-chat-message-status">
-                          {message.status === "failed" ? "Failed" : "Interrupted"}
+                          {message.status === "failed" ? gt("Failed") : gt("Interrupted")}
                         </span>
                       )}
                     </div>
@@ -836,9 +850,11 @@ function ConversationBody({
                     <SourceAgentAvatar agent={agent} size={32} />
                   </span>
                 )}
-                <div className="ob-live-message-author">{agentName ?? "Bot"}</div>
+                <div className="ob-live-message-author">{agentName ?? gt("Bot")}</div>
                 <div className="ob-chat-bubble-content">
-                  <BotTypingIndicator label={`${agentName ?? "Bot"} is typing`} />
+                  <BotTypingIndicator
+                    label={gt("{value} is typing", { value: agentName ?? "Bot" })}
+                  />
                 </div>
               </li>
             )}
@@ -856,17 +872,21 @@ function ConversationBody({
             <div className="ob-chat-reply-preview">
               <div>
                 <span>
-                  Replying to{" "}
-                  {replyMessage?.senderMember?.name ??
-                    (replyMessage?.author === "user" ? "you" : "agent")}
+                  <T>
+                    Replying to<Var> </Var>
+                    <Var>
+                      {replyMessage?.senderMember?.name ??
+                        (replyMessage?.author === "user" ? "you" : "agent")}
+                    </Var>
+                  </T>
                 </span>
                 <blockquote className="ob-chat-reply-quote">
-                  {replyMessage?.text.slice(0, 200) ?? "Earlier message"}
+                  {replyMessage?.text.slice(0, 200) ?? gt("Earlier message")}
                 </blockquote>
               </div>
               <button
                 type="button"
-                aria-label="Cancel reply"
+                aria-label={gt("Cancel reply")}
                 disabled={Boolean(c.fileAttempt)}
                 onClick={() => c.setReply(null)}
               >
@@ -935,7 +955,7 @@ function ConversationBody({
                 environmentId={environmentId}
                 hostId={hostId}
                 agentId={agentId}
-                placeholder={c.reply ? "Reply…" : "Message…"}
+                placeholder={c.reply ? gt("Reply…") : gt("Message…")}
                 disabled={c.busy || Boolean(c.fileAttempt) || voice.busy}
                 value={c.text}
                 attachments={selectedFiles.map((draft) => ({
@@ -972,7 +992,7 @@ function ConversationBody({
                   <BotComposerSend
                     stop={stop}
                     busy={c.busy && !stop}
-                    aria-label={stop ? "Stop turn" : "Send message"}
+                    aria-label={stop ? gt("Stop turn") : gt("Send message")}
                     onClick={stop ? stopTurn : undefined}
                     disabled={
                       stop
@@ -989,7 +1009,7 @@ function ConversationBody({
               <Menu>
                 <MenuTrigger
                   render={<ComposerControl className="size-8 px-0" />}
-                  aria-label="Add to message"
+                  aria-label={gt("Add to message")}
                   disabled={c.busy || Boolean(c.fileAttempt) || voice.busy}
                 >
                   <PlusIcon />
@@ -1000,19 +1020,19 @@ function ConversationBody({
                     onClick={() => fileInput.current?.click()}
                   >
                     <ImageIcon />
-                    Add image
+                    <T>Add image</T>
                   </MenuItem>
                   <MenuItem
                     disabled={!uploads.available}
                     onClick={() => fileInput.current?.click()}
                   >
                     <FileIcon />
-                    Add context
+                    <T>Add context</T>
                   </MenuItem>
                   {onOpenFiles && (
                     <MenuItem onClick={onOpenFiles}>
                       <FileIcon />
-                      Browse files
+                      <T>Browse files</T>
                     </MenuItem>
                   )}
                   <MenuItem
@@ -1026,17 +1046,17 @@ function ConversationBody({
                     }}
                   >
                     <PuzzleIcon />
-                    Add skill
+                    <T>Add skill</T>
                   </MenuItem>
                   {c.fileDrafts.length > 0 && (
                     <MenuItem onClick={() => setPanel("files")}>
                       <FileIcon />
-                      Choose uploaded files
+                      <T>Choose uploaded files</T>
                     </MenuItem>
                   )}
                   <MenuItem onClick={() => setPanel("queue")}>
                     <ListIcon />
-                    Edit queued messages
+                    <T>Edit queued messages</T>
                   </MenuItem>
                 </MenuPopup>
               </Menu>
@@ -1057,12 +1077,12 @@ function ConversationBody({
             <DialogHeader>
               <DialogTitle>
                 {detailsMessage
-                  ? "Message details"
+                  ? gt("Message details")
                   : panel === "files"
-                    ? "Choose uploaded files"
+                    ? gt("Choose uploaded files")
                     : panel === "thread"
-                      ? "Thread settings"
-                      : "Queue"}
+                      ? gt("Thread settings")
+                      : gt("Queue")}
               </DialogTitle>
             </DialogHeader>
             <DialogPanel>
@@ -1102,7 +1122,11 @@ function ConversationBody({
               {panel === "queue" && <BotConversationQueue controller={c} agentId={agentId} />}
               {panel === "files" && (
                 <fieldset className="space-y-2">
-                  <legend>Files ({c.selectedDraftIds.length}/10 selected)</legend>
+                  <legend>
+                    <T>
+                      Files (<Var>{c.selectedDraftIds.length}</Var>/10 selected)
+                    </T>
+                  </legend>
                   {c.fileDrafts.map((draft) => (
                     <label className="flex items-center gap-2" key={draft.attachment.id}>
                       <input
@@ -1119,13 +1143,15 @@ function ConversationBody({
                       {draft.attachment.name} · {draft.state}
                     </label>
                   ))}
-                  <p>Select up to 10 files for this message.</p>
+                  <p>
+                    <T>Select up to 10 files for this message.</T>
+                  </p>
                 </fieldset>
               )}
               {panel === "thread" && taskId && (
                 <div className="space-y-3">
                   <Input
-                    aria-label="Thread title"
+                    aria-label={gt("Thread title")}
                     maxLength={120}
                     value={title}
                     onChange={(event) => setTitle(event.target.value)}
@@ -1136,20 +1162,20 @@ function ConversationBody({
                       void c.act({ operation: "thread.rename", agentId, taskId, title })
                     }
                   >
-                    Rename thread
+                    <T>Rename thread</T>
                   </Button>
                   <div className="flex flex-wrap gap-2">
                     <Button
                       disabled={disabled}
                       onClick={() => void c.act({ operation: "task.close", agentId, taskId })}
                     >
-                      Close thread
+                      <T>Close thread</T>
                     </Button>
                     <Button
                       disabled={disabled}
                       onClick={() => void c.act({ operation: "task.reopen", agentId, taskId })}
                     >
-                      Reopen thread
+                      <T>Reopen thread</T>
                     </Button>
                     <Button
                       variant="destructive"
@@ -1163,7 +1189,7 @@ function ConversationBody({
                           await c.act({ operation: "thread.delete", agentId, taskId });
                       }}
                     >
-                      Delete thread
+                      <T>Delete thread</T>
                     </Button>
                   </div>
                 </div>

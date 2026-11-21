@@ -4,6 +4,7 @@ import { moveBotDraft } from "./botComposerAttachmentOrder";
 import type { OpenbotFileSummary } from "@t3tools/contracts";
 import { CircleAlertIcon, LoaderCircleIcon, RotateCcwIcon, XIcon } from "lucide-react";
 import type { ComposerUpload } from "./useBotComposerUploads";
+import { useGT } from "gt-react";
 
 function sizeLabel(size: number) {
   if (size < 1024) return `${size} B`;
@@ -20,6 +21,7 @@ export function BotComposerAttachments(props: {
   onRemoveUpload: (key: string) => void;
   onRetry: (key: string) => void;
 }) {
+  const gt = useGT();
   const dragging = useRef<string | null>(null);
   const ids = props.files.map((file) => file.id);
   const canReorder = !props.disabled && !props.reorderDisabled && props.files.length > 1;
@@ -35,7 +37,9 @@ export function BotComposerAttachments(props: {
           tabIndex={canReorder ? 0 : undefined}
           role="group"
           aria-label={
-            canReorder ? `${file.name}. Use Alt and arrow keys to move this attachment.` : file.name
+            canReorder
+              ? gt("{name}. Use Alt and arrow keys to move this attachment.", { name: file.name })
+              : file.name
           }
           aria-keyshortcuts={canReorder ? "Alt+ArrowLeft Alt+ArrowRight" : undefined}
           onDragStart={(event) => {
@@ -89,7 +93,7 @@ export function BotComposerAttachments(props: {
           <button
             type="button"
             className="ob-chat-attachment-remove"
-            aria-label={`Remove ${file.name}`}
+            aria-label={gt("Remove {name}", { name: file.name })}
             disabled={props.disabled}
             onClick={() => props.onRemove(file.id)}
           >
@@ -110,21 +114,21 @@ export function BotComposerAttachments(props: {
             ) : (
               <LoaderCircleIcon
                 className="ob-chat-spinner"
-                aria-label={`Uploading ${upload.name}`}
+                aria-label={gt("Uploading {name}", { name: upload.name })}
               />
             )}
           </span>
           <span className="ob-chat-attachment-copy">
             <strong>{upload.name}</strong>
             <small>
-              {upload.removing ? "Removing…" : (upload.error ?? sizeLabel(upload.size))}
+              {upload.removing ? gt("Removing…") : (upload.error ?? sizeLabel(upload.size))}
             </small>
           </span>
           {upload.error && (
             <button
               type="button"
               className="ob-chat-upload-retry"
-              aria-label={`Retry ${upload.name}`}
+              aria-label={gt("Retry {name}", { name: upload.name })}
               disabled={upload.removing || props.disabled}
               onClick={() => props.onRetry(upload.key)}
             >
@@ -134,7 +138,7 @@ export function BotComposerAttachments(props: {
           <button
             type="button"
             className="ob-chat-attachment-remove"
-            aria-label={`Remove ${upload.name}`}
+            aria-label={gt("Remove {name}", { name: upload.name })}
             disabled={upload.removing || props.disabled}
             onClick={() => props.onRemoveUpload(upload.key)}
           >

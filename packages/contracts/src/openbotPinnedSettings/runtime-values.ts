@@ -46,6 +46,9 @@ export function isHttpsUrl(value: unknown): value is string {
   }
 }
 
-export function isOneOf<T extends string | number>(values: readonly T[], value: unknown): value is T {
+export function isOneOf<T extends string | number>(
+  values: readonly T[],
+  value: unknown,
+): value is T {
   return values.some((candidate) => candidate === value);
 }

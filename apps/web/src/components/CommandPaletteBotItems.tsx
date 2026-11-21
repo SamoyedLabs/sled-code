@@ -23,6 +23,7 @@ import { SourceAgentAvatar } from "./bots/SourceAgentAvatar";
 import { randomUUID } from "../lib/utils";
 import type { CommandPaletteActionItem, CommandPaletteGroup } from "./CommandPalette.logic";
 import { validateBotWorkspaceSearch, type BotWorkspacePage } from "./bots/workspaceNavigation";
+import { useGT } from "gt-react";
 
 const decodeMessageMatches = Schema.decodeUnknownOption(OpenbotConversationSearchPage);
 const decodeFileMatches = Schema.decodeUnknownOption(OpenbotConversationFilePage);
@@ -30,6 +31,7 @@ export function useBotCommandPaletteGroups(
   query: string,
   enabled = true,
 ): readonly CommandPaletteGroup[] {
+  const gt = useGT();
   const primary = usePrimaryEnvironmentId();
   const search = useLocation({ select: (location) => validateBotWorkspaceSearch(location.search) });
   const { environments } = useEnvironments();
@@ -123,7 +125,7 @@ export function useBotCommandPaletteGroups(
   actions.splice(3, 0, {
     kind: "action",
     value: "bot-action:new-group",
-    title: "New group chat",
+    title: gt("New group chat"),
     searchTerms: ["new", "group", "chat", "gc", "bots"],
     icon: <MessagesSquareIcon className="size-4" />,
     run: () => go("chats", { botCreate: "group" }),
@@ -133,7 +135,7 @@ export function useBotCommandPaletteGroups(
       kind: "action",
       value: `bot:${agent.id}`,
       title: agent.name,
-      description: "Bot conversation",
+      description: gt("Bot conversation"),
       searchTerms: [agent.name, "bot", "chat"],
       icon: <SourceAgentAvatar agent={agent} size={24} />,
       run: () => go("chats", { botAgent: agent.id }),
@@ -142,7 +144,7 @@ export function useBotCommandPaletteGroups(
       kind: "action",
       value: `bot-channel:${channel.id}`,
       title: channel.name,
-      description: "Group conversation",
+      description: gt("Group conversation"),
       searchTerms: [channel.name, "group", "chat", "bots"],
       icon: <MessagesSquareIcon className="size-4" />,
       run: () => go("chats", { botChannel: channel.id }),
@@ -153,8 +155,10 @@ export function useBotCommandPaletteGroups(
       ? messagePage.value.results.map((hit): CommandPaletteActionItem => ({
           kind: "action",
           value: `bot-message:${hit.agentId}:${hit.message.id}`,
-          title: hit.message.text.slice(0, 100) || "Bot message",
-          description: `Bot message · ${agents.data?.find((agent) => agent.id === hit.agentId)?.name ?? "Conversation"}`,
+          title: hit.message.text.slice(0, 100) || gt("Bot message"),
+          description: gt("Bot message · {value}", {
+            value: agents.data?.find((agent) => agent.id === hit.agentId)?.name ?? "Conversation",
+          }),
           searchTerms: [query, hit.message.text],
           icon: <MessagesSquareIcon className="size-4" />,
           run: () =>
@@ -170,7 +174,7 @@ export function useBotCommandPaletteGroups(
           kind: "action",
           value: `bot-file:${hit.agentId}:${hit.messageId}:${hit.attachment.id}`,
           title: hit.attachment.name,
-          description: "Bot attachment · Open source message",
+          description: gt("Bot attachment · Open source message"),
           searchTerms: [query, hit.attachment.name],
           icon: <SearchIcon className="size-4" />,
           run: () =>
@@ -186,8 +190,8 @@ export function useBotCommandPaletteGroups(
           {
             kind: "action" as const,
             value: "bot-search-error",
-            title: "Some bot search results could not load",
-            description: "Check the selected host connection and search permissions.",
+            title: gt("Some bot search results could not load"),
+            description: gt("Check the selected host connection and search permissions."),
             searchTerms: [query],
             icon: <SearchIcon className="size-4" />,
             disabled: true,
@@ -197,17 +201,17 @@ export function useBotCommandPaletteGroups(
       : []),
   ];
   return [
-    { value: "bot-actions", label: "Bots", items: actions },
+    { value: "bot-actions", label: gt("Bots"), items: actions },
     ...(routines.items.length
       ? [
           {
             value: "bot-routines",
-            label: "Bot routines",
+            label: gt("Bot routines"),
             items: routines.items.map((routine) => ({
               kind: "action" as const,
               value: `bot-routine:${routine.agentId ?? routine.channelId}:${routine.id}`,
               title: routine.name,
-              description: `Routine · ${routine.detail}`,
+              description: gt("Routine · {detail}", { detail: routine.detail }),
               searchTerms: [routine.name, routine.detail, "routine", "schedule"],
               icon: <Repeat2Icon className="size-4" />,
               run: () =>
@@ -224,10 +228,10 @@ export function useBotCommandPaletteGroups(
         ]
       : []),
     ...(content.length
-      ? [{ value: "bot-content", label: "Bot messages & files", items: content }]
+      ? [{ value: "bot-content", label: gt("Bot messages & files"), items: content }]
       : []),
     ...(conversations.length
-      ? [{ value: "bot-conversations", label: "Bot conversations", items: conversations }]
+      ? [{ value: "bot-conversations", label: gt("Bot conversations"), items: conversations }]
       : []),
   ];
 }

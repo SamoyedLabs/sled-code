@@ -19,6 +19,7 @@ import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { useGT } from "gt-react-native";
 
 type RoutineRequest = Extract<OpenbotEventAdminRequest, { operation: "events.save" }>;
 type Owner = { kind: "agent" | "channel"; id: string };
@@ -56,6 +57,7 @@ export function useBotEvents(
   hostId: string,
   initial?: BotRoutineEditTarget,
 ) {
+  const gt = useGT();
   const discovery = useBotRoutineDiscovery(environmentId, hostId);
   const canAdmin = useAtomValue(
     openbot.adminToHost.permissionAtom(environmentId, {
@@ -183,7 +185,7 @@ export function useBotEvents(
       const response = await admin({ environmentId, input: { hostId, request: input } });
       if (response._tag === "Failure") {
         if (input.operation === "events.save" && !input.id) setReadOnly(true);
-        setError("The request could not complete. Reload before retrying a creation or test.");
+        setError(gt("The request could not complete. Reload before retrying a creation or test."));
         return null;
       }
       const value = response.value;
@@ -198,7 +200,7 @@ export function useBotEvents(
         if (selectId !== undefined) {
           loadRoutine(selectId, available);
           if (!available.some((entry) => entry.id === selectId))
-            setError("This routine is no longer available on this host.");
+            setError(gt("This routine is no longer available on this host."));
         }
       }
       if (input.operation === "events.save") {
@@ -211,7 +213,7 @@ export function useBotEvents(
           savedOwner.id !== input.owner.id
         ) {
           setError(
-            "The saved routine could not be identified. Reload routines before saving again.",
+            gt("The saved routine could not be identified. Reload routines before saving again."),
           );
           setReadOnly(true);
           return null;
@@ -260,7 +262,7 @@ export function useBotEvents(
     setBusy(false);
     if (settled._tag === "Failure") {
       if (input.operation === "events.save" && !input.id) setReadOnly(true);
-      setError("The outcome is uncertain. Reload before retrying a creation or test.");
+      setError(gt("The outcome is uncertain. Reload before retrying a creation or test."));
       return null;
     }
     return settled.value;
@@ -297,6 +299,7 @@ export function useBotEvents(
   };
 }
 export function useBotRoutineFlows(environmentId: EnvironmentId, hostId: string, agentId: string) {
+  const gt = useGT();
   const query = useEnvironmentQuery(
     agentId
       ? openbot.readFromHost({
@@ -318,11 +321,13 @@ export function useBotRoutineFlows(environmentId: EnvironmentId, hostId: string,
     const settled = await settlePromise(async () => {
       const response = await write({ environmentId, input: { hostId, request } });
       if (response._tag === "Failure")
-        setError("The flow change was refused. Check your permissions for every bot in this flow.");
+        setError(
+          gt("The flow change was refused. Check your permissions for every bot in this flow."),
+        );
       query.refresh();
     });
     if (settled._tag === "Failure")
-      setError("The flow change could not complete. Reload before retrying.");
+      setError(gt("The flow change could not complete. Reload before retrying."));
     lock.current = false;
     setBusy(false);
   };

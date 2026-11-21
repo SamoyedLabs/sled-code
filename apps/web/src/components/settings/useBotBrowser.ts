@@ -5,8 +5,10 @@ import { browserDisplay, browserProfiles } from "@t3tools/client-runtime/openbot
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { openbot } from "../../state/openbot";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { useGT } from "gt-react";
 
 export function useBotBrowser(environmentId: EnvironmentId, hostId: string) {
+  const gt = useGT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const lock = useRef(false);
@@ -29,7 +31,7 @@ export function useBotBrowser(environmentId: EnvironmentId, hostId: string) {
       if (result._tag === "Failure") {
         setDisplay(null);
         setProfiles(null);
-        setError("The browser request failed. Refresh before retrying.");
+        setError(gt("The browser request failed. Refresh before retrying."));
         return;
       } else if (request.operation === "browser.display") setDisplay(browserDisplay(result.value));
       else if (request.operation === "browser.profiles.list")
@@ -55,7 +57,7 @@ export function useBotBrowser(environmentId: EnvironmentId, hostId: string) {
     if (settled._tag === "Failure") {
       setDisplay(null);
       setProfiles(null);
-      setError("The browser request failed. Refresh before retrying.");
+      setError(gt("The browser request failed. Refresh before retrying."));
     }
     lock.current = false;
     setBusy(false);

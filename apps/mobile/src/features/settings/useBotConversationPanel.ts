@@ -23,6 +23,7 @@ import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { useGT } from "gt-react-native";
 
 const decodePinnedThread = Schema.decodeUnknownOption(OpenbotPinnedThread);
 const decodeThreadBranch = Schema.decodeUnknownOption(OpenbotThreadBranchResult);
@@ -36,12 +37,18 @@ export function useBotConversationPanel(
   watchActiveTurn = false,
   anchorMessageId?: string,
 ) {
+  const gt = useGT();
   const [pages, setPages] = useState<readonly OpenbotConversationPage[]>([]);
   const [text, setText] = useState("");
   const [selectedDraftIds, setSelectedDraftIds] = useState<readonly string[]>([]);
   const selectedDraftId = selectedDraftIds[0] ?? null;
   const setSelectedDraftId = (id: string | null) => setSelectedDraftIds(id ? [id] : []);
-  const [fileAttempt, setFileAttempt] = useState<{ id: string; ids: readonly string[]; text: string; reply: string | null } | null>(null);
+  const [fileAttempt, setFileAttempt] = useState<{
+    id: string;
+    ids: readonly string[];
+    text: string;
+    reply: string | null;
+  } | null>(null);
   const target = taskId ? { kind: "task" as const, taskId } : { kind: "main" as const };
   const scope = { hostId, agentId };
   const drafts = useEnvironmentQuery(openbot.fileDrafts({ environmentId, input: scope }));
@@ -90,7 +97,9 @@ export function useBotConversationPanel(
       environmentId,
       input: {
         hostId,
-        request: taskId ? { operation: "task.list", agentId } : { operation: "queue.read", agentId },
+        request: taskId
+          ? { operation: "task.list", agentId }
+          : { operation: "queue.read", agentId },
       },
     }),
   );
@@ -118,7 +127,11 @@ export function useBotConversationPanel(
   }, [watchActiveTurn, focused, activeTurnId]);
   const queue = taskId ? null : botQueueSnapshot(queueQuery.data);
   const taskQueueChoices = taskId
-    ? taskQueueAttachmentChoices(queueQuery.data, { agentId, taskId, threadId: snapshot?.agentId === agentId ? snapshot.threadId : null })
+    ? taskQueueAttachmentChoices(queueQuery.data, {
+        agentId,
+        taskId,
+        threadId: snapshot?.agentId === agentId ? snapshot.threadId : null,
+      })
     : null;
   const permission = useAtomValue(
     openbot.writeToHost.permissionAtom(environmentId, {
@@ -143,7 +156,9 @@ export function useBotConversationPanel(
     setBusy(false);
     if (settled._tag === "Failure" || settled.value._tag === "Failure") {
       setError(
-        "The host refused the change or the connection was lost. Retry or release an uncertain edit before starting another.",
+        gt(
+          "The host refused the change or the connection was lost. Retry or release an uncertain edit before starting another.",
+        ),
       );
       return null;
     }
@@ -170,7 +185,9 @@ export function useBotConversationPanel(
         : null;
     if (!delivery) {
       setError(
-        "The edit could not be confirmed. Retry its begin or release it before editing another message.",
+        gt(
+          "The edit could not be confirmed. Retry its begin or release it before editing another message.",
+        ),
       );
       return null;
     }
@@ -198,12 +215,27 @@ export function useBotConversationPanel(
         return;
       }
       if (!draft || !selectableDraft(scope, target, draft)) {
-        setError("Refresh Files to reconcile this draft before sending.");
+        setError(gt("Refresh Files to reconcile this draft before sending."));
         return;
       }
       const ids = draft.batchAttachmentIds ?? selectedDraftIds;
-      if (ids.some(id => !drafts.data?.some(item => item.attachment.id === id && selectableDraft(scope, target, item)))) { setError("Refresh Files before selecting this batch."); return; }
-      const attempt = fileAttempt ?? { id: ids[0]!, ids, text: draft.sendText ?? committedText, reply: draft.replyToMessageId ?? reply };
+      if (
+        ids.some(
+          (id) =>
+            !drafts.data?.some(
+              (item) => item.attachment.id === id && selectableDraft(scope, target, item),
+            ),
+        )
+      ) {
+        setError(gt("Refresh Files before selecting this batch."));
+        return;
+      }
+      const attempt = fileAttempt ?? {
+        id: ids[0]!,
+        ids,
+        text: draft.sendText ?? committedText,
+        reply: draft.replyToMessageId ?? reply,
+      };
       setFileAttempt(attempt);
       lock.current = true;
       setBusy(true);
@@ -211,7 +243,14 @@ export function useBotConversationPanel(
       const result = await settlePromise(() =>
         fileSend({
           environmentId,
-          input: { ...scope, attachmentId: attempt.id, attachmentIds: attempt.ids, text: attempt.text, target, ...(attempt.reply === null ? {} : { replyToMessageId: attempt.reply }) },
+          input: {
+            ...scope,
+            attachmentId: attempt.id,
+            attachmentIds: attempt.ids,
+            text: attempt.text,
+            target,
+            ...(attempt.reply === null ? {} : { replyToMessageId: attempt.reply }),
+          },
         }),
       );
       lock.current = false;
@@ -229,7 +268,9 @@ export function useBotConversationPanel(
         setText("");
       } else
         setError(
-          "File acceptance is uncertain. Retry this same selection and original text, or reconcile in Files. Selection is not delivery.",
+          gt(
+            "File acceptance is uncertain. Retry this same selection and original text, or reconcile in Files. Selection is not delivery.",
+          ),
         );
       return;
     }
@@ -279,13 +320,13 @@ export function useBotConversationPanel(
       branch.value.branch.sourceTaskId !== taskId ||
       branch.value.branch.sourceMessageId !== messageId
     ) {
-      setError("The host has not confirmed this branch. Retry from the same message.");
+      setError(gt("The host has not confirmed this branch. Retry from the same message."));
       return null;
     }
     receipts.current.delete(key);
     return {
       id: branch.value.id,
-      title: typeof branch.value.title === "string" ? branch.value.title : "Thread",
+      title: typeof branch.value.title === "string" ? branch.value.title : gt("Thread"),
     };
   };
   // A new latest revision invalidates cached older pages after reconnect or remote mutation.
@@ -312,7 +353,7 @@ export function useBotConversationPanel(
       }),
     );
     if (settled._tag === "Failure" || settled.value._tag === "Failure") {
-      setError("Could not load older messages from the selected host.");
+      setError(gt("Could not load older messages from the selected host."));
     } else {
       const value = botConversationPage(settled.value.value);
       if (
@@ -328,10 +369,22 @@ export function useBotConversationPanel(
     setBusy(false);
   };
   return {
-    environmentId,hostId,agentId,taskId,
+    environmentId,
+    hostId,
+    agentId,
+    taskId,
     selectedDraftId,
     selectedDraftIds,
-    toggleDraft: (id: string) => { if (!fileAttempt && !busy) setSelectedDraftIds(current => current.includes(id) ? current.filter(value => value !== id) : current.length < 10 ? [...current, id] : current); },
+    toggleDraft: (id: string) => {
+      if (!fileAttempt && !busy)
+        setSelectedDraftIds((current) =>
+          current.includes(id)
+            ? current.filter((value) => value !== id)
+            : current.length < 10
+              ? [...current, id]
+              : current,
+        );
+    },
     setSelectedDraftId: (id: string | null) => {
       if (!fileAttempt) setSelectedDraftId(id);
     },
@@ -345,17 +398,19 @@ export function useBotConversationPanel(
     text,
     setText,
     reply,
-    setReply: (value: string | null) => { if (!fileAttempt) setReply(value); },
+    setReply: (value: string | null) => {
+      if (!fileAttempt) setReply(value);
+    },
     busy,
     error:
       error ??
       history.error ??
       queueQuery.error ??
       (taskId && snapshot && queueQuery.data !== null && taskQueueChoices === null
-        ? "The task queue could not be matched to this conversation."
+        ? gt("The task queue could not be matched to this conversation.")
         : null) ??
       (history.data !== null && !snapshot
-        ? "The host returned an unsupported conversation format."
+        ? gt("The host returned an unsupported conversation format.")
         : null),
     references: latest?.references ?? {},
     loading: history.isPending,
@@ -399,8 +454,10 @@ export function useBotConversationPanel(
         ? snapshot.messages.slice(-500)
         : [],
     queueAttachmentChoices: taskId
-      ? taskQueueChoices ?? []
-      : queue?.agentId === agentId ? queue.deliveries.filter(delivery => delivery.status === "queued") : [],
+      ? (taskQueueChoices ?? [])
+      : queue?.agentId === agentId
+        ? queue.deliveries.filter((delivery) => delivery.status === "queued")
+        : [],
     queue: queue?.agentId === agentId ? queue : null,
   };
 }

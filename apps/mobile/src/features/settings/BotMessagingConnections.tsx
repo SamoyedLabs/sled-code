@@ -14,6 +14,7 @@ import {
 } from "@t3tools/client-runtime/openbot/presentation";
 import { AppTextInput } from "../../components/ui/AppText";
 import { confirm, Picker } from "./BotConnectionControls";
+import { T, Var, useGT } from "gt-react-native";
 
 export function MessagingPanel({
   controller,
@@ -21,6 +22,7 @@ export function MessagingPanel({
   environmentId,
   hostId,
 }: PanelProps & { environmentId: EnvironmentId; hostId: string }) {
+  const gt = useGT();
   const { state, run, busy, setError } = controller;
   const [platform, setPlatform] = useState<BotMessagingPlatform>("slack");
   const [callback, setCallback] = useState("");
@@ -32,7 +34,7 @@ export function MessagingPanel({
     const request = botMessagingGrant(platform, value, page.nonce);
     setCallback("");
     if (!request) {
-      setError("The return link must match this platform and pending connection.");
+      setError(gt("The return link must match this platform and pending connection."));
       return;
     }
     await run([request, { operation: "connector.messaging.overview", platform }]);
@@ -41,7 +43,7 @@ export function MessagingPanel({
     const url = botConnectionUrl(page?.url ?? null);
     if (!url) return;
     if (platform === "telegram") {
-      await Linking.openURL(url).catch(() => setError("Could not open Telegram."));
+      await Linking.openURL(url).catch(() => setError(gt("Could not open Telegram.")));
       return;
     }
     if (!page?.nonce || authorizing) return;
@@ -53,7 +55,7 @@ export function MessagingPanel({
     if (result?.type === "success") await complete(result.url);
     if (result === null)
       setError(
-        "Could not open the connection page. Use its return link below to complete sign-in.",
+        gt("Could not open the connection page. Use its return link below to complete sign-in."),
       );
     setAuthorizing(false);
   };
@@ -61,7 +63,7 @@ export function MessagingPanel({
   return (
     <View className="gap-3">
       <Picker
-        label="Messaging platform"
+        label={gt("Messaging platform")}
         value={platform}
         options={[
           { id: "slack", name: "Slack" },
@@ -78,12 +80,12 @@ export function MessagingPanel({
       />
       <View className="flex-row flex-wrap gap-2">
         <Button
-          label="Load connections"
+          label={gt("Load connections")}
           disabled={disabled}
           onPress={() => void run([{ operation: "connector.messaging.overview", platform }])}
         />
         <Button
-          label={platform === "telegram" ? "Connect group chat" : "Connect workspace"}
+          label={platform === "telegram" ? gt("Connect group chat") : gt("Connect workspace")}
           disabled={disabled}
           onPress={() =>
             void run([{ operation: "connector.messaging.connect", platform, place: "group" }])
@@ -91,7 +93,7 @@ export function MessagingPanel({
         />
         {platform === "telegram" && (
           <Button
-            label="Connect direct chat"
+            label={gt("Connect direct chat")}
             disabled={disabled}
             onPress={() =>
               void run([{ operation: "connector.messaging.connect", platform, place: "direct" }])
@@ -102,15 +104,17 @@ export function MessagingPanel({
       {page && (
         <View className="gap-2">
           <Button
-            label={authorizing ? "Waiting for sign-in…" : "Open connection page"}
+            label={authorizing ? gt("Waiting for sign-in…") : gt("Open connection page")}
             disabled={disabled || !page.url}
             onPress={() => void openPage()}
           />
           {page.nonce && platform !== "telegram" && (
             <>
-              <Text>Return link from the connection page</Text>
+              <Text>
+                <T>Return link from the connection page</T>
+              </Text>
               <AppTextInput
-                accessibilityLabel="Connection return link"
+                accessibilityLabel={gt("Connection return link")}
                 secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -119,13 +123,15 @@ export function MessagingPanel({
                 onChangeText={setCallback}
               />
               <Button
-                label="Complete connection"
+                label={gt("Complete connection")}
                 disabled={disabled || !callback.trim()}
                 onPress={() => void complete(callback)}
               />
               <Text textRole="footnote" className="text-foreground-muted">
-                If the browser cannot hand the result back to Sled, paste its return link. The
-                sealed grant clears after submission.
+                <T>
+                  If the browser cannot hand the result back to Sled, paste its return link. The
+                  sealed grant clears after submission.
+                </T>
               </Text>
             </>
           )}
@@ -141,7 +147,9 @@ export function MessagingPanel({
         />
       )}
       {rows?.length === 0 && (
-        <Text className="text-foreground-muted">No connections for this platform.</Text>
+        <Text className="text-foreground-muted">
+          <T>No connections for this platform.</T>
+        </Text>
       )}
       {rows?.map((row) => (
         <View key={row.workspaceId} className="gap-2 border-t border-border pt-3">
@@ -150,12 +158,14 @@ export function MessagingPanel({
           </Text>
           {row.missingScopes.length > 0 && (
             <Text className="text-foreground-muted">
-              Missing permissions: {row.missingScopes.join(", ")}
+              <T>
+                Missing permissions: <Var>{row.missingScopes.join(", ")}</Var>
+              </T>
             </Text>
           )}
           <View className="flex-row flex-wrap gap-2">
             <Button
-              label={row.enabled ? "Disable" : "Enable"}
+              label={row.enabled ? gt("Disable") : gt("Enable")}
               disabled={disabled}
               onPress={() =>
                 void run([
@@ -170,7 +180,7 @@ export function MessagingPanel({
               }
             />
             <Button
-              label="Reconnect"
+              label={gt("Reconnect")}
               disabled={disabled}
               onPress={() =>
                 void run([
@@ -183,12 +193,14 @@ export function MessagingPanel({
               }
             />
             <Button
-              label="Disconnect"
+              label={gt("Disconnect")}
               tone="danger"
               disabled={disabled}
               onPress={() =>
                 confirm(
-                  "Disconnect this workspace or chat from the host? If no other linked place uses its orchestrator, Openbot also deletes that bot. Active work may need to finish first.",
+                  gt(
+                    "Disconnect this workspace or chat from the host? If no other linked place uses its orchestrator, Openbot also deletes that bot. Active work may need to finish first.",
+                  ),
                   () =>
                     void run([
                       {

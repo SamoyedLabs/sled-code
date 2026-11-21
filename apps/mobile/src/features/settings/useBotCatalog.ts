@@ -7,7 +7,9 @@ import {
   catalogRequestValid,
   type CatalogActions,
 } from "@t3tools/client-runtime/openbot/catalog";
+import { useGT } from "gt-react-native";
 export function useBotCatalog(actions: CatalogActions) {
+  const gt = useGT();
   const [state, setState] = useState(EMPTY_CATALOG);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,8 +39,12 @@ export function useBotCatalog(actions: CatalogActions) {
       }
       setError(
         mutation
-          ? "Host outcome unknown. Refresh host status and installed agents before deciding whether to retry."
-          : "Registry unavailable. Check host support for acp-registry-v1, host admin role and Sled permissions, then refresh.",
+          ? gt(
+              "Host outcome unknown. Refresh host status and installed agents before deciding whether to retry.",
+            )
+          : gt(
+              "Registry unavailable. Check host support for acp-registry-v1, host admin role and Sled permissions, then refresh.",
+            ),
       );
     }
     lock.current = false;

@@ -20,6 +20,7 @@ import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { useGT } from "gt-react-native";
 
 export function useBotChannels(
   environmentId: EnvironmentId,
@@ -32,6 +33,7 @@ export function useBotChannels(
     watchActiveTasks?: boolean;
   },
 ) {
+  const gt = useGT();
   const [selected, setSelected] = useState<string | null>(initialChannelId ?? null);
   const [edit, setEdit] = useState<ChannelEdit | null>(() =>
     options?.createOnOpen ? channelNewDraft(newId()) : null,
@@ -67,7 +69,7 @@ export function useBotChannels(
   );
   const latest = useMemo(() => channelPage(pageQuery.data), [pageQuery.data]);
   const messages = useMemo(
-    () => selected ? channelMessages(selected, [...pages, ...(latest ? [latest] : [])]) : [],
+    () => (selected ? channelMessages(selected, [...pages, ...(latest ? [latest] : [])]) : []),
     [selected, pages, latest],
   );
   const activeTaskIds = useMemo(
@@ -131,7 +133,7 @@ export function useBotChannels(
     receipts.current.set(key, id);
     const request = channelAdminRequest(input, id);
     if (!request) {
-      setError("Complete the channel settings before continuing.");
+      setError(gt("Complete the channel settings before continuing."));
       return;
     }
     lock.current = true;
@@ -139,7 +141,7 @@ export function useBotChannels(
     setError(null);
     setNotice(null);
     const result = await admin({ environmentId, input: { hostId, request } }).catch(() => null);
-    if (!result) setError("The channel request could not complete. Retry the same action.");
+    if (!result) setError(gt("The channel request could not complete. Retry the same action."));
     else if (result._tag === "Failure") setError(String(squashAtomCommandFailure(result)));
     else {
       receipts.current.delete(key);
@@ -151,7 +153,7 @@ export function useBotChannels(
         setText("");
         setReply(null);
       } else if (request.operation === "channel.restore")
-        setNotice("Channel restored. Paused tasks can be resumed individually.");
+        setNotice(gt("Channel restored. Paused tasks can be resumed individually."));
       else if (request.operation === "channel.delete") {
         setSelected(null);
         setEdit(null);
@@ -175,12 +177,12 @@ export function useBotChannels(
         request: { operation: "channel.read", channelId: selected, beforeSequence: olderCursor },
       },
     }).catch(() => null);
-    if (!result) setError("Could not load older channel messages.");
+    if (!result) setError(gt("Could not load older channel messages."));
     else if (result._tag === "Failure") setError(String(squashAtomCommandFailure(result)));
     else {
       const value = channelPage(result.value);
       if (value?.channel.id === selected) setPages((previous) => [...previous, value]);
-      else setError("The engine returned an unsupported channel history page.");
+      else setError(gt("The engine returned an unsupported channel history page."));
     }
     setBusy(false);
     lock.current = false;
@@ -246,7 +248,9 @@ export function useBotChannels(
           void act(input);
         } else
           setError(
-            "Channel settings changed or are incomplete. Review the current settings before saving.",
+            gt(
+              "Channel settings changed or are incomplete. Review the current settings before saving.",
+            ),
           );
       }
     },
@@ -269,23 +273,30 @@ export function useBotChannels(
       return (async () => {
         const result = await admin({
           environmentId,
-          input: { hostId, request: {
-            operation: "channel.send",
-            channelId: selected,
-            operationId,
-            includeReceipt: true,
-            text: spoken.trim(),
-            recipientAgentId: recipient,
-            replyToMessageId: null,
-            attachmentDraftIds: [],
-          } },
+          input: {
+            hostId,
+            request: {
+              operation: "channel.send",
+              channelId: selected,
+              operationId,
+              includeReceipt: true,
+              text: spoken.trim(),
+              recipientAgentId: recipient,
+              replyToMessageId: null,
+              attachmentDraftIds: [],
+            },
+          },
         });
         refresh();
         const value = result._tag === "Success" ? result.value : null;
-        return value && typeof value === "object" &&
-          "acceptedOperationId" in value && value.acceptedOperationId === operationId &&
-          "acceptedMessageId" in value && typeof value.acceptedMessageId === "string"
-          ? value.acceptedMessageId : null;
+        return value &&
+          typeof value === "object" &&
+          "acceptedOperationId" in value &&
+          value.acceptedOperationId === operationId &&
+          "acceptedMessageId" in value &&
+          typeof value.acceptedMessageId === "string"
+          ? value.acceptedMessageId
+          : null;
       })().finally(() => {
         setBusy(false);
         lock.current = false;
@@ -295,9 +306,16 @@ export function useBotChannels(
       if (!selected || !canOperate || lock.current) return false;
       const result = await admin({
         environmentId,
-        input: { hostId, request: {
-          operation: "channel.stop", channelId: selected, operationId: newId(), taskId, recipientAgentId: null,
-        } },
+        input: {
+          hostId,
+          request: {
+            operation: "channel.stop",
+            channelId: selected,
+            operationId: newId(),
+            taskId,
+            recipientAgentId: null,
+          },
+        },
       });
       refresh();
       return result._tag === "Success";

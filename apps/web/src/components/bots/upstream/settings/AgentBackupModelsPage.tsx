@@ -9,6 +9,7 @@ import { SourceSwitch } from "./SourceSwitch";
 import { SourceButton } from "./SettingsParts";
 import { ProviderLogo } from "../provider/ProviderLogo";
 import "./backup-models.css";
+import { T, Var, useGT } from "gt-react";
 const Choice = Schema.Struct({
   provider: Schema.String,
   model: Schema.String,
@@ -32,6 +33,7 @@ export function AgentBackupModelsPage({
   agentName: string;
   ownProvider: string;
 }) {
+  const gt = useGT();
   const data = useSourceProviderData();
   const c = useAgentSettingsValue(
     async () => decodeBackup(await api.setting("settings.agent-backup-models.settings")),
@@ -76,11 +78,18 @@ export function AgentBackupModelsPage({
       {c.value && (
         <>
           <p className="ui-text backup-models-intro" data-variant="body-sm" data-tone="secondary">
-            When {ownProvider} reaches its usage limit
-            {automatic ? " or fails with a provider error" : ""} before {agentName} starts to write,{" "}
-            {automatic
-              ? `${agentName} switches to the first available model in the order.`
-              : `${agentName} asks you which model to use.`}
+            <T>
+              When <Var>{ownProvider}</Var> reaches its usage limit
+              <Var>{automatic ? gt(" or fails with a provider error") : ""}</Var> before{" "}
+              <Var>{agentName}</Var> starts to write,<Var> </Var>
+              <Var>
+                {automatic
+                  ? gt("{agentName} switches to the first available model in the order.", {
+                      agentName,
+                    })
+                  : gt("{agentName} asks you which model to use.", { agentName })}
+              </Var>
+            </T>
           </p>
           <SettingsLinkGroup inset className="agent-settings-runtime-rows">
             <div className="agent-settings-switch-row">
@@ -88,23 +97,25 @@ export function AgentBackupModelsPage({
                 <span className="settings-link-icon">
                   <ArrowLeftRight aria-hidden="true" />
                 </span>
-                Ask before switching
+                <T>Ask before switching</T>
               </span>
               <SourceSwitch
-                label="Ask before switching"
+                label={gt("Ask before switching")}
                 checked={!automatic}
                 disabled={c.busy}
                 onChange={(ask) => void save(!ask, order)}
               />
             </div>
           </SettingsLinkGroup>
-          <SettingsLinkGroup title="Order" inset className="agent-settings-runtime-rows">
+          <SettingsLinkGroup title={gt("Order")} inset className="agent-settings-runtime-rows">
             {order.length === 0 ? (
               <p className="ui-text backup-models-empty" data-variant="body-sm" data-tone="muted">
-                No order set. {agentName} offers each available model.
+                <T>
+                  No order set. <Var>{agentName}</Var> offers each available model.
+                </T>
               </p>
             ) : (
-              <ol className="backup-models-list" aria-label="Backup models, in order">
+              <ol className="backup-models-list" aria-label={gt("Backup models, in order")}>
                 {order.map((choice, index) => {
                   const model = models.find(
                     (model) => model.provider === choice.provider && model.id === choice.model,
@@ -126,13 +137,17 @@ export function AgentBackupModelsPage({
                           {model?.name ?? choice.model}
                           {choice.providerAccountId ? ` · ${choice.providerAccountId}` : ""}
                         </span>
-                        {!model && <span className="backup-models-state">Unavailable</span>}
+                        {!model && (
+                          <span className="backup-models-state">
+                            <T>Unavailable</T>
+                          </span>
+                        )}
                       </span>
                       <span className="backup-models-actions">
                         <SourceButton
                           variant="ghost"
                           size="xs"
-                          aria-label={`Move ${choice.model} up`}
+                          aria-label={gt("Move {model} up", { model: choice.model })}
                           disabled={c.busy || index === 0}
                           onClick={() => move(index, -1)}
                         >
@@ -141,7 +156,7 @@ export function AgentBackupModelsPage({
                         <SourceButton
                           variant="ghost"
                           size="xs"
-                          aria-label={`Move ${choice.model} down`}
+                          aria-label={gt("Move {model} down", { model: choice.model })}
                           disabled={c.busy || index === order.length - 1}
                           onClick={() => move(index, 1)}
                         >
@@ -150,7 +165,7 @@ export function AgentBackupModelsPage({
                         <SourceButton
                           variant="ghost"
                           size="xs"
-                          aria-label={`Remove ${choice.model}`}
+                          aria-label={gt("Remove {model}", { model: choice.model })}
                           disabled={c.busy}
                           onClick={() =>
                             void save(
@@ -169,7 +184,7 @@ export function AgentBackupModelsPage({
             )}
             <select
               className="ui-native-select"
-              aria-label="Add backup model"
+              aria-label={gt("Add backup model")}
               value=""
               disabled={c.busy || order.length >= 8 || models.length === 0}
               onChange={(event) => {
@@ -180,7 +195,9 @@ export function AgentBackupModelsPage({
                   void save(automatic, [...order, { provider: choice.provider, model: choice.id }]);
               }}
             >
-              <option value="">Add backup model</option>
+              <option value="">
+                <T>Add backup model</T>
+              </option>
               {models
                 .filter(
                   (model) =>

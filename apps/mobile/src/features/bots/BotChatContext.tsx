@@ -17,6 +17,7 @@ import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useBotPalette } from "./upstream/BotChrome";
 import { OpenBotText as Text } from "./upstream/OpenBotTypography";
+import { useGT } from "gt-react-native";
 
 type Scope = {
   environmentId: EnvironmentId;
@@ -82,6 +83,7 @@ export function BotChatContextSheet({
   onClose: () => void;
   onChanged: () => void;
 }) {
+  const gt = useGT();
   const palette = useBotPalette();
   const permissionsRequest: OpenbotAdminRequest = taskId
     ? { operation: "settings.context-compact.compactTask", parameters: { agentId, taskId } }
@@ -111,16 +113,16 @@ export function BotChatContextSheet({
       if (result._tag === "Success") {
         onChanged();
         if (clear) onClose();
-        else setStatus("Compaction requested.");
-      } else setStatus("The host could not update this context.");
+        else setStatus(gt("Compaction requested."));
+      } else setStatus(gt("The host could not update this context."));
     } catch {
-      setStatus("The host could not update this context.");
+      setStatus(gt("The host could not update this context."));
     }
     lock.current = false;
     setPending(false);
   };
   return (
-    <Sheet title="Context" onClose={onClose}>
+    <Sheet title={gt("Context")} onClose={onClose}>
       <ScreenScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerClassName="gap-4 px-5 py-4"
@@ -128,13 +130,13 @@ export function BotChatContextSheet({
         {usage && (
           <>
             <Text style={{ color: palette.muted }}>
-              {usage.estimated ? "About " : ""}
+              {usage.estimated ? gt("About ") : ""}
               {tokens.format(usage.usedTokens)} of {tokens.format(usage.windowTokens)} tokens
             </Text>
             <View
               accessible
               accessibilityRole="progressbar"
-              accessibilityLabel="Context usage"
+              accessibilityLabel={gt("Context usage")}
               accessibilityValue={{ min: 0, max: 100, now: filled }}
               style={{
                 height: 7,
@@ -163,16 +165,16 @@ export function BotChatContextSheet({
         {compaction && (
           <Text accessibilityLiveRegion="polite">
             {compaction.status === "running"
-              ? "Compacting context…"
+              ? gt("Compacting context…")
               : compaction.status === "completed"
-                ? "Context compacted."
-                : "Compaction failed."}
+                ? gt("Context compacted.")
+                : gt("Compaction failed.")}
           </Text>
         )}
         {status && <Text accessibilityLiveRegion="polite">{status}</Text>}
         {usage && capabilities.includes("context-compact-v1") && (
           <Button
-            label="Compact now"
+            label={gt("Compact now")}
             disabled={disabled}
             onPress={() =>
               void act(
@@ -189,16 +191,18 @@ export function BotChatContextSheet({
         )}
         {!taskId && capabilities.includes("context-reset-v1") && (
           <Button
-            label="Start a new chat"
+            label={gt("Start a new chat")}
             disabled={disabled}
             onPress={() =>
               Dialog.alert(
-                "Start a new chat?",
-                "The agent starts with a fresh context. Existing messages stay in your history.",
+                gt("Start a new chat?"),
+                gt(
+                  "The agent starts with a fresh context. Existing messages stay in your history.",
+                ),
                 [
-                  { text: "Cancel", style: "cancel" },
+                  { text: gt("Cancel"), style: "cancel" },
                   {
-                    text: "Start new chat",
+                    text: gt("Start new chat"),
                     onPress: () =>
                       void act(
                         { operation: "settings.context-reset.clear", parameters: { agentId } },

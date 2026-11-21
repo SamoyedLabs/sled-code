@@ -9,6 +9,7 @@ import {
 import { Button } from "../../../ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../ui/select";
 import type { MarketplaceAgent } from "./marketplace-model";
+import { T, useGT } from "gt-react";
 
 export interface MarketplaceDraftRequest {
   readonly title: string;
@@ -28,6 +29,7 @@ export function MarketplaceDraftDialog({
   onClose: () => void;
   onCompose: (agentId: string, text: string) => boolean;
 }) {
+  const gt = useGT();
   const choices = agents.filter(
     (agent) => !request.agentIds || request.agentIds.includes(agent.id),
   );
@@ -40,7 +42,9 @@ export function MarketplaceDraftDialog({
     if (onCompose(agentId, request.text)) onClose();
     else
       setError(
-        "The selected host or session changed. Reopen the Marketplace before adding this draft.",
+        gt(
+          "The selected host or session changed. Reopen the Marketplace before adding this draft.",
+        ),
       );
   };
   return (
@@ -54,15 +58,15 @@ export function MarketplaceDraftDialog({
         <DialogHeader>
           <DialogTitle>{request.title}</DialogTitle>
           <DialogDescription>
-            Add this to a bot’s main-chat draft. Your existing text is kept; nothing is sent.
+            <T>Add this to a bot’s main-chat draft. Your existing text is kept; nothing is sent.</T>
           </DialogDescription>
         </DialogHeader>
         <label className="flex flex-col gap-2 text-sm">
-          Bot
+          <T>Bot</T>
           <Select value={agentId} onValueChange={(value) => setAgentId(value ?? "")}>
-            <SelectTrigger aria-label="Draft bot">
+            <SelectTrigger aria-label={gt("Draft bot")}>
               <SelectValue>
-                {choices.find((agent) => agent.id === agentId)?.name ?? "Choose a bot"}
+                {choices.find((agent) => agent.id === agentId)?.name ?? gt("Choose a bot")}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -77,10 +81,10 @@ export function MarketplaceDraftDialog({
         {error && <p role="alert">{error}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            <T>Cancel</T>
           </Button>
           <Button disabled={!choices.some((agent) => agent.id === agentId)} onClick={add}>
-            Add to draft
+            <T>Add to draft</T>
           </Button>
         </div>
       </DialogPopup>

@@ -33,7 +33,12 @@ export function TemplateEnvironment({
       input: { hostId, request: { operation: "agent.list" } },
     }),
   );
-  const compatibilityQuery = useEnvironmentQuery(openbot.readFromHost({ environmentId, input: { hostId, request: { operation: "compatibility.read" } } }));
+  const compatibilityQuery = useEnvironmentQuery(
+    openbot.readFromHost({
+      environmentId,
+      input: { hostId, request: { operation: "compatibility.read" } },
+    }),
+  );
   const features = templateFeatures(compatibilityQuery.data);
   const agents = decodeTemplateAgents(agentsQuery.data);
   const read = useAtomCommand(openbot.templateRead, { reportFailure: false });
@@ -53,10 +58,9 @@ export function TemplateEnvironment({
             : canRead &&
               registry.get(openbot.templateRead.permissionAtom(environmentId, { hostId, request })),
         execute: async (request) => {
-          const result =
-            !templateIsRead(request)
-              ? await admin({ environmentId, input: { hostId, request } })
-              : await read({ environmentId, input: { hostId, request } });
+          const result = !templateIsRead(request)
+            ? await admin({ environmentId, input: { hostId, request } })
+            : await read({ environmentId, input: { hostId, request } });
           if (result._tag === "Failure") throw new Error("Host template request failed");
           if (!request.operation.startsWith("templates.preview")) agentsQuery.refresh();
           return result.value;

@@ -12,6 +12,7 @@ import { ScreenScrollView } from "../../components/ui/ScreenScrollView";
 import { AppText as Text } from "../../components/ui/AppText";
 import { useEnvironmentQuery } from "../../state/query";
 import { openbot } from "../../state/openbot";
+import { T, useGT } from "gt-react-native";
 const decodeTarget = Schema.decodeUnknownOption(OpenbotNotificationTarget);
 type Params = {
   environmentId: string;
@@ -23,19 +24,23 @@ type Params = {
   routineRunId?: string;
 };
 export function BotNotificationRouteScreen({ route }: StaticScreenProps<Params>) {
+  const gt = useGT();
   const decoded = decodeTarget({
     kind: "bot",
     ...route.params,
   });
   if (Option.isNone(decoded) || botNotificationDeepLink(decoded.value) === null)
     return (
-      <SettingsScreen title="Bot notification">
-        <Text accessibilityRole="alert">This notification target is invalid.</Text>
+      <SettingsScreen title={gt("Bot notification")}>
+        <Text accessibilityRole="alert">
+          <T>This notification target is invalid.</T>
+        </Text>
       </SettingsScreen>
     );
   return <Destination key={botNotificationDeepLink(decoded.value)} target={decoded.value} />;
 }
 function Destination({ target }: { target: OpenbotNotificationTarget }) {
+  const gt = useGT();
   const host = useEnvironmentQuery(
     openbot.status({ environmentId: target.environmentId, input: {} }),
   );
@@ -47,13 +52,15 @@ function Destination({ target }: { target: OpenbotNotificationTarget }) {
   const agent = agents.data?.find((item) => item.id === target.agentId);
   if (host.data?.state !== "ready" || host.data.hostId !== target.hostId || !agent)
     return (
-      <SettingsScreen title="Bot notification">
+      <SettingsScreen title={gt("Bot notification")}>
         <Text accessibilityRole="status">
           {host.isPending || agents.isPending
-            ? "Connecting to the notification’s bot…"
+            ? gt("Connecting to the notification’s bot…")
             : host.error ||
               agents.error ||
-              "This bot or host is unavailable. Reconnect its environment to review the notification."}
+              gt(
+                "This bot or host is unavailable. Reconnect its environment to review the notification.",
+              )}
         </Text>
       </SettingsScreen>
     );

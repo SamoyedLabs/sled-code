@@ -7,6 +7,7 @@ import type { OpenbotAdminRequest } from "@t3tools/contracts";
 import { relayCallbackQuery } from "./relay-callback";
 import { SourceButton } from "../settings/SettingsParts";
 import type { McpServerConfig } from "./plugin-model";
+import { T, Var, useGT } from "gt-react";
 const decodeStarted = Schema.decodeUnknownSync(
   Schema.Struct({ flowId: Schema.String, expiresAt: Schema.Number }),
 );
@@ -34,6 +35,7 @@ export function SourceMcpRelay(props: {
   onCancel: () => void;
   onActiveChange?: (active: boolean) => void;
 }) {
+  const gt = useGT();
   const [flow, setFlow] = useState<ReturnType<typeof decodeStarted> | null>(null),
     [status, setStatus] = useState<ReturnType<typeof decodeStatus> | null>(null),
     [error, setError] = useState<string | null>(null),
@@ -62,7 +64,9 @@ export function SourceMcpRelay(props: {
         try {
           await props.onConnected();
         } catch (cause) {
-          setError(cause instanceof Error ? cause.message : "Could not save the connected app.");
+          setError(
+            cause instanceof Error ? cause.message : gt("Could not save the connected app."),
+          );
           setBusy(false);
         }
       }
@@ -72,7 +76,7 @@ export function SourceMcpRelay(props: {
     if (!flow || done.current || lock.current) return;
     if (Date.now() >= flow.expiresAt) {
       done.current = true;
-      setError("This sign-in expired. Close it and try again.");
+      setError(gt("This sign-in expired. Close it and try again."));
       return;
     }
     lock.current = true;
@@ -83,7 +87,7 @@ export function SourceMcpRelay(props: {
     });
     if (settled._tag === "Failure" && alive.current) {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "Could not read sign-in status.");
+      setError(cause instanceof Error ? cause.message : gt("Could not read sign-in status."));
     }
     lock.current = false;
   });
@@ -112,7 +116,7 @@ export function SourceMcpRelay(props: {
     });
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "Could not start sign-in.");
+      setError(cause instanceof Error ? cause.message : gt("Could not start sign-in."));
     }
     lock.current = false;
     setBusy(false);
@@ -142,7 +146,7 @@ export function SourceMcpRelay(props: {
     if (alive.current) setBusy(false);
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "Could not complete sign-in.");
+      setError(cause instanceof Error ? cause.message : gt("Could not complete sign-in."));
       throw cause;
     }
   };
@@ -153,7 +157,7 @@ export function SourceMcpRelay(props: {
       try {
         await props.execute({ operation: "provider.signInRelay.cancel", flowId: flow.flowId });
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Could not cancel sign-in.");
+        setError(cause instanceof Error ? cause.message : gt("Could not cancel sign-in."));
         return;
       }
     }
@@ -171,11 +175,14 @@ export function SourceMcpRelay(props: {
   return (
     <div className="mcp-connect-card">
       <p className="mcp-connect-row">
-        Sign in to {props.name} in your browser. The connection is kept on {props.hostName}.
+        <T>
+          Sign in to <Var>{props.name}</Var> in your browser. The connection is kept on{" "}
+          <Var>{props.hostName}</Var>.
+        </T>
       </p>
       {!flow && (
         <SourceButton variant="default" disabled={busy} onClick={() => void start()}>
-          {busy ? "Starting…" : "Sign in"}
+          {busy ? gt("Starting…") : gt("Sign in")}
         </SourceButton>
       )}
       {flow && !status?.result && (
@@ -189,7 +196,9 @@ export function SourceMcpRelay(props: {
               onPaste={complete}
             />
           ) : (
-            <p role="status">Waiting for the sign-in page…</p>
+            <p role="status">
+              <T>Waiting for the sign-in page…</T>
+            </p>
           )}
         </div>
       )}
@@ -199,7 +208,7 @@ export function SourceMcpRelay(props: {
         </p>
       )}
       <SourceButton variant="ghost" disabled={busy} onClick={() => void cancel()}>
-        Cancel
+        <T>Cancel</T>
       </SourceButton>
     </div>
   );

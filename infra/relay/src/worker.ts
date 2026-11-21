@@ -290,10 +290,7 @@ export const layer = Api.make(
       Layer.provideMerge(
         BotAttention.layer.pipe(
           Layer.provide(
-            Layer.effect(
-              SqlClient.SqlClient,
-              RelayDb.RelayDb.pipe(Effect.map((db) => db.$client)),
-            ),
+            Layer.effect(SqlClient.SqlClient, RelayDb.RelayDb.pipe(Effect.map((db) => db.$client))),
           ),
         ),
       ),

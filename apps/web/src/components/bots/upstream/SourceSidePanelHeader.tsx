@@ -17,6 +17,7 @@ import { Menu, MenuItem, MenuTrigger } from "../../ui/menu";
 import { MenuPopup } from "./OpenbotMenu";
 import { OpenbotSideThreadTabs, type OpenbotSideThreadTabsProps } from "./OpenbotSideThreadTabs";
 import type { BotWorkspaceView } from "../BotWorkspaceChrome";
+import { useGT } from "gt-react";
 export type SourcePane = Exclude<BotWorkspaceView, "Chat" | "Tasks">;
 const panes: readonly SourcePane[] = [
   "Files",
@@ -57,6 +58,7 @@ export function SourceSidePanelHeader({
   onMaximize: () => void;
   threads: Omit<OpenbotSideThreadTabsProps, "children" | "actions" | "maximized">;
 }) {
+  const gt = useGT();
   const closed = panes.filter((pane) => !openPanes.includes(pane));
   return (
     <OpenbotSideThreadTabs
@@ -71,7 +73,7 @@ export function SourceSidePanelHeader({
                   <button
                     type="button"
                     className="sidebar-icon-button"
-                    aria-label="Add side panel"
+                    aria-label={gt("Add side panel")}
                   />
                 }
               >
@@ -93,7 +95,7 @@ export function SourceSidePanelHeader({
           <button
             type="button"
             className="sidebar-icon-button"
-            aria-label={maximized ? "Restore side panel" : "Maximize side panel"}
+            aria-label={maximized ? gt("Restore side panel") : gt("Maximize side panel")}
             aria-pressed={maximized}
             onClick={onMaximize}
           >
@@ -103,7 +105,7 @@ export function SourceSidePanelHeader({
             <button
               type="button"
               className="sidebar-icon-button"
-              aria-label="Close side panel"
+              aria-label={gt("Close side panel")}
               onClick={onCollapse}
             >
               <PanelRight />

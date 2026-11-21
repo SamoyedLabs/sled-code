@@ -1,1 +1,1 @@
-{"platforms":["apple"],"apple":{"modules":["SledAppLockModule"]}}
+{ "platforms": ["apple"], "apple": { "modules": ["SledAppLockModule"] } }

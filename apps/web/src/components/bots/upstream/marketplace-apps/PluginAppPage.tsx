@@ -13,6 +13,7 @@ import {
 import { SourceConfirmDialog } from "../data/SourceConfirmDialog";
 import type { MarketplacePluginDetail } from "./plugin-model";
 import type { MarketplaceApp } from "../marketplace/marketplace-model";
+import { T, useGT } from "gt-react";
 export type AppConnection = {
   id: string;
   name: string;
@@ -35,6 +36,7 @@ export function PluginAppPage(props: {
   onRename: (id: string, name: string) => Promise<void>;
   onPrompt?: ((prompt: string) => void) | undefined;
 }) {
+  const gt = useGT();
   const p = props.plugin;
   const [confirm, setConfirm] = useState(false),
     [busy, setBusy] = useState(false),
@@ -69,16 +71,16 @@ export function PluginAppPage(props: {
           <>
             <SourceButton
               variant="ghost"
-              aria-label="Copy link"
+              aria-label={gt("Copy link")}
               onClick={() =>
                 void navigator.clipboard
                   .writeText(p.shareUrl)
                   .then(() => setCopied(true))
-                  .catch(() => setError("Could not copy the link."))
+                  .catch(() => setError(gt("Could not copy the link.")))
               }
             >
               <Copy />
-              {copied ? "Copied" : "Copy link"}
+              {copied ? gt("Copied") : gt("Copy link")}
             </SourceButton>
             {props.status !== "connected" && (
               <SourceButton
@@ -86,7 +88,7 @@ export function PluginAppPage(props: {
                 disabled={!props.canManage}
                 onClick={() => void props.onConnect()}
               >
-                Connect
+                <T>Connect</T>
               </SourceButton>
             )}
           </>
@@ -95,7 +97,9 @@ export function PluginAppPage(props: {
       {props.error && (
         <div className="ui-alert" data-tone="warning" role="alert">
           <p>{props.error}</p>
-          <SourceButton onClick={() => void props.onRefresh()}>Retry</SourceButton>
+          <SourceButton onClick={() => void props.onRefresh()}>
+            <T>Retry</T>
+          </SourceButton>
         </div>
       )}
       {p.prompts.length > 0 && (
@@ -116,7 +120,7 @@ export function PluginAppPage(props: {
                 <SourceButton
                   variant="ghost"
                   className="ui-icon-button"
-                  aria-label={`Ask ${p.name}: ${prompt.text}`}
+                  aria-label={gt("Ask {name}: {text}", { name: p.name, text: prompt.text })}
                   disabled={!props.onPrompt || props.status !== "connected"}
                   onClick={() => props.onPrompt?.(prompt.text)}
                 >
@@ -130,16 +134,16 @@ export function PluginAppPage(props: {
       <Information
         description={p.description}
         facts={[
-          { label: "Developer", value: p.creatorName },
-          { label: "Category", value: p.category },
-          { label: "Version", value: p.version },
-          { label: "Website", value: link(p.websiteUrl, "Website") },
-          { label: "Privacy", value: link(p.privacyPolicyUrl, "Privacy policy") },
-          { label: "Terms", value: link(p.termsUrl, "Terms of service") },
+          { label: gt("Developer"), value: p.creatorName },
+          { label: gt("Category"), value: p.category },
+          { label: gt("Version"), value: p.version },
+          { label: gt("Website"), value: link(p.websiteUrl, "Website") },
+          { label: gt("Privacy"), value: link(p.privacyPolicyUrl, "Privacy policy") },
+          { label: gt("Terms"), value: link(p.termsUrl, "Terms of service") },
         ].filter((f) => f.value !== null)}
       />
       <SettingsSection
-        title="Connection"
+        title={gt("Connection")}
         actions={
           props.canAddAccount
             ? p.apps
@@ -155,7 +159,7 @@ export function PluginAppPage(props: {
                     disabled={!props.canManage || busy}
                     onClick={() => void props.onAddAccount(app.id)}
                   >
-                    Add account
+                    <T>Add account</T>
                   </SourceButton>
                 ))
             : null
@@ -171,10 +175,10 @@ export function PluginAppPage(props: {
                   title={row.name}
                   description={
                     row.needsSignIn
-                      ? "Sign in again to restore access"
+                      ? gt("Sign in again to restore access")
                       : row.enabled
-                        ? "Connected"
-                        : "Disabled"
+                        ? gt("Connected")
+                        : gt("Disabled")
                   }
                 >
                   {row.account && (
@@ -183,7 +187,7 @@ export function PluginAppPage(props: {
                       variant="ghost"
                       onClick={() => setRename({ id: row.id, name: row.name })}
                     >
-                      Rename
+                      <T>Rename</T>
                     </SourceButton>
                   )}
                   {connections.length > 1 && (
@@ -192,7 +196,7 @@ export function PluginAppPage(props: {
                       variant="ghost"
                       onClick={() => setRemoveAccount(row.id)}
                     >
-                      Remove account
+                      <T>Remove account</T>
                     </SourceButton>
                   )}
                   <SourceButton
@@ -200,7 +204,7 @@ export function PluginAppPage(props: {
                     variant="ghost"
                     onClick={() => void props.onConnect(app.id, row.id)}
                   >
-                    Reconnect
+                    <T>Reconnect</T>
                   </SourceButton>
                   <SourceButton
                     disabled={!props.canManage || busy}
@@ -211,13 +215,15 @@ export function PluginAppPage(props: {
                         .onToggle(row.id, !row.enabled)
                         .catch((cause) =>
                           setError(
-                            cause instanceof Error ? cause.message : "Could not update connection.",
+                            cause instanceof Error
+                              ? cause.message
+                              : gt("Could not update connection."),
                           ),
                         )
                         .finally(() => setBusy(false));
                     }}
                   >
-                    {row.enabled ? "Disable" : "Enable"}
+                    {row.enabled ? gt("Disable") : gt("Enable")}
                   </SourceButton>
                 </SettingsRow>
               ))
@@ -227,7 +233,7 @@ export function PluginAppPage(props: {
                   disabled={!props.canManage}
                   onClick={() => void props.onConnect(app.id)}
                 >
-                  Connect
+                  <T>Connect</T>
                 </SourceButton>
               </SettingsRow>
             );
@@ -238,9 +244,9 @@ export function PluginAppPage(props: {
       <SourceConfirmDialog
         open={rename !== null}
         tone="default"
-        title="Rename account"
-        description="Use this name to refer to the account in messages."
-        confirmLabel="Save"
+        title={gt("Rename account")}
+        description={gt("Use this name to refer to the account in messages.")}
+        confirmLabel={gt("Save")}
         pending={busy}
         error={error}
         onCancel={() => setRename(null)}
@@ -253,13 +259,15 @@ export function PluginAppPage(props: {
           });
           if (settled._tag === "Failure") {
             const cause = squashAtomCommandFailure(settled);
-            setError(cause instanceof Error ? cause.message : "Could not rename account.");
+            setError(cause instanceof Error ? cause.message : gt("Could not rename account."));
           }
           setBusy(false);
         }}
       >
         <label className="ui-field">
-          <span className="ui-label">Name</span>
+          <span className="ui-label">
+            <T>Name</T>
+          </span>
           <input
             className="ui-input"
             maxLength={80}
@@ -272,9 +280,9 @@ export function PluginAppPage(props: {
       </SourceConfirmDialog>
       <SourceConfirmDialog
         open={removeAccount !== null}
-        title="Remove account?"
-        description="Agents will no longer have access to this account."
-        confirmLabel="Remove account"
+        title={gt("Remove account?")}
+        description={gt("Agents will no longer have access to this account.")}
+        confirmLabel={gt("Remove account")}
         pending={busy}
         error={error}
         onCancel={() => setRemoveAccount(null)}
@@ -287,25 +295,27 @@ export function PluginAppPage(props: {
           });
           if (settled._tag === "Failure") {
             const cause = squashAtomCommandFailure(settled);
-            setError(cause instanceof Error ? cause.message : "Could not remove account.");
+            setError(cause instanceof Error ? cause.message : gt("Could not remove account."));
           }
           setBusy(false);
         }}
       />
 
       {rows.length > 0 && (
-        <SettingsSection title="Danger zone">
+        <SettingsSection title={gt("Danger zone")}>
           <SettingsCard>
             <SettingsRow
-              title={`Disconnect ${p.name}`}
-              description="Remove this app’s connections from the host. Agents will no longer have access."
+              title={gt("Disconnect {name}", { name: p.name })}
+              description={gt(
+                "Remove this app’s connections from the host. Agents will no longer have access.",
+              )}
             >
               <SourceButton
                 variant="destructive-ghost"
                 disabled={!props.canManage}
                 onClick={() => setConfirm(true)}
               >
-                Disconnect
+                <T>Disconnect</T>
               </SourceButton>
             </SettingsRow>
           </SettingsCard>
@@ -313,9 +323,9 @@ export function PluginAppPage(props: {
       )}
       <SourceConfirmDialog
         open={confirm}
-        title={`Disconnect ${p.name}?`}
-        description="This removes the app connections from the host."
-        confirmLabel="Disconnect"
+        title={gt("Disconnect {name}?", { name: p.name })}
+        description={gt("This removes the app connections from the host.")}
+        confirmLabel={gt("Disconnect")}
         pending={busy}
         error={error}
         onCancel={() => setConfirm(false)}
@@ -328,7 +338,7 @@ export function PluginAppPage(props: {
           });
           if (settled._tag === "Failure") {
             const cause = squashAtomCommandFailure(settled);
-            setError(cause instanceof Error ? cause.message : "Could not disconnect.");
+            setError(cause instanceof Error ? cause.message : gt("Could not disconnect."));
           }
           setBusy(false);
         }}

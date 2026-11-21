@@ -8,7 +8,14 @@
 // runs one task, whatever the value. A lower limit stops no running task; the next turn waits. A
 // member cannot use either route; `requireAdmin` on the host is the only gate. Bounds and meaning do
 // not follow IPC changes; widening any of it needs a second capability string.
-import { type AdminDecoder, adminRoute, fields, identifier, nullable, type OptionalRouteCodec } from "./admin-wire.ts";
+import {
+  type AdminDecoder,
+  adminRoute,
+  fields,
+  identifier,
+  nullable,
+  type OptionalRouteCodec,
+} from "./admin-wire.ts";
 
 export const AGENT_TASK_LIMIT_CAPABILITY = "agent-task-limit-v1";
 
@@ -27,5 +34,8 @@ const settings = fields({ taskLimit });
 
 export const AGENT_TASK_LIMIT_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   [AGENT_TASK_LIMIT_ROUTES.settings, adminRoute(fields({ agentId: identifier }), settings)],
-  [AGENT_TASK_LIMIT_ROUTES.update, adminRoute(fields({ agentId: identifier, taskLimit }), settings)],
+  [
+    AGENT_TASK_LIMIT_ROUTES.update,
+    adminRoute(fields({ agentId: identifier, taskLimit }), settings),
+  ],
 ]);

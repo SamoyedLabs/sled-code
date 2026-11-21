@@ -27,7 +27,12 @@ export const AGENT_HIDDEN_ROUTES = {
 } as const;
 
 const hiddenAt: AdminDecoder = (input) => {
-  if (typeof input !== "string" || input.length === 0 || input.length > 64 || Number.isNaN(Date.parse(input)))
+  if (
+    typeof input !== "string" ||
+    input.length === 0 ||
+    input.length > 64 ||
+    Number.isNaN(Date.parse(input))
+  )
     throw new Error("Invalid hidden agent time.");
   return input;
 };
@@ -45,7 +50,10 @@ export const AGENT_HIDDEN_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new 
   [AGENT_HIDDEN_ROUTES.read, adminRoute(empty, snapshot)],
   [
     AGENT_HIDDEN_ROUTES.set,
-    adminRoute(exact(["agentId", "hidden"], fields({ agentId: identifier, hidden: boolean })), snapshot),
+    adminRoute(
+      exact(["agentId", "hidden"], fields({ agentId: identifier, hidden: boolean })),
+      snapshot,
+    ),
   ],
 ]);
 
@@ -60,7 +68,11 @@ export function agentHiddenEvent(input: unknown): AgentHiddenEvent | null {
   return {
     type: "hidden-agents-changed",
     agents: decoded.map((entry) => {
-      if (!isDynamicRecord(entry) || typeof entry.agentId !== "string" || typeof entry.hiddenAt !== "string")
+      if (
+        !isDynamicRecord(entry) ||
+        typeof entry.agentId !== "string" ||
+        typeof entry.hiddenAt !== "string"
+      )
         throw new Error("Invalid hidden agents event.");
       return { agentId: entry.agentId, hiddenAt: entry.hiddenAt };
     }),

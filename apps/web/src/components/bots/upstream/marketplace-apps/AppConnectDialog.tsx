@@ -11,6 +11,7 @@ import { applyMcpFlow, isListingUrl, mcpFlowComplete, mcpFlowFields } from "./mc
 import type { McpServerConfig, MarketplacePluginApp } from "./plugin-model";
 import "./mcp-connect-dialog.css";
 import "./integration-layout.css";
+import { T, Var, useGT } from "gt-react";
 const decodeTest = Schema.decodeUnknownSync(
   Schema.Struct({ toolCount: Schema.Number, error: Schema.NullOr(Schema.String) }),
 );
@@ -23,6 +24,7 @@ export function AppConnectDialog(props: {
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
+  const gt = useGT();
   const [flowId, setFlowId] = useState(props.app.server.auth?.[0]?.id),
     [values, setValues] = useState<Record<string, string>>({}),
     [busy, setBusy] = useState(false),
@@ -77,7 +79,7 @@ export function AppConnectDialog(props: {
     });
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "Could not connect the app.");
+      setError(cause instanceof Error ? cause.message : gt("Could not connect the app."));
     }
     lock.current = false;
     setBusy(false);
@@ -103,14 +105,25 @@ export function AppConnectDialog(props: {
                       <SkillMark url={props.app.iconUrl} />
                     </span>
                   </div>
-                  <Dialog.Title>Connect {props.app.name}</Dialog.Title>
+                  <Dialog.Title>
+                    <T>
+                      Connect <Var>{props.app.name}</Var>
+                    </T>
+                  </Dialog.Title>
                   <Dialog.Description>
-                    Give your agents access to {props.app.name} on {props.hostName}.
+                    <T>
+                      Give your agents access to <Var>{props.app.name}</Var> on{" "}
+                      <Var>{props.hostName}</Var>.
+                    </T>
                   </Dialog.Description>
                 </header>
                 <div className="integration-wizard-body">
                   {(props.app.server.auth?.length ?? 0) > 1 && (
-                    <div className="ui-tabs-list" role="tablist" aria-label="Connection method">
+                    <div
+                      className="ui-tabs-list"
+                      role="tablist"
+                      aria-label={gt("Connection method")}
+                    >
                       {props.app.server.auth?.map((choice) => (
                         <button
                           key={choice.id}
@@ -157,7 +170,9 @@ export function AppConnectDialog(props: {
                       {flow?.kind === "local" ? (
                         <div className="mcp-connect-card">
                           <h4 className="mcp-local-heading">
-                            Set up {props.app.name} on {props.hostName}
+                            <T>
+                              Set up <Var>{props.app.name}</Var> on <Var>{props.hostName}</Var>
+                            </T>
                           </h4>
                           <ol className="mcp-local-steps">
                             {flow.steps.map((step) => (
@@ -166,12 +181,14 @@ export function AppConnectDialog(props: {
                           </ol>
                           {flow.note && <p>{flow.note}</p>}
                           <p role="note">
-                            This connection must be available on the host. Local desktop setup
-                            cannot be performed from this remote client.
+                            <T>
+                              This connection must be available on the host. Local desktop setup
+                              cannot be performed from this remote client.
+                            </T>
                           </p>
                           {flow.docsUrl && (
                             <a href={flow.docsUrl} target="_blank" rel="noreferrer">
-                              {flow.docsLabel ?? "Setup instructions"}
+                              {flow.docsLabel ?? gt("Setup instructions")}
                             </a>
                           )}
                         </div>
@@ -182,7 +199,7 @@ export function AppConnectDialog(props: {
                               <label className="ui-field">
                                 <span className="ui-label">
                                   {field.label}
-                                  {field.optional ? " (optional)" : ""}
+                                  {field.optional ? gt(" (optional)") : ""}
                                 </span>
                                 <input
                                   className="ui-input"
@@ -211,11 +228,13 @@ export function AppConnectDialog(props: {
                               target="_blank"
                               rel="noreferrer"
                             >
-                              {flow.docsLabel ?? "Get your API key"}
+                              {flow.docsLabel ?? gt("Get your API key")}
                             </a>
                           )}
                           <p className="mcp-connect-row mcp-connect-privacy">
-                            Credentials are kept on {props.hostName}.
+                            <T>
+                              Credentials are kept on <Var>{props.hostName}</Var>.
+                            </T>
                           </p>
                         </div>
                       )}
@@ -226,20 +245,22 @@ export function AppConnectDialog(props: {
                       )}
                       {uncertain && (
                         <p role="alert">
-                          The save outcome is unknown. Refresh the connection status before trying
-                          again.
+                          <T>
+                            The save outcome is unknown. Refresh the connection status before trying
+                            again.
+                          </T>
                         </p>
                       )}
                       <footer className="integration-wizard-foot">
                         <SourceButton variant="ghost" disabled={busy} onClick={close}>
-                          Cancel
+                          <T>Cancel</T>
                         </SourceButton>
                         <SourceButton
                           type="submit"
                           variant="default"
                           disabled={busy || uncertain || flow?.kind === "local"}
                         >
-                          {busy ? "Connecting…" : "Connect"}
+                          {busy ? gt("Connecting…") : gt("Connect")}
                         </SourceButton>
                       </footer>
                     </form>

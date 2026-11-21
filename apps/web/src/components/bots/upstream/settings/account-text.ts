@@ -1,12 +1,20 @@
-const messages: Record<string,string> = {
-  "account.login.connectingTitle": "Connecting to OpenBot",
-  "account.login.unavailableTitle": "Service unavailable",
-  "account.login.signedInTitle": "You’re signed in",
-  "account.login.checkInboxTitle": "Check your inbox",
-  "account.login.signInTitle": "Sign in to OpenBot",
-  "account.login.connectingDescription": "Starting the account service. This usually takes a moment.",
-  "account.login.unavailableDescription": "OpenBot can’t reach the account service right now.",
-  "account.login.signInDescription": "Use your email to sign in or create an account. We’ll send you a one-time code.",
+import { m } from "../../../../i18n/messages";
+import { msg } from "gt-react";
+const messages: Record<string, string> = {
+  "account.login.connectingTitle": m(msg("Connecting to OpenBot")),
+  "account.login.unavailableTitle": m(msg("Service unavailable")),
+  "account.login.signedInTitle": m(msg("You’re signed in")),
+  "account.login.checkInboxTitle": m(msg("Check your inbox")),
+  "account.login.signInTitle": m(msg("Sign in to OpenBot")),
+  "account.login.connectingDescription": m(
+    msg("Starting the account service. This usually takes a moment."),
+  ),
+  "account.login.unavailableDescription": m(
+    msg("OpenBot can’t reach the account service right now."),
+  ),
+  "account.login.signInDescription": m(
+    msg("Use your email to sign in or create an account. We’ll send you a one-time code."),
+  ),
   "account.login.codeAccepted": "Your code was accepted.",
   "account.login.codeSent": "We sent a code to {email}.",
   "account.login.connectingSecurely": "Connecting securely…",
@@ -26,7 +34,7 @@ const messages: Record<string,string> = {
   "account.login.resendFailed": "Something went wrong while sending a new code. Try again.",
   "account.login.stillUnreachable": "OpenBot still can’t reach the account service.",
   "account.login.resetFailed": "OpenBot couldn’t restart sign in. Try again.",
-  "account.login.codeHint": "Enter all 8 characters to continue.",
+  "account.login.codeHint": m(msg("Enter all 8 characters to continue.")),
   "account.login.verified": "Verified. Opening OpenBot…",
   "account.login.developmentCode": "Development code: {code}",
   "account.login.sendNewCode": "Send a new code",
@@ -36,9 +44,12 @@ const messages: Record<string,string> = {
   "account.login.resend": "Resend code",
   "account.login.resendIn": "Resend in {time}",
   "account.login.loadFailed": "OpenBot could not load the account service.",
-  "account.login.companyTitle": "Continue in your browser",
-  "account.login.companyDescription":
-    "{email} signs in with a company account. Finish signing in on the page that opened in your browser.",
+  "account.login.companyTitle": m(msg("Continue in your browser")),
+  "account.login.companyDescription": m(
+    msg(
+      "'{'email'}' signs in with a company account. Finish signing in on the page that opened in your browser.",
+    ),
+  ),
   "account.login.companyWaiting": "Waiting for your browser…",
   "account.login.companyOpenAgain": "Open the sign-in page again",
   "account.login.companyOpening": "Opening…",
@@ -49,4 +60,8 @@ const messages: Record<string,string> = {
   "account.otp.entry": "One-time code entry",
   "account.otp.label": "One-time code",
 };
-export function accountText(key:string,params:Record<string,string|number>={}){return (messages[key]??key).replace(/\{([^}]+)\}/g,(_,name:string)=>String(params[name]??`{${name}}`));}
+export function accountText(key: string, params: Record<string, string | number> = {}) {
+  return (messages[key] ?? key).replace(/\{([^}]+)\}/g, (_, name: string) =>
+    String(params[name] ?? `{${name}}`),
+  );
+}

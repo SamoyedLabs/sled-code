@@ -61,7 +61,10 @@ export const AGENT_ACCESS_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new 
   [
     AGENT_ACCESS_ROUTES.set,
     adminRoute(
-      exact(["revision", "everyone", "roles"], fields({ revision: count, everyone: levels, roles })),
+      exact(
+        ["revision", "everyone", "roles"],
+        fields({ revision: count, everyone: levels, roles }),
+      ),
       snapshot,
     ),
   ],

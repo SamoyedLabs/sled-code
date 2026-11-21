@@ -22,6 +22,7 @@ import { normalizedSearchText, matchParts, snippetAround } from "./global-search
 import { trackResultHighlight, trackResultsHeight } from "./global-search-motion";
 import { useSearchPages, type SearchPage } from "./useSearchPages";
 import "./global-search.css";
+import { T, useGT } from "gt-react";
 type Agent = typeof OpenbotAgent.Type & { description?: string | undefined };
 export type SearchMessage = {
   agentId: string;
@@ -130,6 +131,7 @@ function Filters({
   value: Tab;
   onChange: (tab: Tab) => void;
 }) {
+  const gt = useGT();
   const list = useRef<HTMLDivElement>(null),
     pill = useRef<HTMLSpanElement>(null);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Source filter indicator is positioned from actual button geometry and tracks resize; first placement does not animate.
@@ -156,7 +158,7 @@ function Filters({
   }, [value]);
   return (
     <div className="global-search-filters">
-      <div ref={list} role="tablist" aria-label="Search filters">
+      <div ref={list} role="tablist" aria-label={gt("Search filters")}>
         <span
           ref={pill}
           className="global-search-filter-pill"
@@ -192,7 +194,9 @@ export function GlobalSearch(props: GlobalSearchProps) {
             className="openbot-react ui-dialog-content global-search-dialog"
             aria-describedby={undefined}
           >
-            <Dialog.Title className="sr-only">Search OpenBot</Dialog.Title>
+            <Dialog.Title className="sr-only">
+              <T>Search OpenBot</T>
+            </Dialog.Title>
             <SearchContent {...props} />
           </Dialog.Popup>
         </div>
@@ -201,6 +205,7 @@ export function GlobalSearch(props: GlobalSearchProps) {
   );
 }
 function SearchContent(props: GlobalSearchProps) {
+  const gt = useGT();
   const [query, setQuery] = useState(""),
     [tab, setTab] = useState<Tab>("all"),
     [active, setActive] = useState<string | null>(null),
@@ -416,14 +421,14 @@ function SearchContent(props: GlobalSearchProps) {
         <input
           ref={input}
           className="global-search-input"
-          aria-label="Search OpenBot"
+          aria-label={gt("Search OpenBot")}
           role="combobox"
           aria-expanded="true"
           aria-controls={id}
           autoComplete="off"
           autoCapitalize="none"
           spellCheck={false}
-          placeholder="Search"
+          placeholder={gt("Search")}
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
@@ -474,7 +479,7 @@ function SearchContent(props: GlobalSearchProps) {
         <div ref={body} className="global-search-results-body">
           <div
             role="listbox"
-            aria-label="Search results"
+            aria-label={gt("Search results")}
             id={id}
             data-list={`${tab} ${value}`}
             style={{ height: top }}
@@ -537,12 +542,12 @@ function SearchContent(props: GlobalSearchProps) {
           {pending && (
             <div className="global-search-status" role="status">
               <LoaderCircleIcon className="size-3 animate-spin" />
-              Searching…
+              <T>Searching…</T>
             </div>
           )}
           {failed && !pending && (
             <div className="global-search-status global-search-failed" role="alert">
-              Search failed.{" "}
+              <T>Search failed.</T>{" "}
               <button
                 type="button"
                 onClick={() => {
@@ -551,12 +556,14 @@ function SearchContent(props: GlobalSearchProps) {
                   props.onRetryRoutines?.();
                 }}
               >
-                Retry
+                <T>Retry</T>
               </button>
             </div>
           )}
           {!flat.length && !pending && !failed && (
-            <div className="global-search-empty">No results</div>
+            <div className="global-search-empty">
+              <T>No results</T>
+            </div>
           )}
         </div>
       </div>
@@ -568,28 +575,30 @@ function SearchContent(props: GlobalSearchProps) {
           <kbd>
             <ArrowDownIcon />
           </kbd>
-          Navigate
+          <T>Navigate</T>
         </span>
         <span className="global-search-hint">
           <kbd>
             <CornerDownLeftIcon />
           </kbd>
-          Open
+          <T>Open</T>
         </span>
         <span className="global-search-hint">
           <kbd>
             <ArrowRightToLineIcon />
           </kbd>
-          Filter
+          <T>Filter</T>
         </span>
         <span className="global-search-hint">
           <kbd>
             <CommandIcon />
           </kbd>
-          <kbd>1–9</kbd>Jump
+          <kbd>1–9</kbd>
+          <T>Jump</T>
         </span>
         <span className="global-search-hint">
-          <kbd>Esc</kbd>Close
+          <kbd>Esc</kbd>
+          <T>Close</T>
         </span>
       </div>
     </>

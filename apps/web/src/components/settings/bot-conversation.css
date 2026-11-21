@@ -138,7 +138,8 @@
 }
 .ob-chat-message:hover .ob-chat-message-time,
 .ob-chat-message:focus-within .ob-chat-message-time,
-.ob-chat-message:has(> .ob-chat-action-row > .ob-chat-message-actions > [aria-expanded="true"]) .ob-chat-message-time {
+.ob-chat-message:has(> .ob-chat-action-row > .ob-chat-message-actions > [aria-expanded="true"])
+  .ob-chat-message-time {
   opacity: 1;
 }
 .ob-chat-action-button {

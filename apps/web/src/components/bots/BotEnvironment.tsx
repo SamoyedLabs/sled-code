@@ -28,6 +28,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
+import { T, Var, useGT } from "gt-react";
 
 type BotTab = "conversation" | "task" | "memory" | "routine";
 export function BotDetail({
@@ -47,6 +48,7 @@ export function BotDetail({
   initialRoutineRunId?: string;
   workspaceView?: BotTab;
 }) {
+  const gt = useGT();
   const pendingMessage = useRef<{ text: string; id: string } | null>(null);
   const messageIdFor = (value: string) => {
     if (pendingMessage.current?.text !== value)
@@ -117,21 +119,25 @@ export function BotDetail({
   if (host.data?.state !== "ready" || host.data.hostId !== expectedHostId) {
     return (
       <div role="status" className="space-y-2">
-        <p>Reconnect to the original bot engine or select the bot again before continuing.</p>
+        <p>
+          <T>Reconnect to the original bot engine or select the bot again before continuing.</T>
+        </p>
         <Button size="sm" variant="outline" onClick={host.refresh}>
-          Refresh engine
+          <T>Refresh engine</T>
         </Button>
       </div>
     );
   }
   if (workspaceView === "task")
     return (
-      <section className="flex min-h-0 flex-1" aria-label="Bot tasks">
+      <section className="flex min-h-0 flex-1" aria-label={gt("Bot tasks")}>
         <aside className="flex w-64 shrink-0 flex-col border-r bg-muted/15">
           <div className="flex items-center justify-between p-4">
-            <h2 className="text-sm font-semibold">Tasks</h2>
+            <h2 className="text-sm font-semibold">
+              <T>Tasks</T>
+            </h2>
             <Button size="sm" variant="ghost" onClick={taskQuery.refresh}>
-              Refresh
+              <T>Refresh</T>
             </Button>
           </div>
           <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2">
@@ -147,7 +153,7 @@ export function BotDetail({
                   onClick={() => setSelectedTask(task.id)}
                 >
                   <span className="block truncate text-sm font-medium">
-                    {task.title || "Untitled task"}
+                    {task.title || gt("Untitled task")}
                   </span>
                   <span className="text-xs text-muted-foreground">
                     {task.state}
@@ -158,7 +164,7 @@ export function BotDetail({
             ))}
             {!tasks?.length && (
               <li className="p-3 text-sm text-muted-foreground">
-                {taskQuery.isPending ? "Loading tasks…" : "No tasks yet"}
+                {taskQuery.isPending ? gt("Loading tasks…") : gt("No tasks yet")}
               </li>
             )}
           </ul>
@@ -176,18 +182,18 @@ export function BotDetail({
             }}
           >
             <label className="block text-xs font-medium">
-              New task
+              <T>New task</T>
               <Textarea
-                aria-label="New task"
+                aria-label={gt("New task")}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                placeholder="What should this bot do?"
+                placeholder={gt("What should this bot do?")}
                 required
                 maxLength={100000}
               />
             </label>
             <Button size="sm" type="submit" disabled={busy || !canWrite || !text.trim()}>
-              {busy ? "Starting…" : "Start task"}
+              {busy ? gt("Starting…") : gt("Start task")}
             </Button>
           </form>
         </aside>
@@ -201,7 +207,7 @@ export function BotDetail({
             <>
               <div className="flex items-center justify-between gap-3 border-b px-5 py-3">
                 <h2 className="truncate text-sm font-medium">
-                  {tasks?.find((t) => t.id === selectedTask)?.title || "Task"}
+                  {tasks?.find((t) => t.id === selectedTask)?.title || gt("Task")}
                 </h2>
                 <div className="flex gap-2">
                   {tasks?.find((t) => t.id === selectedTask)?.state === "running" && (
@@ -213,7 +219,7 @@ export function BotDetail({
                         void send({ operation: "task.stop", agentId, taskId: selectedTask })
                       }
                     >
-                      Stop
+                      <T>Stop</T>
                     </Button>
                   )}
                   <Button
@@ -232,8 +238,8 @@ export function BotDetail({
                     }
                   >
                     {tasks?.find((t) => t.id === selectedTask)?.state === "closed"
-                      ? "Reopen"
-                      : "Close task"}
+                      ? gt("Reopen")
+                      : gt("Close task")}
                   </Button>
                 </div>
               </div>
@@ -248,9 +254,11 @@ export function BotDetail({
             </>
           ) : (
             <div className="m-auto max-w-sm space-y-2 p-8 text-center">
-              <h2 className="text-xl font-medium">A space for each task</h2>
+              <h2 className="text-xl font-medium">
+                <T>A space for each task</T>
+              </h2>
               <p className="text-sm text-muted-foreground">
-                Open a task to pick up its conversation, or start a new one.
+                <T>Open a task to pick up its conversation, or start a new one.</T>
               </p>
             </div>
           )}
@@ -262,23 +270,23 @@ export function BotDetail({
       className={
         workspaceView ? "mx-auto w-full max-w-3xl space-y-6" : "space-y-4 rounded-lg border p-4"
       }
-      aria-label="Bot workspace"
+      aria-label={gt("Bot workspace")}
     >
       {workspaceView && (
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-balance text-xl font-semibold">
-              {workspaceView === "memory" ? "Memory" : "Routines"}
+              {workspaceView === "memory" ? gt("Memory") : gt("Routines")}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {workspaceView === "memory"
-                ? "What this bot remembers across conversations."
-                : "Work this bot repeats on a schedule."}
+                ? gt("What this bot remembers across conversations.")
+                : gt("Work this bot repeats on a schedule.")}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <Button size="sm" variant="ghost" onClick={query.refresh} disabled={busy}>
-              Reload
+              <T>Reload</T>
             </Button>
             <Button
               size="sm"
@@ -293,14 +301,16 @@ export function BotDetail({
               }}
             >
               <PlusIcon aria-hidden className="size-4" />
-              {workspaceView === "memory" ? "Add memory" : "New routine"}
+              {workspaceView === "memory" ? gt("Add memory") : gt("New routine")}
             </Button>
           </div>
         </header>
       )}
       {!workspaceView && (
         <details>
-          <summary>Agent settings</summary>
+          <summary>
+            <T>Agent settings</T>
+          </summary>
           <BotSettingsEnvironment
             key={`${environmentId}:${expectedHostId}:${agentId}`}
             environmentId={environmentId}
@@ -310,7 +320,7 @@ export function BotDetail({
         </details>
       )}
       {!workspaceView && (
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Bot views">
+        <div className="flex flex-wrap gap-2" role="group" aria-label={gt("Bot views")}>
           {(["conversation", "task", "memory", "routine"] as const).map((value) => (
             <Button
               key={value}
@@ -326,16 +336,16 @@ export function BotDetail({
               }}
             >
               {value === "conversation"
-                ? "Chat"
+                ? gt("Chat")
                 : value === "task"
-                  ? "Tasks"
+                  ? gt("Tasks")
                   : value === "memory"
-                    ? "Memory"
-                    : "Routines"}
+                    ? gt("Memory")
+                    : gt("Routines")}
             </Button>
           ))}
           <Button size="sm" variant="ghost" onClick={query.refresh}>
-            Refresh
+            <T>Refresh</T>
           </Button>
         </div>
       )}
@@ -344,7 +354,11 @@ export function BotDetail({
           {error ?? query.error}
         </p>
       )}
-      {query.isPending && !query.data && <p role="status">Loading…</p>}
+      {query.isPending && !query.data && (
+        <p role="status">
+          <T>Loading…</T>
+        </p>
+      )}
       {selectedTask && (
         <Button
           size="sm"
@@ -354,27 +368,36 @@ export function BotDetail({
             setText("");
           }}
         >
-          Back to tasks
+          <T>Back to tasks</T>
         </Button>
       )}
       {tasks?.length === 0 && (
-        <p className="text-sm text-muted-foreground">No tasks yet. Start one below.</p>
+        <p className="text-sm text-muted-foreground">
+          <T>No tasks yet. Start one below.</T>
+        </p>
       )}
       {memories?.length === 0 && (
         <div className="rounded-2xl bg-muted/25 px-6 py-10 text-center">
           <BrainIcon aria-hidden className="mx-auto mb-3 size-6 text-muted-foreground" />
-          <h3 className="text-balance text-sm font-medium">A little context goes a long way</h3>
+          <h3 className="text-balance text-sm font-medium">
+            <T>A little context goes a long way</T>
+          </h3>
           <p className="mx-auto mt-2 max-w-sm text-pretty text-sm text-muted-foreground">
-            Save preferences, facts, and instructions this bot should remember across conversations.
+            <T>
+              Save preferences, facts, and instructions this bot should remember across
+              conversations.
+            </T>
           </p>
         </div>
       )}
       {routines?.length === 0 && (
         <div className="rounded-2xl bg-muted/25 px-6 py-10 text-center">
           <CalendarClockIcon aria-hidden className="mx-auto mb-3 size-6 text-muted-foreground" />
-          <h3 className="text-balance text-sm font-medium">Put recurring work on a schedule</h3>
+          <h3 className="text-balance text-sm font-medium">
+            <T>Put recurring work on a schedule</T>
+          </h3>
           <p className="mx-auto mt-2 max-w-sm text-pretty text-sm text-muted-foreground">
-            Create a daily routine and this bot will take care of it at the time you choose.
+            <T>Create a daily routine and this bot will take care of it at the time you choose.</T>
           </p>
         </div>
       )}
@@ -406,7 +429,7 @@ export function BotDetail({
                     setText("");
                   }}
                 >
-                  Open task
+                  <T>Open task</T>
                 </Button>
                 <Button
                   size="sm"
@@ -420,7 +443,7 @@ export function BotDetail({
                     })
                   }
                 >
-                  {task.state === "closed" ? "Reopen" : "Close task"}
+                  {task.state === "closed" ? gt("Reopen") : gt("Close task")}
                 </Button>
                 {task.state === "running" && (
                   <Button
@@ -429,7 +452,7 @@ export function BotDetail({
                     disabled={busy || !canWrite}
                     onClick={() => void send({ operation: "task.stop", agentId, taskId: task.id })}
                   >
-                    Stop
+                    <T>Stop</T>
                   </Button>
                 )}
               </div>
@@ -443,8 +466,8 @@ export function BotDetail({
             <SearchIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
             <div className="flex-1">
               <Input
-                aria-label="Search memories"
-                placeholder="Search memories"
+                aria-label={gt("Search memories")}
+                placeholder={gt("Search memories")}
                 value={memorySearch}
                 onChange={(event) => setMemorySearch(event.target.value)}
               />
@@ -474,7 +497,7 @@ export function BotDetail({
                         setShowMemoryEditor(true);
                       }}
                     >
-                      Edit
+                      <T>Edit</T>
                     </Button>
                     <Button
                       size="sm"
@@ -484,7 +507,7 @@ export function BotDetail({
                         const approved =
                           (await requestConfirmDialog("Delete this saved memory?", {
                             variant: "destructive",
-                          })) ?? window.confirm("Delete this saved memory?");
+                          })) ?? window.confirm(gt("Delete this saved memory?"));
                         if (approved)
                           void send(
                             { operation: "memory.delete", agentId, memoryId: memory.id },
@@ -502,14 +525,17 @@ export function BotDetail({
             memory.text.toLocaleLowerCase().includes(memorySearch.trim().toLocaleLowerCase()),
           ) && (
             <p role="status" className="py-6 text-center text-sm text-muted-foreground">
-              No memories match this search.
+              <T>No memories match this search.</T>
             </p>
           )}
         </div>
       )}
       {tab === "memory" && !canAdmin && (
         <p className="text-sm text-muted-foreground">
-          You can read memories. Host settings permission is required to add, edit, or delete them.
+          <T>
+            You can read memories. Host settings permission is required to add, edit, or delete
+            them.
+          </T>
         </p>
       )}
       {initialRoutineId && (
@@ -539,7 +565,7 @@ export function BotDetail({
                       : "bg-muted text-muted-foreground",
                   )}
                 >
-                  {routine.active ? "Active" : "Paused"}
+                  {routine.active ? gt("Active") : gt("Paused")}
                 </span>
               </div>
               <p className="whitespace-pre-wrap wrap-anywhere text-sm leading-relaxed text-muted-foreground">
@@ -562,7 +588,7 @@ export function BotDetail({
                     )
                   }
                 >
-                  {routine.active ? "Pause" : "Resume"}
+                  {routine.active ? gt("Pause") : gt("Resume")}
                 </Button>
                 <Button
                   size="sm"
@@ -572,7 +598,7 @@ export function BotDetail({
                     void send({ operation: "routine.test", agentId, routineId: routine.id })
                   }
                 >
-                  Run now
+                  <T>Run now</T>
                 </Button>
               </div>
             </li>
@@ -581,14 +607,17 @@ export function BotDetail({
       )}
       {query.data !== null && query.data !== undefined && !tasks && !memories && !routines && (
         <p role="alert" className="text-sm text-muted-foreground">
-          This host returned an unsupported format. Update the integration before editing this view.
+          <T>
+            This host returned an unsupported format. Update the integration before editing this
+            view.
+          </T>
         </p>
       )}
       {!workspaceView && (
         <>
           <details className="space-y-3">
             <summary className="cursor-pointer text-sm font-medium">
-              Model, instructions and coding destinations
+              <T>Model, instructions and coding destinations</T>
             </summary>
             <BotProviderSettings
               environmentId={environmentId}
@@ -633,11 +662,13 @@ export function BotDetail({
             hostId={expectedHostId}
             agentId={agentId}
           />
-          <section className="space-y-2" aria-label="Delegated coding work">
+          <section className="space-y-2" aria-label={gt("Delegated coding work")}>
             <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium">Coding work</h4>
+              <h4 className="text-sm font-medium">
+                <T>Coding work</T>
+              </h4>
               <Button size="sm" variant="ghost" onClick={coding.refresh}>
-                Refresh coding work
+                <T>Refresh coding work</T>
               </Button>
             </div>
             {coding.error && (
@@ -647,7 +678,7 @@ export function BotDetail({
             )}
             {coding.data?.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                Coding assignments delegated by this bot will appear here.
+                <T>Coding assignments delegated by this bot will appear here.</T>
               </p>
             )}
             <ul className="space-y-2">
@@ -658,7 +689,9 @@ export function BotDetail({
                     params={{ environmentId, threadId: task.threadId }}
                     className="text-sm text-primary underline underline-offset-4"
                   >
-                    Open coding thread · {task.state}
+                    <T>
+                      Open coding thread · <Var>{task.state}</Var>
+                    </T>
                   </Link>
                   {task.result && (
                     <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
@@ -667,16 +700,18 @@ export function BotDetail({
                   )}
                   {task.delivery?.state === "pending" && (
                     <p className="text-sm text-muted-foreground">
-                      Result delivery to the bot is pending.
+                      <T>Result delivery to the bot is pending.</T>
                     </p>
                   )}
                   {task.delivery?.state === "reconciliation-required" && (
                     <p role="status" className="text-sm text-muted-foreground">
-                      The bot’s receipt needs review before this result can be sent again.
+                      <T>The bot’s receipt needs review before this result can be sent again.</T>
                     </p>
                   )}
                   {task.pendingRequestIds.length > 0 && (
-                    <p className="text-sm">This thread needs your input.</p>
+                    <p className="text-sm">
+                      <T>This thread needs your input.</T>
+                    </p>
                   )}
                 </li>
               ))}
@@ -686,14 +721,14 @@ export function BotDetail({
       )}
       {tab === "routine" && (!canAdmin || !canWrite) && (
         <p className="text-sm text-muted-foreground">
-          Host settings and bot operation permissions are required to manage routines.
+          <T>Host settings and bot operation permissions are required to manage routines.</T>
         </p>
       )}
       {tab === "routine" && routines !== null && (!workspaceView || showRoutineEditor) && (
         <div className="space-y-3">
           {workspaceView && (
             <Button size="sm" variant="ghost" onClick={() => setShowRoutineEditor(false)}>
-              Cancel
+              <T>Cancel</T>
             </Button>
           )}
           <DailyRoutineForm
@@ -735,13 +770,17 @@ export function BotDetail({
           >
             <label className="block space-y-1 text-sm">
               <span className="font-medium">
-                {tab === "task" ? "New task" : editingMemory ? "Edit memory" : "New memory"}
+                {tab === "task"
+                  ? gt("New task")
+                  : editingMemory
+                    ? gt("Edit memory")
+                    : gt("New memory")}
               </span>
               <Textarea
                 value={text}
                 onChange={(event) => setText(event.target.value)}
                 maxLength={tab === "memory" ? 500 : 100000}
-                placeholder={tab === "memory" ? "What should this bot remember?" : undefined}
+                placeholder={tab === "memory" ? gt("What should this bot remember?") : undefined}
                 rows={4}
                 required
               />
@@ -753,12 +792,12 @@ export function BotDetail({
                 disabled={busy || !text.trim() || (tab === "memory" ? !canAdmin : !canWrite)}
               >
                 {busy
-                  ? "Sending…"
+                  ? gt("Sending…")
                   : tab === "task"
-                    ? "Start task"
+                    ? gt("Start task")
                     : editingMemory
-                      ? "Save memory"
-                      : "Add memory"}
+                      ? gt("Save memory")
+                      : gt("Add memory")}
               </Button>
               {tab === "memory" && (
                 <>
@@ -773,7 +812,7 @@ export function BotDetail({
                       setShowMemoryEditor(false);
                     }}
                   >
-                    Cancel
+                    <T>Cancel</T>
                   </Button>
                   <span className="ml-auto text-xs tabular-nums text-muted-foreground">
                     {text.length}/500
@@ -798,6 +837,7 @@ function DailyRoutineForm({
   hostId: string;
   onCreated: () => void;
 }) {
+  const gt = useGT();
   const canAdmin = useAtomValue(openbot.admin.permissionAtom(environmentId));
   const canOperate = useAtomValue(openbot.writeToHost.permissionAtom(environmentId));
   const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
@@ -845,13 +885,17 @@ function DailyRoutineForm({
       }}
     >
       <div className="space-y-1">
-        <h4 className="text-balance text-sm font-medium">New daily routine</h4>
+        <h4 className="text-balance text-sm font-medium">
+          <T>New daily routine</T>
+        </h4>
         <p className="text-pretty text-xs text-muted-foreground">
-          This bot will run these instructions every day at the scheduled time.
+          <T>This bot will run these instructions every day at the scheduled time.</T>
         </p>
       </div>
       <label className="block space-y-1 text-sm">
-        <span>Name</span>
+        <span>
+          <T>Name</T>
+        </span>
         <Input
           value={name}
           onChange={(event) => setName(event.target.value)}
@@ -860,7 +904,9 @@ function DailyRoutineForm({
         />
       </label>
       <label className="block space-y-1 text-sm">
-        <span>Instructions</span>
+        <span>
+          <T>Instructions</T>
+        </span>
         <Textarea
           value={instruction}
           onChange={(event) => setInstruction(event.target.value)}
@@ -870,7 +916,9 @@ function DailyRoutineForm({
       </label>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block space-y-1 text-sm">
-          <span>Time</span>
+          <span>
+            <T>Time</T>
+          </span>
           <Input
             type="time"
             value={time}
@@ -879,7 +927,9 @@ function DailyRoutineForm({
           />
         </label>
         <label className="block space-y-1 text-sm">
-          <span>Time zone</span>
+          <span>
+            <T>Time zone</T>
+          </span>
           <Input
             value={timezone}
             onChange={(event) => setTimezone(event.target.value)}
@@ -905,7 +955,7 @@ function DailyRoutineForm({
           !timezone.trim()
         }
       >
-        {busy ? "Creating…" : "Create routine"}
+        {busy ? gt("Creating…") : gt("Create routine")}
       </Button>
     </form>
   );

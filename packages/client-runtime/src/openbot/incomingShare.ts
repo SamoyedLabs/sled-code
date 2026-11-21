@@ -2,6 +2,7 @@ import { OpenbotOriginalUploadIdentity } from "../../../contracts/src/openbotFil
 import * as Schema from "effect/Schema";
 import { OpenbotDraftFile, OpenbotFileTarget, type OpenbotFileSendInput } from "@t3tools/contracts";
 import { acceptedDraft } from "./richConversation.ts";
+import { mFallback, msg } from "gt-i18n";
 
 export const BotShareDestination = Schema.Struct({
   environmentId: Schema.String,
@@ -56,16 +57,40 @@ export function botShareRecovery(
     canReconcile: !mismatch && reason === "unknown",
     message:
       reason === "session-mismatch"
-        ? "This retained share belongs to the original signed-in session. Reconnect that session to recover; this session cannot resend or cancel it. Copies remain in the inbox."
+        ? mFallback(
+            msg(
+              "This retained share belongs to the original signed-in session. Reconnect that session to recover; this session cannot resend or cancel it. Copies remain in the inbox.",
+            ),
+          )
         : reason === "destination-mismatch"
-          ? "Return to the original environment and bot conversation to recover this share. Copies remain in the inbox."
+          ? mFallback(
+              msg(
+                "Return to the original environment and bot conversation to recover this share. Copies remain in the inbox.",
+              ),
+            )
           : reason === "cancelled"
-            ? "The original upload was cancelled. Copies remain in the inbox. Cancel staging to confirm release of this reservation before starting a new upload."
+            ? mFallback(
+                msg(
+                  "The original upload was cancelled. Copies remain in the inbox. Cancel staging to confirm release of this reservation before starting a new upload.",
+                ),
+              )
             : state?.uploadOutcome === "absent"
-              ? "No committed upload established. Copies remain in the inbox. Retry staging with the original upload identity or cancel staging."
+              ? mFallback(
+                  msg(
+                    "No committed upload established. Copies remain in the inbox. Retry staging with the original upload identity or cancel staging.",
+                  ),
+                )
               : reason === "unknown"
-                ? "The original operation is unconfirmed. Reconcile its receipt; do not resend or change destination. Copies remain in the inbox."
-                : "No pending upload or send receipt is recorded. Copies remain in the inbox. Retry staging in this destination or cancel staging.",
+                ? mFallback(
+                    msg(
+                      "The original operation is unconfirmed. Reconcile its receipt; do not resend or change destination. Copies remain in the inbox.",
+                    ),
+                  )
+                : mFallback(
+                    msg(
+                      "No pending upload or send receipt is recorded. Copies remain in the inbox. Retry staging in this destination or cancel staging.",
+                    ),
+                  ),
   };
 }
 export interface BotShareSource {

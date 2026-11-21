@@ -16,7 +16,7 @@ const id = (value: unknown): value is string =>
 export function attachSupervisedPrivilegedCommitTransport(
   child: NodeChildProcess.ChildProcess,
   channel: Channel,
-  activation?: {environmentId:string;hostId:string;allowed():boolean},
+  activation?: { environmentId: string; hostId: string; allowed(): boolean },
 ): { readonly negotiated: boolean } {
   const pipe = child.stdio[4];
   if (!(pipe instanceof NodeStream.Duplex)) throw new Error("Privileged commit unavailable");
@@ -58,9 +58,33 @@ export function attachSupervisedPrivilegedCommitTransport(
           continue;
         }
         if (request?.operation === "activate") {
-          if (!negotiated || !id(request.id) || !id(request.environmentId) || !id(request.hostId) || !exact(request,["id","operation","environmentId","hostId"])) throw new Error();
-          const enabled = activation !== undefined && request.environmentId === activation.environmentId && request.hostId === activation.hostId && channel.activationReady() && activation.allowed();
-          if (!pipe.write(JSON.stringify({id:request.id,ok:true,enabled,incarnation:channel.incarnation,environmentId:request.environmentId,hostId:request.hostId}) + "\n")) stop();
+          if (
+            !negotiated ||
+            !id(request.id) ||
+            !id(request.environmentId) ||
+            !id(request.hostId) ||
+            !exact(request, ["id", "operation", "environmentId", "hostId"])
+          )
+            throw new Error();
+          const enabled =
+            activation !== undefined &&
+            request.environmentId === activation.environmentId &&
+            request.hostId === activation.hostId &&
+            channel.activationReady() &&
+            activation.allowed();
+          if (
+            !pipe.write(
+              JSON.stringify({
+                id: request.id,
+                ok: true,
+                enabled,
+                incarnation: channel.incarnation,
+                environmentId: request.environmentId,
+                hostId: request.hostId,
+              }) + "\n",
+            )
+          )
+            stop();
           continue;
         }
         const queueReply = handleQueueCommitFrame(request, channel);

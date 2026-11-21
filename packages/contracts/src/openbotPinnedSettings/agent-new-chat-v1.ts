@@ -21,5 +21,8 @@ const settings = fields({ allowNewChat: boolean });
 
 export const AGENT_NEW_CHAT_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   [AGENT_NEW_CHAT_ROUTES.settings, adminRoute(fields({ agentId: identifier }), settings)],
-  [AGENT_NEW_CHAT_ROUTES.update, adminRoute(fields({ agentId: identifier, allowNewChat: boolean }), settings)],
+  [
+    AGENT_NEW_CHAT_ROUTES.update,
+    adminRoute(fields({ agentId: identifier, allowNewChat: boolean }), settings),
+  ],
 ]);

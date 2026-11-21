@@ -13,6 +13,7 @@ import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Checkbox } from "../ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { T, Var, useGT } from "gt-react";
 
 type Props = {
   environmentId: EnvironmentId;
@@ -23,18 +24,19 @@ type Props = {
 };
 type Controller = ReturnType<typeof useBotChannels>;
 export function BotChannels(props: Props) {
+  const gt = useGT();
   const [expanded, setExpanded] = useState(
     props.initiallyExpanded ?? props.initialChannelId !== undefined,
   );
   return (
-    <section aria-label="Bot channels" className="space-y-3">
+    <section aria-label={gt("Bot channels")} className="space-y-3">
       <Button
         variant="outline"
         size="sm"
         aria-expanded={expanded}
         onClick={() => setExpanded(!expanded)}
       >
-        {expanded ? "Close channels" : "Channels"}
+        {expanded ? gt("Close channels") : gt("Channels")}
       </Button>
       {expanded && <ChannelsPanel key={`${props.environmentId}:${props.hostId}`} {...props} />}
     </section>
@@ -86,6 +88,7 @@ async function confirm(message: string) {
   );
 }
 function ChannelSettings({ controller }: { controller: Controller }) {
+  const gt = useGT();
   const edit = controller.edit;
   if (!edit) return null;
   const visible = new Set(controller.agents.map((agent) => agent.id));
@@ -94,9 +97,13 @@ function ChannelSettings({ controller }: { controller: Controller }) {
   const disabled = controller.busy || !controller.canManage;
   return (
     <div className="space-y-3">
-      <h3 className="text-base font-medium">{edit.update ? "Channel settings" : "New channel"}</h3>
+      <h3 className="text-base font-medium">
+        {edit.update ? gt("Channel settings") : gt("New channel")}
+      </h3>
       <label className="block space-y-1 text-sm">
-        <span>Channel name</span>
+        <span>
+          <T>Channel name</T>
+        </span>
         <Input
           value={edit.value.name}
           maxLength={80}
@@ -107,7 +114,9 @@ function ChannelSettings({ controller }: { controller: Controller }) {
         />
       </label>
       <label className="block space-y-1 text-sm">
-        <span>Title</span>
+        <span>
+          <T>Title</T>
+        </span>
         <Input
           value={edit.value.title}
           maxLength={120}
@@ -118,7 +127,9 @@ function ChannelSettings({ controller }: { controller: Controller }) {
         />
       </label>
       <label className="block space-y-1 text-sm">
-        <span>Shared instructions</span>
+        <span>
+          <T>Shared instructions</T>
+        </span>
         <Textarea
           value={edit.value.instructions}
           rows={4}
@@ -133,7 +144,9 @@ function ChannelSettings({ controller }: { controller: Controller }) {
         />
       </label>
       <fieldset className="space-y-2">
-        <legend className="text-sm">Member bots</legend>
+        <legend className="text-sm">
+          <T>Member bots</T>
+        </legend>
         {controller.agents.map((agent) => (
           <label key={agent.id} className="flex items-center gap-2 text-sm">
             <Checkbox
@@ -155,12 +168,16 @@ function ChannelSettings({ controller }: { controller: Controller }) {
       </fieldset>
       {unavailable.length > 0 && (
         <p className="text-sm text-muted-foreground">
-          {unavailable.length} unlisted {unavailable.length === 1 ? "member is" : "members are"}{" "}
-          retained. Changing visible members keeps them in this channel.
+          <T>
+            <Var>{unavailable.length}</Var> unlisted{" "}
+            <Var>{unavailable.length === 1 ? gt("member is") : gt("members are")}</Var>
+            <Var> </Var>
+            retained. Changing visible members keeps them in this channel.
+          </T>
         </p>
       )}
       <Choice
-        label="Lead bot"
+        label={gt("Lead bot")}
         value={edit.value.leadAgentId}
         empty="No lead"
         options={edit.value.members.map((member) => ({
@@ -175,13 +192,17 @@ function ChannelSettings({ controller }: { controller: Controller }) {
         }
       />
       <p className="text-sm text-muted-foreground">
-        Removing a member pauses its unfinished work. Messages use the lead, an @mention, or a
-        selected recipient.
+        <T>
+          Removing a member pauses its unfinished work. Messages use the lead, an @mention, or a
+          selected recipient.
+        </T>
       </p>
       {controller.conflict && (
         <p role="alert" className="text-sm text-destructive">
-          The channel settings changed on the engine. Your draft is retained; discard it to load the
-          current settings.
+          <T>
+            The channel settings changed on the engine. Your draft is retained; discard it to load
+            the current settings.
+          </T>
         </p>
       )}
       <div className="flex flex-wrap gap-2">
@@ -190,7 +211,7 @@ function ChannelSettings({ controller }: { controller: Controller }) {
           disabled={disabled || controller.conflict || !edit.value.name.trim()}
           onClick={controller.save}
         >
-          {edit.update ? "Save settings" : "Create channel"}
+          {edit.update ? gt("Save settings") : gt("Create channel")}
         </Button>
         <Button
           variant="outline"
@@ -198,13 +219,14 @@ function ChannelSettings({ controller }: { controller: Controller }) {
           disabled={controller.busy}
           onClick={() => controller.setEdit(null)}
         >
-          Discard draft
+          <T>Discard draft</T>
         </Button>
       </div>
     </div>
   );
 }
 function TaskRow({ controller, task }: { controller: Controller; task: OpenbotChannelTask }) {
+  const gt = useGT();
   const [assignee, setAssignee] = useState<string | null>(null);
   const actions = channelTaskActions(task.state, controller.channel?.archived ?? true);
   const channel = controller.channel;
@@ -219,14 +241,17 @@ function TaskRow({ controller, task }: { controller: Controller; task: OpenbotCh
       <p className="text-sm font-medium">
         {task.ownerAgentId
           ? (controller.agents.find((agent) => agent.id === task.ownerAgentId)?.name ??
-            "Unlisted bot")
-          : "Waiting for assignment"}{" "}
+            gt("Unlisted bot"))
+          : gt("Waiting for assignment")}{" "}
         · {task.state}
       </p>
       <p className="whitespace-pre-wrap break-words text-sm">{task.instruction}</p>
       {task.dependencies.length > 0 && (
         <p className="text-sm text-muted-foreground">
-          Depends on {task.dependencies.length} {task.dependencies.length === 1 ? "task" : "tasks"}.
+          <T>
+            Depends on <Var>{task.dependencies.length}</Var>{" "}
+            <Var>{task.dependencies.length === 1 ? "task" : "tasks"}</Var>.
+          </T>
         </p>
       )}
       {task.error && (
@@ -247,7 +272,7 @@ function TaskRow({ controller, task }: { controller: Controller; task: OpenbotCh
               })
             }
           >
-            Stop task
+            <T>Stop task</T>
           </Button>
         )}
         {actions.includes("resume") && (
@@ -263,7 +288,7 @@ function TaskRow({ controller, task }: { controller: Controller; task: OpenbotCh
               })
             }
           >
-            Resume task
+            <T>Resume task</T>
           </Button>
         )}
         {actions.includes("cancel") && (
@@ -273,7 +298,9 @@ function TaskRow({ controller, task }: { controller: Controller; task: OpenbotCh
             disabled={disabled}
             onClick={() => {
               void confirm(
-                "Cancel this task's run and all of its delegated tasks? The conversation stays available.",
+                gt(
+                  "Cancel this task's run and all of its delegated tasks? The conversation stays available.",
+                ),
               ).then((approved) => {
                 if (approved)
                   void controller.act({
@@ -285,14 +312,14 @@ function TaskRow({ controller, task }: { controller: Controller; task: OpenbotCh
               });
             }}
           >
-            Cancel run
+            <T>Cancel run</T>
           </Button>
         )}
       </div>
       {actions.includes("reassign") && (
         <div className="space-y-2">
           <Choice
-            label="Reassign task to"
+            label={gt("Reassign task to")}
             value={assignee}
             options={options}
             empty="Choose a bot"
@@ -313,7 +340,7 @@ function TaskRow({ controller, task }: { controller: Controller; task: OpenbotCh
                 });
             }}
           >
-            Reassign task
+            <T>Reassign task</T>
           </Button>
         </div>
       )}
@@ -321,6 +348,7 @@ function TaskRow({ controller, task }: { controller: Controller; task: OpenbotCh
   );
 }
 function ChannelsPanel({ environmentId, hostId, initialChannelId, initialTaskId }: Props) {
+  const gt = useGT();
   const controller = useBotChannels(environmentId, hostId, randomUUID, initialChannelId);
   const [archived, setArchived] = useState(false);
   const [messageLimit, setMessageLimit] = useState(50);
@@ -335,25 +363,34 @@ function ChannelsPanel({ environmentId, hostId, initialChannelId, initialTaskId 
   return (
     <div className="space-y-4" aria-busy={controller.busy}>
       <p className="text-sm text-muted-foreground">
-        Channels let bots share a conversation, coordinate assignments and hand work to each other.
+        <T>
+          Channels let bots share a conversation, coordinate assignments and hand work to each
+          other.
+        </T>
       </p>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" disabled={controller.busy} onClick={controller.refresh}>
-          Refresh channels
+          <T>Refresh channels</T>
         </Button>
         <Button
           size="sm"
           disabled={controller.busy || !controller.canManage || Boolean(controller.edit)}
           onClick={controller.create}
         >
-          New channel
+          <T>New channel</T>
         </Button>
       </div>
       <label className="flex items-center gap-2 text-sm">
         <Checkbox checked={archived} onCheckedChange={(checked) => setArchived(Boolean(checked))} />
-        <span>Show archived channels</span>
+        <span>
+          <T>Show archived channels</T>
+        </span>
       </label>
-      {controller.loading && <p role="status">Loading channels…</p>}
+      {controller.loading && (
+        <p role="status">
+          <T>Loading channels…</T>
+        </p>
+      )}
       {controller.error && (
         <p role="alert" className="text-sm text-destructive">
           {controller.error}
@@ -379,14 +416,17 @@ function ChannelsPanel({ environmentId, hostId, initialChannelId, initialTaskId 
                   setTaskLimit(25);
                 }}
               >
-                {item.name} · {item.activeTasks} running · {item.unreadCount} unread
+                <T>
+                  <Var>{item.name}</Var> · <Var>{item.activeTasks}</Var> running ·{" "}
+                  <Var>{item.unreadCount}</Var> unread
+                </T>
               </Button>
             </li>
           ))}
       </ul>
       {controller.channels?.filter((item) => item.archived === archived).length === 0 && (
         <p className="text-sm text-muted-foreground">
-          {archived ? "No archived channels." : "No channels yet."}
+          {archived ? gt("No archived channels.") : gt("No channels yet.")}
         </p>
       )}
       <ChannelSettings controller={controller} />
@@ -403,7 +443,7 @@ function ChannelsPanel({ environmentId, hostId, initialChannelId, initialTaskId 
           )}
           <h3 className="text-base font-medium">
             {channel.name}
-            {channel.archived ? " · archived" : ""}
+            {channel.archived ? gt(" · archived") : ""}
           </h3>
           {channel.title && <p className="text-sm">{channel.title}</p>}
           {channel.instructions && (
@@ -418,7 +458,7 @@ function ChannelsPanel({ environmentId, hostId, initialChannelId, initialTaskId 
               disabled={controller.busy || !controller.canManage || Boolean(controller.edit)}
               onClick={controller.editSettings}
             >
-              Edit channel
+              <T>Edit channel</T>
             </Button>
             {channel.archived ? (
               <Button
@@ -429,7 +469,7 @@ function ChannelsPanel({ environmentId, hostId, initialChannelId, initialTaskId 
                   void controller.act({ operation: "channel.restore", channelId: channel.id })
                 }
               >
-                Restore channel
+                <T>Restore channel</T>
               </Button>
             ) : (
               <Button
@@ -437,7 +477,7 @@ function ChannelsPanel({ environmentId, hostId, initialChannelId, initialTaskId 
                 size="sm"
                 disabled={disabled || Boolean(controller.edit)}
                 onClick={() => {
-                  void confirm("Archive this channel? Running work will pause.").then(
+                  void confirm(gt("Archive this channel? Running work will pause.")).then(
                     (approved) => {
                       if (approved)
                         void controller.act({
@@ -448,7 +488,7 @@ function ChannelsPanel({ environmentId, hostId, initialChannelId, initialTaskId 
                   );
                 }}
               >
-                Archive channel
+                <T>Archive channel</T>
               </Button>
             )}
             <Button
@@ -456,15 +496,15 @@ function ChannelsPanel({ environmentId, hostId, initialChannelId, initialTaskId 
               size="sm"
               disabled={disabled || Boolean(controller.edit)}
               onClick={() => {
-                void confirm("Delete this channel and its history? Active work will stop.").then(
-                  (approved) => {
-                    if (approved)
-                      void controller.act({ operation: "channel.delete", channelId: channel.id });
-                  },
-                );
+                void confirm(
+                  gt("Delete this channel and its history? Active work will stop."),
+                ).then((approved) => {
+                  if (approved)
+                    void controller.act({ operation: "channel.delete", channelId: channel.id });
+                });
               }}
             >
-              Delete channel
+              <T>Delete channel</T>
             </Button>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -480,7 +520,7 @@ function ChannelsPanel({ environmentId, hostId, initialChannelId, initialTaskId 
                 })
               }
             >
-              Mark channel read
+              <T>Mark channel read</T>
             </Button>
             <Button
               variant="outline"
@@ -494,7 +534,7 @@ function ChannelsPanel({ environmentId, hostId, initialChannelId, initialTaskId 
                 setMessageLimit(messageLimit + 100);
               }}
             >
-              Older messages
+              <T>Older messages</T>
             </Button>
           </div>
           <ol className="space-y-4">
@@ -502,12 +542,14 @@ function ChannelsPanel({ environmentId, hostId, initialChannelId, initialTaskId 
               <li key={message.id} className="space-y-1">
                 <p className="text-xs text-muted-foreground">
                   {message.author.name} · {message.message.status}
-                  {message.superseded ? " · earlier attempt" : ""}
+                  {message.superseded ? gt(" · earlier attempt") : ""}
                 </p>
                 <p className="whitespace-pre-wrap break-words text-sm">{message.message.text}</p>
                 {message.message.attachments?.map((attachment) => (
                   <p key={attachment.id} className="text-sm text-muted-foreground">
-                    File: {attachment.name}
+                    <T>
+                      File: <Var>{attachment.name}</Var>
+                    </T>
                   </p>
                 ))}
                 <Button
@@ -516,7 +558,7 @@ function ChannelsPanel({ environmentId, hostId, initialChannelId, initialTaskId 
                   disabled={disabled || channel.archived || Boolean(controller.edit)}
                   onClick={() => controller.setReply(message.id)}
                 >
-                  Reply
+                  <T>Reply</T>
                 </Button>
               </li>
             ))}
@@ -524,18 +566,22 @@ function ChannelsPanel({ environmentId, hostId, initialChannelId, initialTaskId 
           {controller.reply && (
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                Replying to:{" "}
-                {controller.messages
-                  .find((message) => message.id === controller.reply)
-                  ?.message.text.slice(0, 160) ?? "an earlier message"}
+                <T>
+                  Replying to:<Var> </Var>
+                  <Var>
+                    {controller.messages
+                      .find((message) => message.id === controller.reply)
+                      ?.message.text.slice(0, 160) ?? gt("an earlier message")}
+                  </Var>
+                </T>
               </p>
               <Button variant="outline" size="sm" onClick={() => controller.setReply(null)}>
-                Clear reply
+                <T>Clear reply</T>
               </Button>
             </div>
           )}
           <Choice
-            label="Send to"
+            label={gt("Send to")}
             value={controller.recipient}
             options={members}
             empty="Lead or @mentions"
@@ -543,7 +589,9 @@ function ChannelsPanel({ environmentId, hostId, initialChannelId, initialTaskId 
             onChange={controller.setRecipient}
           />
           <label className="block space-y-1 text-sm">
-            <span>Channel message</span>
+            <span>
+              <T>Channel message</T>
+            </span>
             <Textarea
               rows={4}
               value={controller.text}
@@ -559,9 +607,11 @@ function ChannelsPanel({ environmentId, hostId, initialChannelId, initialTaskId 
             }
             onClick={controller.send}
           >
-            Send to channel
+            <T>Send to channel</T>
           </Button>
-          <h3 className="text-base font-medium">Tasks</h3>
+          <h3 className="text-base font-medium">
+            <T>Tasks</T>
+          </h3>
           <ul className="space-y-4">
             {controller.tasks
               .toSorted(
@@ -575,7 +625,7 @@ function ChannelsPanel({ environmentId, hostId, initialChannelId, initialTaskId 
           </ul>
           {controller.tasks.length > taskLimit && (
             <Button variant="outline" size="sm" onClick={() => setTaskLimit(taskLimit + 25)}>
-              Show more tasks
+              <T>Show more tasks</T>
             </Button>
           )}
         </div>

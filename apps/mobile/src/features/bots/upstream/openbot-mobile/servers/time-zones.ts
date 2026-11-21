@@ -72,7 +72,8 @@ const COMMON_TIME_ZONES = [
 
 /** The IANA zones that the user can choose. "UTC" comes first: V8 does not list it as canonical. */
 export function knownTimeZones(): string[] {
-  const listed = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
+  const listed =
+    typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
   const zones = listed.length > 0 ? listed : COMMON_TIME_ZONES;
   return ["UTC", ...zones.filter((zone) => zone !== "UTC")];
 }

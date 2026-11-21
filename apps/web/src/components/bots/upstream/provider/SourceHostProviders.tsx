@@ -51,6 +51,7 @@ import { SourceSelect } from "./SourceSelect";
 import { SourceSwitch } from "./SourceSwitch";
 import { currentText } from "./text";
 import { readAgentStatus } from "./types";
+import { useGT } from "gt-react";
 const { t } = currentText();
 const decodeAgents = Schema.decodeUnknownResult(
   Schema.Array(Schema.Struct({ id: Schema.String, name: Schema.String, provider: Schema.String })),
@@ -90,6 +91,7 @@ export function SourceHostProviders(props: Props) {
   return <Host key={`${props.environmentId}:${props.hostId}:${session.epoch}`} {...props} />;
 }
 function Host(props: Props) {
+  const gt = useGT();
   const { environmentId, hostId } = props;
   const data = useSourceProviderData();
   const registry = useContext(RegistryContext);
@@ -176,7 +178,7 @@ function Host(props: Props) {
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
       if (alive.current)
-        setError(cause instanceof Error ? cause.message : "Provider change failed.");
+        setError(cause instanceof Error ? cause.message : gt("Provider change failed."));
       throw cause;
     }
   };
@@ -395,7 +397,7 @@ function Host(props: Props) {
   if (!data?.status)
     return (
       <p role={data?.error ? "alert" : "status"}>
-        {data?.error ? "Could not read this host’s providers." : "Loading providers…"}
+        {data?.error ? gt("Could not read this host’s providers.") : gt("Loading providers…")}
       </p>
     );
   const modelsSlot = (provider: string) =>
@@ -552,6 +554,7 @@ function SignInConnection(
     onClose: () => void;
   },
 ) {
+  const gt = useGT();
   const { provider, execute } = props;
   const [state, setState] = useState<ProviderCodeState>({ phase: "starting" }),
     [error, setError] = useState<string | null>(null),
@@ -565,8 +568,8 @@ function SignInConnection(
       type: "success",
       title: `${isAgentProvider(provider) ? agentProviderName(provider) : provider} connected`,
       description: account
-        ? `Signed in as ${account}.`
-        : "The sign-in finished on the other device.",
+        ? gt("Signed in as {account}.", { account })
+        : gt("The sign-in finished on the other device."),
     });
     props.onClose();
   };
@@ -595,8 +598,10 @@ function SignInConnection(
         if (deadline !== null && Date.now() >= deadline) {
           toastManager.add({
             type: "warning",
-            title: `The ${isAgentProvider(provider) ? agentProviderName(provider) : provider} code expired`,
-            description: "Nobody entered it in time. That code no longer works.",
+            title: gt("The {value} code expired", {
+              value: isAgentProvider(provider) ? agentProviderName(provider) : provider,
+            }),
+            description: gt("Nobody entered it in time. That code no longer works."),
           });
           props.onClose();
           return;

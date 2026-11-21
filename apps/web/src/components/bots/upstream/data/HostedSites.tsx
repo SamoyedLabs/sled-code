@@ -6,6 +6,7 @@ import { SettingsSection, SourceButton } from "../settings/SettingsParts";
 import { SourceConfirmDialog } from "./SourceConfirmDialog";
 import { t } from "./source-text";
 import "./HostedSites.css";
+import { T } from "gt-react";
 export function HostedSites(props: {
   sites: OpenbotHostedSites | null;
   available: boolean;
@@ -36,7 +37,9 @@ export function HostedSites(props: {
                   })}
                 </span>
                 {props.onSeePlans && props.sites!.used >= props.sites!.limit && (
-                  <SourceButton onClick={props.onSeePlans}>See plans</SourceButton>
+                  <SourceButton onClick={props.onSeePlans}>
+                    <T>See plans</T>
+                  </SourceButton>
                 )}
               </div>
             )}

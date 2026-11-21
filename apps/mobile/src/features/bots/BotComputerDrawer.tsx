@@ -16,6 +16,7 @@ import { SymbolView } from "../../components/ui/AppSymbol";
 import type { EnvironmentPresentation } from "../../state/environments";
 import { BotGlass, BotIconButton, useBotPalette } from "./upstream/BotChrome";
 import { OpenBotText as Text } from "./upstream/OpenBotTypography";
+import { T, useGT } from "gt-react-native";
 
 const DRAWER_SPRING = {
   dampingRatio: 0.8,
@@ -46,6 +47,7 @@ export function BotComputerDrawer({
   activeId: EnvironmentId | undefined;
   environments: readonly EnvironmentPresentation[];
 }>) {
+  const gt = useGT();
   const p = useBotPalette();
   const reducedMotion = useBotReducedMotion();
   const insets = useSafeAreaInsets();
@@ -130,10 +132,10 @@ export function BotComputerDrawer({
               accessibilityRole="header"
               style={{ color: p.text, fontSize: 24, fontWeight: "700" }}
             >
-              Servers
+              <T>Servers</T>
             </Text>
             <BotGlass>
-              <BotIconButton label="Add server" icon="plus" onPress={onAdd} />
+              <BotIconButton label={gt("Add server")} icon="plus" onPress={onAdd} />
             </BotGlass>
           </View>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 4 }}>
@@ -168,10 +170,10 @@ export function BotComputerDrawer({
                     </Text>
                     <Text style={{ color: p.muted, fontSize: 12 }}>
                       {connected
-                        ? "Connected"
+                        ? gt("Connected")
                         : environment.connection.phase === "reconnecting"
-                          ? "Reconnecting"
-                          : "Disconnected"}
+                          ? gt("Reconnecting")
+                          : gt("Disconnected")}
                     </Text>
                   </View>
                   {selected && <SymbolView name="checkmark" size={17} tintColor={p.text} />}
@@ -182,13 +184,13 @@ export function BotComputerDrawer({
           <View style={{ flexDirection: "row", justifyContent: "space-between", paddingTop: 12 }}>
             {onLibrary ? (
               <BotGlass>
-                <BotIconButton label="Library" icon="square.grid.2x2" onPress={onLibrary} />
+                <BotIconButton label={gt("Library")} icon="square.grid.2x2" onPress={onLibrary} />
               </BotGlass>
             ) : (
               <View />
             )}
             <BotGlass>
-              <BotIconButton label="Settings" icon="gearshape" onPress={onManage} />
+              <BotIconButton label={gt("Settings")} icon="gearshape" onPress={onManage} />
             </BotGlass>
           </View>
         </Animated.View>
@@ -209,7 +211,7 @@ export function BotComputerDrawer({
           />
           {open && (
             <Pressable
-              accessibilityLabel="Close computer drawer"
+              accessibilityLabel={gt("Close computer drawer")}
               accessibilityRole="button"
               onPress={close}
               style={StyleSheet.absoluteFill}

@@ -1,6 +1,8 @@
 /* Original OpenBot app-shell/primitives search selectors and timing; React Base UI bindings. */
 .openbot-react {
-  .ui-dialog-content {box-shadow:0 0 0 1px var(--openbot-dialog-ring);}
+  .ui-dialog-content {
+    box-shadow: 0 0 0 1px var(--openbot-dialog-ring);
+  }
   .global-search-dialog {
     border: 0;
     border-radius: var(--openbot-radius-card);

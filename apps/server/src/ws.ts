@@ -1554,12 +1554,19 @@ export const layerWsRpc = (
               : yield* botHost.apiRead(request);
             if (
               request.operation === "compatibility.read" &&
-              result && typeof result === "object" && !Array.isArray(result) &&
-              "capabilities" in result && Array.isArray(result.capabilities)
+              result &&
+              typeof result === "object" &&
+              !Array.isArray(result) &&
+              "capabilities" in result &&
+              Array.isArray(result.capabilities)
             ) {
               return {
                 ...result,
-                capabilities: [...result.capabilities, "sled-roster-pins-v1", "sled-library-stream-v1"],
+                capabilities: [
+                  ...result.capabilities,
+                  "sled-roster-pins-v1",
+                  "sled-library-stream-v1",
+                ],
               };
             }
             return result;
@@ -3599,7 +3606,10 @@ export const layerWsRpc = (
           Effect.fnUntraced(function* (input) {
             const path = yield* Path.Path;
             if (input.resource._tag === "bot-library-image") {
-              if (Option.isNone(openbot) || (yield* openbot.value.readyHostId) !== input.resource.hostId) {
+              if (
+                Option.isNone(openbot) ||
+                (yield* openbot.value.readyHostId) !== input.resource.hostId
+              ) {
                 return yield* new AssetWorkspaceContextNotFoundError({ resource: input.resource });
               }
               return yield* issueAssetUrl({ resource: input.resource });
@@ -4255,124 +4265,126 @@ export const layer = Layer.unwrap(
               serverBrowser,
               reportProfiles,
               readSettingsClient(url.value),
-            ).pipe(
-              Layer.provide(
-                Layer.mergeAll(
-                  Option.match(openbotPrivileged, {
-                    onNone: () => Layer.empty,
-                    onSome: (service) =>
-                      Layer.succeed(OpenbotPrivileged.PrivilegedResponses, service),
-                  }),
-                  Option.match(openbotFiles, {
-                    onNone: () => Layer.empty,
-                    onSome: (service) => Layer.succeed(OpenbotFiles.Files, service),
-                  }),
-                  Option.match(computerGateway, {
-                    onNone: () => Layer.empty,
-                    onSome: (service) =>
-                      Layer.succeed(OpenbotComputerGateway.ComputerViewGateway, service),
-                  }),
-                  Option.match(browserGateway, {
-                    onNone: () => Layer.empty,
-                    onSome: (service) =>
-                      Layer.succeed(OpenbotBrowserGateway.BrowserViewGateway, service),
-                  }),
-                  Option.match(openbotChannelCoding, {
-                    onNone: () => Layer.empty,
-                    onSome: (service) => Layer.succeed(OpenbotChannelCoding.ChannelCoding, service),
-                  }),
-                  Option.match(openbotChannelGrants, {
-                    onNone: () => Layer.empty,
-                    onSome: (service) =>
-                      Layer.succeed(OpenbotChannelGrants.ChannelCodingGrants, service),
-                  }),
-                  Option.match(openbotContinuity, {
-                    onNone: () => Layer.empty,
-                    onSome: (service) => Layer.succeed(OpenbotContinuity.Continuity, service),
-                  }),
-                  Option.match(openbotCodingPolicy, {
-                    onNone: () => Layer.empty,
-                    onSome: (service) => Layer.succeed(OpenbotCodingPolicy.CodingPolicy, service),
-                  }),
-                ),
-              ),
-              Layer.provide(
-                Option.match(openbotDelivery, {
-                  onNone: () => Layer.empty,
-                  onSome: (service) => Layer.succeed(OpenbotDelivery.CodingDelivery, service),
-                }),
-              ),
-              Layer.provide(
-                Option.match(openbot, {
-                  onNone: () => Layer.empty,
-                  onSome: (service) => Layer.succeed(Openbot.Integration, service),
-                }),
-              ),
-              Layer.provide(
-                Option.match(openbotCoding, {
-                  onNone: () => Layer.empty,
-                  onSome: (service) => Layer.succeed(OpenbotCoding.CodingBridge, service),
-                }),
-              ),
-              Layer.provide(
-                Option.match(sledTools, {
-                  onNone: () => Layer.empty,
-                  onSome: (service) => Layer.succeed(OpenbotSledTools.SledTools, service),
-                }),
-              ),
-              Layer.provide(
-                Layer.mergeAll(
-                  Option.match(maintenance, {
-                    onNone: () => Layer.empty,
-                    onSome: (service) => Layer.succeed(OpenbotMaintenance.Maintenance, service),
-                  }),
-                  Option.match(upstream, {
-                    onNone: () => Layer.empty,
-                    onSome: (service) => Layer.succeed(OpenbotUpstream.UpstreamRuntime, service),
-                  }),
-                ),
-              ),
-              Layer.provideMerge(RpcSerialization.layerJson),
-              // Handler-context reporters see only request defects, not server-wide defects.
-              Layer.provide(DefectReporter.layer),
-              Layer.provide(AcpRegistrySessions.layer),
-              Layer.provide(Layer.succeed(SqlClient.SqlClient, sql)),
-              Layer.provide(ProviderMaintenanceRunner.layer),
-              Layer.provide(Layer.succeed(RemoteDesktop.Service, remoteDesktop)),
-              Layer.provide(Layer.succeed(NpmRelease.NpmRelease, npmRelease)),
-              Layer.provide(Layer.succeed(ServerSelfUpdate.ServerSelfUpdate, serverSelfUpdate)),
-              // Share server-lifetime PR caches so WS mutations invalidate every client's HTTP diffs.
-              Layer.provide(Layer.succeed(PullRequestService.PullRequestService, pullRequests)),
-              Layer.provide(Layer.succeed(IssueService.IssueService, issues)),
-              Layer.provide(Layer.succeed(ThreadIssueService.ThreadIssueService, threadIssues)),
-              Layer.provide(
-                Layer.succeed(IssueTrackerConnections.IssueTrackerConnections, issueTrackers),
-              ),
-              Layer.provide(OtlpEndpointCheck.layer),
             )
-            .pipe(
-              Layer.provide(
-                Layer.succeed(
-                  PullRequestReviewGuideService.PullRequestReviewGuideService,
-                  reviewGuides,
+              .pipe(
+                Layer.provide(
+                  Layer.mergeAll(
+                    Option.match(openbotPrivileged, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) =>
+                        Layer.succeed(OpenbotPrivileged.PrivilegedResponses, service),
+                    }),
+                    Option.match(openbotFiles, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) => Layer.succeed(OpenbotFiles.Files, service),
+                    }),
+                    Option.match(computerGateway, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) =>
+                        Layer.succeed(OpenbotComputerGateway.ComputerViewGateway, service),
+                    }),
+                    Option.match(browserGateway, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) =>
+                        Layer.succeed(OpenbotBrowserGateway.BrowserViewGateway, service),
+                    }),
+                    Option.match(openbotChannelCoding, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) =>
+                        Layer.succeed(OpenbotChannelCoding.ChannelCoding, service),
+                    }),
+                    Option.match(openbotChannelGrants, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) =>
+                        Layer.succeed(OpenbotChannelGrants.ChannelCodingGrants, service),
+                    }),
+                    Option.match(openbotContinuity, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) => Layer.succeed(OpenbotContinuity.Continuity, service),
+                    }),
+                    Option.match(openbotCodingPolicy, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) => Layer.succeed(OpenbotCodingPolicy.CodingPolicy, service),
+                    }),
+                  ),
                 ),
-              ),
-              Layer.provide(Layer.succeed(PeerLinks.PeerLinks, peerLinks)),
-              Layer.provide(Layer.succeed(PeerLinkRequests.PeerLinkRequests, peerLinkRequests)),
-              Layer.provide(
-                SourceControlDiscovery.layer.pipe(
-                  Layer.provide(
-                    SourceControlProviderRegistry.layer.pipe(
-                      Layer.provide(SourceControlBuiltInDrivers.layer),
-                      Layer.provideMerge(GitVcsDriver.layer),
-                      Layer.provide(
-                        VcsDriverRegistry.layer.pipe(Layer.provide(VcsProjectConfig.layer)),
+                Layer.provide(
+                  Option.match(openbotDelivery, {
+                    onNone: () => Layer.empty,
+                    onSome: (service) => Layer.succeed(OpenbotDelivery.CodingDelivery, service),
+                  }),
+                ),
+                Layer.provide(
+                  Option.match(openbot, {
+                    onNone: () => Layer.empty,
+                    onSome: (service) => Layer.succeed(Openbot.Integration, service),
+                  }),
+                ),
+                Layer.provide(
+                  Option.match(openbotCoding, {
+                    onNone: () => Layer.empty,
+                    onSome: (service) => Layer.succeed(OpenbotCoding.CodingBridge, service),
+                  }),
+                ),
+                Layer.provide(
+                  Option.match(sledTools, {
+                    onNone: () => Layer.empty,
+                    onSome: (service) => Layer.succeed(OpenbotSledTools.SledTools, service),
+                  }),
+                ),
+                Layer.provide(
+                  Layer.mergeAll(
+                    Option.match(maintenance, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) => Layer.succeed(OpenbotMaintenance.Maintenance, service),
+                    }),
+                    Option.match(upstream, {
+                      onNone: () => Layer.empty,
+                      onSome: (service) => Layer.succeed(OpenbotUpstream.UpstreamRuntime, service),
+                    }),
+                  ),
+                ),
+                Layer.provideMerge(RpcSerialization.layerJson),
+                // Handler-context reporters see only request defects, not server-wide defects.
+                Layer.provide(DefectReporter.layer),
+                Layer.provide(AcpRegistrySessions.layer),
+                Layer.provide(Layer.succeed(SqlClient.SqlClient, sql)),
+                Layer.provide(ProviderMaintenanceRunner.layer),
+                Layer.provide(Layer.succeed(RemoteDesktop.Service, remoteDesktop)),
+                Layer.provide(Layer.succeed(NpmRelease.NpmRelease, npmRelease)),
+                Layer.provide(Layer.succeed(ServerSelfUpdate.ServerSelfUpdate, serverSelfUpdate)),
+                // Share server-lifetime PR caches so WS mutations invalidate every client's HTTP diffs.
+                Layer.provide(Layer.succeed(PullRequestService.PullRequestService, pullRequests)),
+                Layer.provide(Layer.succeed(IssueService.IssueService, issues)),
+                Layer.provide(Layer.succeed(ThreadIssueService.ThreadIssueService, threadIssues)),
+                Layer.provide(
+                  Layer.succeed(IssueTrackerConnections.IssueTrackerConnections, issueTrackers),
+                ),
+                Layer.provide(OtlpEndpointCheck.layer),
+              )
+              .pipe(
+                Layer.provide(
+                  Layer.succeed(
+                    PullRequestReviewGuideService.PullRequestReviewGuideService,
+                    reviewGuides,
+                  ),
+                ),
+                Layer.provide(Layer.succeed(PeerLinks.PeerLinks, peerLinks)),
+                Layer.provide(Layer.succeed(PeerLinkRequests.PeerLinkRequests, peerLinkRequests)),
+                Layer.provide(
+                  SourceControlDiscovery.layer.pipe(
+                    Layer.provide(
+                      SourceControlProviderRegistry.layer.pipe(
+                        Layer.provide(SourceControlBuiltInDrivers.layer),
+                        Layer.provideMerge(GitVcsDriver.layer),
+                        Layer.provide(
+                          VcsDriverRegistry.layer.pipe(Layer.provide(VcsProjectConfig.layer)),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
           ),
         );
         const framedRpcWebSocketHttpEffect = url.value.searchParams.has(

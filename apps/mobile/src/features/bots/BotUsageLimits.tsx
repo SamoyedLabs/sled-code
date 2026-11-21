@@ -12,6 +12,8 @@ import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { SettingsSection } from "../settings/components/SettingsSection";
 import { BotGlass, useBotPalette } from "./upstream/BotChrome";
+import { m } from "../../i18n/messages";
+import { T, Var, msg, useGT } from "gt-react-native";
 
 const Finite = Schema.Number.check(Schema.isFinite());
 const Window = Schema.Struct({
@@ -59,7 +61,7 @@ function remainingAtEvenPace({ windowDurationMins, resetsAt }: typeof Window.Typ
 }
 
 function duration(minutes: number | null) {
-  if (!minutes) return "Plan limit";
+  if (!minutes) return m(msg("Plan limit"));
   const [count, unit] =
     minutes % 1440 === 0
       ? [minutes / 1440, "day"]
@@ -203,6 +205,7 @@ export function BotUsageLimitsButton({
   hostId: string | null;
   offline: boolean;
 }) {
+  const gt = useGT();
   const live = usePlanLimitRows({ environmentId, hostId });
   const [last, setLast] = useState(() => rememberedByEnvironment.get(environmentId) ?? null);
   const [showDetails, setShowDetails] = useState(false);
@@ -223,9 +226,11 @@ export function BotUsageLimitsButton({
       <BotGlass>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Plan limits, ${rows.map((row) => `${providerName(row.id)} ${row.remaining}% left`).join(", ")}`}
+          accessibilityLabel={gt("Plan limits, {value}", {
+            value: rows.map((row) => `${providerName(row.id)} ${row.remaining}% left`).join(", "),
+          })}
           accessibilityState={{ disabled: offline }}
-          accessibilityHint={offline ? "Last reading before the host disconnected" : undefined}
+          accessibilityHint={offline ? gt("Last reading before the host disconnected") : undefined}
           disabled={offline}
           onPress={() => setShowDetails(true)}
           className="h-11 min-w-11 flex-row items-center justify-center gap-0.5 px-1 active:opacity-60"
@@ -237,7 +242,7 @@ export function BotUsageLimitsButton({
         </Pressable>
       </BotGlass>
       {!offline && showDetails && (
-        <Sheet title="Plan limits" onClose={() => setShowDetails(false)}>
+        <Sheet title={gt("Plan limits")} onClose={() => setShowDetails(false)}>
           <ScreenScrollView
             contentInsetAdjustmentBehavior="automatic"
             contentContainerClassName="px-5 py-4"
@@ -256,6 +261,7 @@ export function BotUsageLimits(host: Host) {
 }
 
 function PlanLimitList({ rows, showTitle = true }: { rows: LimitRow[]; showTitle?: boolean }) {
+  const gt = useGT();
   const p = useBotPalette();
   const [now, setNow] = useState(Date.now);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Keep the pace marker in step with the wall clock while this view is open.
@@ -270,7 +276,7 @@ function PlanLimitList({ rows, showTitle = true }: { rows: LimitRow[]; showTitle
   });
   return (
     <SettingsSection
-      title={showTitle ? "Plan limits" : undefined}
+      title={showTitle ? gt("Plan limits") : undefined}
       footer="Current provider limits are independent of the report dates."
     >
       {rows.map((row) => (
@@ -287,15 +293,24 @@ function PlanLimitList({ rows, showTitle = true }: { rows: LimitRow[]; showTitle
               <View key={window.key} className="gap-1.5">
                 <View className="flex-row items-baseline justify-between gap-3">
                   <Text className="shrink text-sm">{window.label}</Text>
-                  <Text className="text-sm tabular-nums" style={{ color: remainingColor(remaining) }}>
-                    {remaining}% left
+                  <Text
+                    className="text-sm tabular-nums"
+                    style={{ color: remainingColor(remaining) }}
+                  >
+                    <T>
+                      <Var>{remaining}</Var>% left
+                    </T>
                   </Text>
                 </View>
                 <View
                   className="h-1.5 justify-center"
                   accessible
                   accessibilityRole="progressbar"
-                  accessibilityLabel={`${window.label}, ${remaining}% left${pace === null ? "" : `, even pace ${Math.round(pace)}%`}`}
+                  accessibilityLabel={gt("{label}, {remaining}% left{value}", {
+                    label: window.label,
+                    remaining,
+                    value: pace === null ? "" : `, even pace ${Math.round(pace)}%`,
+                  })}
                   accessibilityValue={{ min: 0, max: 100, now: remaining }}
                 >
                   <View className="h-full overflow-hidden rounded-full">
@@ -317,7 +332,9 @@ function PlanLimitList({ rows, showTitle = true }: { rows: LimitRow[]; showTitle
                 </View>
                 {reset && Number.isFinite(reset.getTime()) && (
                   <Text className="text-xs text-foreground-muted">
-                    Resets {formatter.format(reset)}
+                    <T>
+                      Resets <Var>{formatter.format(reset)}</Var>
+                    </T>
                   </Text>
                 )}
               </View>

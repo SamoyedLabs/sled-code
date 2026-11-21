@@ -20,6 +20,7 @@ import {
 import { useSuggestionScroll } from "./useSuggestionScroll";
 import { t } from "./text";
 import "./first-agent-setup.css";
+import { T, useGT } from "gt-react";
 const COLORS = {
   0: "Red",
   30: "Orange",
@@ -47,6 +48,7 @@ export function FirstAgentSetup(props: {
   onCancel?: undefined | (() => void);
   onManageProviders?: undefined | (() => void);
 }) {
+  const gt = useGT();
   const suggestionList = useRef<HTMLUListElement>(null);
   const value = props.value,
     disabled = props.busy || props.blocked,
@@ -88,7 +90,7 @@ export function FirstAgentSetup(props: {
             disabled={props.busy}
             onClick={props.onCancel}
           >
-            Cancel
+            <T>Cancel</T>
           </SourceButton>
         )}
       </header>
@@ -240,12 +242,12 @@ export function FirstAgentSetup(props: {
           </div>
           {(props.error || !props.canCreate) && (
             <p className="first-agent-error" role="alert">
-              {props.error ?? "You do not have permission to create an agent on this host."}
+              {props.error ?? gt("You do not have permission to create an agent on this host.")}
             </p>
           )}
           {props.onOpenCreated && (
             <SourceButton disabled={props.busy} onClick={() => void props.onOpenCreated?.()}>
-              Open created agent
+              <T>Open created agent</T>
             </SourceButton>
           )}
           <div className="first-agent-submit-actions">

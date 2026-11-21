@@ -35,6 +35,7 @@ import {
 } from "./upstream/provider/usage-format";
 import "./upstream/provider/AgentUsage.css";
 import "./upstream/provider/SourceControls.css";
+import { useGT } from "gt-react";
 const text = currentText();
 const { t } = text;
 function range(days: number) {
@@ -63,6 +64,7 @@ export function ReactBotUsage({
   initialAgentId?: string;
   onBack?: () => void;
 }) {
+  const gt = useGT();
   const [agentId, setAgentId] = useState(initialAgentId ?? "");
   const [period, setPeriod] = useState<UsagePeriod>("30d");
   const [metric, setMetric] = useState<UsageMetric>("cost");
@@ -124,7 +126,7 @@ export function ReactBotUsage({
             <button
               type="button"
               className="ui-button ui-icon-button"
-              aria-label="Back"
+              aria-label={gt("Back")}
               onClick={onBack}
             >
               <ArrowLeftIcon aria-hidden="true" />

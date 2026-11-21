@@ -44,12 +44,14 @@ import { Picker } from "../settings/BotConnectionControls";
 import { SettingsSection } from "../settings/components/SettingsSection";
 import { useBotTemplates } from "../settings/useBotTemplates";
 import { BotAvatar } from "./upstream/BotAvatar";
+import { m } from "../../i18n/messages";
+import { T, Var, msg, useGT } from "gt-react-native";
 
 type Scope = { environmentId: EnvironmentId; hostId: string };
 type Tab = "agents" | "skills";
 const tabs = [
-  { value: "agents", label: "Agents" },
-  { value: "skills", label: "Skills" },
+  { value: "agents", label: m(msg("Agents")) },
+  { value: "skills", label: m(msg("Skills")) },
 ] as const;
 const listCategories = Object.entries(CATEGORY_LABELS).map(([id, name]) => ({ id, name }));
 const agentList = { operation: "agent.list" } as const;
@@ -115,7 +117,12 @@ export function BotMarketplace(scope: Scope) {
       return result.value;
     },
   };
-  if (!canBrowse) return <Text>You need settings access to browse this server’s catalog.</Text>;
+  if (!canBrowse)
+    return (
+      <Text>
+        <T>You need settings access to browse this server’s catalog.</T>
+      </Text>
+    );
   return (
     <MarketplacePanel
       key={JSON.stringify([environmentId, hostId])}
@@ -152,6 +159,7 @@ function MarketplacePanel({
   templates: TemplateActions;
   agents: readonly Agent[];
 }) {
+  const gt = useGT();
   const [tab, setTab] = useState<Tab>("agents");
   const [text, setText] = useState("");
   const [category, setCategory] = useState<Category | "all">("all");
@@ -209,7 +217,7 @@ function MarketplacePanel({
         if (generation.current === ticket)
           setFailure({
             key: requestKey,
-            detail: cause instanceof Error ? cause.message : "Could not load the catalog.",
+            detail: cause instanceof Error ? cause.message : gt("Could not load the catalog."),
           });
       })
       .finally(() => {
@@ -236,7 +244,7 @@ function MarketplacePanel({
   const scopeKey = JSON.stringify([scope.environmentId, scope.hostId]);
   return selection ? (
     <View className="gap-4">
-      <Button tone="text" label="Back to Marketplace" onPress={() => setSelection(null)} />
+      <Button tone="text" label={gt("Back to Marketplace")} onPress={() => setSelection(null)} />
       <Text className="text-2xl font-t3-semibold">{selection.value.name}</Text>
       <Text className="text-foreground-muted">{selection.value.creatorName}</Text>
       <Text>{selection.value.description}</Text>
@@ -261,8 +269,8 @@ function MarketplacePanel({
     <View className="gap-4">
       <SegmentedControl selected={tab} options={tabs} onSelect={setTab} />
       <AppTextInput
-        accessibilityLabel="Search Marketplace"
-        placeholder={tab === "agents" ? "Search agents" : "Search skills"}
+        accessibilityLabel={gt("Search Marketplace")}
+        placeholder={tab === "agents" ? gt("Search agents") : gt("Search skills")}
         value={text}
         maxLength={256}
         onChangeText={setText}
@@ -270,7 +278,7 @@ function MarketplacePanel({
       />
       <View className="flex-row flex-wrap items-center justify-between gap-2">
         <Picker
-          label="Category"
+          label={gt("Category")}
           disabled={false}
           value={category}
           options={[{ id: "all", name: "All categories" }, ...listCategories]}
@@ -281,7 +289,7 @@ function MarketplacePanel({
         <Button
           tone="text"
           icon="arrow.clockwise"
-          label="Refresh catalog"
+          label={gt("Refresh catalog")}
           disabled={loading}
           onPress={() => void read()}
         />
@@ -289,14 +297,16 @@ function MarketplacePanel({
       {error && <Text accessibilityRole="alert">{error}</Text>}
       {!current && !error && (
         <Text accessibilityRole="progressbar" className="text-foreground-muted">
-          Loading catalog…
+          <T>Loading catalog…</T>
         </Text>
       )}
       {current && rows.length === 0 && !loading && (
-        <Text className="text-foreground-muted">No matches</Text>
+        <Text className="text-foreground-muted">
+          <T>No matches</T>
+        </Text>
       )}
       {rows.length > 0 && (
-        <SettingsSection title={tab === "agents" ? "Agents" : "Skills"}>
+        <SettingsSection title={tab === "agents" ? gt("Agents") : gt("Skills")}>
           {rows.map((row) => (
             <Pressable
               key={row.value.id}
@@ -312,11 +322,7 @@ function MarketplacePanel({
                   size={38}
                 />
               ) : (
-                <SymbolView
-                  name="cube"
-                  size={24}
-                  tintColorClassName="accent-foreground-muted"
-                />
+                <SymbolView name="cube" size={24} tintColorClassName="accent-foreground-muted" />
               )}
               <View className="min-w-0 flex-1 gap-1">
                 <Text className="font-t3-semibold" numberOfLines={1}>
@@ -333,7 +339,7 @@ function MarketplacePanel({
           ))}
           {current?.next && (
             <ListRow
-              label="Load more"
+              label={gt("Load more")}
               disabled={loading}
               onPress={() => void read(current.next ?? undefined)}
             />
@@ -355,6 +361,7 @@ function AgentListing({
   actions: TemplateActions;
   agents: readonly Agent[];
 }) {
+  const gt = useGT();
   const c = useBotTemplates(scopeKey, actions);
   const [operationId, setOperationId] = useState(randomUUID);
   const review = { operation: "templates.listing" as const, listingId: listing.value.id };
@@ -381,7 +388,7 @@ function AgentListing({
   const recovery = templateHistoryRequest(c.state);
   return (
     <>
-      <SettingsSection title="Included">
+      <SettingsSection title={gt("Included")}>
         <View className="gap-2 px-4 py-3">
           {info?.skills.map((skill) => (
             <Text key={skill.slug}>{skill.name}</Text>
@@ -389,12 +396,15 @@ function AgentListing({
           {info?.routines.map((routine) => (
             <Text key={routine.name}>
               {routine.name}
-              {routine.active ? " (active)" : ""}
+              {routine.active ? gt(" (active)") : ""}
             </Text>
           ))}
           {!info && (
             <Text className="text-foreground-muted">
-              {listing.value.skillCount} skills · {listing.value.routineCount} routines
+              <T>
+                <Var>{listing.value.skillCount}</Var> skills ·{" "}
+                <Var>{listing.value.routineCount}</Var> routines
+              </T>
             </Text>
           )}
         </View>
@@ -403,20 +413,24 @@ function AgentListing({
       {c.state.notice && <Text accessibilityRole="status">{c.state.notice}</Text>}
       {c.state.uncertain ? (
         <Button
-          label="Check installation status"
+          label={gt("Check installation status")}
           disabled={c.busy || !actions.can(recovery)}
           onPress={() => void c.run(recovery)}
         />
       ) : (
         <Button
-          label={installed ? "Update agent" : "Add agent"}
+          label={installed ? gt("Update agent") : gt("Add agent")}
           disabled={c.busy || !request || !actions.can(request)}
           onPress={() => {
             if (!request || !info) return;
             Dialog.confirm({
-              title: installed ? "Update this agent?" : "Add this agent?",
-              message: `${listing.value.name} includes ${info.skills.length} skills and ${info.routines.length} routines.`,
-              confirmText: installed ? "Update" : "Add agent",
+              title: installed ? gt("Update this agent?") : gt("Add this agent?"),
+              message: gt("{name} includes {length} skills and {length2} routines.", {
+                name: listing.value.name,
+                length: info.skills.length,
+                length2: info.routines.length,
+              }),
+              confirmText: installed ? gt("Update") : gt("Add agent"),
               onConfirm: () =>
                 void c.run(request).then((ok) => {
                   if (ok) setOperationId(randomUUID());
@@ -438,6 +452,7 @@ function SkillListing({
   actions: SettingsActions;
   agents: readonly Agent[];
 }) {
+  const gt = useGT();
   const [detail, setDetail] = useState<SkillDetail | null>(null);
   const [agentId, setAgentId] = useState("");
   const [installed, setInstalled] = useState<{ agentId: string; version: number } | null>(null);
@@ -453,7 +468,7 @@ function SkillListing({
         await whenReady("settings.local-catalog.skill", { skillId: listing.value.id }),
       );
     } catch {
-      if (active.current) setError("Could not open this skill.");
+      if (active.current) setError(gt("Could not open this skill."));
       return;
     }
     if (next.id === listing.value.id && active.current) setDetail(next);
@@ -481,10 +496,12 @@ function SkillListing({
   return (
     <>
       {detail && (
-        <SettingsSection title="Skill details">
+        <SettingsSection title={gt("Skill details")}>
           <View className="gap-2 px-4 py-3">
             <Text>
-              Version {detail.version} · {detail.files.length} files
+              <T>
+                Version <Var>{detail.version}</Var> · <Var>{detail.files.length}</Var> files
+              </T>
             </Text>
             {detail.instructions && (
               <Text className="text-foreground-muted">{detail.instructions}</Text>
@@ -494,7 +511,7 @@ function SkillListing({
       )}
       {agents.length > 0 && (
         <Picker
-          label="Add to agent"
+          label={gt("Add to agent")}
           disabled={busy}
           value={agentId}
           options={agents.map(({ id, name }) => ({ id, name }))}
@@ -503,10 +520,14 @@ function SkillListing({
       )}
       {error && <Text accessibilityRole="alert">{error}</Text>}
       {installed?.agentId === agentId && (
-        <Text accessibilityRole="status">Version {installed.version} installed</Text>
+        <Text accessibilityRole="status">
+          <T>
+            Version <Var>{installed.version}</Var> installed
+          </T>
+        </Text>
       )}
       <Button
-        label="Add skill"
+        label={gt("Add skill")}
         disabled={busy || !install || !actions.can(install) || installed?.agentId === agentId}
         onPress={() => {
           if (!detail || !install || installing.current) return;
@@ -527,7 +548,7 @@ function SkillListing({
             })
             .catch(() => {
               if (active.current)
-                setError("The skill install could not be confirmed. Check the agent’s skills.");
+                setError(gt("The skill install could not be confirmed. Check the agent’s skills."));
             })
             .finally(() => {
               installing.current = false;

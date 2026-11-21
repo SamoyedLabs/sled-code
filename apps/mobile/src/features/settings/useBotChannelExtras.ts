@@ -6,8 +6,10 @@ import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime"
 import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { useGT } from "gt-react-native";
 
 export function useBotChannelExtras(environmentId: EnvironmentId, hostId: string) {
+  const gt = useGT();
   const [channelId, setChannelId] = useState("");
   const [routineId, setRoutineId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +82,9 @@ export function useBotChannelExtras(environmentId: EnvironmentId, hostId: string
       else refresh();
     } catch {
       setError(
-        "The channel request could not complete. Refresh to check the saved state before retrying.",
+        gt(
+          "The channel request could not complete. Refresh to check the saved state before retrying.",
+        ),
       );
     }
     lock.current = false;

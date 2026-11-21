@@ -18,6 +18,7 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { Switch } from "../ui/switch";
 import { BotSettingsAdvanced } from "./BotSettingsAdvanced";
 import { botSettingDescriptions, botSettingsSections } from "./botSettingsSections";
+import { T, Var, useGT } from "gt-react";
 
 export function BotSettings({
   agentId,
@@ -30,6 +31,7 @@ export function BotSettings({
   actions: SettingsActions;
   content?: Readonly<Partial<Record<string, ReactNode>>>;
 }) {
+  const gt = useGT();
   const [selected, setSelected] = useState("general");
   const forms = SETTING_FORMS.filter(
     (form) => form.agent === Boolean(agentId) && capabilities.includes(`${form.id}-v1`),
@@ -45,20 +47,22 @@ export function BotSettings({
   if (!current)
     return (
       <div role="status" className="rounded-xl bg-muted/30 p-6 text-sm text-muted-foreground">
-        This host does not expose {agentId ? "bot" : "host"} settings yet.
+        <T>
+          This host does not expose <Var>{agentId ? "bot" : "host"}</Var> settings yet.
+        </T>
       </div>
     );
   return (
     <section
-      aria-label={agentId ? "Bot settings" : "Host settings"}
+      aria-label={agentId ? gt("Bot settings") : gt("Host settings")}
       className="grid min-w-0 gap-6 md:grid-cols-[196px_minmax(0,1fr)] md:gap-8"
     >
       <aside className="min-w-0">
         <p className="mb-3 px-3 text-xs font-medium text-muted-foreground">
-          {agentId ? "Bot settings" : "Host settings"}
+          {agentId ? gt("Bot settings") : gt("Host settings")}
         </p>
         <nav
-          aria-label={agentId ? "Bot settings sections" : "Host settings sections"}
+          aria-label={agentId ? gt("Bot settings sections") : gt("Host settings sections")}
           className="flex gap-1 overflow-x-auto md:flex-col"
         >
           {sections.map((section) => {
@@ -86,7 +90,9 @@ export function BotSettings({
           <h2 className="text-balance text-xl font-semibold">{current.label}</h2>
           <p className="mt-1 text-pretty text-sm text-muted-foreground">{current.description}</p>
           {!agentId && (
-            <p className="mt-2 text-xs text-muted-foreground">Applies to the connected host.</p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              <T>Applies to the connected host.</T>
+            </p>
           )}
         </header>
         {forms.map((form) => (
@@ -121,6 +127,7 @@ function BotSettingForm({
   agentId: string | undefined;
   actions: SettingsActions;
 }) {
+  const gt = useGT();
   const c = useBotSettings(actions);
   const id = useId();
   const [drafts, setDrafts] = useState<Readonly<Record<string, Json>>>({});
@@ -174,17 +181,17 @@ function BotSettingForm({
       </h3>
       {!canRead ? (
         <p className="rounded-xl bg-muted/30 p-4 text-sm text-muted-foreground">
-          You need permission to read these settings on this host.
+          <T>You need permission to read these settings on this host.</T>
         </p>
       ) : value === undefined ? (
         <div className="rounded-xl bg-muted/30 p-4">
           <p role="status" className="text-sm text-muted-foreground">
-            {c.busy ? "Loading settings…" : "Settings haven’t loaded."}
+            {c.busy ? gt("Loading settings…") : gt("Settings haven’t loaded.")}
           </p>
           {!c.busy && (
             <div className="mt-3">
               <Button size="sm" variant="outline" onClick={() => void load()}>
-                Try again
+                <T>Try again</T>
               </Button>
             </div>
           )}
@@ -235,7 +242,7 @@ function BotSettingForm({
                         value={
                           typeof fieldValue(field) === "string" ? String(fieldValue(field)) : ""
                         }
-                        placeholder="System default"
+                        placeholder={gt("System default")}
                         onChange={(event) =>
                           change(event.target.value || (field.nullable ? null : ""))
                         }
@@ -260,7 +267,7 @@ function BotSettingForm({
                           aria-label={field.label}
                           aria-describedby={`${fieldId}-description`}
                         >
-                          <SelectValue placeholder="No options available" />
+                          <SelectValue placeholder={gt("No options available")} />
                         </SelectTrigger>
                         <SelectPopup>
                           {options.map((option) => (
@@ -285,12 +292,12 @@ function BotSettingForm({
         <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
           {!canSave && (
             <p className="mr-auto text-xs text-muted-foreground">
-              Host settings permission is required to make changes.
+              <T>Host settings permission is required to make changes.</T>
             </p>
           )}
           {saved && (
             <p role="status" className="mr-auto text-xs text-muted-foreground">
-              Saved
+              <T>Saved</T>
             </p>
           )}
           <Button
@@ -302,10 +309,10 @@ function BotSettingForm({
               void load();
             }}
           >
-            {dirty ? "Discard changes" : "Reload"}
+            {dirty ? gt("Discard changes") : gt("Reload")}
           </Button>
           <Button size="sm" disabled={c.busy || !dirty || !canSave} onClick={() => void update()}>
-            {c.busy ? "Working…" : "Save changes"}
+            {c.busy ? gt("Working…") : gt("Save changes")}
           </Button>
         </div>
       )}

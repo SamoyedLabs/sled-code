@@ -21,6 +21,7 @@ import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { useGT } from "gt-react";
 
 const decodePresentations = Schema.decodeUnknownOption(OpenbotChannelPresentations);
 export function useBotChannels(
@@ -30,6 +31,7 @@ export function useBotChannels(
   initialChannelId?: string,
   initialCreate = false,
 ) {
+  const gt = useGT();
   const [selected, setSelected] = useState<string | null>(initialChannelId ?? null);
   const [edit, setEdit] = useState<ChannelEdit | null>(() =>
     initialCreate ? channelNewDraft(newId()) : null,
@@ -118,7 +120,7 @@ export function useBotChannels(
     receipts.current.set(key, id);
     const request = channelAdminRequest(input, id);
     if (!request) {
-      setError("Complete the channel settings before continuing.");
+      setError(gt("Complete the channel settings before continuing."));
       return;
     }
     lock.current = true;
@@ -126,7 +128,7 @@ export function useBotChannels(
     setError(null);
     setNotice(null);
     const result = await admin({ environmentId, input: { hostId, request } }).catch(() => null);
-    if (!result) setError("The channel request could not complete. Retry the same action.");
+    if (!result) setError(gt("The channel request could not complete. Retry the same action."));
     else if (result._tag === "Failure") setError(String(squashAtomCommandFailure(result)));
     else {
       receipts.current.delete(key);
@@ -137,7 +139,7 @@ export function useBotChannels(
         setText("");
         setReply(null);
       } else if (request.operation === "channel.restore")
-        setNotice("Channel restored. Paused tasks can be resumed individually.");
+        setNotice(gt("Channel restored. Paused tasks can be resumed individually."));
       else if (request.operation === "channel.delete") {
         setSelected(null);
         setEdit(null);
@@ -157,7 +159,7 @@ export function useBotChannels(
     if (!request) return false;
     const result = await settlePromise(() => admin({ environmentId, input: { hostId, request } }));
     if (result._tag === "Failure" || result.value._tag === "Failure") {
-      setError("Could not update the read status. Use Mark read to retry.");
+      setError(gt("Could not update the read status. Use Mark read to retry."));
       return false;
     }
     listQuery.refresh();
@@ -180,12 +182,12 @@ export function useBotChannels(
         request: { operation: "channel.read", channelId: selected, beforeSequence: olderCursor },
       },
     }).catch(() => null);
-    if (!result) setError("Could not load older channel messages.");
+    if (!result) setError(gt("Could not load older channel messages."));
     else if (result._tag === "Failure") setError(String(squashAtomCommandFailure(result)));
     else {
       const value = channelPage(result.value);
       if (value?.channel.id === selected) setPages((previous) => [...previous, value]);
-      else setError("The engine returned an unsupported channel history page.");
+      else setError(gt("The engine returned an unsupported channel history page."));
     }
     setBusy(false);
     lock.current = false;
@@ -250,7 +252,7 @@ export function useBotChannels(
       setBusy(false);
       if (settled._tag === "Failure") {
         const cause = squashAtomCommandFailure(settled);
-        setError(cause instanceof Error ? cause.message : "Could not find the unread message.");
+        setError(cause instanceof Error ? cause.message : gt("Could not find the unread message."));
         return false;
       }
       return settled.value;
@@ -299,7 +301,9 @@ export function useBotChannels(
           void act(input);
         } else
           setError(
-            "Channel settings changed or are incomplete. Review the current settings before saving.",
+            gt(
+              "Channel settings changed or are incomplete. Review the current settings before saving.",
+            ),
           );
       }
     },

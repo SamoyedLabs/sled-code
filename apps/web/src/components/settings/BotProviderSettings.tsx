@@ -17,6 +17,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { openbot } from "../../state/openbot";
 import { BotProviderChoice } from "./BotProviderChoice";
 import { Button } from "../ui/button";
+import { T, Var, useGT } from "gt-react";
 
 export function BotProviderSettings({
   environmentId,
@@ -27,6 +28,7 @@ export function BotProviderSettings({
   hostId: string;
   agentId: string;
 }) {
+  const gt = useGT();
   const modelsQuery = useEnvironmentQuery(
     openbot.readFromHost({
       environmentId,
@@ -79,7 +81,7 @@ export function BotProviderSettings({
     else if (request.operation === "provider.accounts.list") {
       const value = providerAccounts(result.value);
       setAccounts(value);
-      if (!value) setError("This engine returned unsupported account settings.");
+      if (!value) setError(gt("This engine returned unsupported account settings."));
     } else {
       if (request.operation === "agent.update") setDraft(null);
       agentsQuery.refresh();
@@ -98,8 +100,10 @@ export function BotProviderSettings({
   const assigned =
     accounts?.agents.find((agent) => agent.agentId === agentId)?.accountId ?? "default";
   return (
-    <section aria-label="Bot provider settings" className="space-y-3 rounded-lg border p-4">
-      <h4 className="text-sm font-medium">Provider and model</h4>
+    <section aria-label={gt("Bot provider settings")} className="space-y-3 rounded-lg border p-4">
+      <h4 className="text-sm font-medium">
+        <T>Provider and model</T>
+      </h4>
       {(error || modelsQuery.error || statusQuery.error || agentsQuery.error) && (
         <p role="alert" className="text-sm text-destructive">
           {error ?? modelsQuery.error ?? statusQuery.error ?? agentsQuery.error}
@@ -109,7 +113,7 @@ export function BotProviderSettings({
         <>
           {current?.pendingRuntime && (
             <p className="text-sm text-muted-foreground">
-              A runtime change is queued until this bot's current work ends.
+              <T>A runtime change is queued until this bot's current work ends.</T>
             </p>
           )}
           <BotProviderChoice
@@ -127,14 +131,14 @@ export function BotProviderSettings({
               if (request) void run(request);
             }}
           >
-            Save provider and model
+            <T>Save provider and model</T>
           </Button>
         </>
       ) : (
         <p className="text-sm text-muted-foreground">
           {agentsQuery.isPending || modelsQuery.isPending || statusQuery.isPending
-            ? "Loading provider settings…"
-            : "Provider settings are unavailable. Refresh before editing."}
+            ? gt("Loading provider settings…")
+            : gt("Provider settings are unavailable. Refresh before editing.")}
         </p>
       )}
       <Button
@@ -146,23 +150,27 @@ export function BotProviderSettings({
           agentsQuery.refresh();
         }}
       >
-        Refresh providers
+        <T>Refresh providers</T>
       </Button>
       <div className="space-y-2">
-        <h5 className="text-sm font-medium">Account for this bot</h5>
+        <h5 className="text-sm font-medium">
+          <T>Account for this bot</T>
+        </h5>
         <Button
           variant="outline"
           size="sm"
           disabled={busy || !canAccounts}
           onClick={() => void run({ operation: "provider.accounts.list" })}
         >
-          Load accounts
+          <T>Load accounts</T>
         </Button>
         {accounts && accountProvider && (
           <>
             <p className="text-sm text-muted-foreground">
-              Accounts belong to {current?.provider ?? "this provider"}. Manage sign-ins from
-              Provider setup.
+              <T>
+                Accounts belong to <Var>{current?.provider ?? gt("this provider")}</Var>. Manage
+                sign-ins from Provider setup.
+              </T>
             </p>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -173,7 +181,7 @@ export function BotProviderSettings({
                   void run({ operation: "provider.account.assign", agentId, accountId: null })
                 }
               >
-                Provider's own sign-in
+                <T>Provider's own sign-in</T>
               </Button>
               {accountOptions
                 .filter((account) => account.id !== "default")

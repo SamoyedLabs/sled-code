@@ -9,6 +9,7 @@ import {
   type SharedTablesProps,
 } from "../bots/upstream/data/SharedTables";
 import { HostedSites } from "../bots/upstream/data/HostedSites";
+import { useGT } from "gt-react";
 
 type Props = {
   actions: DataActions;
@@ -18,15 +19,16 @@ type Props = {
   modal?: { open: boolean; onOpenChange: (open: boolean) => void } | undefined;
 };
 export function BotData({ workspace = false, ...props }: Props) {
+  const gt = useGT();
   const [expanded, setExpanded] = useState(false);
   return (
     <section
-      aria-label={props.view === "sites" ? "Published sites" : "Tables"}
+      aria-label={props.view === "sites" ? gt("Published sites") : gt("Tables")}
       className="openbot-react min-w-0"
     >
       {!workspace && !props.modal && (
         <Button variant="outline" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
-          {props.view === "sites" ? "Published sites" : "Tables"}
+          {props.view === "sites" ? gt("Published sites") : gt("Tables")}
         </Button>
       )}
       {(workspace || expanded || props.modal?.open) && <DataPanel {...props} />}
@@ -34,6 +36,7 @@ export function BotData({ workspace = false, ...props }: Props) {
   );
 }
 function DataPanel({ actions, agents, view = "tables", modal }: Props) {
+  const gt = useGT();
   const data = useBotData(actions);
   const tableProps: SharedTablesProps = {
     agents,
@@ -41,7 +44,7 @@ function DataPanel({ actions, agents, view = "tables", modal }: Props) {
     loading: data.tables === null && data.busy,
     error: actions.canReadTables
       ? data.errors.tables
-      : "You don’t have permission to view tables on this host.",
+      : gt("You don’t have permission to view tables on this host."),
     confirmName: data.pending?.operation === "tables.delete" ? data.pending.name : null,
     deletingName:
       data.busy && data.pending?.operation === "tables.delete" ? data.pending.name : null,

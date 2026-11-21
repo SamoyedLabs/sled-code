@@ -12,6 +12,7 @@ import {
   type HighlightedCode,
 } from "./codeHighlighting";
 import "./SourceCodeBlock.css";
+import { useGT } from "gt-react";
 
 export function SourceCodeBlock({
   code,
@@ -24,6 +25,7 @@ export function SourceCodeBlock({
   filename?: string | undefined;
   streaming?: boolean | undefined;
 }) {
+  const gt = useGT();
   const [result, setResult] = useState(() => ({
     language: codeLanguage(language),
     lines: plainCodeLines(code),
@@ -60,7 +62,9 @@ export function SourceCodeBlock({
   return (
     <section
       className="message-code-block"
-      aria-label={`${codeLanguageLabel(language)} code block`}
+      aria-label={gt("{codeLanguageLabel} code block", {
+        codeLanguageLabel: codeLanguageLabel(language),
+      })}
     >
       <header className="message-code-header">
         <div className="message-code-heading">
@@ -71,7 +75,7 @@ export function SourceCodeBlock({
           <button
             type="button"
             className="ui-button message-code-copy"
-            aria-label={copied ? "Copied code" : "Copy code"}
+            aria-label={copied ? gt("Copied code") : gt("Copy code")}
             onClick={() => {
               void writeTextToClipboard(code, namedClipboardTarget("code")).then(
                 () => {
@@ -91,7 +95,7 @@ export function SourceCodeBlock({
                 <CheckIcon />
               </span>
             </span>
-            <span>{copied ? "Copied" : "Copy"}</span>
+            <span>{copied ? gt("Copied") : gt("Copy")}</span>
           </button>
         </div>
       </header>

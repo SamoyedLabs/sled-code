@@ -19,6 +19,8 @@ import { Sheet } from "../../components/ui/Sheet";
 import { beginForegroundHandoff } from "../../lib/foreground-handoff";
 import { chooseBotFile } from "./useBotFileUpload";
 import { SettingsSection } from "./components/SettingsSection";
+import { m } from "../../i18n/messages";
+import { T, Var, msg, useGT } from "gt-react-native";
 
 export type BotVaultCode = { code: string; period: number; expiresAt: number };
 type CodePanelProps = {
@@ -75,21 +77,28 @@ function useClock(enabled: boolean) {
 }
 
 export function BotVaultCodePanel({ live, busy, onRefresh }: CodePanelProps) {
+  const gt = useGT();
   const now = useClock(live !== null);
   const remaining = live ? Math.max(0, Math.ceil((live.expiresAt - now) / 1000)) : 0;
   const code = live && remaining > 0 ? live.code : null;
   return (
-    <SettingsSection title="Verification code">
+    <SettingsSection title={gt("Verification code")}>
       <View className="gap-2 px-4 py-3">
         <Text className="text-2xl font-t3-semibold tabular-nums">
-          {code ? groupedTwoStepCode(code) : "No code yet"}
+          {code ? groupedTwoStepCode(code) : gt("No code yet")}
         </Text>
-        {code && <Text className="text-foreground-muted">Changes in {remaining}s</Text>}
+        {code && (
+          <Text className="text-foreground-muted">
+            <T>
+              Changes in <Var>{remaining}</Var>s
+            </T>
+          </Text>
+        )}
         <View className="flex-row flex-wrap gap-2">
           {code && (
             <Button
               size="compact"
-              label="Copy code"
+              label={gt("Copy code")}
               onPress={() => {
                 if (live && Date.now() < live.expiresAt) void Clipboard.setStringAsync(code);
               }}
@@ -97,7 +106,7 @@ export function BotVaultCodePanel({ live, busy, onRefresh }: CodePanelProps) {
           )}
           <Button
             size="compact"
-            label={busy ? "Loading…" : "Refresh code"}
+            label={busy ? gt("Loading…") : gt("Refresh code")}
             disabled={busy}
             onPress={onRefresh}
           />
@@ -114,6 +123,7 @@ export function BotVaultTwoStepSetup({
   onApply: (key: string) => void;
   onClose: () => void;
 }) {
+  const gt = useGT();
   const [input, setInput] = useState("");
   const [step, setStep] = useState<"input" | "scan" | "check">("input");
   const [error, setError] = useState<string | null>(null);
@@ -148,7 +158,7 @@ export function BotVaultTwoStepSetup({
         if (active) setDraft({ key, live });
       },
       () => {
-        if (active) setError("Could not generate a verification code.");
+        if (active) setError(m(msg("Could not generate a verification code.")));
       },
     );
     return () => {
@@ -157,7 +167,7 @@ export function BotVaultTwoStepSetup({
   }, [key, interval]);
   const acceptKey = (value: string) => {
     if (!parseTwoStepKey(value)) {
-      setError("Enter a valid setup key or a time-based verification QR code.");
+      setError(gt("Enter a valid setup key or a time-based verification QR code."));
       return false;
     }
     setInput(value);
@@ -178,10 +188,10 @@ export function BotVaultTwoStepSetup({
       if (!lifetime.active) return;
       const keyText = codes.find(({ data }) => parseTwoStepKey(data))?.data;
       if (keyText) acceptKey(keyText);
-      else setError("No verification setup QR code was found in this image.");
+      else setError(gt("No verification setup QR code was found in this image."));
     })()
       .catch(() => {
-        if (lifetime.active) setError("Could not read the selected image.");
+        if (lifetime.active) setError(gt("Could not read the selected image."));
       })
       .finally(() => {
         lifetime.photo = false;
@@ -190,7 +200,7 @@ export function BotVaultTwoStepSetup({
   };
   return (
     <Sheet
-      title={step === "check" ? "Check verification code" : "Two-step verification"}
+      title={step === "check" ? gt("Check verification code") : gt("Two-step verification")}
       onClose={onClose}
     >
       <ScreenScrollView
@@ -202,10 +212,10 @@ export function BotVaultTwoStepSetup({
         {step === "input" && (
           <>
             <Text className="text-foreground-muted">
-              Enter the setup key from your site or scan its QR code.
+              <T>Enter the setup key from your site or scan its QR code.</T>
             </Text>
             <AppTextInput
-              accessibilityLabel="Verification setup key"
+              accessibilityLabel={gt("Verification setup key")}
               className="min-h-12 rounded-xl bg-grouped-card px-4"
               secureTextEntry
               autoCapitalize="none"
@@ -216,17 +226,21 @@ export function BotVaultTwoStepSetup({
                 setInput(value);
                 setError(null);
               }}
-              placeholder="Setup key"
+              placeholder={gt("Setup key")}
             />
-            <Button label="Check code" disabled={!input.trim()} onPress={() => acceptKey(input)} />
             <Button
-              label="Choose QR image"
+              label={gt("Check code")}
+              disabled={!input.trim()}
+              onPress={() => acceptKey(input)}
+            />
+            <Button
+              label={gt("Choose QR image")}
               icon="photo"
               disabled={reading}
               onPress={() => void chooseImage()}
             />
             <Button
-              label="Scan QR code"
+              label={gt("Scan QR code")}
               icon="camera"
               disabled={reading}
               onPress={() => {
@@ -239,10 +253,10 @@ export function BotVaultTwoStepSetup({
                     if (result.granted) {
                       scanned.current = false;
                       setStep("scan");
-                    } else setError("Allow camera access to scan the verification QR code.");
+                    } else setError(gt("Allow camera access to scan the verification QR code."));
                   })
                   .catch(() => {
-                    if (lifetime.active) setError("Could not open the camera.");
+                    if (lifetime.active) setError(gt("Could not open the camera."));
                   })
                   .finally(() => {
                     lifetime.photo = false;
@@ -261,32 +275,35 @@ export function BotVaultTwoStepSetup({
                 if (!scanned.current) scanned.current = acceptKey(data);
               }}
             />
-            <Button label="Back to setup key" tone="text" onPress={() => setStep("input")} />
+            <Button label={gt("Back to setup key")} tone="text" onPress={() => setStep("input")} />
           </>
         )}
         {step === "check" && (
           <>
             <Text className="text-foreground-muted">
-              Enter this code on the site to check the key.
+              <T>Enter this code on the site to check the key.</T>
             </Text>
-            <SettingsSection title="Verification code">
+            <SettingsSection title={gt("Verification code")}>
               <View className="gap-2 px-4 py-3">
                 <Text className="text-2xl font-t3-semibold tabular-nums">
-                  {current ? groupedTwoStepCode(current.code) : "No code yet"}
+                  {current ? groupedTwoStepCode(current.code) : gt("No code yet")}
                 </Text>
                 {current && (
                   <Text className="text-foreground-muted">
-                    Changes in {Math.max(0, Math.ceil((current.expiresAt - now) / 1000))}s
+                    <T>
+                      Changes in{" "}
+                      <Var>{Math.max(0, Math.ceil((current.expiresAt - now) / 1000))}</Var>s
+                    </T>
                   </Text>
                 )}
               </View>
             </SettingsSection>
             <Button
-              label="Use this key"
+              label={gt("Use this key")}
               disabled={!current}
               onPress={() => onApply(input.trim())}
             />
-            <Button label="Back to setup key" tone="text" onPress={() => setStep("input")} />
+            <Button label={gt("Back to setup key")} tone="text" onPress={() => setStep("input")} />
           </>
         )}
       </ScreenScrollView>

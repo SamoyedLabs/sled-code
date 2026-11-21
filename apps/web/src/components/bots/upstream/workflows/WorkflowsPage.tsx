@@ -80,6 +80,7 @@ import { INK_WIDTH, INK_STEP, inkPath, overlaps, union, type Box } from "./workf
 import "./workflows.css";
 import "./workflow-nodes.css";
 import "./workflows-adapter.css";
+import { T, Var, useGT } from "gt-react";
 
 type Graph = OpenbotWorkflowGraph;
 type Node = Graph["nodes"][number];
@@ -139,6 +140,7 @@ function WorkflowCanvas({
   hostId: string;
   onBack?: () => void;
 }) {
+  const gt = useGT();
   const c = useBotWorkflows(environmentId, hostId, randomUUID);
   const catalogs = useWorkflowCatalogs(environmentId, hostId, c.canManage);
   const clipboard = useSyncExternalStore(subscribeCanvasCopy, readCanvasCopy);
@@ -605,7 +607,7 @@ function WorkflowCanvas({
     if (next) {
       change(next.graph);
       setSelection(next.ids);
-    } else c.reportError("This copy would exceed the canvas size limit.");
+    } else c.reportError(gt("This copy would exceed the canvas size limit."));
   }
   function fit() {
     if (!graph?.nodes.length) {
@@ -636,7 +638,9 @@ function WorkflowCanvas({
       change(next);
       setConnection(null);
     } else
-      c.reportError("These ports cannot connect. Choose compatible content and a different step.");
+      c.reportError(
+        gt("These ports cannot connect. Choose compatible content and a different step."),
+      );
   }
   function undoEdit() {
     const previous = undo.at(-1);
@@ -655,18 +659,18 @@ function WorkflowCanvas({
   const currentRun = c.activeRun;
   const stepFor = (id: string) => currentRun?.steps.findLast((step) => step.nodeId === id);
   const tools = [
-    { id: "select" as const, label: "Select", Icon: MousePointer2 },
-    { id: "pan" as const, label: "Pan", Icon: Hand },
-    { id: "draw" as const, label: "Draw", Icon: Pencil },
-    { id: "note" as const, label: "Sticky note", Icon: StickyNote },
-    { id: "shape" as const, label: "Shape", Icon: Square },
+    { id: "select" as const, label: gt("Select"), Icon: MousePointer2 },
+    { id: "pan" as const, label: gt("Pan"), Icon: Hand },
+    { id: "draw" as const, label: gt("Draw"), Icon: Pencil },
+    { id: "note" as const, label: gt("Sticky note"), Icon: StickyNote },
+    { id: "shape" as const, label: gt("Shape"), Icon: Square },
   ];
   return (
     <main
       className="wfn-stage wfn-canvas"
       data-frame="window"
       data-tool={tool}
-      aria-label="Workflows"
+      aria-label={gt("Workflows")}
       onCopy={(event) => {
         if (!graph || !selection.length || hasTextSelection()) return;
         const key = randomUUID();
@@ -789,7 +793,7 @@ function WorkflowCanvas({
           }}
           className="wfn-viewport"
           tabIndex={0}
-          aria-label="Workflow canvas"
+          aria-label={gt("Workflow canvas")}
           onPointerLeave={() => setEraser(null)}
           onPointerDown={(event) => pointerDown(event)}
           onPointerMove={pointerMove}
@@ -821,7 +825,7 @@ function WorkflowCanvas({
               } as CSSProperties
             }
           >
-            <svg className="wfn-react-connections" aria-label="Workflow connections">
+            <svg className="wfn-react-connections" aria-label={gt("Workflow connections")}>
               {graph?.edges.map((edge) => {
                 const from = graph.nodes.find((node) => node.id === edge.from),
                   to = graph.nodes.find((node) => node.id === edge.to);
@@ -841,7 +845,10 @@ function WorkflowCanvas({
                     <path
                       role="button"
                       tabIndex={0}
-                      aria-label={`Disconnect ${workflowNodeTitle(graph, edge.from)} from ${workflowNodeTitle(graph, edge.to)}`}
+                      aria-label={gt("Disconnect {workflowNodeTitle} from {workflowNodeTitle2}", {
+                        workflowNodeTitle: workflowNodeTitle(graph, edge.from),
+                        workflowNodeTitle2: workflowNodeTitle(graph, edge.to),
+                      })}
                       d={`M${x},${y} C${x + 100},${y} ${endX - 100},${endY} ${endX},${endY}`}
                       fill="none"
                       stroke="transparent"
@@ -998,7 +1005,7 @@ function WorkflowCanvas({
                       <div className="wfn-react-node-actions">
                         <button
                           className="wfn-tool-action"
-                          aria-label={node.locked ? "Unlock step" : "Lock step"}
+                          aria-label={node.locked ? gt("Unlock step") : gt("Lock step")}
                           disabled={!editable}
                           onClick={() =>
                             change({
@@ -1013,7 +1020,7 @@ function WorkflowCanvas({
                         </button>
                         <button
                           className="wfn-tool-action"
-                          aria-label="Delete step"
+                          aria-label={gt("Delete step")}
                           disabled={!editable || node.locked}
                           onClick={() => {
                             change(workflowRemoveNode(graph, node.id));
@@ -1076,9 +1083,9 @@ function WorkflowCanvas({
                           <Play size={12} />
                           {node.kind === "trigger"
                             ? node.fields.trigger === "manual"
-                              ? "Run workflow"
-                              : "Run now"
-                            : "Run step"}
+                              ? gt("Run workflow")
+                              : gt("Run now")
+                            : gt("Run step")}
                         </button>
                       )}
                     {stepFor(node.id) && (
@@ -1105,7 +1112,10 @@ function WorkflowCanvas({
                           <span key={type} className="wfn-port-slot" data-side="in">
                             <button
                               className="wfn-port"
-                              aria-label={`Connect ${type} to ${nodeName(node)}`}
+                              aria-label={gt("Connect {type} to {nodeName}", {
+                                type,
+                                nodeName: nodeName(node),
+                              })}
                               disabled={!editable || !connection || connection.type !== type}
                               data-target={connection?.type === type ? "" : undefined}
                               onClick={() => connect(node.id)}
@@ -1125,7 +1135,10 @@ function WorkflowCanvas({
                           <span key={port} className="wfn-port-slot" data-side="out">
                             <button
                               className="wfn-port"
-                              aria-label={`Connect ${port} from ${nodeName(node)}`}
+                              aria-label={gt("Connect {port} from {nodeName}", {
+                                port,
+                                nodeName: nodeName(node),
+                              })}
                               disabled={!editable}
                               data-armed={connection?.from === node.id ? "" : undefined}
                               onClick={() =>
@@ -1167,7 +1180,10 @@ function WorkflowCanvas({
                         data-corner={handle}
                         data-side={handle.length === 1 ? "" : undefined}
                         data-wfn-resize={node.id}
-                        aria-label={`Resize ${nodeName(node)} ${handle}`}
+                        aria-label={gt("Resize {nodeName} {handle}", {
+                          nodeName: nodeName(node),
+                          handle,
+                        })}
                         onPointerDown={(event) => beginResize(event, node, handle)}
                         onDoubleClick={() =>
                           change({
@@ -1191,7 +1207,7 @@ function WorkflowCanvas({
             <ContextMenu.Popup
               className="ui-action-menu wfn-menu"
               ref={menuMotionRef(undefined)}
-              aria-label="Canvas actions"
+              aria-label={gt("Canvas actions")}
             >
               <ContextMenu.Item
                 disabled={!selection.length}
@@ -1201,7 +1217,7 @@ function WorkflowCanvas({
                   document.execCommand("copy");
                 }}
               >
-                Copy
+                <T>Copy</T>
               </ContextMenu.Item>
               <ContextMenu.Item
                 disabled={!editable || !selection.length}
@@ -1212,23 +1228,23 @@ function WorkflowCanvas({
                   deleteSelection();
                 }}
               >
-                Cut
+                <T>Cut</T>
               </ContextMenu.Item>
               <ContextMenu.Item disabled={!editable || !clipboard} onClick={() => paste()}>
-                Paste
+                <T>Paste</T>
               </ContextMenu.Item>
               <ContextMenu.Item
                 disabled={!editable || !selection.length}
                 onClick={() => paste(true)}
               >
-                Duplicate
+                <T>Duplicate</T>
               </ContextMenu.Item>
               <ContextMenu.Separator />
               <ContextMenu.Item
                 disabled={!graph?.nodes.length}
                 onClick={() => setSelection(graph?.nodes.map((node) => node.id) ?? [])}
               >
-                Select all
+                <T>Select all</T>
               </ContextMenu.Item>
               <ContextMenu.Item
                 disabled={!editable || !selection.length}
@@ -1246,7 +1262,7 @@ function WorkflowCanvas({
                   }
                 }}
               >
-                Lock / unlock selection
+                <T>Lock / unlock selection</T>
               </ContextMenu.Item>
               <ContextMenu.Item
                 disabled={!editable || !selection.length}
@@ -1262,9 +1278,11 @@ function WorkflowCanvas({
                     });
                 }}
               >
-                Reset size
+                <T>Reset size</T>
               </ContextMenu.Item>
-              <ContextMenu.Item onClick={fit}>Fit workflow</ContextMenu.Item>
+              <ContextMenu.Item onClick={fit}>
+                <T>Fit workflow</T>
+              </ContextMenu.Item>
               <ContextMenu.Separator />
               <ContextMenu.Item disabled={!editable || !selection.length} onClick={deleteSelection}>
                 Delete
@@ -1276,21 +1294,21 @@ function WorkflowCanvas({
       <div className="wfn-hud-top">
         <div className="wfn-hud wfn-hud-title">
           {onBack && (
-            <button className="wfn-hud-tool" aria-label="Back" onClick={onBack}>
+            <button className="wfn-hud-tool" aria-label={gt("Back")} onClick={onBack}>
               <ArrowLeft size={16} />
             </button>
           )}
           <Menu.Root>
             <Menu.Trigger className="wfn-hud-switcher">
               <span className="wfn-hud-switcher-name">
-                {c.detail?.summary.title ?? "Workflows"}
+                {c.detail?.summary.title ?? gt("Workflows")}
               </span>
               <ChevronDown size={13} />
             </Menu.Trigger>
             <MenuPopup align="start">
               <input
-                aria-label="Search workflows"
-                placeholder="Search workflows…"
+                aria-label={gt("Search workflows")}
+                placeholder={gt("Search workflows…")}
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
               />
@@ -1310,20 +1328,20 @@ function WorkflowCanvas({
               <Menu.Item
                 disabled={!c.canManage || c.busy || Boolean(c.draft)}
                 onClick={() =>
-                  void c.act({ operation: "workflow.create", title: "Untitled workflow" })
+                  void c.act({ operation: "workflow.create", title: gt("Untitled workflow") })
                 }
               >
                 <Plus size={14} />
-                New workflow
+                <T>New workflow</T>
               </Menu.Item>
               <Menu.Item
                 disabled={!c.detail || !editable || Boolean(c.draft)}
                 onClick={() => setRename(c.detail?.summary.title ?? "")}
               >
-                Rename
+                <T>Rename</T>
               </Menu.Item>
               <Menu.Item onClick={() => setPanel(panel === "versions" ? null : "versions")}>
-                Version history
+                <T>Version history</T>
               </Menu.Item>
               <Menu.Item
                 disabled={!c.detail || !editable || Boolean(c.draft)}
@@ -1339,7 +1357,7 @@ function WorkflowCanvas({
                 }}
               >
                 <Trash2 size={14} />
-                Delete workflow
+                <T>Delete workflow</T>
               </Menu.Item>
             </MenuPopup>
           </Menu.Root>
@@ -1357,13 +1375,19 @@ function WorkflowCanvas({
               }}
             >
               <input
-                aria-label="Workflow name"
+                aria-label={gt("Workflow name")}
                 value={rename}
                 maxLength={160}
                 onChange={(event) => setRename(event.target.value)}
               />
-              <button type="submit">Save</button>
-              <button type="button" aria-label="Cancel rename" onClick={() => setRename(null)}>
+              <button type="submit">
+                <T>Save</T>
+              </button>
+              <button
+                type="button"
+                aria-label={gt("Cancel rename")}
+                onClick={() => setRename(null)}
+              >
                 <X size={12} />
               </button>
             </form>
@@ -1373,12 +1397,14 @@ function WorkflowCanvas({
           <div className="wfn-hud">
             {currentRun && (
               <span className="wfn-react-run-status">
-                Run {currentRun.run.number} · {currentRun.run.status}
+                <T>
+                  Run <Var>{currentRun.run.number}</Var> · <Var>{currentRun.run.status}</Var>
+                </T>
               </span>
             )}
             <button
               className="wfn-hud-tool"
-              aria-label="Run history"
+              aria-label={gt("Run history")}
               aria-pressed={panel === "history"}
               onClick={() => setPanel(panel === "history" ? null : "history")}
             >
@@ -1393,7 +1419,7 @@ function WorkflowCanvas({
                 }
               >
                 <Square size={13} />
-                Stop
+                <T>Stop</T>
               </button>
             ) : (
               <button
@@ -1409,7 +1435,7 @@ function WorkflowCanvas({
                 onClick={() => c.start("workflow.startRun")}
               >
                 <Play size={13} />
-                Run
+                <T>Run</T>
               </button>
             )}
           </div>
@@ -1422,11 +1448,11 @@ function WorkflowCanvas({
             <>
               <span>
                 {c.draft.conflict
-                  ? "A newer version exists. Your draft is retained."
-                  : "Unsaved changes"}
+                  ? gt("A newer version exists. Your draft is retained.")
+                  : gt("Unsaved changes")}
               </span>
               <button disabled={!editable || Boolean(c.draft.conflict)} onClick={c.save}>
-                Save
+                <T>Save</T>
               </button>
               <button
                 disabled={c.busy}
@@ -1436,7 +1462,7 @@ function WorkflowCanvas({
                   setRedo([]);
                 }}
               >
-                Discard
+                <T>Discard</T>
               </button>
               {c.draft.conflict && (
                 <button
@@ -1445,42 +1471,58 @@ function WorkflowCanvas({
                     if (conflict) c.setDraft(workflowDraft(conflict));
                   }}
                 >
-                  Use server version
+                  <T>Use server version</T>
                 </button>
               )}
             </>
           )}
-          {preview && <button onClick={() => setPreview(false)}>Close version preview</button>}
+          {preview && (
+            <button onClick={() => setPreview(false)}>
+              <T>Close version preview</T>
+            </button>
+          )}
         </div>
       )}
       {!graph && (
         <div className="wfn-react-empty">
           <h2>
-            {preview ? "Loading version…" : c.loading ? "Loading workflows…" : "Connect your work."}
+            {preview
+              ? gt("Loading version…")
+              : c.loading
+                ? gt("Loading workflows…")
+                : gt("Connect your work.")}
           </h2>
           {!c.loading && !preview && (
             <>
-              <p>Add a prompt, an agent, or a decision to build a workflow.</p>
+              <p>
+                <T>Add a prompt, an agent, or a decision to build a workflow.</T>
+              </p>
               <button
                 disabled={!c.canManage || c.busy}
                 onClick={() =>
-                  void c.act({ operation: "workflow.create", title: "Untitled workflow" })
+                  void c.act({ operation: "workflow.create", title: gt("Untitled workflow") })
                 }
               >
-                Create workflow
+                <T>Create workflow</T>
               </button>
-              <button onClick={c.refresh}>Retry</button>
+              <button onClick={c.refresh}>
+                <T>Retry</T>
+              </button>
             </>
           )}
         </div>
       )}
       {graph?.nodes.length === 0 && (
         <div className="wfn-react-empty">
-          <h2>Start with a step</h2>
-          <p>Add a prompt, then connect it to an agent.</p>
+          <h2>
+            <T>Start with a step</T>
+          </h2>
+          <p>
+            <T>Add a prompt, then connect it to an agent.</T>
+          </p>
           <button disabled={!editable} onClick={() => add("prompt")}>
             <Plus size={14} />
-            Add prompt
+            <T>Add prompt</T>
           </button>
         </div>
       )}
@@ -1501,7 +1543,7 @@ function WorkflowCanvas({
           <>
             <button
               className="wfn-hud-tool"
-              aria-label="Pen"
+              aria-label={gt("Pen")}
               aria-pressed={drawMode === "pen"}
               onClick={() => setDrawMode("pen")}
             >
@@ -1509,7 +1551,7 @@ function WorkflowCanvas({
             </button>
             <button
               className="wfn-hud-tool"
-              aria-label="Marker"
+              aria-label={gt("Marker")}
               aria-pressed={drawMode === "marker"}
               onClick={() => setDrawMode("marker")}
             >
@@ -1517,7 +1559,7 @@ function WorkflowCanvas({
             </button>
             <button
               className="wfn-hud-tool"
-              aria-label="Eraser"
+              aria-label={gt("Eraser")}
               aria-pressed={drawMode === "eraser"}
               onClick={() => setDrawMode("eraser")}
             >
@@ -1527,7 +1569,7 @@ function WorkflowCanvas({
               <button
                 key={color}
                 className="wfn-hud-tool wfn-ink-swatch"
-                aria-label={`Ink ${color}`}
+                aria-label={gt("Ink {color}", { color })}
                 aria-pressed={inkColor === color}
                 onClick={() => {
                   setInkColor(color);
@@ -1552,7 +1594,7 @@ function WorkflowCanvas({
         {selection.length > 0 && (
           <button
             className="wfn-hud-tool"
-            aria-label="Duplicate selection"
+            aria-label={gt("Duplicate selection")}
             disabled={!editable}
             onClick={() => paste(true)}
           >
@@ -1561,7 +1603,7 @@ function WorkflowCanvas({
         )}
         <button
           className="wfn-hud-tool"
-          aria-label="Paste copied nodes"
+          aria-label={gt("Paste copied nodes")}
           disabled={!editable || !clipboard}
           onClick={() => paste()}
         >
@@ -1570,13 +1612,15 @@ function WorkflowCanvas({
         <Menu.Root>
           <Menu.Trigger className="wfn-hud-tool wfn-hud-add-button" disabled={!editable}>
             <Plus size={16} />
-            Add step
+            <T>Add step</T>
           </Menu.Trigger>
           <MenuPopup>
             {WORKFLOW_NODE_CHOICES.filter((kind) => kind !== "image" && kind !== "asset").map(
               (kind) => (
                 <Menu.Item key={kind} onClick={() => add(kind)}>
-                  {kind === "llm" ? "LLM Assistant" : kind.charAt(0).toUpperCase() + kind.slice(1)}
+                  {kind === "llm"
+                    ? gt("LLM Assistant")
+                    : kind.charAt(0).toUpperCase() + kind.slice(1)}
                 </Menu.Item>
               ),
             )}
@@ -1586,7 +1630,7 @@ function WorkflowCanvas({
       <div className="wfn-hud wfn-hud-zoom">
         <button
           className="wfn-hud-tool"
-          aria-label="Zoom out"
+          aria-label={gt("Zoom out")}
           onClick={() => setCamera({ ...camera, zoom: Math.max(0.25, camera.zoom / 1.2) })}
         >
           <Minus size={16} />
@@ -1594,17 +1638,17 @@ function WorkflowCanvas({
         <span>{Math.round(camera.zoom * 100)}%</span>
         <button
           className="wfn-hud-tool"
-          aria-label="Zoom in"
+          aria-label={gt("Zoom in")}
           onClick={() => setCamera({ ...camera, zoom: Math.min(2, camera.zoom * 1.2) })}
         >
           <Plus size={16} />
         </button>
-        <button className="wfn-hud-tool" aria-label="Fit workflow" onClick={fit}>
+        <button className="wfn-hud-tool" aria-label={gt("Fit workflow")} onClick={fit}>
           <Scan size={16} />
         </button>
         <button
           className="wfn-hud-tool"
-          aria-label="Undo"
+          aria-label={gt("Undo")}
           disabled={!editable || !undo.length}
           onClick={undoEdit}
         >
@@ -1612,7 +1656,7 @@ function WorkflowCanvas({
         </button>
         <button
           className="wfn-hud-tool"
-          aria-label="Redo"
+          aria-label={gt("Redo")}
           disabled={!editable || !redo.length}
           onClick={redoEdit}
         >
@@ -1621,18 +1665,20 @@ function WorkflowCanvas({
       </div>
       {connection && (
         <div className="wfn-react-connect" role="status">
-          Choose a matching input to connect.{" "}
-          <button onClick={() => setConnection(null)}>Cancel</button>
+          <T>Choose a matching input to connect.</T>{" "}
+          <button onClick={() => setConnection(null)}>
+            <T>Cancel</T>
+          </button>
         </div>
       )}
       {panel && (
         <aside
           className="wfn-react-history"
-          aria-label={panel === "history" ? "Run history" : "Version history"}
+          aria-label={panel === "history" ? gt("Run history") : gt("Version history")}
         >
           <header>
-            <h2>{panel === "history" ? "Run history" : "Version history"}</h2>
-            <button aria-label="Close history" onClick={() => setPanel(null)}>
+            <h2>{panel === "history" ? gt("Run history") : gt("Version history")}</h2>
+            <button aria-label={gt("Close history")} onClick={() => setPanel(null)}>
               <X size={16} />
             </button>
           </header>
@@ -1645,17 +1691,27 @@ function WorkflowCanvas({
                       aria-pressed={currentRun?.run.id === run.run.id}
                       onClick={() => c.inspectRun(run.run.id)}
                     >
-                      <span>Run {run.run.number}</span>
+                      <span>
+                        <T>
+                          Run <Var>{run.run.number}</Var>
+                        </T>
+                      </span>
                       <span>{run.run.status}</span>
                       <time>{new Date(run.run.startedAt).toLocaleString()}</time>
                     </button>
                   </li>
                 ))}
               </ul>
-              {c.runs?.runs.length === 0 && <p>No runs yet.</p>}
-              <button onClick={c.newest}>Newest</button>
+              {c.runs?.runs.length === 0 && (
+                <p>
+                  <T>No runs yet.</T>
+                </p>
+              )}
+              <button onClick={c.newest}>
+                <T>Newest</T>
+              </button>
               <button disabled={!c.runs?.nextBefore} onClick={c.older}>
-                Older
+                <T>Older</T>
               </button>
               {currentRun?.run.error && <p role="alert">{currentRun.run.error}</p>}
               {c.runs?.soloSteps.map((step) => (
@@ -1681,7 +1737,7 @@ function WorkflowCanvas({
                       setPreview(true);
                     }}
                   >
-                    Revision {version.revision} · {version.kind}
+                    <T>Revision</T> {version.revision} · {version.kind}
                     <time>{new Date(version.at).toLocaleString()}</time>
                   </button>
                   <button
@@ -1697,7 +1753,7 @@ function WorkflowCanvas({
                     }}
                   >
                     <RotateCcw size={12} />
-                    Restore
+                    <T>Restore</T>
                   </button>
                 </li>
               ))}
@@ -1725,7 +1781,9 @@ function StepResult({
     <div className="wfn-field wfn-field-result">
       <div className="wfn-field-head">
         <span>
-          {step.status} · attempt {step.attempt}
+          <T>
+            <Var>{step.status}</Var> · attempt <Var>{step.attempt}</Var>
+          </T>
         </span>
       </div>
       {step.output && <p>{step.output}</p>}
@@ -1737,21 +1795,21 @@ function StepResult({
       {step.status === "approval" && (
         <div>
           <button disabled={!canRun} onClick={() => onDecision(step.id, true)}>
-            Approve
+            <T>Approve</T>
           </button>
           <button disabled={!canRun} onClick={() => onDecision(step.id, false)}>
-            Decline
+            <T>Decline</T>
           </button>
         </div>
       )}
       {workflowRunCanStop(step.status) && (
         <button disabled={!canRun} onClick={() => onStop(step.id)}>
-          Stop step
+          <T>Stop step</T>
         </button>
       )}
       {["failed", "stopped"].includes(step.status) && (
         <button disabled={!canRun} onClick={() => onRetry(step.id)}>
-          Retry step
+          <T>Retry step</T>
         </button>
       )}
     </div>

@@ -17,6 +17,7 @@ import { writeLocalStorageValue } from "../../hooks/useLocalStorage";
 import type { MessageResolver } from "../../i18n/messages";
 import { commandLabel } from "./KeybindingsSettings.logic";
 import type { ResolvedSettingsScope } from "./settingsScope";
+import { m as i18nMessage } from "../../i18n/messages";
 
 export type SettingsPath =
   | "/settings/projects"
@@ -253,7 +254,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   })),
   {
     id: "bots",
-    title: "Bots",
+    title: i18nMessage(msg("Bots")),
     to: "/settings/bots",
     scope: "environment",
     searchTerms: ["openbot persistent teammates tasks memory routines"],

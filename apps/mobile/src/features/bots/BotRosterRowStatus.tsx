@@ -8,7 +8,11 @@ import { typeScale } from "./upstream/openbot-mobile/shared/lib/type-scale";
 // OpenBot 1.4.11 agent-wait-badge and agent-unread-badge presentation.
 const waitStyle = {
   prompt: { action: "Answer", state: "Waiting for your answer", icon: "questionmark.bubble" },
-  approval: { action: "Review", state: "Waiting for your approval", icon: "exclamationmark.shield" },
+  approval: {
+    action: "Review",
+    state: "Waiting for your approval",
+    icon: "exclamationmark.shield",
+  },
   takeover: { action: "Take over", state: "Waiting for you in the browser", icon: "safari" },
 } satisfies Record<BotRosterWait, { action: string; state: string; icon: AppSymbolName }>;
 
@@ -86,7 +90,10 @@ export function BotRosterWaitChip({ wait }: { wait: BotRosterWait }) {
       style={{ backgroundColor: p.warningSoft }}
     >
       <SymbolView name={waitStyle[wait].icon} size={13} tintColor={p.warningText} />
-      <Text numberOfLines={1} style={{ ...typeScale.small, color: p.warningText, fontWeight: "700" }}>
+      <Text
+        numberOfLines={1}
+        style={{ ...typeScale.small, color: p.warningText, fontWeight: "700" }}
+      >
         {waitStyle[wait].action}
       </Text>
     </View>

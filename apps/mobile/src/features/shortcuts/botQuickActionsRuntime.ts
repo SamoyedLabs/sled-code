@@ -18,6 +18,8 @@ import {
   type BotQuickActionKind,
   type BotShortcutComputer,
 } from "./botQuickActions";
+import { m } from "../../i18n/messages";
+import { msg } from "gt-react-native";
 
 const kindsKey = "sled.bots.quick-actions.v1";
 const recentsKey = "sled.bots.quick-actions.recents.v1";
@@ -115,7 +117,7 @@ export function installBotQuickActions(navigate: (href: string) => void) {
       whenMobileAppUnlocked(() => {
         void Share.share({
           url: "https://github.com/SamoyedLabs/sled-code",
-          title: "Sled Code",
+          title: m(msg("Sled Code")),
         }).catch(() => {});
       });
       return;

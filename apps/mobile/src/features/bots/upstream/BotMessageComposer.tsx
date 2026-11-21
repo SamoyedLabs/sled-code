@@ -8,6 +8,7 @@ import { useOpenBotFont } from "./OpenBotTypography";
 import { TextInput, View, useWindowDimensions, type TextInputInstance } from "react-native";
 import { useBotMotion } from "../botFeedback";
 import { BotGlass, BotIconButton, useBotPalette } from "./BotChrome";
+import { useGT } from "gt-react-native";
 
 const AnimatedComposerField = Animated.createAnimatedComponent(TextInput);
 
@@ -20,10 +21,11 @@ export function useBotKeyboardAvoidance(composerBottomPadding: number) {
 }
 
 export function BotScrollToLatest({ onPress }: { onPress: () => void }) {
+  const gt = useGT();
   return (
     <View style={{ position: "absolute", top: -46, alignSelf: "center", zIndex: 3 }}>
       <BotGlass>
-        <BotIconButton label="Scroll to latest" icon="arrow.down" onPress={onPress} />
+        <BotIconButton label={gt("Scroll to latest")} icon="arrow.down" onPress={onPress} />
       </BotGlass>
     </View>
   );
@@ -41,7 +43,7 @@ export function BotMessageComposer({
   showVoiceControl,
   onDictate,
   voiceLabel,
-  sendLabel = "Send message",
+  sendLabel: rawSendLabel,
 }: {
   label: string;
   text: string;
@@ -55,6 +57,8 @@ export function BotMessageComposer({
   voiceLabel?: string | undefined;
   sendLabel?: string;
 }) {
+  const gt = useGT();
+  const sendLabel = rawSendLabel ?? gt("Send message");
   const p = useBotPalette();
   const navigation = useNavigation();
   const { fontScale } = useWindowDimensions();
@@ -89,7 +93,7 @@ export function BotMessageComposer({
         <AnimatedComposerField
           ref={input}
           accessibilityLabel={label}
-          placeholder="Message…"
+          placeholder={gt("Message…")}
           placeholderTextColor={p.muted}
           multiline
           maxLength={100_000}
@@ -119,14 +123,14 @@ export function BotMessageComposer({
         />
         {showVoiceControl && action === "send" && actionDisabled && !text.trim() ? (
           <BotIconButton
-            label={voiceLabel ?? (onDictate ? "Dictate message" : "Voice settings")}
+            label={voiceLabel ?? (onDictate ? gt("Dictate message") : gt("Voice settings"))}
             icon="mic"
             onPress={onDictate ?? openVoiceSettings}
             onLongPress={onDictate ? openVoiceSettings : undefined}
           />
         ) : (
           <BotIconButton
-            label={action === "stop" ? "Stop turn" : sendLabel}
+            label={action === "stop" ? gt("Stop turn") : sendLabel}
             icon={action === "stop" ? "stop.fill" : "arrow.up"}
             filled={!actionDisabled}
             disabled={actionDisabled}

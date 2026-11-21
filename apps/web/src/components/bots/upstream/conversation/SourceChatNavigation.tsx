@@ -5,6 +5,7 @@ import { observeResize } from "../../../../lib/observeResize";
 import { useStableCallback } from "../../../../hooks/useStableCallback";
 import { tallyNewMessages, anchorNewMessages, type TimelineRow } from "./new-message-tally";
 import "./scroll-rail.css";
+import { T, Var, useGT } from "gt-react";
 
 export function useNewMessageTally(rows: readonly TimelineRow[], following: boolean) {
   const version = JSON.stringify(rows);
@@ -27,11 +28,18 @@ export function UnreadMessagesBanner({
   onJump: () => void;
   onRead: () => void;
 }) {
+  const gt = useGT();
   if (!count) return null;
   return (
-    <div className="unread-messages-banner" role="status" aria-label={`${count} new messages`}>
+    <div
+      className="unread-messages-banner"
+      role="status"
+      aria-label={gt("{count} new messages", { count })}
+    >
       <button type="button" className="ui-button unread-messages-jump" onClick={onJump}>
-        {count} new messages
+        <T>
+          <Var>{count}</Var> new messages
+        </T>
       </button>
       <button
         type="button"
@@ -40,26 +48,30 @@ export function UnreadMessagesBanner({
         onClick={onRead}
       >
         <span className="unread-messages-mark-read-label">
-          {busy ? "Marking…" : "Mark as read"}
+          {busy ? gt("Marking…") : gt("Mark as read")}
         </span>
       </button>
     </div>
   );
 }
 export function UnreadMessagesDivider() {
+  const gt = useGT();
   return (
     <div className="unread-messages-divider">
-      <hr aria-label="Unread messages" />
-      <span>New messages</span>
+      <hr aria-label={gt("Unread messages")} />
+      <span>
+        <T>New messages</T>
+      </span>
       <hr />
     </div>
   );
 }
 export function ScrollToLatestButton({ count, onJump }: { count: number; onJump: () => void }) {
+  const gt = useGT();
   return (
     <ScrollToEndButton
       bottom="calc(100% + 6px)"
-      summary={count > 0 ? `${count} new messages` : null}
+      summary={count > 0 ? gt("{count} new messages", { count }) : null}
       onScrollToEnd={onJump}
     />
   );
@@ -83,6 +95,7 @@ export function SourceChatScrollRail({
   sections: readonly ChatScrollSection[];
   onJump: (section: ChatScrollSection) => void;
 }) {
+  const gt = useGT();
   const [rail, setRail] = useState<RailState>({ shown: false, height: 0, inset: 0, lengths: [] });
   const [active, setActive] = useState(0);
   const [keyboardFocus, setKeyboardFocus] = useState(false);
@@ -276,7 +289,7 @@ export function SourceChatScrollRail({
       <nav
         ref={nav}
         className="chat-scroll-rail-nav"
-        aria-label="Conversation outline"
+        aria-label={gt("Conversation outline")}
         data-keyboard-focus={keyboardFocus ? "" : undefined}
         onFocusCapture={(event) => setKeyboardFocus(event.target.matches(":focus-visible"))}
         onBlurCapture={(event) => {
@@ -285,7 +298,9 @@ export function SourceChatScrollRail({
       >
         <span className="chat-scroll-rail-surface" aria-hidden="true" />
         <p className="chat-scroll-rail-eyebrow" aria-hidden="true">
-          <span>Conversation</span>
+          <span>
+            <T>Conversation</T>
+          </span>
           <span className="chat-scroll-rail-count">
             <span className="t-digit-group" key={active}>
               <span className={reduced() ? undefined : "t-digit"}>

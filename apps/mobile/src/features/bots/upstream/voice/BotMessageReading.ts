@@ -15,6 +15,8 @@ import { speechTextFromMarkdown } from "./speech-text";
 import { botElevenLabsSynthesizer, useBotElevenLabs } from "./botElevenLabs";
 import { botVoiceServerSynthesizer, useBotVoiceServer } from "./botVoiceServer";
 import { SPEECH_LANGUAGES, type SpeechLanguage } from "./speech-languages";
+import { m } from "../../../../i18n/messages";
+import { msg } from "gt-react-native";
 
 type Reading = {
   scope: string;
@@ -222,8 +224,10 @@ function startReading(
     else if (handlers.onError) handlers.onError();
     else
       Dialog.alert(
-        downloadOnly ? "Could not download the voice model" : "Could not read this message aloud",
-        "Check the speech download and try again.",
+        downloadOnly
+          ? m(msg("Could not download the voice model"))
+          : m(msg("Could not read this message aloud")),
+        m(msg("Check the speech download and try again.")),
       );
   };
   const done = () => {

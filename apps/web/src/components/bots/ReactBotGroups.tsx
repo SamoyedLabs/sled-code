@@ -83,6 +83,8 @@ import { MenuPopup } from "./upstream/OpenbotMenu";
 import { OpenbotSlidingTabs } from "./upstream/OpenbotSlidingTabs";
 import "../settings/bot-conversation.css";
 import "./group-conversation.css";
+import { m } from "../../i18n/messages";
+import { T, Var, msg, useGT } from "gt-react";
 
 type Props = {
   environmentId: EnvironmentId;
@@ -140,6 +142,7 @@ async function confirm(message: string) {
   );
 }
 function ChannelSettings({ controller }: { controller: Controller }) {
+  const gt = useGT();
   const edit = controller.edit;
   if (!edit) return null;
   const visible = new Set(controller.agents.map((agent) => agent.id));
@@ -148,9 +151,13 @@ function ChannelSettings({ controller }: { controller: Controller }) {
   const disabled = controller.busy || !controller.canManage;
   return (
     <div className="space-y-3">
-      <h3 className="text-base font-medium">{edit.update ? "Group settings" : "New group"}</h3>
+      <h3 className="text-base font-medium">
+        {edit.update ? gt("Group settings") : gt("New group")}
+      </h3>
       <label className="block space-y-1 text-sm">
-        <span>Group name</span>
+        <span>
+          <T>Group name</T>
+        </span>
         <Input
           value={edit.value.name}
           maxLength={80}
@@ -161,7 +168,9 @@ function ChannelSettings({ controller }: { controller: Controller }) {
         />
       </label>
       <label className="block space-y-1 text-sm">
-        <span>Title</span>
+        <span>
+          <T>Title</T>
+        </span>
         <Input
           value={edit.value.title}
           maxLength={120}
@@ -172,7 +181,9 @@ function ChannelSettings({ controller }: { controller: Controller }) {
         />
       </label>
       <label className="block space-y-1 text-sm">
-        <span>Shared instructions</span>
+        <span>
+          <T>Shared instructions</T>
+        </span>
         <Textarea
           value={edit.value.instructions}
           rows={4}
@@ -187,7 +198,9 @@ function ChannelSettings({ controller }: { controller: Controller }) {
         />
       </label>
       <fieldset className="space-y-2">
-        <legend className="text-sm">Member bots</legend>
+        <legend className="text-sm">
+          <T>Member bots</T>
+        </legend>
         {controller.agents.map((agent) => (
           <label key={agent.id} className="flex items-center gap-2 text-sm">
             <Checkbox
@@ -209,12 +222,16 @@ function ChannelSettings({ controller }: { controller: Controller }) {
       </fieldset>
       {unavailable.length > 0 && (
         <p className="text-sm text-muted-foreground">
-          {unavailable.length} unlisted {unavailable.length === 1 ? "member is" : "members are"}{" "}
-          retained. Changing visible members keeps them in this group.
+          <T>
+            <Var>{unavailable.length}</Var> unlisted{" "}
+            <Var>{unavailable.length === 1 ? gt("member is") : gt("members are")}</Var>
+            <Var> </Var>
+            retained. Changing visible members keeps them in this group.
+          </T>
         </p>
       )}
       <Choice
-        label="Lead bot"
+        label={gt("Lead bot")}
         value={edit.value.leadAgentId}
         empty="No lead"
         options={edit.value.members.map((member) => ({
@@ -229,13 +246,17 @@ function ChannelSettings({ controller }: { controller: Controller }) {
         }
       />
       <p className="text-sm text-muted-foreground">
-        Removing a member pauses its unfinished work. Messages use the lead, an @mention, or a
-        selected recipient.
+        <T>
+          Removing a member pauses its unfinished work. Messages use the lead, an @mention, or a
+          selected recipient.
+        </T>
       </p>
       {controller.conflict && (
         <p role="alert" className="text-sm text-destructive">
-          The group settings changed. Your draft is retained; discard it to load the current
-          settings.
+          <T>
+            The group settings changed. Your draft is retained; discard it to load the current
+            settings.
+          </T>
         </p>
       )}
       <div className="flex flex-wrap gap-2">
@@ -244,7 +265,7 @@ function ChannelSettings({ controller }: { controller: Controller }) {
           disabled={disabled || controller.conflict || !edit.value.name.trim()}
           onClick={controller.save}
         >
-          {edit.update ? "Save settings" : "Create group"}
+          {edit.update ? gt("Save settings") : gt("Create group")}
         </Button>
         <Button
           variant="outline"
@@ -252,13 +273,14 @@ function ChannelSettings({ controller }: { controller: Controller }) {
           disabled={controller.busy}
           onClick={() => controller.setEdit(null)}
         >
-          Discard draft
+          <T>Discard draft</T>
         </Button>
       </div>
     </div>
   );
 }
 function TaskRow({ controller, task }: { controller: Controller; task: OpenbotChannelTask }) {
+  const gt = useGT();
   const [assignee, setAssignee] = useState<string | null>(null);
   const actions = channelTaskActions(task.state, controller.channel?.archived ?? true);
   const channel = controller.channel;
@@ -273,14 +295,17 @@ function TaskRow({ controller, task }: { controller: Controller; task: OpenbotCh
       <p className="text-sm font-medium">
         {task.ownerAgentId
           ? (controller.agents.find((agent) => agent.id === task.ownerAgentId)?.name ??
-            "Unlisted bot")
-          : "Waiting for assignment"}{" "}
+            gt("Unlisted bot"))
+          : gt("Waiting for assignment")}{" "}
         · {task.state}
       </p>
       <p className="whitespace-pre-wrap break-words text-sm">{task.instruction}</p>
       {task.dependencies.length > 0 && (
         <p className="text-sm text-muted-foreground">
-          Depends on {task.dependencies.length} {task.dependencies.length === 1 ? "task" : "tasks"}.
+          <T>
+            Depends on <Var>{task.dependencies.length}</Var>{" "}
+            <Var>{task.dependencies.length === 1 ? "task" : "tasks"}</Var>.
+          </T>
         </p>
       )}
       {task.error && (
@@ -301,7 +326,7 @@ function TaskRow({ controller, task }: { controller: Controller; task: OpenbotCh
               })
             }
           >
-            Stop task
+            <T>Stop task</T>
           </Button>
         )}
         {actions.includes("resume") && (
@@ -317,7 +342,7 @@ function TaskRow({ controller, task }: { controller: Controller; task: OpenbotCh
               })
             }
           >
-            Resume task
+            <T>Resume task</T>
           </Button>
         )}
         {actions.includes("cancel") && (
@@ -327,7 +352,9 @@ function TaskRow({ controller, task }: { controller: Controller; task: OpenbotCh
             disabled={disabled}
             onClick={() => {
               void confirm(
-                "Cancel this task's run and all of its delegated tasks? The conversation stays available.",
+                gt(
+                  "Cancel this task's run and all of its delegated tasks? The conversation stays available.",
+                ),
               ).then((approved) => {
                 if (approved)
                   void controller.act({
@@ -339,14 +366,14 @@ function TaskRow({ controller, task }: { controller: Controller; task: OpenbotCh
               });
             }}
           >
-            Cancel run
+            <T>Cancel run</T>
           </Button>
         )}
       </div>
       {actions.includes("reassign") && (
         <div className="space-y-2">
           <Choice
-            label="Reassign task to"
+            label={gt("Reassign task to")}
             value={assignee}
             options={options}
             empty="Choose a bot"
@@ -367,7 +394,7 @@ function TaskRow({ controller, task }: { controller: Controller; task: OpenbotCh
                 });
             }}
           >
-            Reassign task
+            <T>Reassign task</T>
           </Button>
         </div>
       )}
@@ -376,8 +403,8 @@ function TaskRow({ controller, task }: { controller: Controller; task: OpenbotCh
 }
 
 const PANEL_TABS = [
-  { value: "Files", label: "Files" },
-  { value: "Tasks", label: "Tasks" },
+  { value: "Files", label: m(msg("Files")) },
+  { value: "Tasks", label: m(msg("Tasks")) },
 ] as const;
 
 export function ReactBotGroups(props: Props) {
@@ -396,6 +423,7 @@ function GroupWorkspace({
   embedded = false,
   onSelectAgent,
 }: Props) {
+  const gt = useGT();
   const traceCompatibility = useEnvironmentQuery(
     openbot.readFromHost({
       environmentId,
@@ -510,7 +538,7 @@ function GroupWorkspace({
       : [],
   );
   if (projection.rows.length > messageLimit || c.olderCursor !== null)
-    railSections.unshift({ key: "", label: "Earlier messages", start: 0 });
+    railSections.unshift({ key: "", label: gt("Earlier messages"), start: 0 });
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- A read-only unread jump may load a page; scroll only after its original row enters the current virtualized timeline.
   useEffect(() => {
@@ -555,15 +583,17 @@ function GroupWorkspace({
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Each transcript revision can change DOM height even when the scroller instance stays the same.
   }, [channel?.id, c.messages.length, lastText, messageLimit]);
   return (
-    <section aria-label="Groups" className="ob-groups" aria-busy={c.busy}>
+    <section aria-label={gt("Groups")} className="ob-groups" aria-busy={c.busy}>
       {!embedded && (
         <aside className="flex w-56 shrink-0 flex-col border-r bg-muted/15 max-sm:w-40">
           <div className="flex h-14 items-center justify-between px-4">
-            <h2 className="text-sm font-semibold">Groups</h2>
+            <h2 className="text-sm font-semibold">
+              <T>Groups</T>
+            </h2>
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label="New group"
+              aria-label={gt("New group")}
               disabled={c.busy || !c.canManage || Boolean(c.edit)}
               onClick={() => {
                 c.create();
@@ -578,8 +608,8 @@ function GroupWorkspace({
               <SearchIcon className="size-3.5 shrink-0" aria-hidden="true" />
               <input
                 className="min-w-0 flex-1 bg-transparent text-xs outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-                aria-label="Search groups"
-                placeholder="Search groups"
+                aria-label={gt("Search groups")}
+                placeholder={gt("Search groups")}
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
               />
@@ -588,16 +618,16 @@ function GroupWorkspace({
           <div className="flex-1 overflow-y-auto px-2">
             {c.loading && !c.channels && (
               <p role="status" className="px-2 py-3 text-xs text-muted-foreground">
-                Loading groups…
+                <T>Loading groups…</T>
               </p>
             )}
             {groups?.length === 0 && (
               <p className="px-2 py-3 text-xs text-muted-foreground">
                 {search
-                  ? "No matching groups."
+                  ? gt("No matching groups.")
                   : archived
-                    ? "No archived groups."
-                    : "No groups yet."}
+                    ? gt("No archived groups.")
+                    : gt("No groups yet.")}
               </p>
             )}
             <ul className="space-y-1">
@@ -635,7 +665,9 @@ function GroupWorkspace({
                     {group.unreadCount > 0 && (
                       <span
                         className="rounded-full bg-primary px-1.5 text-3xs text-primary-foreground"
-                        aria-label={`${group.unreadCount} unread messages`}
+                        aria-label={gt("{unreadCount} unread messages", {
+                          unreadCount: group.unreadCount,
+                        })}
                       >
                         {group.unreadCount}
                       </span>
@@ -651,12 +683,12 @@ function GroupWorkspace({
                 checked={archived}
                 onCheckedChange={(value) => setArchived(Boolean(value))}
               />
-              Archived
+              <T>Archived</T>
             </label>
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label="Refresh groups"
+              aria-label={gt("Refresh groups")}
               onClick={c.refresh}
               disabled={c.busy}
             >
@@ -673,7 +705,7 @@ function GroupWorkspace({
               <button
                 type="button"
                 className="conversation-title channel-title"
-                aria-label="Group settings"
+                aria-label={gt("Group settings")}
                 aria-expanded={view === "Settings" || Boolean(c.edit)}
                 onClick={() => setView(view === "Settings" ? "Chat" : "Settings")}
                 data-avatar-hover
@@ -687,18 +719,22 @@ function GroupWorkspace({
                   />
                 )}
                 <span className="channel-header-copy">
-                  <h1>{c.edit && !c.edit.update ? "New group" : channel?.name}</h1>
+                  <h1>{c.edit && !c.edit.update ? gt("New group") : channel?.name}</h1>
                   {channel?.title && <span className="channel-header-title">{channel.title}</span>}
                 </span>
               </button>
             </div>
             {channel && (
               <div className="conversation-header-actions">
-                {channel.archived && <span className="ob-group-archived">Archived</span>}
+                {channel.archived && (
+                  <span className="ob-group-archived">
+                    <T>Archived</T>
+                  </span>
+                )}
                 <button
                   type="button"
                   className="header-panel-toggle"
-                  aria-label={pane ? "Close group panel" : "Open group files and tasks"}
+                  aria-label={pane ? gt("Close group panel") : gt("Open group files and tasks")}
                   aria-expanded={pane}
                   onClick={() => setView(pane ? "Chat" : "Files")}
                   disabled={Boolean(c.edit)}
@@ -723,14 +759,18 @@ function GroupWorkspace({
             )}
             {c.loading && c.selected && !channel && (
               <p role="status" className="ob-group-notice">
-                Loading conversation…
+                <T>Loading conversation…</T>
               </p>
             )}
             {!channel && !c.edit && !c.loading && (
               <div className="channel-empty">
                 <UsersIcon size={32} aria-hidden="true" />
-                <h2>Bring your bots together</h2>
-                <p>Create a group to share a conversation and let your bots work together.</p>
+                <h2>
+                  <T>Bring your bots together</T>
+                </h2>
+                <p>
+                  <T>Create a group to share a conversation and let your bots work together.</T>
+                </p>
                 <Button
                   size="sm"
                   disabled={!c.canManage || c.busy}
@@ -739,7 +779,7 @@ function GroupWorkspace({
                     setView("Settings");
                   }}
                 >
-                  Create group
+                  <T>Create group</T>
                 </Button>
               </div>
             )}
@@ -807,7 +847,7 @@ function GroupWorkspace({
                             setMessageLimit(messageLimit + 100);
                           }}
                         >
-                          Load older messages
+                          <T>Load older messages</T>
                         </Button>
                       )}
                     </div>
@@ -826,7 +866,7 @@ function GroupWorkspace({
                     <ol
                       ref={virtualRoot}
                       className="ob-group-messages virtual-chat-list"
-                      aria-label="Group messages"
+                      aria-label={gt("Group messages")}
                       style={{
                         position: "relative",
                         height: virtual.virtualized ? virtual.total : "auto",
@@ -897,7 +937,9 @@ function GroupWorkspace({
                                       <button
                                         type="button"
                                         className="ob-group-message-avatar-button"
-                                        aria-label={`Open chat with ${message.author.name}`}
+                                        aria-label={gt("Open chat with {name}", {
+                                          name: message.author.name,
+                                        })}
                                         onClick={() => onSelectAgent(agent.id)}
                                       >
                                         <BotAvatar
@@ -922,7 +964,9 @@ function GroupWorkspace({
                                         type="button"
                                         className="ob-group-author-link"
                                         onClick={() => onSelectAgent(agent.id)}
-                                        aria-label={`Open chat with ${message.author.name}`}
+                                        aria-label={gt("Open chat with {name}", {
+                                          name: message.author.name,
+                                        })}
                                       >
                                         {message.author.name}
                                       </button>
@@ -977,7 +1021,9 @@ function GroupWorkspace({
                                         {!message.message.text &&
                                           message.message.status === "streaming" && (
                                             <BotTypingIndicator
-                                              label={`${message.author.name} is working`}
+                                              label={gt("{name} is working", {
+                                                name: message.author.name,
+                                              })}
                                             />
                                           )}
                                         <BotStreamingMessage
@@ -1022,7 +1068,9 @@ function GroupWorkspace({
                                     <button
                                       type="button"
                                       className="ob-chat-action-button"
-                                      aria-label={`Reply to ${message.author.name}`}
+                                      aria-label={gt("Reply to {name}", {
+                                        name: message.author.name,
+                                      })}
                                       disabled={composeDisabled}
                                       onClick={() => {
                                         c.setReply(message.id);
@@ -1035,7 +1083,7 @@ function GroupWorkspace({
                                       type="button"
                                       className="ob-chat-action-button"
                                       aria-label={
-                                        copiedId === message.id ? "Copied" : "Copy message"
+                                        copiedId === message.id ? gt("Copied") : gt("Copy message")
                                       }
                                       onClick={() =>
                                         void writeTextToClipboard(
@@ -1046,7 +1094,7 @@ function GroupWorkspace({
                                             setCopiedId(message.id);
                                             setCopyError(null);
                                           },
-                                          () => setCopyError("Could not copy this message."),
+                                          () => setCopyError(gt("Could not copy this message.")),
                                         )
                                       }
                                     >
@@ -1059,7 +1107,9 @@ function GroupWorkspace({
                                     </span>
                                   )}
                                   {message.superseded && (
-                                    <span className="ob-group-earlier">Earlier attempt</span>
+                                    <span className="ob-group-earlier">
+                                      <T>Earlier attempt</T>
+                                    </span>
                                   )}
                                 </div>
                               </li>
@@ -1092,10 +1142,14 @@ function GroupWorkspace({
                                 size={32}
                               />
                             </div>
-                            <div className="ob-group-message-author">{agent?.name ?? "Bot"}</div>
+                            <div className="ob-group-message-author">
+                              {agent?.name ?? gt("Bot")}
+                            </div>
                             <div className="ob-chat-message-shell">
                               <div className="ob-chat-bubble-content">
-                                <BotTypingIndicator label={`${agent?.name ?? "Bot"} is working`} />
+                                <BotTypingIndicator
+                                  label={gt("{value} is working", { value: agent?.name ?? "Bot" })}
+                                />
                               </div>
                             </div>
                           </div>
@@ -1120,7 +1174,7 @@ function GroupWorkspace({
                       <section key={task.id} className="ob-group-paused-task">
                         <p>{task.error}</p>
                         <button type="button" onClick={() => setView("Tasks")}>
-                          Review task
+                          <T>Review task</T>
                         </button>
                         {channelTaskActions(task.state, channel.archived).includes("resume") &&
                           (!task.ownerAgentId ||
@@ -1139,7 +1193,7 @@ function GroupWorkspace({
                                 })
                               }
                             >
-                              Continue
+                              <T>Continue</T>
                             </button>
                           )}
                       </section>
@@ -1167,9 +1221,13 @@ function GroupWorkspace({
                     <div className="ob-chat-reply-preview">
                       <div>
                         <span>
-                          Replying to{" "}
-                          {c.messages.find((message) => message.id === c.reply)?.author.name ??
-                            "an earlier message"}
+                          <T>
+                            Replying to<Var> </Var>
+                            <Var>
+                              {c.messages.find((message) => message.id === c.reply)?.author.name ??
+                                gt("an earlier message")}
+                            </Var>
+                          </T>
                         </span>
                         <p className="ob-chat-reply-quote">
                           {c.messages
@@ -1179,7 +1237,7 @@ function GroupWorkspace({
                       </div>
                       <button
                         type="button"
-                        aria-label="Cancel reply"
+                        aria-label={gt("Cancel reply")}
                         onClick={() => c.setReply(null)}
                       >
                         <XIcon />
@@ -1208,16 +1266,16 @@ function GroupWorkspace({
                           disabled={composeDisabled}
                           placeholder={
                             channel.archived
-                              ? "Restore this group to continue the conversation"
-                              : "Message…"
+                              ? gt("Restore this group to continue the conversation")
+                              : gt("Message…")
                           }
                           attachments={[]}
                         />
                       ) : (
                         <div className="ob-chat-editor-root">
                           <textarea
-                            aria-label="Message group"
-                            placeholder="Add a bot to start a conversation"
+                            aria-label={gt("Message group")}
+                            placeholder={gt("Add a bot to start a conversation")}
                             value={c.text}
                             onChange={(event) => c.setText(event.target.value)}
                             disabled={composeDisabled}
@@ -1230,7 +1288,7 @@ function GroupWorkspace({
                       actions={
                         <>
                           <BotComposerRecipient
-                            label="Message recipient"
+                            label={gt("Message recipient")}
                             value={c.recipient ?? ""}
                             onChange={(id) => c.setRecipient(id || null)}
                             disabled={composeDisabled}
@@ -1256,7 +1314,7 @@ function GroupWorkspace({
                             disabled={disabled || channel.archived || Boolean(c.edit)}
                           />
                           <BotComposerSend
-                            aria-label="Send message"
+                            aria-label={gt("Send message")}
                             busy={c.busy}
                             disabled={composeDisabled || !c.text.trim()}
                           />
@@ -1266,18 +1324,18 @@ function GroupWorkspace({
                       <Menu>
                         <MenuTrigger
                           render={<ComposerControl className="size-8 px-0" />}
-                          aria-label="Add to group message"
+                          aria-label={gt("Add to group message")}
                         >
                           <PlusIcon />
                         </MenuTrigger>
                         <MenuPopup align="start" side="top">
                           <MenuItem onClick={() => setView("Files")}>
                             <FolderIcon />
-                            Group files
+                            <T>Group files</T>
                           </MenuItem>
                           <MenuItem onClick={() => setView("Tasks")}>
                             <ListTodoIcon />
-                            Group tasks
+                            <T>Group tasks</T>
                           </MenuItem>
                           <MenuItem
                             disabled={c.busy || !c.canSettings}
@@ -1290,11 +1348,11 @@ function GroupWorkspace({
                             }
                           >
                             <CheckCheckIcon />
-                            Mark read
+                            <T>Mark read</T>
                           </MenuItem>
                           <MenuItem disabled={c.busy} onClick={c.refresh}>
                             <RefreshCwIcon />
-                            Refresh
+                            <T>Refresh</T>
                           </MenuItem>
                         </MenuPopup>
                       </Menu>
@@ -1308,23 +1366,25 @@ function GroupWorkspace({
           {pane && (channel || c.edit) && (
             <GroupSidePanel
               settings={view === "Settings" || Boolean(c.edit)}
-              label={view === "Settings" || c.edit ? "Group settings" : "Group files and tasks"}
+              label={
+                view === "Settings" || c.edit ? gt("Group settings") : gt("Group files and tasks")
+              }
             >
               <div className="ob-group-panel-header">
                 {view === "Settings" || c.edit ? (
-                  <h2>{c.edit && !c.edit.update ? "New group" : "Group settings"}</h2>
+                  <h2>{c.edit && !c.edit.update ? gt("New group") : gt("Group settings")}</h2>
                 ) : (
                   <OpenbotSlidingTabs
                     value={view === "Tasks" ? "Tasks" : "Files"}
                     onChange={setView}
                     items={PANEL_TABS}
-                    label="Group panel"
+                    label={gt("Group panel")}
                   />
                 )}
                 <button
                   type="button"
                   className="ob-chat-action-button"
-                  aria-label="Close group panel"
+                  aria-label={gt("Close group panel")}
                   disabled={Boolean(c.edit)}
                   onClick={() => setView("Chat")}
                 >
@@ -1372,9 +1432,11 @@ function GroupWorkspace({
                                   size={24}
                                 />
                                 {c.agents.find((agent) => agent.id === member.agentId)?.name ??
-                                  "Unlisted bot"}
+                                  gt("Unlisted bot")}
                                 {member.agentId === channel.leadAgentId && (
-                                  <span className="text-xs text-muted-foreground">Lead</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    <T>Lead</T>
+                                  </span>
                                 )}
                               </li>
                             ))}
@@ -1385,13 +1447,13 @@ function GroupWorkspace({
                             disabled={c.busy || !c.canManage}
                             onClick={c.editSettings}
                           >
-                            Edit group
+                            <T>Edit group</T>
                           </Button>
                           <BotChannelExtras environmentId={environmentId} hostId={hostId} />
                           {(c.recipient ?? channel.leadAgentId) && (
                             <details>
                               <summary className="cursor-pointer text-sm">
-                                Background coding permission
+                                <T>Background coding permission</T>
                               </summary>
                               <div className="pt-3">
                                 <BotChannelGrants
@@ -1418,18 +1480,18 @@ function GroupWorkspace({
                                     channelId: channel.id,
                                   });
                                 else
-                                  void confirm("Archive this group? Running work will pause.").then(
-                                    (approved) => {
-                                      if (approved)
-                                        void c.act({
-                                          operation: "channel.archive",
-                                          channelId: channel.id,
-                                        });
-                                    },
-                                  );
+                                  void confirm(
+                                    gt("Archive this group? Running work will pause."),
+                                  ).then((approved) => {
+                                    if (approved)
+                                      void c.act({
+                                        operation: "channel.archive",
+                                        channelId: channel.id,
+                                      });
+                                  });
                               }}
                             >
-                              {channel.archived ? "Restore group" : "Archive group"}
+                              {channel.archived ? gt("Restore group") : gt("Archive group")}
                             </Button>
                             <Button
                               variant="destructive"
@@ -1437,7 +1499,7 @@ function GroupWorkspace({
                               disabled={disabled}
                               onClick={() => {
                                 void confirm(
-                                  "Delete this group and its history? Active work will stop.",
+                                  gt("Delete this group and its history? Active work will stop."),
                                 ).then((approved) => {
                                   if (approved)
                                     void c.act({
@@ -1447,7 +1509,7 @@ function GroupWorkspace({
                                 });
                               }}
                             >
-                              Delete group
+                              <T>Delete group</T>
                             </Button>
                           </div>
                         </>
@@ -1468,17 +1530,19 @@ function GroupWorkspace({
                     />
                   ) : (
                     <p className="text-sm text-muted-foreground">
-                      Add a bot to this group to share files.
+                      <T>Add a bot to this group to share files.</T>
                     </p>
                   )}
                 </div>
               ) : (
                 <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both p-6">
                   <div className="mx-auto max-w-2xl">
-                    <h3 className="mb-5 text-base font-medium">Group tasks</h3>
+                    <h3 className="mb-5 text-base font-medium">
+                      <T>Group tasks</T>
+                    </h3>
                     {c.tasks.length === 0 && (
                       <p className="text-sm text-muted-foreground">
-                        Tasks appear here when bots begin working in this group.
+                        <T>Tasks appear here when bots begin working in this group.</T>
                       </p>
                     )}
                     <ul className="space-y-6">
@@ -1494,7 +1558,7 @@ function GroupWorkspace({
                     </ul>
                     {c.tasks.length > taskLimit && (
                       <Button variant="ghost" onClick={() => setTaskLimit(taskLimit + 25)}>
-                        Show more tasks
+                        <T>Show more tasks</T>
                       </Button>
                     )}
                   </div>

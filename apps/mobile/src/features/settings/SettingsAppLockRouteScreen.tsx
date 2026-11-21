@@ -19,6 +19,7 @@ import { APP_LOCK_DELAYS, type AppLockDelay } from "../app-lock/appLockPolicy";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { SettingsSection } from "./components/SettingsSection";
 import * as Dialog from "../../components/ui/Dialog";
+import { T, useGT } from "gt-react-native";
 
 const delayNames: Record<AppLockDelay, string> = {
   0: "Immediately",
@@ -60,6 +61,7 @@ function LockToggle({
 }
 
 export function SettingsAppLockRouteScreen() {
+  const gt = useGT();
   const { config, status } = useMobileAppLock();
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState("");
@@ -88,7 +90,7 @@ export function SettingsAppLockRouteScreen() {
   };
   const disabled = busy || status !== "ready";
   return (
-    <SettingsScreen title="App Lock">
+    <SettingsScreen title={gt("App Lock")}>
       <ScreenScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerClassName="gap-5 px-5 py-4"
@@ -98,13 +100,13 @@ export function SettingsAppLockRouteScreen() {
             {failure}
           </Text>
         )}
-        <SettingsSection title="Unlock Sled">
+        <SettingsSection title={gt("Unlock Sled")}>
           <Pressable
             accessibilityRole="button"
             disabled={disabled}
             onPress={() => void act(() => setEdit(true))}
           >
-            <ListRowLayout label={config.pin ? "Change PIN" : "Set a PIN"} />
+            <ListRowLayout label={config.pin ? gt("Change PIN") : gt("Set a PIN")} />
           </Pressable>
           {!!config.pin && (
             <Pressable
@@ -113,19 +115,19 @@ export function SettingsAppLockRouteScreen() {
               onPress={() =>
                 void act(() =>
                   Dialog.confirm({
-                    title: "Remove PIN?",
-                    confirmText: "Remove PIN",
+                    title: gt("Remove PIN?"),
+                    confirmText: gt("Remove PIN"),
                     destructive: true,
                     onConfirm: () => void act(() => setMobileAppPin(null)),
                   }),
                 )
               }
             >
-              <ListRowLayout label="Remove PIN" />
+              <ListRowLayout label={gt("Remove PIN")} />
             </Pressable>
           )}
           <LockToggle
-            label={device ? `Unlock with ${device}` : "Device authentication"}
+            label={device ? gt("Unlock with {device}", { device }) : gt("Device authentication")}
             checked={config.useDevice}
             disabled={disabled || (!device && !config.useDevice)}
             onPress={() =>
@@ -140,7 +142,7 @@ export function SettingsAppLockRouteScreen() {
           />
         </SettingsSection>
         {(config.pin || config.useDevice) && (
-          <SettingsSection title="Automatic lock">
+          <SettingsSection title={gt("Automatic lock")}>
             <Menu
               actions={APP_LOCK_DELAYS.map((delay) => ({
                 id: String(delay),
@@ -152,10 +154,13 @@ export function SettingsAppLockRouteScreen() {
                 if (delay !== undefined) void act(() => saveMobileAppLock({ delay }));
               }}
             >
-              <ListRowLayout label="Lock after leaving" description={delayNames[config.delay]} />
+              <ListRowLayout
+                label={gt("Lock after leaving")}
+                description={delayNames[config.delay]}
+              />
             </Menu>
             <LockToggle
-              label="Lock when the phone locks"
+              label={gt("Lock when the phone locks")}
               checked={config.lockWithPhone}
               disabled={disabled}
               onPress={() =>
@@ -171,6 +176,7 @@ export function SettingsAppLockRouteScreen() {
 }
 
 function AppPinSheet({ onClose }: { onClose: () => void }) {
+  const gt = useGT();
   const [pin, setPin] = useState("");
   const [repeat, setRepeat] = useState("");
   const [busy, setBusy] = useState(false);
@@ -192,17 +198,17 @@ function AppPinSheet({ onClose }: { onClose: () => void }) {
   };
   const inputStyle = "min-h-12 rounded-xl border border-border bg-card px-4 text-foreground";
   return (
-    <Sheet title="App Lock PIN" onClose={onClose}>
+    <Sheet title={gt("App Lock PIN")} onClose={onClose}>
       <ScreenScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerClassName="gap-4 px-5 py-4"
       >
         <Text className="text-foreground-muted">
-          Choose four digits and enter them again to confirm.
+          <T>Choose four digits and enter them again to confirm.</T>
         </Text>
         <TextInput
-          accessibilityLabel="New PIN"
-          placeholder="New PIN"
+          accessibilityLabel={gt("New PIN")}
+          placeholder={gt("New PIN")}
           className={inputStyle}
           value={pin}
           onChangeText={(value) => setPin(value.replace(/[^0-9]/gu, ""))}
@@ -211,8 +217,8 @@ function AppPinSheet({ onClose }: { onClose: () => void }) {
           maxLength={4}
         />
         <TextInput
-          accessibilityLabel="Confirm PIN"
-          placeholder="Confirm PIN"
+          accessibilityLabel={gt("Confirm PIN")}
+          placeholder={gt("Confirm PIN")}
           className={inputStyle}
           value={repeat}
           onChangeText={(value) => setRepeat(value.replace(/[^0-9]/gu, ""))}
@@ -226,7 +232,7 @@ function AppPinSheet({ onClose }: { onClose: () => void }) {
           </Text>
         )}
         <Button
-          label="Save PIN"
+          label={gt("Save PIN")}
           onPress={() => void submit()}
           disabled={busy || pin.length !== 4 || repeat.length !== 4}
         />

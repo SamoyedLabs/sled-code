@@ -324,7 +324,8 @@ const requiredScopesForRpcCall = (
   }
   if (method === WS_METHODS.assetsCreateUrl) {
     const { resource } = decodeAssetCreateUrlInput(payload);
-    if (resource._tag === "bot-library-image") return [AuthOrchestrationReadScope, AuthFilesystemReadScope];
+    if (resource._tag === "bot-library-image")
+      return [AuthOrchestrationReadScope, AuthFilesystemReadScope];
     return [
       resource._tag === "workspace-file" ||
       resource._tag === "media-file" ||
@@ -347,7 +348,8 @@ const requiredScopesForRpcCall = (
   if (method === WS_METHODS.projectsMutate) {
     return requiredScopesForProjectMutation(decodeProjectMutation(payload));
   }
-  if(method===WS_METHODS.openbotPrivilegedScope)return [AuthSettingsWriteScope,AuthOrchestrationOperateScope];
+  if (method === WS_METHODS.openbotPrivilegedScope)
+    return [AuthSettingsWriteScope, AuthOrchestrationOperateScope];
   const guarded = clientRpcRequiredScopes(method, payload);
   const scopes = guarded.length > 0 ? guarded : [requiredScopeForRpcMethod(method)];
   return sendsProviderSignOutPrompt(method, payload)

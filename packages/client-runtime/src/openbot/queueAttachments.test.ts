@@ -143,53 +143,88 @@ it("rehydrates the original attempt from durable client storage without changing
 });
 
 const retainedTaskList = {
-  "agentId": "agent-c07fa9ec-4433-40ac-9c08-56cfd69a150c",
-  "tasks": [
+  agentId: "agent-c07fa9ec-4433-40ac-9c08-56cfd69a150c",
+  tasks: [
     {
-      "id": "openbot-thread-b1157799-2940-45ca-bd9e-812e0b3d91ed",
-      "agentId": "agent-c07fa9ec-4433-40ac-9c08-56cfd69a150c",
-      "threadId": "openbot-thread-b1157799-2940-45ca-bd9e-812e0b3d91ed",
-      "origin": "user",
-      "title": "SLED_PRIVATE_QUEUE_HOLD task correction proof",
-      "state": "running",
-      "outcome": null,
-      "hold": null,
-      "activeTurnId": "b29c2f23-6d58-41c5-b61a-23286e3b967f",
-      "progress": null,
-      "error": null,
-      "queuedMessages": [
+      id: "openbot-thread-b1157799-2940-45ca-bd9e-812e0b3d91ed",
+      agentId: "agent-c07fa9ec-4433-40ac-9c08-56cfd69a150c",
+      threadId: "openbot-thread-b1157799-2940-45ca-bd9e-812e0b3d91ed",
+      origin: "user",
+      title: "SLED_PRIVATE_QUEUE_HOLD task correction proof",
+      state: "running",
+      outcome: null,
+      hold: null,
+      activeTurnId: "b29c2f23-6d58-41c5-b61a-23286e3b967f",
+      progress: null,
+      error: null,
+      queuedMessages: [
         {
-          "deliveryId": "0b91239e-604b-4d69-89e0-7a7b8300f73c",
-          "text": "Owned queue attachment fixture 5d9691bc-6117-4a59-aded-13bb94493bd3",
-          "createdAt": "2026-11-05T00:31:15.175Z"
+          deliveryId: "0b91239e-604b-4d69-89e0-7a7b8300f73c",
+          text: "Owned queue attachment fixture 5d9691bc-6117-4a59-aded-13bb94493bd3",
+          createdAt: "2026-11-05T00:31:15.175Z",
         },
         {
-          "deliveryId": "c071a389-e478-4c56-8d48-b27b5f11cbd5",
-          "text": "Owned queue attachment fixture d400d10e-5300-4b49-9291-4b01339e2386",
-          "createdAt": "2026-11-05T00:33:38.837Z"
-        }
+          deliveryId: "c071a389-e478-4c56-8d48-b27b5f11cbd5",
+          text: "Owned queue attachment fixture d400d10e-5300-4b49-9291-4b01339e2386",
+          createdAt: "2026-11-05T00:33:38.837Z",
+        },
       ],
-      "createdAt": "2026-11-05T00:31:15.131Z",
-      "updatedAt": "2026-11-05T00:31:15.165Z",
-      "closedAt": null
-    }
+      createdAt: "2026-11-05T00:31:15.131Z",
+      updatedAt: "2026-11-05T00:31:15.165Z",
+      closedAt: null,
+    },
   ],
-  "limit": 2
+  limit: 2,
 };
 
 it("offers task queue attachments from the released task list while validating the selected target", () => {
   const task = retainedTaskList.tasks[0]!;
   const target = { agentId: retainedTaskList.agentId, taskId: task.id, threadId: task.threadId };
   expect(taskQueueAttachmentChoices(retainedTaskList, target)).toEqual(
-    task.queuedMessages.map(message => ({ id: message.deliveryId, text: message.text })),
+    task.queuedMessages.map((message) => ({ id: message.deliveryId, text: message.text })),
   );
-  expect(taskQueueAttachmentChoices({ ...retainedTaskList, tasks: [{ ...task, queuedMessages: [] }] }, target)).toEqual([]);
-  expect(taskQueueAttachmentChoices({ ...retainedTaskList, tasks: [{ ...task, closedAt: "2026-11-05T01:00:00Z" }] }, target)).toEqual([]);
-  for (const changed of [{ agentId: "other" }, { taskId: "other" }, { threadId: "other" }, { threadId: null }]) {
+  expect(
+    taskQueueAttachmentChoices(
+      { ...retainedTaskList, tasks: [{ ...task, queuedMessages: [] }] },
+      target,
+    ),
+  ).toEqual([]);
+  expect(
+    taskQueueAttachmentChoices(
+      { ...retainedTaskList, tasks: [{ ...task, closedAt: "2026-11-05T01:00:00Z" }] },
+      target,
+    ),
+  ).toEqual([]);
+  for (const changed of [
+    { agentId: "other" },
+    { taskId: "other" },
+    { threadId: "other" },
+    { threadId: null },
+  ]) {
     expect(taskQueueAttachmentChoices(retainedTaskList, { ...target, ...changed })).toBeNull();
   }
-  expect(taskQueueAttachmentChoices({ ...retainedTaskList, tasks: [{ ...task, agentId: "other" }] }, target)).toBeNull();
-  expect(taskQueueAttachmentChoices({ ...retainedTaskList, tasks: [task, task] }, target)).toBeNull();
-  expect(taskQueueAttachmentChoices({ ...retainedTaskList, tasks: [{ ...task, queuedMessages: [{ deliveryId: 42, text: "bad" }] }] }, target)).toBeNull();
-  expect(taskQueueAttachmentChoices({ agentId: target.agentId, threadId: target.threadId, messages: [] }, target)).toBeNull();
+  expect(
+    taskQueueAttachmentChoices(
+      { ...retainedTaskList, tasks: [{ ...task, agentId: "other" }] },
+      target,
+    ),
+  ).toBeNull();
+  expect(
+    taskQueueAttachmentChoices({ ...retainedTaskList, tasks: [task, task] }, target),
+  ).toBeNull();
+  expect(
+    taskQueueAttachmentChoices(
+      {
+        ...retainedTaskList,
+        tasks: [{ ...task, queuedMessages: [{ deliveryId: 42, text: "bad" }] }],
+      },
+      target,
+    ),
+  ).toBeNull();
+  expect(
+    taskQueueAttachmentChoices(
+      { agentId: target.agentId, threadId: target.threadId, messages: [] },
+      target,
+    ),
+  ).toBeNull();
 });

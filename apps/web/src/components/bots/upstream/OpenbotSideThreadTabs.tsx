@@ -5,6 +5,7 @@ import { useStableCallback } from "../../../hooks/useStableCallback";
 import { bindThreadTabDrag, threadTabCarry, type OpenbotThreadTab } from "./openbotThreadTabDrag";
 import { ThreadTabGhost } from "./OpenbotThreadTabs";
 import "./openbot-side-thread-tabs.css";
+import { useGT } from "gt-react";
 export type OpenbotSideThreadTabsProps = {
   threads: readonly OpenbotThreadTab[];
   selectedId: string | null;
@@ -17,6 +18,7 @@ export type OpenbotSideThreadTabsProps = {
   actions?: ReactNode;
 };
 export function OpenbotSideThreadTabs(props: OpenbotSideThreadTabsProps) {
+  const gt = useGT();
   const list = useRef<HTMLDivElement>(null);
   const carried = useSyncExternalStore(threadTabCarry.subscribe, threadTabCarry.getSnapshot);
   const getThreads = useStableCallback(() => props.threads),
@@ -37,7 +39,7 @@ export function OpenbotSideThreadTabs(props: OpenbotSideThreadTabsProps) {
   }, [getThreads, move, dock, maximized]);
   return (
     <div className="side-panel-header" data-drop-target={carried?.from === "chat" ? "" : undefined}>
-      <div ref={list} className="side-panel-tabs" role="tablist" aria-label="Side panel tabs">
+      <div ref={list} className="side-panel-tabs" role="tablist" aria-label={gt("Side panel tabs")}>
         {props.children}
         {props.threads.map((thread) => (
           <div
@@ -129,7 +131,7 @@ export function OpenbotSideThreadTabs(props: OpenbotSideThreadTabsProps) {
             <button
               type="button"
               className="side-panel-thread-return"
-              aria-label={`Move ${thread.title} to chat`}
+              aria-label={gt("Move {title} to chat", { title: thread.title })}
               onClick={() => props.onMoveToChat(thread.id)}
             >
               <PanelLeft size={12} />

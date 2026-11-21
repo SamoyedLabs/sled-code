@@ -19,6 +19,7 @@ import { useAgentSettingsValue } from "../settings/agent-settings-api";
 import { t } from "../vault/connector-text";
 import { SourceConfirmDialog } from "../data/SourceConfirmDialog";
 import type { McpExecute } from "./SourceMcpRelay";
+import { useGT } from "gt-react";
 const Role = Schema.Struct({ id: Schema.String, name: Schema.String });
 const decodeAccess = Schema.decodeUnknownSync(Schema.Struct({ allowedRoles: Schema.Array(Role) }));
 const decodeRoles = Schema.decodeUnknownSync(Schema.Struct({ roles: Schema.Array(Role) }));
@@ -29,6 +30,7 @@ export function DiscordAccess(props: {
   connections: readonly { workspaceId: string; workspaceName: string }[];
   execute: McpExecute;
 }) {
+  const gt = useGT();
   const registry = useContext(RegistryContext),
     connection = readPreparedConnection(props.environmentId),
     command = useAtomCommand(openbot.settingsRead, { reportFailure: false });
@@ -109,7 +111,7 @@ export function DiscordAccess(props: {
     });
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "Could not read roles.");
+      setError(cause instanceof Error ? cause.message : gt("Could not read roles."));
     }
     setBusy(false);
   };
@@ -132,7 +134,7 @@ export function DiscordAccess(props: {
                     ? held.length
                       ? held.map((role) => role.name).join(", ")
                       : t("connector.discord.accessEveryone")
-                    : "Reading access…"
+                    : gt("Reading access…")
               }
             >
               {supported && (
@@ -180,7 +182,7 @@ export function DiscordAccess(props: {
           });
           if (settled._tag === "Failure") {
             const cause = squashAtomCommandFailure(settled);
-            setError(cause instanceof Error ? cause.message : "Could not save Discord access.");
+            setError(cause instanceof Error ? cause.message : gt("Could not save Discord access."));
           }
           setBusy(false);
         }}

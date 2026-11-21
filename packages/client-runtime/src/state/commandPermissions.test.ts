@@ -113,7 +113,8 @@ describe("query permissions", () => {
       );
       const read = createEnvironmentQueryAtomFamily(queryRuntime, {
         label: "test.scoped-openbot-query",
-        execute: (target: ReturnType<typeof input>) => requestGuarded(WS_METHODS.openbotReadToHost, target),
+        execute: (target: ReturnType<typeof input>) =>
+          requestGuarded(WS_METHODS.openbotReadToHost, target),
       });
       const readPins = (agentId: string) =>
         Effect.gen(function* () {
@@ -125,10 +126,16 @@ describe("query permissions", () => {
           );
         }).pipe(Effect.scoped);
       const scopes = [AuthOrchestrationReadScope, AuthOrchestrationOperateScope];
-      registry.set(sessions(env), AsyncResult.success({ ...grant(false), scopes, permissions: scopes }));
+      registry.set(
+        sessions(env),
+        AsyncResult.success({ ...grant(false), scopes, permissions: scopes }),
+      );
       expect(yield* readPins("allowed")).toEqual({ agentId: "allowed", pins: [] });
       const readOnly = [AuthOrchestrationReadScope];
-      registry.set(sessions(env), AsyncResult.success({ ...grant(false), scopes: readOnly, permissions: readOnly }));
+      registry.set(
+        sessions(env),
+        AsyncResult.success({ ...grant(false), scopes: readOnly, permissions: readOnly }),
+      );
       expect(yield* readPins("denied").pipe(Effect.flip)).toMatchObject({
         requiredScope: AuthOrchestrationOperateScope,
       });

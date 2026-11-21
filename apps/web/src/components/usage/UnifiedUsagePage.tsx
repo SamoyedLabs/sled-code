@@ -10,6 +10,7 @@ import { SourceProviderHost } from "../bots/SourceProviderEnvironment";
 import { Select, SelectTrigger, SelectValue, SelectPopup, SelectItem } from "../ui/select";
 import { UsagePage } from "./UsagePage";
 import "../bots/upstream/openbot-react.css";
+import { T, useGT } from "gt-react";
 
 export function validateUsageSearch(value: Record<string, unknown>): {
   view?: "bots" | "threads" | "limits";
@@ -25,6 +26,7 @@ export function validateUsageSearch(value: Record<string, unknown>): {
 const views = ["bots", "threads", "limits"] as const;
 type View = (typeof views)[number];
 export function UnifiedUsagePage() {
+  const gt = useGT();
   const search = useLocation({ select: (location) => validateUsageSearch(location.search) });
   const navigate = useNavigate();
   const [lastView, setLastView] = useState<View>("bots");
@@ -42,11 +44,13 @@ export function UnifiedUsagePage() {
     void navigate({ to: "/usage", search: { ...search, view: value } });
   };
   return (
-    <AppRouteModal label="Usage">
+    <AppRouteModal label={gt("Usage")}>
       <header className="flex min-h-14 shrink-0 items-center gap-4 border-b px-5 pe-2">
-        <h1 className="text-sm font-semibold">Usage</h1>
+        <h1 className="text-sm font-semibold">
+          <T>Usage</T>
+        </h1>
         <nav
-          aria-label="Usage views"
+          aria-label={gt("Usage views")}
           className="flex items-center gap-1 rounded-lg bg-muted/50 p-1"
         >
           {views.map((value) => (
@@ -59,7 +63,7 @@ export function UnifiedUsagePage() {
                 changeView(value);
               }}
             >
-              {value === "bots" ? "Bots" : value === "threads" ? "Threads" : "Limits"}
+              {value === "bots" ? gt("Bots") : value === "threads" ? gt("Threads") : gt("Limits")}
             </button>
           ))}
         </nav>
@@ -71,7 +75,7 @@ export function UnifiedUsagePage() {
               if (value) void navigate({ to: "/usage", search: { view: "bots", machine: value } });
             }}
           >
-            <SelectTrigger aria-label="Bot usage environment" size="compact" variant="ghost">
+            <SelectTrigger aria-label={gt("Bot usage environment")} size="compact" variant="ghost">
               <SelectValue />
             </SelectTrigger>
             <SelectPopup>
@@ -102,8 +106,10 @@ export function UnifiedUsagePage() {
         </section>
       ))}
       <p className="shrink-0 border-t px-5 py-2 text-xs text-muted-foreground">
-        Bot activity can also appear in provider logs. Bots and Threads totals are separate views,
-        not additive.
+        <T>
+          Bot activity can also appear in provider logs. Bots and Threads totals are separate views,
+          not additive.
+        </T>
       </p>
     </AppRouteModal>
   );
@@ -114,6 +120,7 @@ function BotUsagePanel({
 }: {
   environment: ReturnType<typeof useEnvironments>["environments"][number] | undefined;
 }) {
+  const gt = useGT();
   const host = useEnvironmentQuery(
     environment ? openbot.status({ environmentId: environment.environmentId, input: {} }) : null,
   );
@@ -132,8 +139,8 @@ function BotUsagePanel({
       ) : (
         <p className="p-6 text-sm text-muted-foreground">
           {host.isPending
-            ? "Loading bot usage…"
-            : (host.error ?? "Connect a bot host to see its usage.")}
+            ? gt("Loading bot usage…")
+            : (host.error ?? gt("Connect a bot host to see its usage."))}
         </p>
       )}
     </div>

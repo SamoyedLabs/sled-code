@@ -403,7 +403,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                 )}
                 {pathname === "/settings/bots" && (
                   <nav
-                    aria-label="Bot host settings"
+                    aria-label={gt("Bot host settings")}
                     className="space-y-1 border-b border-sidebar-border pb-4 max-md:hidden"
                   >
                     <h3
@@ -412,7 +412,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                         !compactSearchOpen && "max-md:sr-only",
                       )}
                     >
-                      Bots
+                      <T>Bots</T>
                     </h3>
                     <SidebarMenu>
                       {BOT_HOST_SETTINGS.map((item) => {

@@ -88,10 +88,14 @@ it("leaves pane chrome to the dock while keeping detail back navigation availabl
       </div>
     </div>,
   );
-  await expect.element(screen.getByRole("heading", { name: "Bot settings" })).not.toBeInTheDocument();
+  await expect
+    .element(screen.getByRole("heading", { name: "Bot settings" }))
+    .not.toBeInTheDocument();
   await screen.getByRole("button", { name: "Permissions", exact: true }).click();
   await expect.element(screen.getByRole("button", { name: "Back", exact: true })).toBeVisible();
-  await expect.element(screen.getByRole("button", { name: "Close settings" })).not.toBeInTheDocument();
+  await expect
+    .element(screen.getByRole("button", { name: "Close settings" }))
+    .not.toBeInTheDocument();
   await screen.getByRole("button", { name: "Back", exact: true }).click();
   await expect
     .element(screen.getByRole("button", { name: "Permissions", exact: true }))

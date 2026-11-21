@@ -39,6 +39,7 @@ import {
 } from "./marketplace-model";
 import type { OpenbotSettingsRequest } from "@t3tools/contracts/openbot-settings";
 import type { Json } from "effect/Schema";
+import { T, Var, useGT } from "gt-react";
 
 export function MarketplaceDetail({
   listing,
@@ -70,6 +71,7 @@ function AgentDetail({
   listing: Extract<Listing, { kind: "agent" }>["value"];
   model: MarketplaceProps;
 }) {
+  const gt = useGT();
   const adoption = model.capabilities.includes("agent-adoption-v1");
   // Review and history share one controller lock. Run them in order so the initial
   // history read cannot silently discard the listing review on mount.
@@ -117,14 +119,17 @@ function AgentDetail({
           name={listing.name}
           logo={<Avatar agent={listing} />}
           verified={listing.verified}
-          subtitle={`${listing.title} · by ${listing.creatorName}`}
+          subtitle={gt("{title} · by {creatorName}", {
+            title: listing.title,
+            creatorName: listing.creatorName,
+          })}
           status={target ? "connected" : "idle"}
-          statusLabel={target ? "Added" : "Not added"}
+          statusLabel={target ? gt("Added") : gt("Not added")}
           actions={
             <>
               {target && model.onOpenAgent && (
                 <SourceButton onClick={() => model.onOpenAgent?.(target.id)}>
-                  Open chat
+                  <T>Open chat</T>
                 </SourceButton>
               )}
               <SourceButton
@@ -132,7 +137,7 @@ function AgentDetail({
                 onClick={() => void add()}
               >
                 <Plus aria-hidden="true" />
-                {target ? "Update" : "Add agent"}
+                {target ? gt("Update") : gt("Add agent")}
               </SourceButton>
             </>
           }
@@ -141,36 +146,46 @@ function AgentDetail({
           <p className="ui-text marketplace-agent-trust" data-variant="caption" data-tone="muted">
             <UsersRound aria-hidden="true" />
             {detail?.pending
-              ? "Shared by its creator before OpenBot reviewed it."
-              : "Made by another OpenBot user. OpenBot reviewed it before it went live."}
+              ? gt("Shared by its creator before OpenBot reviewed it.")
+              : gt("Made by another OpenBot user. OpenBot reviewed it before it went live.")}
           </p>
         )}
-        {c.busy && !detail && <p role="status">Loading agent details…</p>}
+        {c.busy && !detail && (
+          <p role="status">
+            <T>Loading agent details…</T>
+          </p>
+        )}
         {c.error && (
           <p role="alert">
             {c.error}
-            <SourceButton onClick={() => void read()}>Retry</SourceButton>
+            <SourceButton onClick={() => void read()}>
+              <T>Retry</T>
+            </SourceButton>
           </p>
         )}
         {detail?.pending && (
-          <p role="status">This listing is awaiting review. Adding is unavailable.</p>
+          <p role="status">
+            <T>This listing is awaiting review. Adding is unavailable.</T>
+          </p>
         )}
         {detail && (
           <>
-            <SettingsSection title="Skills">
+            <SettingsSection title={gt("Skills")}>
               <SettingsCard>
                 {detail.skills.map((skill) => (
                   <SettingsRow
                     key={skill.slug}
                     title={skill.name}
                     description={
-                      skill.kind === "marketplace" ? `Version ${skill.version}` : "Included skill"
+                      skill.kind === "marketplace"
+                        ? gt("Version {version}", { version: skill.version })
+                        : gt("Included skill")
                     }
                   />
                 ))}
               </SettingsCard>
             </SettingsSection>
-            <SettingsSection title="Routines">
+            <SettingsSection title={gt("Routines")}>
               <SettingsCard>
                 {detail.routines.map((routine) => (
                   <SettingsRow
@@ -188,9 +203,9 @@ function AgentDetail({
         <Information
           description={detail?.description ?? listing.description}
           facts={[
-            { label: "Creator", value: listing.creatorName },
+            { label: gt("Creator"), value: listing.creatorName },
             {
-              label: "Source",
+              label: gt("Source"),
               value: model.capabilities.includes("sled-public-catalog-v1")
                 ? "Public OpenBot catalog"
                 : listing.verified
@@ -198,29 +213,33 @@ function AgentDetail({
                   : "Public",
             },
             ...(listing.category
-              ? [{ label: "Category", value: CATEGORY_LABELS[listing.category] }]
+              ? [{ label: gt("Category"), value: CATEGORY_LABELS[listing.category] }]
               : []),
-            { label: "Version", value: listing.version },
+            { label: gt("Version"), value: listing.version },
             {
-              label: model.capabilities.includes("sled-public-catalog-v1") ? "Bundled" : "Updated",
+              label: model.capabilities.includes("sled-public-catalog-v1")
+                ? gt("Bundled")
+                : gt("Updated"),
               value: new Date(listing.updatedAt).toLocaleDateString(),
             },
           ]}
         />
         {c.state.notice && <p role="status">{c.state.notice}</p>}
         {c.state.uncertain && (
-          <SettingsSection title="Installation status">
+          <SettingsSection title={gt("Installation status")}>
             <SettingsCard>
               <div className="integration-card-body">
                 <p>
-                  The host outcome is not yet confirmed. Refresh to recover the original
-                  installation.
+                  <T>
+                    The host outcome is not yet confirmed. Refresh to recover the original
+                    installation.
+                  </T>
                 </p>
                 <SourceButton
                   disabled={c.busy}
                   onClick={() => void c.run(templateHistoryRequest(c.state))}
                 >
-                  Refresh installation status
+                  <T>Refresh installation status</T>
                 </SourceButton>
                 {c.state.adoptions.map((item) => (
                   <SettingsRow
@@ -238,7 +257,7 @@ function AgentDetail({
                           })
                         }
                       >
-                        I inspected this agent
+                        <T>I inspected this agent</T>
                       </SourceButton>
                     )}
                   </SettingsRow>
@@ -264,6 +283,7 @@ function SkillDetailPage({
   installed: Readonly<Record<string, readonly InstalledSkill[]>>;
   refreshSkills: () => Promise<void>;
 }) {
+  const gt = useGT();
   const [detail, setDetail] = useState<SkillDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -296,7 +316,7 @@ function SkillDetailPage({
         ),
       );
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "This skill could not be read.");
+      setError(cause instanceof Error ? cause.message : gt("This skill could not be read."));
     }
   });
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Load the reviewed skill version from the host before installation.
@@ -314,7 +334,7 @@ function SkillDetailPage({
     });
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "The skill could not be changed.");
+      setError(cause instanceof Error ? cause.message : gt("The skill could not be changed."));
     }
     lock.current = false;
     setBusy(false);
@@ -339,7 +359,7 @@ function SkillDetailPage({
     });
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "The skill could not be added.");
+      setError(cause instanceof Error ? cause.message : gt("The skill could not be added."));
       await settlePromise(() => refreshSkills());
     }
     lock.current = false;
@@ -355,7 +375,9 @@ function SkillDetailPage({
           subtitle={listing.description}
           status={have.length ? "connected" : "idle"}
           statusLabel={
-            have.length ? `On ${have.map((agent) => agent.name).join(", ")}` : "Not added"
+            have.length
+              ? gt("On {value}", { value: have.map((agent) => agent.name).join(", ") })
+              : gt("Not added")
           }
           actions={
             <>
@@ -364,13 +386,13 @@ function SkillDetailPage({
                 onClick={() => {
                   if (detail)
                     model.onDraftRequest?.({
-                      title: `Try ${detail.name}`,
+                      title: gt("Try {name}", { name: detail.name }),
                       text: `${serializeBotReference("skill", detail.name, detail.id)} ${detail.examplePrompt?.trim() || "Help me use this skill."}`,
                       agentIds: have.map((agent) => agent.id),
                     });
                 }}
               >
-                Try skill
+                <T>Try skill</T>
               </SourceButton>
               <SourceButton
                 disabled={
@@ -398,7 +420,7 @@ function SkillDetailPage({
                 }}
               >
                 <Plus aria-hidden="true" />
-                Add to agents
+                <T>Add to agents</T>
               </SourceButton>
             </>
           }
@@ -406,12 +428,18 @@ function SkillDetailPage({
         {error && (
           <p role="alert">
             {error}
-            <SourceButton onClick={() => void read()}>Retry</SourceButton>
+            <SourceButton onClick={() => void read()}>
+              <T>Retry</T>
+            </SourceButton>
           </p>
         )}
-        {!detail && !error && <p role="status">Loading skill details…</p>}
+        {!detail && !error && (
+          <p role="status">
+            <T>Loading skill details…</T>
+          </p>
+        )}
         {have.length > 0 && (
-          <SettingsSection title={`Agents · ${have.length}`}>
+          <SettingsSection title={gt("Agents · {length}", { length: have.length })}>
             <SettingsCard>
               {have.map((agent) => {
                 const skill = installed[agent.id]?.find((item) => item.skillId === listing.id);
@@ -432,7 +460,9 @@ function SkillDetailPage({
                     description={
                       skill.problem ??
                       (skill.state === "installed"
-                        ? `Version ${skill.installedVersion}`
+                        ? gt("Version {installedVersion}", {
+                            installedVersion: skill.installedVersion,
+                          })
                         : skill.state)
                     }
                   >
@@ -456,11 +486,14 @@ function SkillDetailPage({
                           )
                         }
                       >
-                        Update
+                        <T>Update</T>
                       </SourceButton>
                     )}
                     <SourceSwitch
-                      label={`Enable ${listing.name} for ${agent.name}`}
+                      label={gt("Enable {name} for {name2}", {
+                        name: listing.name,
+                        name2: agent.name,
+                      })}
                       checked={skill.enabled !== false}
                       disabled={
                         busy ||
@@ -496,7 +529,7 @@ function SkillDetailPage({
                           })
                         }
                       >
-                        Remove
+                        <T>Remove</T>
                       </SourceButton>
                     )}
                   </SettingsRow>
@@ -506,7 +539,7 @@ function SkillDetailPage({
           </SettingsSection>
         )}
         {detail && (
-          <SettingsSection title="Instructions">
+          <SettingsSection title={gt("Instructions")}>
             <SettingsCard>
               <div className="integration-card-body marketplace-skill-instructions">
                 <ReactMarkdown>{detail.instructions}</ReactMarkdown>
@@ -517,24 +550,26 @@ function SkillDetailPage({
         <Information
           description={listing.description}
           facts={[
-            { label: "Creator", value: listing.creatorName },
+            { label: gt("Creator"), value: listing.creatorName },
             {
-              label: "Source",
+              label: gt("Source"),
               value: model.capabilities.includes("sled-public-catalog-v1")
                 ? "Public OpenBot catalog"
                 : listing.verified
                   ? "Verified by OpenBot"
                   : "Public",
             },
-            { label: "Category", value: CATEGORY_LABELS[listing.category] },
-            { label: "Version", value: listing.version },
+            { label: gt("Category"), value: CATEGORY_LABELS[listing.category] },
+            { label: gt("Version"), value: listing.version },
             {
-              label: model.capabilities.includes("sled-public-catalog-v1") ? "Bundled" : "Updated",
+              label: model.capabilities.includes("sled-public-catalog-v1")
+                ? gt("Bundled")
+                : gt("Updated"),
               value: new Date(listing.updatedAt).toLocaleDateString(),
             },
             ...(model.capabilities.includes("sled-public-catalog-v1")
               ? []
-              : [{ label: "Installs", value: listing.installs.toLocaleString() }]),
+              : [{ label: gt("Installs"), value: listing.installs.toLocaleString() }]),
           ]}
         />
         <Dialog
@@ -545,9 +580,13 @@ function SkillDetailPage({
         >
           <DialogPopup>
             <DialogHeader>
-              <DialogTitle>Add {listing.name} to agents</DialogTitle>
+              <DialogTitle>
+                <T>
+                  Add <Var>{listing.name}</Var> to agents
+                </T>
+              </DialogTitle>
               <DialogDescription>
-                Choose the agents that will receive this reviewed skill version.
+                <T>Choose the agents that will receive this reviewed skill version.</T>
               </DialogDescription>
             </DialogHeader>
             <div className="openbot-react">
@@ -574,10 +613,10 @@ function SkillDetailPage({
               </SettingsCard>
               {error && <p role="alert">{error}</p>}
               <SourceButton disabled={busy} onClick={() => setChoose(false)}>
-                Cancel
+                <T>Cancel</T>
               </SourceButton>
               <SourceButton disabled={busy || !selected.length} onClick={() => void install()}>
-                {busy ? "Adding…" : "Save"}
+                {busy ? gt("Adding…") : gt("Save")}
               </SourceButton>
             </div>
           </DialogPopup>

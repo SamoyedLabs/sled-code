@@ -7,6 +7,7 @@ import { openbot } from "../../state/openbot";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
+import { T, Var, useGT } from "gt-react";
 export function BotConfiguration({
   environmentId,
   agentId,
@@ -16,6 +17,7 @@ export function BotConfiguration({
   agentId: string;
   hostId: string;
 }) {
+  const gt = useGT();
   const canAdmin = useAtomValue(openbot.adminToHost.permissionAtom(environmentId));
   const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
   const [busy, setBusy] = useState(false);
@@ -41,14 +43,14 @@ export function BotConfiguration({
     else {
       const value = permissionView(permissionResult.value);
       setPermissions(value);
-      if (value === null) setError("This host returned unsupported permission settings.");
+      if (value === null) setError(gt("This host returned unsupported permission settings."));
     }
     if (instructionResult._tag === "Failure")
       setError(String(squashAtomCommandFailure(instructionResult)));
     else {
       const value = instructionView(instructionResult.value);
       setInstructions(value);
-      if (value === null) setError("This host returned unsupported instructions.");
+      if (value === null) setError(gt("This host returned unsupported instructions."));
       else {
         setText(value.text);
         setRevision((value) => value + 1);
@@ -65,20 +67,22 @@ export function BotConfiguration({
     else if (input.operation === "agent.permissions.update") {
       const value = permissionView(result.value);
       setPermissions(value);
-      if (value === null) setError("Reload settings before making another change.");
+      if (value === null) setError(gt("Reload settings before making another change."));
     } else if (input.operation === "agent.instructions.save") {
       const value = instructionView(result.value);
       setInstructions(value);
-      if (value === null) setError("Reload instructions before making another change.");
+      if (value === null) setError(gt("Reload instructions before making another change."));
     }
     setBusy(false);
   };
 
   return (
-    <section className="space-y-3 rounded-lg border p-4" aria-label="Bot configuration">
-      <h4 className="text-sm font-medium">Permissions and instructions</h4>
+    <section className="space-y-3 rounded-lg border p-4" aria-label={gt("Bot configuration")}>
+      <h4 className="text-sm font-medium">
+        <T>Permissions and instructions</T>
+      </h4>
       <Button variant="outline" size="sm" disabled={busy || !canAdmin} onClick={() => void load()}>
-        Load settings
+        <T>Load settings</T>
       </Button>
       {error && (
         <p role="alert" className="text-sm text-destructive">
@@ -88,16 +92,20 @@ export function BotConfiguration({
       {permissions && (
         <div className="space-y-2">
           <p className="text-sm">
-            Access:{" "}
-            {permissions.access === "workspace"
-              ? "Workspace only"
-              : permissions.autoApprove
-                ? "Full access"
-                : "Ask first"}
+            <T>
+              Access:<Var> </Var>
+              <Var>
+                {permissions.access === "workspace"
+                  ? gt("Workspace only")
+                  : permissions.autoApprove
+                    ? gt("Full access")
+                    : gt("Ask first")}
+              </Var>
+            </T>
           </p>
           {permissions.autoApproveLocked && (
             <p className="text-sm text-muted-foreground">
-              Approval settings are locked by this host.
+              <T>Approval settings are locked by this host.</T>
             </p>
           )}
           <div className="flex flex-wrap gap-2">
@@ -118,10 +126,10 @@ export function BotConfiguration({
                 }
               >
                 {level === "workspace"
-                  ? "Workspace only"
+                  ? gt("Workspace only")
                   : level === "ask"
-                    ? "Ask first"
-                    : "Full access"}
+                    ? gt("Ask first")
+                    : gt("Full access")}
               </Button>
             ))}
           </div>
@@ -141,7 +149,7 @@ export function BotConfiguration({
           }}
         >
           <label htmlFor={`bot-instructions-${agentId}`} className="text-sm">
-            Instructions
+            <T>Instructions</T>
           </label>
           <Textarea
             id={`bot-instructions-${agentId}`}
@@ -156,7 +164,7 @@ export function BotConfiguration({
             size="sm"
             disabled={busy || !canAdmin || text === instructions.text}
           >
-            Save instructions
+            <T>Save instructions</T>
           </Button>
         </form>
       )}

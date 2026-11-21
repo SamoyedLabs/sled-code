@@ -27,6 +27,7 @@ import { useFreshAssetUrl } from "../../state/assets";
 import { useEnvironmentQuery } from "../../state/query";
 import { BotGlass, BotIconButton } from "./upstream/BotChrome";
 import { OpenBotText as Text } from "./upstream/OpenBotTypography";
+import { useGT } from "gt-react-native";
 
 type FileScope = {
   environmentId: EnvironmentId;
@@ -137,6 +138,7 @@ function GalleryPage({
   resolve: Resolve;
   onZoom(zoom: boolean): void;
 }) {
+  const gt = useGT();
   const original = useLibraryPicture(scope);
   const shouldAsk = scope.file.size > OPENBOT_LIBRARY_AUTOMATIC_IMAGE_LIMIT;
   const [download, setDownload] = useState(!shouldAsk);
@@ -186,12 +188,12 @@ function GalleryPage({
         </ScrollView>
       ) : front && original.streamed && !original.pending ? (
         <View style={{ alignSelf: "center" }}>
-          <Button label="Retry loading photo" onPress={original.retry} />
+          <Button label={gt("Retry loading photo")} onPress={original.retry} />
         </View>
       ) : !download || fetched ? (
         <View style={{ alignSelf: "center" }}>
           <Button
-            label={fetched ? "Retry loading photo" : "Download photo"}
+            label={fetched ? gt("Retry loading photo") : gt("Download photo")}
             onPress={() => {
               setFetched(null);
               setDownload(true);
@@ -199,7 +201,7 @@ function GalleryPage({
           />
         </View>
       ) : (
-        <ActivityIndicator color="white" accessibilityLabel="Loading photo" />
+        <ActivityIndicator color="white" accessibilityLabel={gt("Loading photo")} />
       )}
     </View>
   );
@@ -221,6 +223,7 @@ export function BotLibraryGallery({
   resolve: Resolve;
   share(file: OpenbotLibraryFile, signal: AbortSignal): Promise<void>;
 }) {
+  const gt = useGT();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(initialIndex);
@@ -244,7 +247,8 @@ export function BotLibraryGallery({
     setSharing(true);
     void share(active, controller.signal)
       .catch(() => {
-        if (!controller.signal.aborted) Dialog.alert("Could not share this file", "Try again.");
+        if (!controller.signal.aborted)
+          Dialog.alert(gt("Could not share this file"), gt("Try again."));
       })
       .finally(() => {
         if (sharingAbort.current !== controller) return;
@@ -302,7 +306,7 @@ export function BotLibraryGallery({
           }}
         >
           <BotGlass>
-            <BotIconButton label="Close gallery" icon="xmark" onPress={close} />
+            <BotIconButton label={gt("Close gallery")} icon="xmark" onPress={close} />
           </BotGlass>
           <BotGlass style={{ flexShrink: 1, borderRadius: 22 }}>
             <Text
@@ -315,7 +319,7 @@ export function BotLibraryGallery({
           </BotGlass>
           <BotGlass>
             <BotIconButton
-              label="Share photo"
+              label={gt("Share photo")}
               icon="square.and.arrow.up"
               disabled={!canShare || sharing}
               onPress={openShare}

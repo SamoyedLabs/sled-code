@@ -1,1 +1,1 @@
-{"platforms":["apple"],"apple":{"modules":["SpeechModule"]}}
+{ "platforms": ["apple"], "apple": { "modules": ["SpeechModule"] } }

@@ -26,6 +26,7 @@ import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
 
 import { Pin, botRosterItemKey, type BotRosterPin } from "./bot-roster-pin";
 import type { DropChange } from "./bot-roster-drag-model";
+import { useGT } from "gt-react-native";
 
 export { botRosterItemKey, type BotRosterPin } from "./bot-roster-pin";
 
@@ -93,6 +94,7 @@ type Host = {
 };
 
 export function useBotRosterOrganization({ environmentId, hostId, online, cacheScope }: Host) {
+  const gt = useGT();
   const key = cacheScope
     ? "bots.roster.v1." + bytesToHex(sha256(utf8ToBytes(JSON.stringify([cacheScope, hostId]))))
     : null;
@@ -247,7 +249,7 @@ export function useBotRosterOrganization({ environmentId, hostId, online, cacheS
     try {
       await action();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not update this roster.");
+      setError(cause instanceof Error ? cause.message : gt("Could not update this roster."));
     }
     lock.current = false;
     setBusy(false);

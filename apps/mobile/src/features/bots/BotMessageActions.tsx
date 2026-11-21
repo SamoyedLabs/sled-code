@@ -13,6 +13,7 @@ import { SettingsRow } from "../settings/components/SettingsRow";
 import { SettingsSection } from "../settings/components/SettingsSection";
 import { useMarkdownPreviewStyles } from "../files/FileMarkdownPreview";
 import { BotReplyMarkdown } from "./BotReplyMotion";
+import { useGT } from "gt-react-native";
 
 const reactions = [
   "👍",
@@ -56,6 +57,7 @@ export function BotMessageActions({
   onReact?: ((emoji: string | null) => void) | undefined;
   onDelete?: (() => void) | undefined;
 }) {
+  const gt = useGT();
   const [more, setMore] = useState(false);
   const [selecting, setSelecting] = useState(false);
   const cells = more ? [...reactions] : [...reactions.slice(0, 11), "more"];
@@ -66,7 +68,7 @@ export function BotMessageActions({
     action();
   };
   return (
-    <Sheet title={selecting ? "Select text" : "Message actions"} onClose={onClose}>
+    <Sheet title={selecting ? gt("Select text") : gt("Message actions")} onClose={onClose}>
       {selecting ? (
         <BotMessageTextSelection text={text} />
       ) : (
@@ -75,7 +77,11 @@ export function BotMessageActions({
           contentContainerClassName="gap-4 px-4 pt-5 pb-10"
         >
           {onReact && (
-            <View className="gap-3" accessibilityRole="toolbar" accessibilityLabel="Reactions">
+            <View
+              className="gap-3"
+              accessibilityRole="toolbar"
+              accessibilityLabel={gt("Reactions")}
+            >
               {[cells.slice(0, columns), cells.slice(columns)].map((row) => (
                 <View key={row[0]} className="flex-row">
                   {row.map((emoji) => {
@@ -86,10 +92,10 @@ export function BotMessageActions({
                         accessibilityRole="button"
                         accessibilityLabel={
                           emoji === "more"
-                            ? "More reactions"
+                            ? gt("More reactions")
                             : selected
-                              ? `Remove reaction ${emoji}`
-                              : `React ${emoji}`
+                              ? gt("Remove reaction {emoji}", { emoji })
+                              : gt("React {emoji}", { emoji })
                         }
                         accessibilityState={{ selected }}
                         onPress={() => {
@@ -122,15 +128,23 @@ export function BotMessageActions({
           {(onReply || onBranch || pinAction) && (
             <SettingsSection>
               {onReply && (
-                <SettingsRow icon="arrow.uturn.backward" label="Reply" onPress={() => run(onReply)} />
+                <SettingsRow
+                  icon="arrow.uturn.backward"
+                  label={gt("Reply")}
+                  onPress={() => run(onReply)}
+                />
               )}
               {onBranch && (
-                <SettingsRow icon="arrow.branch" label="Branch here" onPress={() => run(onBranch)} />
+                <SettingsRow
+                  icon="arrow.branch"
+                  label={gt("Branch here")}
+                  onPress={() => run(onBranch)}
+                />
               )}
               {pinAction && (
                 <SettingsRow
                   icon="pin"
-                  label={pinAction.pinned ? "Unpin" : "Pin"}
+                  label={pinAction.pinned ? gt("Unpin") : gt("Pin")}
                   onPress={() => run(pinAction.run)}
                 />
               )}
@@ -140,7 +154,7 @@ export function BotMessageActions({
             <SettingsSection>
               <SettingsRow
                 icon={reading ? "stop.fill" : "headphones"}
-                label={reading ? "Stop reading" : "Read aloud"}
+                label={reading ? gt("Stop reading") : gt("Read aloud")}
                 onPress={() => run(onReadAloud)}
               />
             </SettingsSection>
@@ -151,18 +165,18 @@ export function BotMessageActions({
             >
               <SettingsRow
                 icon="doc.on.doc"
-                label="Copy"
+                label={gt("Copy")}
                 onPress={() => {
                   run(() => {
                     void Clipboard.setStringAsync(text).catch(() =>
-                      Dialog.alert("Could not copy message"),
+                      Dialog.alert(gt("Could not copy message")),
                     );
                   });
                 }}
               />
               <SettingsRow
                 icon="textformat.size"
-                label="Select text"
+                label={gt("Select text")}
                 onPress={() => setSelecting(true)}
               />
             </SettingsSection>
@@ -176,9 +190,10 @@ export function BotMessageActions({
                 onPress={() =>
                   run(() => {
                     Dialog.confirm({
-                      title: "Delete this message?",
-                      message:
+                      title: gt("Delete this message?"),
+                      message: gt(
                         "This removes the message for everyone in this chat. Agents may still remember it.",
+                      ),
                       confirmText: "Delete",
                       destructive: true,
                       onConfirm: onDelete,
@@ -239,6 +254,7 @@ export function BotMessageReactionPill({
   ownMessage: boolean;
   onRemove: (() => void) | undefined;
 }) {
+  const gt = useGT();
   const p = useBotPalette();
   if (!reactions.length) return null;
   return (
@@ -263,7 +279,7 @@ export function BotMessageReactionPill({
           <Pressable
             key={key}
             accessibilityRole="button"
-            accessibilityLabel={`Remove reaction ${emoji}`}
+            accessibilityLabel={gt("Remove reaction {emoji}", { emoji })}
             hitSlop={8}
             onPress={() => {
               void selectionAsync().catch(() => undefined);
@@ -278,7 +294,9 @@ export function BotMessageReactionPill({
             key={key}
             accessible
             accessibilityRole="image"
-            accessibilityLabel={own ? `Your reaction ${emoji}` : `Bot reaction ${emoji}`}
+            accessibilityLabel={
+              own ? gt("Your reaction {emoji}", { emoji }) : gt("Bot reaction {emoji}", { emoji })
+            }
             className="h-7 justify-center px-1"
           >
             <Text>{emoji}</Text>

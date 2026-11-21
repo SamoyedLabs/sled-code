@@ -24,6 +24,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { useBotPalette } from "./upstream/BotChrome";
 import { OpenBotText as Text } from "./upstream/OpenBotTypography";
 import { botAttachmentDownload, botChatAttachments } from "./bot-attachment-transfer";
+import { T, useGT } from "gt-react-native";
 
 type PrefetchedFile = {
   key: string;
@@ -47,6 +48,7 @@ export function useBotAttachmentPreview(
   hostId: string,
   automatic = false,
 ) {
+  const gt = useGT();
   const materialize = useAtomCommand(openbot.fileMaterialize, { reportFailure: false });
   const canOpen = useAtomValue(openbot.fileMaterialize.permissionAtom(environmentId));
   const [preview, setPreview] = useState<FilePreviewSource | null>(null);
@@ -181,7 +183,10 @@ export function useBotAttachmentPreview(
     })()
       .catch(() => {
         if (current === request.current)
-          Dialog.alert("Attachment unavailable", "Reconnect to the original host and try again.");
+          Dialog.alert(
+            gt("Attachment unavailable"),
+            gt("Reconnect to the original host and try again."),
+          );
       })
       .finally(() => {
         if (current === request.current) opening.current = false;
@@ -223,7 +228,10 @@ export function useBotAttachmentPreview(
       onRequestClose: () => setPreview(null),
       onOpenError: () => {
         setPreview(null);
-        Dialog.alert("Preview unavailable", "Reconnect to the original host and try again.");
+        Dialog.alert(
+          gt("Preview unavailable"),
+          gt("Reconnect to the original host and try again."),
+        );
       },
     },
   };
@@ -238,6 +246,7 @@ export function BotAttachmentList({
   canOpen: boolean;
   onOpen: (id: string) => void;
 }) {
+  const gt = useGT();
   const palette = useBotPalette();
   const files = botChatAttachments(value);
   if (!files.length) return null;
@@ -247,9 +256,9 @@ export function BotAttachmentList({
         <Pressable
           key={id}
           accessibilityRole="button"
-          accessibilityLabel={`Open attachment ${name}`}
+          accessibilityLabel={gt("Open attachment {name}", { name })}
           accessibilityHint={
-            botAttachmentDownload(size) === "desktop" ? "Available on desktop" : undefined
+            botAttachmentDownload(size) === "desktop" ? gt("Available on desktop") : undefined
           }
           disabled={!canOpen || botAttachmentDownload(size) === "desktop"}
           onPress={() => onOpen(id)}
@@ -261,7 +270,9 @@ export function BotAttachmentList({
             {name}
           </Text>
           {botAttachmentDownload(size) === "desktop" && (
-            <Text style={{ color: palette.muted, fontSize: 12 }}>Open on desktop</Text>
+            <Text style={{ color: palette.muted, fontSize: 12 }}>
+              <T>Open on desktop</T>
+            </Text>
           )}
         </Pressable>
       ))}

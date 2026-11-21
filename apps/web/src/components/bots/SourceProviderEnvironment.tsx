@@ -17,6 +17,7 @@ import { BotModelPicker } from "./BotModelPicker";
 import { AccountUsageDetails } from "./upstream/provider/AccountUsageDetails";
 import { accountUsageProviderRows } from "./upstream/provider/account-usage-view";
 import { isReasoningEffort } from "./upstream/provider/types";
+import { T, useGT } from "gt-react";
 const decodeAdmin = Schema.decodeUnknownResult(OpenbotAdminRequest);
 const decodeFast = Schema.decodeUnknownResult(
   Schema.Struct({ fastMode: Schema.NullOr(Schema.Boolean) }),
@@ -71,6 +72,7 @@ export function SourceModelPicker({
   variant?: "pill" | "field";
   disabled?: boolean;
 }) {
+  const gt = useGT();
   const data = useContext(Context),
     registry = useContext(RegistryContext);
   const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
@@ -120,7 +122,7 @@ export function SourceModelPicker({
     if (!connection) return;
     const requests = inputs.map((input) => decodeAdmin(input));
     if (requests.some((request) => Result.isFailure(request))) {
-      setError("This host cannot accept that provider setting.");
+      setError(gt("This host cannot accept that provider setting."));
       return;
     }
     lock.current = true;
@@ -146,7 +148,7 @@ export function SourceModelPicker({
     if (settled._tag === "Failure" && readPreparedConnection(environmentId) === connection) {
       const failure = squashAtomCommandFailure(settled);
       setError(
-        failure instanceof Error ? failure.message : "Provider change could not be confirmed.",
+        failure instanceof Error ? failure.message : gt("Provider change could not be confirmed."),
       );
     }
     lock.current = false;
@@ -160,7 +162,7 @@ export function SourceModelPicker({
   if (!data?.status || !current)
     return (
       <span className="text-xs text-muted-foreground">
-        {data?.loading ? "Loading model…" : "Model unavailable"}
+        {data?.loading ? gt("Loading model…") : gt("Model unavailable")}
       </span>
     );
   const assigned = data.accounts?.agents.find((row) => row.agentId === agentId)?.accountId ?? null;
@@ -179,7 +181,7 @@ export function SourceModelPicker({
         {...(effort ? { reasoningEffort: effort } : {})}
         disabled={disabled || busy || !canChange}
         {...(!canChange
-          ? { disabledReason: "This connection cannot change the agent model." }
+          ? { disabledReason: gt("This connection cannot change the agent model.") }
           : {})}
         runtimeStatuses={data.runtimeStatuses}
         customProviders={data.customProviders}
@@ -238,10 +240,11 @@ export function SourceModelPicker({
 }
 
 export function SourceUsageDetails() {
+  const gt = useGT();
   const data = useContext(Context);
   if (!data) return null;
   return (
-    <section className="account-usage-popover" aria-label="Provider limits">
+    <section className="account-usage-popover" aria-label={gt("Provider limits")}>
       <AccountUsageDetails
         rows={accountUsageProviderRows(data.usage, data.status?.providers)}
         loading={data.loading}
@@ -249,7 +252,11 @@ export function SourceUsageDetails() {
         refreshActive={data.loading}
         refreshDisabled={data.loading}
         onRefresh={data.refresh}
-        title={<h2 className="account-usage-popover-title">Plan limits</h2>}
+        title={
+          <h2 className="account-usage-popover-title">
+            <T>Plan limits</T>
+          </h2>
+        }
       />
     </section>
   );

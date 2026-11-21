@@ -16,6 +16,7 @@ import { Checkbox } from "../ui/checkbox";
 import { CheckCheckIcon, InboxIcon } from "lucide-react";
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { Skeleton } from "../ui/skeleton";
+import { T, Var, useGT } from "gt-react";
 
 type RequestConversation = { label: string; onOpen: () => void };
 export function BotAttention({
@@ -25,6 +26,7 @@ export function BotAttention({
   environmentId: EnvironmentId;
   conversationForRequest?: (request: OpenbotAttentionRequest) => RequestConversation | null;
 }) {
+  const gt = useGT();
   const query = useEnvironmentQuery(openbot.attention({ environmentId, input: {} }));
   const changes = useEnvironmentQuery(openbot.changes({ environmentId, input: {} }));
   const agents = useEnvironmentQuery(openbot.agents({ environmentId, input: {} }));
@@ -33,11 +35,13 @@ export function BotAttention({
   const ready = snapshot?.state === "ready" && !query.error && !changes.error && !query.isPending;
   return (
     <WorkspacePageContainer>
-      <section aria-label="Bot requests" className="space-y-5">
+      <section aria-label={gt("Bot requests")} className="space-y-5">
         <header className="space-y-2">
-          <h2 className="text-balance text-xl font-semibold">Needs your input</h2>
+          <h2 className="text-balance text-xl font-semibold">
+            <T>Needs your input</T>
+          </h2>
           <p className="text-pretty text-sm text-muted-foreground">
-            Review questions, permissions and requests that are holding up your bots.
+            <T>Review questions, permissions and requests that are holding up your bots.</T>
           </p>
         </header>
         {(query.error || changes.error) && (
@@ -49,8 +53,8 @@ export function BotAttention({
           <div role="status" className="space-y-3 rounded-xl border border-border/60 p-5">
             <p className="text-sm text-muted-foreground">
               {snapshot?.state === "disconnected"
-                ? "Bot requests are unavailable while the engine is offline."
-                : "Connecting to live bot requests…"}
+                ? gt("Bot requests are unavailable while the engine is offline.")
+                : gt("Connecting to live bot requests…")}
             </p>
             {query.isPending && (
               <>
@@ -62,22 +66,26 @@ export function BotAttention({
         )}
         {snapshot?.state === "ready" && !snapshot.complete && (
           <p role="status" className="text-sm text-muted-foreground">
-            Showing a partial set of requests. More may be waiting; this list updates as you
-            respond.
+            <T>
+              Showing a partial set of requests. More may be waiting; this list updates as you
+              respond.
+            </T>
           </p>
         )}
         {ready && snapshot.complete && snapshot.requests.length === 0 && (
           <div className="flex flex-col items-center gap-3 rounded-xl border border-border/60 px-6 py-12 text-center">
             <CheckCheckIcon aria-hidden className="size-7 text-muted-foreground" />
-            <h3 className="text-base font-medium">You’re all caught up</h3>
+            <h3 className="text-base font-medium">
+              <T>You’re all caught up</T>
+            </h3>
             <p className="text-pretty text-sm text-muted-foreground">
-              Questions and approvals will appear here when a bot needs you.
+              <T>Questions and approvals will appear here when a bot needs you.</T>
             </p>
           </div>
         )}
         {!canRespond && (
           <p className="text-sm text-muted-foreground">
-            Settings permission is required to respond to bot requests.
+            <T>Settings permission is required to respond to bot requests.</T>
           </p>
         )}
         {snapshot?.requests.map((request) => (
@@ -113,6 +121,7 @@ export function BotAttentionRequest({
   disabled: boolean;
   conversation?: RequestConversation | null;
 }) {
+  const gt = useGT();
   const admin = useAtomCommand(openbot.admin, { reportFailure: false });
   const answerRequest = useAtomCommand(openbot.attentionRespond, { reportFailure: false });
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
@@ -152,12 +161,12 @@ export function BotAttentionRequest({
         {request.kind === "approval"
           ? `${request.approvalKind ?? "Action"} approval`
           : request.kind === "prompt"
-            ? "Question"
-            : "Browser help"}
+            ? gt("Question")
+            : gt("Browser help")}
       </p>
       {(busy || submitted) && (
         <p role="status" className="text-sm text-muted-foreground">
-          {busy ? "Sending response…" : "Response sent. Waiting for the bot…"}
+          {busy ? gt("Sending response…") : gt("Response sent. Waiting for the bot…")}
         </p>
       )}
       {error && (
@@ -171,7 +180,9 @@ export function BotAttentionRequest({
             <dl className="space-y-2 break-words text-sm">
               {approval.command && (
                 <div>
-                  <dt className="text-muted-foreground">Command</dt>
+                  <dt className="text-muted-foreground">
+                    <T>Command</T>
+                  </dt>
                   <dd>
                     <pre className="whitespace-pre-wrap break-all font-mono">
                       {approval.command}
@@ -181,44 +192,55 @@ export function BotAttentionRequest({
               )}
               {approval.cwd && (
                 <div>
-                  <dt className="text-muted-foreground">Working directory</dt>
+                  <dt className="text-muted-foreground">
+                    <T>Working directory</T>
+                  </dt>
                   <dd>{approval.cwd}</dd>
                 </div>
               )}
               {approval.reason && (
                 <div>
-                  <dt className="text-muted-foreground">Reason</dt>
+                  <dt className="text-muted-foreground">
+                    <T>Reason</T>
+                  </dt>
                   <dd>{approval.reason}</dd>
                 </div>
               )}
               {approval.grantRoot && (
                 <div>
-                  <dt className="text-muted-foreground">Access root</dt>
+                  <dt className="text-muted-foreground">
+                    <T>Access root</T>
+                  </dt>
                   <dd>{approval.grantRoot}</dd>
                 </div>
               )}
               {approval.permissions && (
                 <div>
-                  <dt className="text-muted-foreground">Requested permissions</dt>
+                  <dt className="text-muted-foreground">
+                    <T>Requested permissions</T>
+                  </dt>
                   <dd>
-                    Read: {approval.permissions.fileSystem.read.join(", ") || "None"}
+                    <T>Read:</T> {approval.permissions.fileSystem.read.join(", ") || gt("None")}
                     <br />
-                    Write: {approval.permissions.fileSystem.write.join(", ") || "None"}
+                    <T>Write:</T> {approval.permissions.fileSystem.write.join(", ") || gt("None")}
                     <br />
-                    Network: {approval.permissions.network ? "Allowed" : "Not requested"}
+                    <T>Network:</T>{" "}
+                    {approval.permissions.network ? gt("Allowed") : gt("Not requested")}
                   </dd>
                 </div>
               )}
             </dl>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Approval details are unavailable. Review this request on the host.
+              <T>Approval details are unavailable. Review this request on the host.</T>
             </p>
           )}
           {approval?.truncated && (
             <p className="text-sm text-muted-foreground">
-              These details were shortened by the engine. Review the complete request on the host
-              before approving.
+              <T>
+                These details were shortened by the engine. Review the complete request on the host
+                before approving.
+              </T>
             </p>
           )}
           <div className="flex flex-wrap gap-2">
@@ -233,7 +255,7 @@ export function BotAttentionRequest({
                 })
               }
             >
-              Approve once
+              <T>Approve once</T>
             </Button>
             <Button
               variant="outline"
@@ -247,7 +269,7 @@ export function BotAttentionRequest({
                 })
               }
             >
-              Decline
+              <T>Decline</T>
             </Button>
           </div>
         </>
@@ -255,16 +277,20 @@ export function BotAttentionRequest({
       {request.kind === "prompt" && secure && (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            This bot is waiting for a private response. Open its conversation to review the secure
-            form.
+            <T>
+              This bot is waiting for a private response. Open its conversation to review the secure
+              form.
+            </T>
           </p>
           {conversation ? (
             <Button size="sm" variant="outline" onClick={conversation.onOpen}>
-              Open {conversation.label}
+              <T>
+                Open <Var>{conversation.label}</Var>
+              </T>
             </Button>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Open the original conversation to respond.
+              <T>Open the original conversation to respond.</T>
             </p>
           )}
         </div>
@@ -279,7 +305,7 @@ export function BotAttentionRequest({
         >
           {request.questions?.map((question) => (
             <fieldset key={question.id} disabled={unavailable} className="space-y-2">
-              <legend className="text-sm font-medium">{question.header || "Question"}</legend>
+              <legend className="text-sm font-medium">{question.header || gt("Question")}</legend>
               <p className="text-sm">{question.question}</p>
               {!question.isSecret && question.options?.length ? (
                 <div className="space-y-2">
@@ -329,7 +355,7 @@ export function BotAttentionRequest({
           ))}
           <div className="flex flex-wrap gap-2">
             <Button size="sm" type="submit" disabled={unavailable || !answer}>
-              Send answer
+              <T>Send answer</T>
             </Button>
             <Button
               size="sm"
@@ -344,7 +370,7 @@ export function BotAttentionRequest({
                 })
               }
             >
-              Cancel request
+              <T>Cancel request</T>
             </Button>
           </div>
         </form>
@@ -353,15 +379,17 @@ export function BotAttentionRequest({
         <>
           <p className="text-sm">
             {request.takeoverReason === "sign-in-blocked"
-              ? "The website blocked sign-in. Finish signing in using the bot’s browser on its host."
-              : "This bot needs you to finish a step in its browser on the host."}
+              ? gt(
+                  "The website blocked sign-in. Finish signing in using the bot’s browser on its host.",
+                )
+              : gt("This bot needs you to finish a step in its browser on the host.")}
           </p>
           {request.browserSecret && (
             <p className="break-words text-sm text-muted-foreground">
               {request.browserSecret.origin} ·{" "}
               {request.browserSecret.method === "password"
-                ? "Password required"
-                : "Verification code required"}
+                ? gt("Password required")
+                : gt("Verification code required")}
             </p>
           )}
           {tabId && (
@@ -371,7 +399,7 @@ export function BotAttentionRequest({
               disabled={unavailable}
               onClick={() => void respond({ operation: "browser.activate", tabId })}
             >
-              Show tab on host
+              <T>Show tab on host</T>
             </Button>
           )}
           <label className="flex items-center gap-2 text-sm">
@@ -380,7 +408,7 @@ export function BotAttentionRequest({
               disabled={unavailable}
               onCheckedChange={(value) => setReviewed(value === true)}
             />
-            I finished the browser step on the host
+            <T>I finished the browser step on the host</T>
           </label>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -394,7 +422,7 @@ export function BotAttentionRequest({
                 })
               }
             >
-              Resume bot
+              <T>Resume bot</T>
             </Button>
             <Button
               variant="outline"
@@ -408,7 +436,7 @@ export function BotAttentionRequest({
                 })
               }
             >
-              Cancel request
+              <T>Cancel request</T>
             </Button>
           </div>
         </>

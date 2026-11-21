@@ -40,11 +40,13 @@ import {
   useBotRecognition,
   useBotRecognitionModel,
 } from "../bots/upstream/voice/botRecognition";
+import { T, useGT } from "gt-react-native";
 
 const SAMPLE_ID = "sample";
 const SAMPLE_TEXT = "Hi. This is what I sound like when I read a bot reply.";
 
 export function SettingsBotVoiceRouteScreen() {
+  const gt = useGT();
   const [tab, setTab] = useState<"listening" | "speaking" | "gptLive">("listening");
   const [pause, setPause] = useState(getBotTurnPause);
   const [voice, setVoice] = useState(getBotSpeechVoice);
@@ -64,7 +66,7 @@ export function SettingsBotVoiceRouteScreen() {
       if (previewing) sample.toggle(SAMPLE_ID, SAMPLE_TEXT);
       setVoice(next);
     } catch {
-      Dialog.alert("Could not save the voice", "Try choosing it again.");
+      Dialog.alert(gt("Could not save the voice"), gt("Try choosing it again."));
     }
   }
 
@@ -74,14 +76,14 @@ export function SettingsBotVoiceRouteScreen() {
       return;
     }
     Dialog.confirm({
-      title: "Remove the voice model?",
-      message: "You can download Supertonic 3 again to read bot replies aloud.",
-      confirmText: "Remove",
+      title: gt("Remove the voice model?"),
+      message: gt("You can download Supertonic 3 again to read bot replies aloud."),
+      confirmText: gt("Remove"),
       destructive: true,
       onConfirm: () => {
         setRemoving(true);
         void removeBotSpeechModel()
-          .catch(() => Dialog.alert("Could not remove the voice model", "Try again."))
+          .catch(() => Dialog.alert(gt("Could not remove the voice model"), gt("Try again.")))
           .finally(() => setRemoving(false));
       },
     });
@@ -97,9 +99,11 @@ export function SettingsBotVoiceRouteScreen() {
     >
       <SegmentedControl
         options={[
-          { value: "listening", label: "Listening" },
-          { value: "speaking", label: "Speaking" },
-          ...(botGptVoiceNative ? [{ value: "gptLive" as const, label: "GPT live voice" }] : []),
+          { value: "listening", label: gt("Listening") },
+          { value: "speaking", label: gt("Speaking") },
+          ...(botGptVoiceNative
+            ? [{ value: "gptLive" as const, label: gt("GPT live voice") }]
+            : []),
         ]}
         selected={tab}
         onSelect={(next) => {
@@ -109,19 +113,22 @@ export function SettingsBotVoiceRouteScreen() {
       />
       {tab === "listening" ? (
         <>
-          <SettingsSection title="Listening" footer="Choose how Bots transcribes your dictation.">
+          <SettingsSection
+            title={gt("Listening")}
+            footer="Choose how Bots transcribes your dictation."
+          >
             <ListActionRow
               icon="mic"
-              label="Device dictation"
-              detail={listening === "device" ? "Selected" : undefined}
+              label={gt("Device dictation")}
+              detail={listening === "device" ? gt("Selected") : undefined}
               disabled={usingMicrophone}
               onPress={() => selectBotRecognition("device")}
             />
             {server?.routes.dictation && (
               <ListActionRow
                 icon="server.rack"
-                label="Voice server dictation"
-                detail={listening === "voice-server" ? "Selected" : undefined}
+                label={gt("Voice server dictation")}
+                detail={listening === "voice-server" ? gt("Selected") : undefined}
                 disabled={usingMicrophone}
                 onPress={() => selectBotRecognition("voice-server")}
               />
@@ -129,8 +136,8 @@ export function SettingsBotVoiceRouteScreen() {
             {elevenLabs && (
               <ListActionRow
                 icon="mic"
-                label="Scribe v2 Realtime"
-                detail={listening === "elevenlabs" ? "Selected" : undefined}
+                label={gt("Scribe v2 Realtime")}
+                detail={listening === "elevenlabs" ? gt("Selected") : undefined}
                 disabled={usingMicrophone}
                 onPress={() => selectBotRecognition("elevenlabs")}
               />
@@ -147,13 +154,13 @@ export function SettingsBotVoiceRouteScreen() {
           <BotVoiceServerSettings disabled={usingMicrophone} />
           <BotElevenLabsSettings disabled={usingMicrophone} />
           <SettingsSection
-            title="Voice conversation"
+            title={gt("Voice conversation")}
             footer="How long Bots waits for you to keep speaking before sending."
           >
             <SliderRow
               {...BOT_TURN_PAUSE}
               icon="mic"
-              label="Pause before sending"
+              label={gt("Pause before sending")}
               value={pause}
               valueLabel={`${pause / 1000} s`}
               disabled={usingMicrophone}
@@ -161,7 +168,7 @@ export function SettingsBotVoiceRouteScreen() {
                 try {
                   setPause(saveBotTurnPause(next));
                 } catch {
-                  Dialog.alert("Could not save the pause", "Try choosing it again.");
+                  Dialog.alert(gt("Could not save the pause"), gt("Try choosing it again."));
                 }
               }}
             />
@@ -173,7 +180,7 @@ export function SettingsBotVoiceRouteScreen() {
         <>
           <BotElevenLabsSettings disabled={usingMicrophone} />
           <SettingsSection
-            title="Supertonic 3"
+            title={gt("Supertonic 3")}
             footer={
               sample.available
                 ? "The model stays on this device until you remove it."
@@ -184,10 +191,10 @@ export function SettingsBotVoiceRouteScreen() {
               icon="arrow.down.circle"
               label={
                 sample.downloadingModel
-                  ? "Cancel download"
+                  ? gt("Cancel download")
                   : installed
-                    ? "Remove voice model"
-                    : "Download voice model"
+                    ? gt("Remove voice model")
+                    : gt("Download voice model")
               }
               detail={sample.downloadingModel ? `${sample.progress}%` : BOT_SPEECH_MODEL_SIZE}
               disabled={!sample.available || previewing}
@@ -196,14 +203,14 @@ export function SettingsBotVoiceRouteScreen() {
             />
             <ListActionRow
               icon="headphones"
-              label={previewing ? "Stop preview" : "Listen"}
+              label={previewing ? gt("Stop preview") : gt("Listen")}
               disabled={!installed || removing}
               onPress={() => sample.toggle(SAMPLE_ID, SAMPLE_TEXT, voice)}
             />
           </SettingsSection>
           <View className="gap-2">
             <AppText textRole="footnote" className="px-4 text-foreground-muted">
-              Speed
+              <T>Speed</T>
             </AppText>
             <SegmentedControl
               options={BOT_SPEECH_SPEEDS.map((value) => ({ value, label: `${value}×` }))}
@@ -214,20 +221,23 @@ export function SettingsBotVoiceRouteScreen() {
                   saveBotSpeechSpeed(next);
                   setSpeed(next);
                 } catch {
-                  Dialog.alert("Could not save the playback speed", "Try choosing it again.");
+                  Dialog.alert(
+                    gt("Could not save the playback speed"),
+                    gt("Try choosing it again."),
+                  );
                 }
               }}
             />
             <AppText textRole="footnote" className="px-4 text-foreground-muted">
-              Changes how fast bot replies are read aloud.
+              <T>Changes how fast bot replies are read aloud.</T>
             </AppText>
           </View>
-          <SettingsSection title="Supertonic 3 voice">
+          <SettingsSection title={gt("Supertonic 3 voice")}>
             {BOT_SPEECH_VOICES.map((option) => (
               <ListActionRow
                 key={option}
                 label={`${option.startsWith("F") ? "Female" : "Male"} ${option.slice(1)}`}
-                detail={voice === option ? "Selected" : undefined}
+                detail={voice === option ? gt("Selected") : undefined}
                 disabled={!sample.available}
                 onPress={() => choose(option)}
               />
@@ -248,6 +258,7 @@ function RecognitionModelRows({
   selected: boolean;
   usingMicrophone: boolean;
 }) {
+  const gt = useGT();
   const state = useBotRecognitionModel(model);
   const [removing, setRemoving] = useState(false);
   const size = model.files.reduce((total, item) => total + item.bytes, 0);
@@ -258,16 +269,16 @@ function RecognitionModelRows({
         label={model.name}
         detail={
           !state.supported
-            ? "Unavailable on this build or device"
+            ? gt("Unavailable on this build or device")
             : selected
-              ? "Selected"
+              ? gt("Selected")
               : state.ready
                 ? model.detail
                 : state.downloading
-                  ? `Downloading · ${state.progress}%`
+                  ? gt("Downloading · {progress}%", { progress: state.progress })
                   : state.error
-                    ? "Download failed · Tap to retry"
-                    : `${Math.round(size / 1_000_000)} MB · Download`
+                    ? gt("Download failed · Tap to retry")
+                    : gt("{value} MB · Download", { value: Math.round(size / 1_000_000) })
         }
         disabled={!state.supported || usingMicrophone || removing}
         onPress={() => {
@@ -278,19 +289,19 @@ function RecognitionModelRows({
       {state.ready && (
         <ListActionRow
           icon="trash"
-          label={`Remove ${model.name}`}
+          label={gt("Remove {name}", { name: model.name })}
           disabled={usingMicrophone || removing}
           loading={removing}
           onPress={() =>
             Dialog.confirm({
-              title: `Remove ${model.name}?`,
-              message: "You can download the model again.",
-              confirmText: "Remove",
+              title: gt("Remove {name}?", { name: model.name }),
+              message: gt("You can download the model again."),
+              confirmText: gt("Remove"),
               destructive: true,
               onConfirm: () => {
                 setRemoving(true);
                 void removeBotRecognition(model)
-                  .catch(() => Dialog.alert("Could not remove the model", "Try again."))
+                  .catch(() => Dialog.alert(gt("Could not remove the model"), gt("Try again.")))
                   .finally(() => setRemoving(false));
               },
             })

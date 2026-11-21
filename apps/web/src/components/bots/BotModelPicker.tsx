@@ -7,9 +7,11 @@ import { Switch } from "../ui/switch";
 import { botModelPickerCatalog } from "./botModelPickerCatalog";
 import type { OpenbotProviderModelPickerProps } from "./upstream/provider/ProviderModelPicker";
 import { isReasoningEffort } from "./upstream/provider/types";
+import { T, useGT } from "gt-react";
 
 /** Uses the actual Threads picker and effort column; host writes retain their bot identities. */
 export function BotModelPicker(props: OpenbotProviderModelPickerProps & { scope?: string }) {
+  const gt = useGT();
   const [open, setOpen] = useState(false);
   // oxlint-disable-next-line t3code/no-manual-memo -- Stable entries prevent the shared picker from resetting provider focus while the composer draft rerenders.
   const catalog = useMemo(
@@ -35,7 +37,12 @@ export function BotModelPicker(props: OpenbotProviderModelPickerProps & { scope?
       target?.provider === props.provider && target.accountId === (props.providerAccountId ?? null)
     );
   });
-  if (!active) return <span className="text-xs text-muted-foreground">Model unavailable</span>;
+  if (!active)
+    return (
+      <span className="text-xs text-muted-foreground">
+        <T>Model unavailable</T>
+      </span>
+    );
   const traits: TraitsSelectionInput = {
     provider: active.driverKind,
     instanceId: active.instanceId,
@@ -67,7 +74,7 @@ export function BotModelPicker(props: OpenbotProviderModelPickerProps & { scope?
       disabled={props.disabled ?? false}
       open={open}
       onOpenChange={setOpen}
-      triggerAriaLabel={props.ariaLabel ?? "Choose bot model"}
+      triggerAriaLabel={props.ariaLabel ?? gt("Choose bot model")}
       triggerSuffix={effort.suffix}
       triggerDetail={effort.detail}
       effortColumn={<ComposerEffortColumn traits={traits} />}
@@ -82,14 +89,14 @@ export function BotModelPicker(props: OpenbotProviderModelPickerProps & { scope?
                 props.onManageProviders?.(event.currentTarget);
               }}
             >
-              Models & accounts
+              <T>Models & accounts</T>
             </Button>
           ) : (
             <span />
           )}
           {props.onFastModeChange ? (
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              Fast
+              <T>Fast</T>
               <Switch
                 checked={props.fastMode ?? false}
                 disabled={props.disabled ?? false}

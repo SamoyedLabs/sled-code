@@ -36,7 +36,10 @@ export const dispatch = Effect.fn("QueueAttachments.dispatch")(function* <E>(
   const body = yield* encodeEdit(request.value).pipe(
     Effect.mapError(() => new QueueAttachmentsUnavailable({})),
   );
-  const raw = yield* ports.post(`/v1/sled/queue-attachments/${resultOnly ? "result" : "save"}`, body);
+  const raw = yield* ports.post(
+    `/v1/sled/queue-attachments/${resultOnly ? "result" : "save"}`,
+    body,
+  );
   if (raw === null && resultOnly) return null;
   const receipt = decodeReceipt(raw);
   if (

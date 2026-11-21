@@ -18,8 +18,10 @@ import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime"
 import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { useGT } from "gt-react";
 
 export function useBotWorkflows(environmentId: EnvironmentId, hostId: string, newId: () => string) {
+  const gt = useGT();
   const [selected, setSelected] = useState<string | null>(null);
   const agentsQuery = useEnvironmentQuery(
     openbot.readFromHost({
@@ -96,7 +98,7 @@ export function useBotWorkflows(environmentId: EnvironmentId, hostId: string, ne
   const canManage = useAtomValue(
     openbot.adminToHost.permissionAtom(environmentId, {
       hostId,
-      request: { operation: "workflow.create", title: "Workflow" },
+      request: { operation: "workflow.create", title: gt("Workflow") },
     }),
   );
   const canRun = useAtomValue(
@@ -125,7 +127,7 @@ export function useBotWorkflows(environmentId: EnvironmentId, hostId: string, ne
     setError(null);
     setNotice(null);
     const result = await admin({ environmentId, input: { hostId, request } }).catch(() => null);
-    if (!result) setError("The workflow request could not complete. Retry the same action.");
+    if (!result) setError(gt("The workflow request could not complete. Retry the same action."));
     else if (result._tag === "Failure") setError(String(squashAtomCommandFailure(result)));
     else {
       if ("requestId" in request)
@@ -149,26 +151,30 @@ export function useBotWorkflows(environmentId: EnvironmentId, hostId: string, ne
           setVersionId(null);
           setBefore(undefined);
           setDraft(workflowDraft(created));
-        } else setError("The engine returned an unsupported workflow.");
+        } else setError(gt("The engine returned an unsupported workflow."));
       } else if (request.operation === "workflow.saveGraph" && draft) {
         const outcome = workflowSaveOutcome(draft, result.value);
         if (outcome?.state === "saved") {
           setDraft(null);
-          setNotice("Workflow saved.");
+          setNotice(gt("Workflow saved."));
         } else if (outcome?.state === "conflict") {
           setDraft(outcome.draft);
           setError(
-            "Another device changed this workflow. Your draft is retained; review the server version before saving.",
+            gt(
+              "Another device changed this workflow. Your draft is retained; review the server version before saving.",
+            ),
           );
         } else
-          setError("The engine returned an unsupported save result. Reload before saving again.");
+          setError(
+            gt("The engine returned an unsupported save result. Reload before saving again."),
+          );
       } else if (request.operation === "workflow.delete") {
         setSelected(null);
         setDraft(null);
         setRunId(null);
       } else if (request.operation === "workflow.restoreVersion") {
         setDraft(null);
-        setNotice("Version restored.");
+        setNotice(gt("Version restored."));
       } else if (request.operation === "workflow.startRun") {
         const started = workflowRun(result.value);
         if (started) {

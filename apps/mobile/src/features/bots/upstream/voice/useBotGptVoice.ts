@@ -11,6 +11,7 @@ import { useEnvironmentQuery } from "../../../../state/query";
 import { useAtomCommand } from "../../../../state/use-atom-command";
 import { botGptVoiceNative, useBotGptVoiceSettings } from "./botGptVoice";
 import type { useBotLiveVoice } from "./useBotLiveVoice";
+import { useGT } from "gt-react-native";
 
 type State = NonNullable<ReturnType<typeof useBotLiveVoice>["state"]>;
 type CallLifetime = { scope: string; allowed: boolean };
@@ -46,6 +47,7 @@ export function useBotGptVoice(input: {
   visible: boolean;
   available: boolean;
 }): ReturnType<typeof useBotLiveVoice> {
+  const gt = useGT();
   const native = botGptVoiceNative;
   const settings = useBotGptVoiceSettings();
   const foreground = useAppForeground();
@@ -128,7 +130,7 @@ export function useBotGptVoice(input: {
           run.connectionTimeout = setTimeout(() => {
             if (active.current === run) close("The voice connection could not reconnect.");
           }, 15_000);
-          setState({ phase: "starting", caption: "Reconnecting…" });
+          setState({ phase: "starting", caption: gt("Reconnecting…") });
           return;
         }
         if (peerState === "connected") {

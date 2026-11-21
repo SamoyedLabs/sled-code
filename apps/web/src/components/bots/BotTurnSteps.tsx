@@ -9,6 +9,8 @@ import { Badge } from "../ui/badge";
 import { Dialog, DialogPopup, DialogTitle, DialogDescription } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { BotAvatar } from "./avatar/BotAvatar";
+import { m } from "../../i18n/messages";
+import { T, Var, msg, useGT } from "gt-react";
 type TraceMetadata = {
   startedAt?: number;
   endedAt?: number;
@@ -26,9 +28,9 @@ function progress(tool: Tool) {
     return tool.state === "output-error" ? tool.errorText : `${title(tool)} was denied.`;
   const name = getToolName(tool);
   if (name === "search_product_notes")
-    return pending(tool) ? "Searching product notes…" : "Found the product notes.";
+    return pending(tool) ? m(msg("Searching product notes…")) : m(msg("Found the product notes."));
   if (name === "read_launch_brief")
-    return pending(tool) ? "Reading the launch brief…" : "Read the launch brief.";
+    return pending(tool) ? m(msg("Reading the launch brief…")) : m(msg("Read the launch brief."));
   return title(tool);
 }
 
@@ -41,7 +43,7 @@ export function BotTurnSteps({
   showAvatar = true,
   compact = false,
   metadata,
-  sourceLabel = "Bot turn",
+  sourceLabel: rawSourceLabel,
   llmCalls,
   showToolDetails = false,
   initialTraceOpen = false,
@@ -59,6 +61,8 @@ export function BotTurnSteps({
   showToolDetails?: boolean;
   initialTraceOpen?: boolean;
 }) {
+  const gt = useGT();
+  const sourceLabel = rawSourceLabel ?? gt("Bot turn");
   const [stepsOpen, setStepsOpen] = useState(false);
   const [stepLimit, setStepLimit] = useState(50);
   const [traceOpen, setTraceOpen] = useState(initialTraceOpen);
@@ -103,7 +107,7 @@ export function BotTurnSteps({
   const stepList = stepsOpen ? (
     <section
       id={panelId}
-      aria-label="Agent steps"
+      aria-label={gt("Agent steps")}
       tabIndex={0}
       className="max-h-[220px] overflow-y-auto border-l border-border pl-3"
     >
@@ -123,7 +127,7 @@ export function BotTurnSteps({
             <PuzzleIcon className="mt-0.5 size-3 shrink-0" />
             <div className="min-w-0">
               {stopped && pending(tool)
-                ? `${title(tool)} stopped before a result was reported.`
+                ? gt("{title} stopped before a result was reported.", { title: title(tool) })
                 : progress(tool)}
               {showToolDetails &&
                 typeof tool.input === "object" &&
@@ -139,7 +143,9 @@ export function BotTurnSteps({
       </ol>
       {tools.length > stepLimit && (
         <Button variant="ghost-muted" size="xs" onClick={() => setStepLimit(stepLimit + 50)}>
-          Show next {Math.min(50, tools.length - stepLimit)} steps
+          <T>
+            Show next <Var>{Math.min(50, tools.length - stepLimit)}</Var> steps
+          </T>
         </Button>
       )}
     </section>
@@ -162,7 +168,7 @@ export function BotTurnSteps({
               <Button
                 variant="ghost-muted"
                 size="icon-xs"
-                aria-label={stepsOpen ? "Hide agent steps" : "Show agent steps"}
+                aria-label={stepsOpen ? gt("Hide agent steps") : gt("Show agent steps")}
                 aria-expanded={stepsOpen}
                 aria-controls={stepsOpen ? panelId : undefined}
                 onClick={() => setStepsOpen(!stepsOpen)}
@@ -181,7 +187,7 @@ export function BotTurnSteps({
               size="xs"
               className="-ml-2"
               ref={opener}
-              aria-label={stepsOpen ? "Collapse agent steps" : "Open turn trace"}
+              aria-label={stepsOpen ? gt("Collapse agent steps") : gt("Open turn trace")}
               aria-controls={stepsOpen ? panelId : undefined}
               aria-haspopup={stepsOpen ? undefined : "dialog"}
               aria-expanded={stepsOpen ? true : undefined}
@@ -203,7 +209,11 @@ export function BotTurnSteps({
                   {Math.round(duration / 1000)}s
                 </span>
               )}
-              {stopped && <span className="font-normal text-muted-foreground">Stopped</span>}
+              {stopped && (
+                <span className="font-normal text-muted-foreground">
+                  <T>Stopped</T>
+                </span>
+              )}
               {stepsOpen ? (
                 <ChevronDownIcon className="size-3" />
               ) : (
@@ -223,9 +233,11 @@ export function BotTurnSteps({
           >
             {traceSpans?.length ? (
               <div className="p-6">
-                <DialogTitle className="sr-only">Trace</DialogTitle>
+                <DialogTitle className="sr-only">
+                  <T>Trace</T>
+                </DialogTitle>
                 <DialogDescription className="sr-only">
-                  Inspect this bot turn’s timing, reported usage and steps.
+                  <T>Inspect this bot turn’s timing, reported usage and steps.</T>
                 </DialogDescription>
                 <BotTraceWaterfall
                   spans={traceSpans}
@@ -241,7 +253,9 @@ export function BotTurnSteps({
             ) : (
               <div className="space-y-5 p-6">
                 <div className="pr-8">
-                  <DialogTitle>Trace</DialogTitle>
+                  <DialogTitle>
+                    <T>Trace</T>
+                  </DialogTitle>
                   <DialogDescription>
                     {sourceLabel}
                     {agent ? ` · ${agent.name}` : ""}
@@ -249,31 +263,39 @@ export function BotTurnSteps({
                 </div>
                 <div className="grid grid-cols-4 gap-4 border-y py-4 text-xs">
                   <div>
-                    <span className="text-muted-foreground">Duration</span>
+                    <span className="text-muted-foreground">
+                      <T>Duration</T>
+                    </span>
                     <p className="mt-1 text-lg font-medium tabular-nums">
-                      {duration !== null ? seconds(duration) : "Not reported"}
+                      {duration !== null ? seconds(duration) : gt("Not reported")}
                     </p>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">LLM calls</span>
+                    <span className="text-muted-foreground">
+                      <T>LLM calls</T>
+                    </span>
                     <p className="mt-1 text-lg font-medium tabular-nums">
-                      {llmCalls ?? "Not reported"}
+                      {llmCalls ?? gt("Not reported")}
                     </p>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Tool calls</span>
+                    <span className="text-muted-foreground">
+                      <T>Tool calls</T>
+                    </span>
                     <p className="mt-1 text-lg font-medium tabular-nums">{tools.length}</p>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Errors</span>
+                    <span className="text-muted-foreground">
+                      <T>Errors</T>
+                    </span>
                     <p className="mt-1 text-lg font-medium tabular-nums">{failures}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
                   <Input
-                    aria-label="Search trace"
-                    placeholder="Search trace…"
+                    aria-label={gt("Search trace")}
+                    placeholder={gt("Search trace…")}
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                   />
@@ -283,13 +305,15 @@ export function BotTurnSteps({
                     aria-pressed={onlyFailed}
                     onClick={() => setOnlyFailed(!onlyFailed)}
                   >
-                    Errors
+                    <T>Errors</T>
                   </Button>
                 </div>
                 <div className="max-h-80 overflow-auto">
                   <div className="min-w-[520px]">
                     <div className="grid grid-cols-[minmax(160px,1fr)_minmax(220px,2fr)_52px] gap-3 border-b pb-2 text-xs text-muted-foreground">
-                      <span>Steps</span>
+                      <span>
+                        <T>Steps</T>
+                      </span>
                       <div className="flex justify-between">
                         {[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
                           <span key={fraction}>{seconds(total * fraction)}</span>
@@ -311,7 +335,7 @@ export function BotTurnSteps({
                           <button
                             type="button"
                             className="flex min-w-0 items-center gap-2 text-left hover:underline"
-                            aria-label={`Show step: ${title(tool)}`}
+                            aria-label={gt("Show step: {title}", { title: title(tool) })}
                             onClick={() => {
                               setTraceOpen(false);
                               setStepsOpen(true);
@@ -320,7 +344,11 @@ export function BotTurnSteps({
                           >
                             <PuzzleIcon className="size-3.5 shrink-0 text-muted-foreground" />
                             <span className="truncate">{title(tool)}</span>
-                            {failed(tool) && <span className="text-destructive">Failed</span>}
+                            {failed(tool) && (
+                              <span className="text-destructive">
+                                <T>Failed</T>
+                              </span>
+                            )}
                           </button>
                           <div className="relative h-4 rounded-sm bg-muted/40">
                             {at !== null && length !== null ? (
@@ -337,25 +365,25 @@ export function BotTurnSteps({
                               />
                             ) : (
                               <span className="px-2 text-2xs text-muted-foreground">
-                                Timing not reported
+                                <T>Timing not reported</T>
                               </span>
                             )}
                           </div>
                           <span className="text-right tabular-nums text-muted-foreground">
-                            {length !== null ? seconds(length) : stopped ? "Stopped" : "n/a"}
+                            {length !== null ? seconds(length) : stopped ? gt("Stopped") : "n/a"}
                           </span>
                         </div>
                       );
                     })}
                     {!shown.length && (
                       <p className="py-6 text-center text-xs text-muted-foreground">
-                        No matching steps.
+                        <T>No matching steps.</T>
                       </p>
                     )}
                   </div>
                 </div>
                 <p className="text-2xs text-muted-foreground">
-                  Select a step to return to its progress line in the conversation.
+                  <T>Select a step to return to its progress line in the conversation.</T>
                 </p>
               </div>
             )}

@@ -22,10 +22,12 @@ import {
 import { useMarketplace } from "./useMarketplace";
 import "./marketplace.css";
 import "./marketplace-adapter.css";
+import { m } from "../../../../i18n/messages";
+import { T, Var, msg, useGT } from "gt-react";
 const TABS = [
-  { id: "apps", title: "Apps", icon: Blocks },
-  { id: "agents", title: "Agents", icon: Bot },
-  { id: "skills", title: "Skills", icon: BookOpen },
+  { id: "apps", title: m(msg("Apps")), icon: Blocks },
+  { id: "agents", title: m(msg("Agents")), icon: Bot },
+  { id: "skills", title: m(msg("Skills")), icon: BookOpen },
 ] as const;
 const DESCRIPTION = {
   apps: "Connect the tools and services that your agents work with.",
@@ -33,17 +35,17 @@ const DESCRIPTION = {
   skills: "Instructions that teach an agent a task or a tool.",
 };
 const SOURCES = [
-  { value: "all", label: "All" },
+  { value: "all", label: m(msg("All")) },
   {
     value: "verified",
     label: (
       <>
         <ShieldCheck aria-hidden="true" />
-        Verified
+        <T>Verified</T>
       </>
     ),
   },
-  { value: "public", label: "Public" },
+  { value: "public", label: m(msg("Public")) },
 ] as const;
 type View =
   | { kind: "browse" }
@@ -64,6 +66,7 @@ function move(motion: "forward" | "back" | "tab" | "swap", update: () => void) {
   });
 }
 export function Marketplace(model: MarketplaceProps) {
+  const gt = useGT();
   const publicCatalog = model.capabilities.includes("sled-public-catalog-v1");
   const [tab, setTab] = useState<MarketplaceTab>("apps");
   const [libraryError, setLibraryError] = useState<string | null>(null);
@@ -179,7 +182,7 @@ export function Marketplace(model: MarketplaceProps) {
       skill.origin === "local" ? "settings.local-catalog.localGet" : "settings.local-catalog.skill";
     const request = settingRequest(operation, { skillId: skill.skillId });
     if (!request || !model.actions.can(request)) {
-      setLibraryError("You need permission to read this skill on the host.");
+      setLibraryError(gt("You need permission to read this skill on the host."));
       return;
     }
     try {
@@ -189,7 +192,7 @@ export function Marketplace(model: MarketplaceProps) {
         listing: { kind: "skill", value, ...(skill.origin === "local" ? { local: true } : {}) },
       });
     } catch (cause) {
-      setLibraryError(cause instanceof Error ? cause.message : "The skill could not be read.");
+      setLibraryError(cause instanceof Error ? cause.message : gt("The skill could not be read."));
     }
   };
   const all: Listing[] =
@@ -209,15 +212,17 @@ export function Marketplace(model: MarketplaceProps) {
   const available = filtered.filter((item) => !owned(item));
   const action = (item: Listing) =>
     owned(item) ? (
-      <Done>Added</Done>
+      <Done>
+        <T>Added</T>
+      </Done>
     ) : (
       <SourceButton
         variant="secondary"
-        aria-label={`Add ${item.value.name}`}
+        aria-label={gt("Add {name}", { name: item.value.name })}
         onClick={() => go({ kind: "listing", listing: item })}
       >
         <Plus aria-hidden="true" />
-        Add
+        <T>Add</T>
       </SourceButton>
     );
   const rows = (items: readonly Listing[]) => (
@@ -242,10 +247,10 @@ export function Marketplace(model: MarketplaceProps) {
         {top.kind !== "group" && (items.length > 6 || c.cursor !== null) && (
           <SourceButton
             variant="ghost"
-            aria-label={`See all ${name}`}
+            aria-label={gt("See all {name}", { name })}
             onClick={() => go({ kind: "group", category: key })}
           >
-            See all
+            <T>See all</T>
             <ChevronRight aria-hidden="true" />
           </SourceButton>
         )}
@@ -260,12 +265,12 @@ export function Marketplace(model: MarketplaceProps) {
     <section
       ref={root}
       className="skills-marketplace skills-marketplace-page"
-      aria-label="Marketplace"
+      aria-label={gt("Marketplace")}
     >
       <header className="skills-marketplace-topbar">
         <nav
           className="marketplace-heading"
-          aria-label="Marketplace path"
+          aria-label={gt("Marketplace path")}
           hidden={stack.length < 2}
         >
           {stack.slice(0, -1).map((view, index) => (
@@ -290,9 +295,9 @@ export function Marketplace(model: MarketplaceProps) {
       </header>
       <aside className="marketplace-nav" aria-labelledby="marketplace-nav-title">
         <h2 id="marketplace-nav-title" className="marketplace-nav-title" tabIndex={-1}>
-          Marketplace
+          <T>Marketplace</T>
         </h2>
-        <nav aria-label="Marketplace kinds">
+        <nav aria-label={gt("Marketplace kinds")}>
           <ul className="settings-modal-nav marketplace-nav-list">
             {TABS.map((item) => (
               <li key={item.id}>
@@ -311,7 +316,9 @@ export function Marketplace(model: MarketplaceProps) {
         </nav>
         {model.apps?.some((app) => app.status === "connected" || app.status === "attention") && (
           <section className="marketplace-nav-group">
-            <h3 className="marketplace-nav-heading">Your apps</h3>
+            <h3 className="marketplace-nav-heading">
+              <T>Your apps</T>
+            </h3>
             <ul className="settings-modal-nav marketplace-nav-list">
               {model.apps
                 .filter((app) => app.status === "connected" || app.status === "attention")
@@ -358,12 +365,14 @@ export function Marketplace(model: MarketplaceProps) {
                     disabled={model.agents.length === 0}
                     onClick={() =>
                       model.onDraftRequest?.({
-                        title: "Create a local skill",
-                        text: "Help me create a new local skill. Use the skill-creation guide. Ask me what workflow it should support before you create it.",
+                        title: gt("Create a local skill"),
+                        text: gt(
+                          "Help me create a new local skill. Use the skill-creation guide. Ask me what workflow it should support before you create it.",
+                        ),
                       })
                     }
                   >
-                    Create skill
+                    <T>Create skill</T>
                   </SourceButton>
                 )}
 
@@ -380,19 +389,19 @@ export function Marketplace(model: MarketplaceProps) {
                       {DESCRIPTION[tab]}
                       {publicCatalog &&
                         tab !== "apps" &&
-                        " From the bundled public catalog. No OpenBot account required."}
+                        gt(" From the bundled public catalog. No OpenBot account required.")}
                     </p>
                   </div>
                   {tab !== "apps" && publicCatalog && model.onSignIn && (
                     <SourceButton variant="secondary" onClick={model.onSignIn}>
-                      OpenBot community marketplace
+                      <T>OpenBot community marketplace</T>
                     </SourceButton>
                   )}
                   {tab !== "apps" && !publicCatalog && (
                     <OpenbotSlidingTabs
                       value={source}
                       onChange={(value) => move("swap", () => setSource(value))}
-                      label="Source"
+                      label={gt("Source")}
                       items={SOURCES}
                     />
                   )}
@@ -406,8 +415,8 @@ export function Marketplace(model: MarketplaceProps) {
                       type="search"
                       value={query}
                       maxLength={256}
-                      placeholder="Search Marketplace"
-                      aria-label="Search Marketplace"
+                      placeholder={gt("Search Marketplace")}
+                      aria-label={gt("Search Marketplace")}
                       onChange={(event) => setQuery(event.target.value)}
                     />
                   </label>
@@ -415,7 +424,7 @@ export function Marketplace(model: MarketplaceProps) {
                     <select
                       className="ui-native-select"
                       data-size="sm"
-                      aria-label="Sort skills"
+                      aria-label={gt("Sort skills")}
                       value={sort}
                       onChange={(event) => {
                         const value = event.target.value;
@@ -423,15 +432,21 @@ export function Marketplace(model: MarketplaceProps) {
                           setSort(value);
                       }}
                     >
-                      <option value="installs">Most installed</option>
-                      <option value="updated">Recently updated</option>
-                      <option value="name">Name</option>
+                      <option value="installs">
+                        <T>Most installed</T>
+                      </option>
+                      <option value="updated">
+                        <T>Recently updated</T>
+                      </option>
+                      <option value="name">
+                        <T>Name</T>
+                      </option>
                     </select>
                   )}
                   {tab === "apps" && model.onAddApp && (
                     <SourceButton onClick={model.onAddApp}>
                       <Plus aria-hidden="true" />
-                      Add custom
+                      <T>Add custom</T>
                     </SourceButton>
                   )}
                 </div>
@@ -454,7 +469,7 @@ export function Marketplace(model: MarketplaceProps) {
                                 <SourceButton
                                   variant="ghost"
                                   className="marketplace-app-row-hit"
-                                  aria-label={`Open ${app.name}`}
+                                  aria-label={gt("Open {name}", { name: app.name })}
                                   onClick={() => go({ kind: "app", id: app.id })}
                                 />
                                 <span className="marketplace-app-logo">
@@ -471,14 +486,16 @@ export function Marketplace(model: MarketplaceProps) {
                                 </span>
                                 <span className="marketplace-app-row-status">
                                   {app.status === "connected" ? (
-                                    <Done>Connected</Done>
+                                    <Done>
+                                      <T>Connected</T>
+                                    </Done>
                                   ) : (
                                     <SourceButton
                                       variant="secondary"
                                       onClick={() => go({ kind: "app", id: app.id })}
                                     >
                                       <Plus aria-hidden="true" />
-                                      Connect
+                                      <T>Connect</T>
                                     </SourceButton>
                                   )}
                                 </span>
@@ -492,10 +509,10 @@ export function Marketplace(model: MarketplaceProps) {
                       <div className="marketplace-empty">
                         <p className="ui-text" data-variant="body-sm" data-tone="muted">
                           {model.apps === undefined
-                            ? "App connections are not available on this host."
+                            ? gt("App connections are not available on this host.")
                             : query
-                              ? "No apps match your search."
-                              : "No apps are available."}
+                              ? gt("No apps match your search.")
+                              : gt("No apps are available.")}
                         </p>
                       </div>
                     )}
@@ -506,18 +523,30 @@ export function Marketplace(model: MarketplaceProps) {
                       <div role="alert" className="marketplace-empty">
                         <p>{c.error}</p>
                         {c.error.includes("Sign in to OpenBot on this host") && model.onSignIn && (
-                          <SourceButton onClick={model.onSignIn}>Sign in to OpenBot</SourceButton>
+                          <SourceButton onClick={model.onSignIn}>
+                            <T>Sign in to OpenBot</T>
+                          </SourceButton>
                         )}
-                        <SourceButton onClick={c.reload}>Retry</SourceButton>
+                        <SourceButton onClick={c.reload}>
+                          <T>Retry</T>
+                        </SourceButton>
                       </div>
                     )}
                     {c.skillError && (
                       <div role="alert">
                         <p>{c.skillError}</p>
-                        <SourceButton onClick={() => void c.refreshSkills()}>Retry</SourceButton>
+                        <SourceButton onClick={() => void c.refreshSkills()}>
+                          <T>Retry</T>
+                        </SourceButton>
                       </div>
                     )}
-                    {c.busy && filtered.length === 0 && <p role="status">Loading {tab}…</p>}
+                    {c.busy && filtered.length === 0 && (
+                      <p role="status">
+                        <T>
+                          Loading <Var>{tab}</Var>…
+                        </T>
+                      </p>
+                    )}
                     {!c.busy && !c.error && (
                       <>
                         {tab === "agents" && own.length > 0 && group("Your agents", "yours", own)}
@@ -527,7 +556,7 @@ export function Marketplace(model: MarketplaceProps) {
                             <section className="marketplace-app-group">
                               <div className="marketplace-skill-group-head">
                                 <h4 className="marketplace-app-group-title">
-                                  Your skills
+                                  <T>Your skills</T>
                                   <span className="marketplace-app-group-count">
                                     {library.length}
                                   </span>
@@ -537,7 +566,7 @@ export function Marketplace(model: MarketplaceProps) {
                                     variant="ghost"
                                     onClick={() => go({ kind: "group", category: "yours" })}
                                   >
-                                    See all
+                                    <T>See all</T>
                                     <ChevronRight aria-hidden="true" />
                                   </SourceButton>
                                 )}
@@ -553,7 +582,7 @@ export function Marketplace(model: MarketplaceProps) {
                                         <SourceButton
                                           variant="ghost"
                                           className="marketplace-app-row-hit"
-                                          aria-label={`Open ${skill.name}`}
+                                          aria-label={gt("Open {name}", { name: skill.name })}
                                           onClick={() => void openInstalled(skill)}
                                         />
                                         <SkillMark />
@@ -563,15 +592,17 @@ export function Marketplace(model: MarketplaceProps) {
                                           </span>
                                           <span className="marketplace-app-row-tagline">
                                             {skill.state === "modified"
-                                              ? "Changed by you"
+                                              ? gt("Changed by you")
                                               : skill.state === "needs-repair"
-                                                ? "Needs repair"
+                                                ? gt("Needs repair")
                                                 : skill.state === "update-available"
-                                                  ? "Update available"
+                                                  ? gt("Update available")
                                                   : skill.origin === "local"
-                                                    ? "Made on this computer"
+                                                    ? gt("Made on this computer")
                                                     : (skill.description ??
-                                                      `Version ${skill.installedVersion}`)}
+                                                      gt("Version {installedVersion}", {
+                                                        installedVersion: skill.installedVersion,
+                                                      }))}
                                           </span>
                                         </span>
                                         <span className="marketplace-app-row-status">
@@ -579,7 +610,7 @@ export function Marketplace(model: MarketplaceProps) {
                                             variant="outline"
                                             onClick={() => void openInstalled(skill)}
                                           >
-                                            Agents
+                                            <T>Agents</T>
                                           </SourceButton>
                                         </span>
                                       </li>
@@ -595,15 +626,17 @@ export function Marketplace(model: MarketplaceProps) {
                                     <SkillMark />
                                     <div>
                                       <p className="ui-text" data-variant="body">
-                                        No agent has a skill yet.
+                                        <T>No agent has a skill yet.</T>
                                       </p>
                                       <p
                                         className="ui-text"
                                         data-variant="body-sm"
                                         data-tone="muted"
                                       >
-                                        A skill teaches an agent one task. Add one below, or create
-                                        your own.
+                                        <T>
+                                          A skill teaches an agent one task. Add one below, or
+                                          create your own.
+                                        </T>
                                       </p>
                                     </div>
                                   </div>
@@ -616,7 +649,9 @@ export function Marketplace(model: MarketplaceProps) {
                           !query &&
                           available.length > 0 && (
                             <section className="marketplace-skill-featured marketplace-app-group">
-                              <h4 className="marketplace-app-group-title">Featured</h4>
+                              <h4 className="marketplace-app-group-title">
+                                <T>Featured</T>
+                              </h4>
                               <div className="marketplace-skill-featured-grid">
                                 {[...available]
                                   .sort(
@@ -654,14 +689,14 @@ export function Marketplace(model: MarketplaceProps) {
                             <div className="marketplace-empty">
                               <p className="ui-text" data-variant="body-sm" data-tone="muted">
                                 {query
-                                  ? `No ${tab} match your search.`
+                                  ? gt("No {tab} match your search.", { tab })
                                   : source !== "all"
-                                    ? "No items match these filters."
-                                    : `No ${tab} are available.`}
+                                    ? gt("No items match these filters.")
+                                    : gt("No {tab} are available.", { tab })}
                               </p>
                               {source !== "all" && (
                                 <SourceButton onClick={() => setSource("all")}>
-                                  Clear filters
+                                  <T>Clear filters</T>
                                 </SourceButton>
                               )}
                             </div>
@@ -671,7 +706,7 @@ export function Marketplace(model: MarketplaceProps) {
                     {c.cursor && (
                       <div className="marketplace-load-more">
                         <SourceButton disabled={c.busy} onClick={c.more}>
-                          {c.busy ? "Loading…" : "Load more"}
+                          {c.busy ? gt("Loading…") : gt("Load more")}
                         </SourceButton>
                       </div>
                     )}

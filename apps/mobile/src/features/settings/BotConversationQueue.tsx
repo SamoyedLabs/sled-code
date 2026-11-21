@@ -1,4 +1,4 @@
-import {BotQueueAttachmentsEnvironment} from "./BotQueueAttachmentsEnvironment";
+import { BotQueueAttachmentsEnvironment } from "./BotQueueAttachmentsEnvironment";
 import { useEffect, useRef, useState } from "react";
 import {
   BotQueueEditSession,
@@ -10,6 +10,7 @@ import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
 
 import type { useBotConversationPanel } from "./useBotConversationPanel";
+import { T, useGT } from "gt-react-native";
 export function BotConversationQueue({
   controller: c,
   agentId,
@@ -17,7 +18,8 @@ export function BotConversationQueue({
   controller: ReturnType<typeof useBotConversationPanel>;
   agentId: string;
 }) {
-  const [attachmentsActive,setAttachmentsActive]=useState(false);
+  const gt = useGT();
+  const [attachmentsActive, setAttachmentsActive] = useState(false);
   const [edit, setEdit] = useState<BotQueueEdit | null>(null);
   const session = useRef(new BotQueueEditSession());
   const releaseOnLeave = useRef<(() => void) | null>(null);
@@ -33,7 +35,14 @@ export function BotConversationQueue({
     const acquired = await c.beginEdit(pending.deliveryId, pending.editId);
     if (acquired) setEdit(session.current.confirm(pending.editId, acquired));
   };
-  if(c.taskId)return <BotQueueAttachmentsEnvironment controller={c} legacyEditing={false} onActiveChange={setAttachmentsActive}/>;
+  if (c.taskId)
+    return (
+      <BotQueueAttachmentsEnvironment
+        controller={c}
+        legacyEditing={false}
+        onActiveChange={setAttachmentsActive}
+      />
+    );
   const disabled = c.busy || !c.permission || attachmentsActive;
   const queued =
     c.queue?.deliveries
@@ -41,9 +50,19 @@ export function BotConversationQueue({
       .sort((a, b) => (a.position ?? 0) - (b.position ?? 0)) ?? [];
   return (
     <View className="gap-3">
-      <BotQueueAttachmentsEnvironment controller={c} legacyEditing={edit!==null} onActiveChange={setAttachmentsActive}/>
-      <Text accessibilityRole="header">Queue</Text>
-      {c.queue?.hold && <Text>Queue held by channel work.</Text>}
+      <BotQueueAttachmentsEnvironment
+        controller={c}
+        legacyEditing={edit !== null}
+        onActiveChange={setAttachmentsActive}
+      />
+      <Text accessibilityRole="header">
+        <T>Queue</T>
+      </Text>
+      {c.queue?.hold && (
+        <Text>
+          <T>Queue held by channel work.</T>
+        </Text>
+      )}
       {(c.queue?.deliveries ?? [])
         .filter((d) => d.status !== "completed" && d.status !== "cancelled")
         .slice(0, 100)
@@ -58,14 +77,14 @@ export function BotConversationQueue({
                 <Button
                   disabled={disabled || edit !== null}
                   onPress={() => void begin(d.id)}
-                  label="Edit"
+                  label={gt("Edit")}
                 />
                 <Button
                   disabled={disabled}
                   onPress={() =>
                     void c.act({ operation: "queue.cancel", agentId, deliveryId: d.id })
                   }
-                  label="Cancel delivery"
+                  label={gt("Cancel delivery")}
                 />
                 <Button
                   disabled={disabled || !c.snapshot?.activeTurnId}
@@ -78,7 +97,7 @@ export function BotConversationQueue({
                         expectedTurnId: c.snapshot.activeTurnId,
                       });
                   }}
-                  label="Steer running turn"
+                  label={gt("Steer running turn")}
                 />
                 <Button
                   disabled={disabled || queued.length > 100 || queued[0]?.id === d.id}
@@ -89,7 +108,7 @@ export function BotConversationQueue({
                       deliveryIds: [d.id, ...queued.filter((q) => q.id !== d.id).map((q) => q.id)],
                     })
                   }
-                  label="Move first"
+                  label={gt("Move first")}
                 />
               </View>
             )}
@@ -99,7 +118,7 @@ export function BotConversationQueue({
                 onPress={() =>
                   void c.act({ operation: "queue.acknowledgeFailure", agentId, turnId: d.turnId! })
                 }
-                label="Acknowledge failure"
+                label={gt("Acknowledge failure")}
               />
             )}
           </View>
@@ -109,13 +128,15 @@ export function BotConversationQueue({
           {edit.state === "pending" ? (
             <>
               <Text accessibilityLiveRegion="polite">
-                This edit has not been confirmed. Retry or release it before editing another
-                message.
+                <T>
+                  This edit has not been confirmed. Retry or release it before editing another
+                  message.
+                </T>
               </Text>
               <Button
                 disabled={disabled}
                 onPress={() => void begin(edit.deliveryId)}
-                label="Retry edit"
+                label={gt("Retry edit")}
               />
             </>
           ) : (
@@ -123,7 +144,7 @@ export function BotConversationQueue({
               {edit.keepAttachmentIds.map((id) => (
                 <Button
                   key={id}
-                  label={`Remove retained file ${id}`}
+                  label={gt("Remove retained file {id}", { id })}
                   disabled={disabled}
                   onPress={() =>
                     setEdit(
@@ -136,7 +157,7 @@ export function BotConversationQueue({
                 />
               ))}
               <AppTextInput
-                accessibilityLabel="Edit queued message"
+                accessibilityLabel={gt("Edit queued message")}
                 value={edit.text}
                 maxLength={100000}
                 editable={!disabled}
@@ -161,7 +182,7 @@ export function BotConversationQueue({
                     releaseOnLeave.current = null;
                   }
                 }}
-                label="Save queue edit"
+                label={gt("Save queue edit")}
               />
             </>
           )}
@@ -181,10 +202,12 @@ export function BotConversationQueue({
                 releaseOnLeave.current = null;
               }
             }}
-            label="Release edit"
+            label={gt("Release edit")}
           />
           <Text>
-            Release this edit before leaving; a connection failure can prevent automatic release.
+            <T>
+              Release this edit before leaving; a connection failure can prevent automatic release.
+            </T>
           </Text>
         </View>
       )}

@@ -25,6 +25,7 @@ import { AppText as Text } from "../../components/ui/AppText";
 import { View } from "react-native";
 import storage from "expo-sqlite/kv-store";
 import { randomUUID as newId } from "expo-crypto";
+import { useGT } from "gt-react-native";
 const Acquiring = Schema.Struct({
   kind: Schema.Literal("acquiring"),
   scope: Schema.Struct({ ...QueueAttachmentTarget.fields, principal: Schema.String }),
@@ -47,6 +48,7 @@ export function BotQueueAttachmentsEnvironment({
   legacyEditing,
   onActiveChange,
 }: Props) {
+  const gt = useGT();
   const canEdit = useAtomValue(openbot.queueAttachmentSave.permissionAtom(c.environmentId));
   const allowed = c.permission && canEdit;
   const fileContext = useAtomQueryRunner(openbot.fileContext, {
@@ -250,7 +252,9 @@ export function BotQueueAttachmentsEnvironment({
     });
     if (opened._tag === "Failure")
       setNotice(
-        "File edit unavailable or unconfirmed. Resume or release the original edit before continuing.",
+        gt(
+          "File edit unavailable or unconfirmed. Resume or release the original edit before continuing.",
+        ),
       );
     setBusy(false);
   };
@@ -264,7 +268,7 @@ export function BotQueueAttachmentsEnvironment({
       c.taskId !== pending.taskId ||
       c.snapshot?.threadId !== pending.threadId
     ) {
-      setNotice("Return to the original conversation to release this edit.");
+      setNotice(gt("Return to the original conversation to release this edit."));
       return;
     }
     setBusy(true);
@@ -277,7 +281,7 @@ export function BotQueueAttachmentsEnvironment({
       fresh.value.value.principalId !== pending.principal
     ) {
       setBusy(false);
-      setNotice("Original session unavailable.");
+      setNotice(gt("Original session unavailable."));
       return;
     }
     if (
@@ -298,7 +302,7 @@ export function BotQueueAttachmentsEnvironment({
       );
       setPending(null);
       onActiveChange(false);
-      setNotice("Edit released.");
+      setNotice(gt("Edit released."));
     }
     setBusy(false);
   };
@@ -321,7 +325,7 @@ export function BotQueueAttachmentsEnvironment({
           <Button
             disabled={!allowed || busy || legacyEditing}
             onPress={() => void open()}
-            label="Resume file edit"
+            label={gt("Resume file edit")}
           />
           {!pending &&
             choices.map((d) => (
@@ -329,14 +333,16 @@ export function BotQueueAttachmentsEnvironment({
                 key={d.id}
                 disabled={!allowed || busy || legacyEditing}
                 onPress={() => void open(d.id)}
-                label={`Edit with files: ${d.text.slice(0, 60) || "Queued message"}`}
+                label={gt("Edit with files: {value}", {
+                  value: d.text.slice(0, 60) || "Queued message",
+                })}
               />
             ))}
           {pending && (
             <Button
               disabled={!allowed || busy}
               onPress={() => void release()}
-              label="Release unconfirmed file edit"
+              label={gt("Release unconfirmed file edit")}
             />
           )}
         </>

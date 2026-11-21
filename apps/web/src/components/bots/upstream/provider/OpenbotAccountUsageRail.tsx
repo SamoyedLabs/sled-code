@@ -12,6 +12,7 @@ import {
   type AccountUsageProviderRow,
 } from "./account-usage-view";
 import { type AccountUsage, type AgentStatus } from "./types";
+import { T } from "gt-react";
 
 export function AccountUsageRings({
   rows,
@@ -100,7 +101,11 @@ function UsageRing({
           refreshActive={false}
           refreshDisabled
           onRefresh={() => undefined}
-          title={<h2 className="account-usage-popover-title">Usage</h2>}
+          title={
+            <h2 className="account-usage-popover-title">
+              <T>Usage</T>
+            </h2>
+          }
         />
       </TooltipPopup>
     </Tooltip>

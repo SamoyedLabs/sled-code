@@ -7,6 +7,7 @@ import { SettingsReadState } from "./AgentConfigurationPages";
 import { SettingsLinkGroup } from "./SettingsPanel";
 import { SourceButton } from "./SettingsParts";
 import "./agent-folders.css";
+import { T, useGT } from "gt-react";
 const FolderList = Schema.Struct({
   workspace: Schema.String,
   shared: Schema.String,
@@ -28,6 +29,7 @@ const decodeChange = Schema.decodeUnknownSync(
 );
 const basename = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
 export function AgentFoldersPage({ api }: { api: AgentSettingsApi }) {
+  const gt = useGT();
   const c = useAgentSettingsValue(
     async () => decodeFolders(await api.setting("settings.agent-folders.read")),
     api.agentId,
@@ -52,7 +54,7 @@ export function AgentFoldersPage({ api }: { api: AgentSettingsApi }) {
     return (
       <HostFolderPicker
         api={api}
-        title={picker.kind === "add" ? "Add folder" : "Exclude folder"}
+        title={picker.kind === "add" ? gt("Add folder") : gt("Exclude folder")}
         onCancel={() => setPicker(null)}
         onChoose={async (path) => {
           await change(picker.kind, path, picker.replace);
@@ -70,12 +72,12 @@ export function AgentFoldersPage({ api }: { api: AgentSettingsApi }) {
       />
       {c.value && (
         <>
-          <SettingsLinkGroup inset title="Always available">
+          <SettingsLinkGroup inset title={gt("Always available")}>
             <FolderRow path={c.value.workspace} name="Workspace" />
             <FolderRow path={c.value.shared} name="Shared folder" />
           </SettingsLinkGroup>
           <div className="agent-folders-drop-target">
-            <SettingsLinkGroup inset title="Added folders">
+            <SettingsLinkGroup inset title={gt("Added folders")}>
               {c.value.folders.map((folder) => (
                 <FolderRow
                   key={folder.path}
@@ -96,12 +98,12 @@ export function AgentFoldersPage({ api }: { api: AgentSettingsApi }) {
                   <span className="settings-link-icon">
                     <Plus aria-hidden="true" />
                   </span>
-                  Add folder
+                  <T>Add folder</T>
                 </span>
               </SourceButton>
             </SettingsLinkGroup>
           </div>
-          <SettingsLinkGroup inset title="Excluded folders">
+          <SettingsLinkGroup inset title={gt("Excluded folders")}>
             {c.value.excluded.map((path) => (
               <FolderRow
                 key={path}
@@ -121,7 +123,7 @@ export function AgentFoldersPage({ api }: { api: AgentSettingsApi }) {
                 <span className="settings-link-icon">
                   <Plus aria-hidden="true" />
                 </span>
-                Exclude folder
+                <T>Exclude folder</T>
               </span>
             </SourceButton>
           </SettingsLinkGroup>
@@ -147,6 +149,7 @@ function FolderRow({
   onLocate?: () => void;
   onRemove?: () => void;
 }) {
+  const gt = useGT();
   return (
     <div className="agent-folders-row">
       <span className="settings-link-icon">
@@ -156,12 +159,12 @@ function FolderRow({
         <span className="agent-folders-name">{name ?? basename(path)}</span>
         <span className="agent-folders-path">
           {path}
-          {missing ? " · Missing" : ""}
+          {missing ? gt(" · Missing") : ""}
         </span>
       </span>
       {missing && onLocate && (
         <SourceButton disabled={disabled} onClick={onLocate}>
-          Locate
+          <T>Locate</T>
         </SourceButton>
       )}
       {onRemove && (
@@ -204,7 +207,7 @@ function HostFolderPicker({
           {title}
         </h3>
         <SourceButton variant="ghost" onClick={onCancel}>
-          Cancel
+          <T>Cancel</T>
         </SourceButton>
       </div>
       <SettingsReadState busy={c.busy} error={c.error} onRetry={() => void c.refresh()} />
@@ -216,7 +219,7 @@ function HostFolderPicker({
             onClick={() => setPath(c.value!.parentPath)}
           >
             <ChevronUp aria-hidden="true" />
-            Parent folder
+            <T>Parent folder</T>
           </SourceButton>
           <SettingsLinkGroup inset>
             <SourceButton
@@ -251,14 +254,16 @@ function HostFolderPicker({
             ))}
           </SettingsLinkGroup>
           {c.value.truncated && (
-            <p role="status">This folder has more entries than the host can show.</p>
+            <p role="status">
+              <T>This folder has more entries than the host can show.</T>
+            </p>
           )}
           <SourceButton
             variant="default"
             disabled={c.busy}
             onClick={() => void c.change(() => onChoose(c.value!.path))}
           >
-            Choose this folder
+            <T>Choose this folder</T>
           </SourceButton>
         </>
       )}

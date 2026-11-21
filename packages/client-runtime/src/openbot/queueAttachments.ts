@@ -217,30 +217,47 @@ export function queueAttachmentInitial(
   };
 }
 
-const decodeTaskQueue = Schema.decodeUnknownResult(Schema.Struct({
-  agentId: Schema.String,
-  tasks: Schema.Array(Schema.Struct({
-    id: Schema.String,
+const decodeTaskQueue = Schema.decodeUnknownResult(
+  Schema.Struct({
     agentId: Schema.String,
-    threadId: Schema.String,
-    closedAt: Schema.NullOr(Schema.String),
-    queuedMessages: Schema.Array(Schema.Struct({
-      deliveryId: Schema.String,
-      text: Schema.String,
-    })).check(Schema.isMaxLength(1000)),
-  })).check(Schema.isMaxLength(50)),
-}));
+    tasks: Schema.Array(
+      Schema.Struct({
+        id: Schema.String,
+        agentId: Schema.String,
+        threadId: Schema.String,
+        closedAt: Schema.NullOr(Schema.String),
+        queuedMessages: Schema.Array(
+          Schema.Struct({
+            deliveryId: Schema.String,
+            text: Schema.String,
+          }),
+        ).check(Schema.isMaxLength(1000)),
+      }),
+    ).check(Schema.isMaxLength(50)),
+  }),
+);
 // Task conversation snapshots omit pending deliveries; only task.list supplies these previews.
 export function taskQueueAttachmentChoices(
   value: unknown,
   target: { readonly agentId: string; readonly taskId: string; readonly threadId: string | null },
 ) {
   const decoded = decodeTaskQueue(value);
-  if (!Result.isSuccess(decoded) || decoded.success.agentId !== target.agentId || !target.threadId) return null;
-  const matches = decoded.success.tasks.filter(task => task.id === target.taskId);
+  if (!Result.isSuccess(decoded) || decoded.success.agentId !== target.agentId || !target.threadId)
+    return null;
+  const matches = decoded.success.tasks.filter((task) => task.id === target.taskId);
   const task = matches[0];
-  if (matches.length !== 1 || !task || task.agentId !== target.agentId || task.threadId !== target.threadId) return null;
+  if (
+    matches.length !== 1 ||
+    !task ||
+    task.agentId !== target.agentId ||
+    task.threadId !== target.threadId
+  )
+    return null;
   if (task.closedAt !== null) return [];
-  if (new Set(task.queuedMessages.map(message => message.deliveryId)).size !== task.queuedMessages.length) return null;
-  return task.queuedMessages.map(message => ({ id: message.deliveryId, text: message.text }));
+  if (
+    new Set(task.queuedMessages.map((message) => message.deliveryId)).size !==
+    task.queuedMessages.length
+  )
+    return null;
+  return task.queuedMessages.map((message) => ({ id: message.deliveryId, text: message.text }));
 }

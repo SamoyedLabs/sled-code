@@ -65,7 +65,47 @@ it("uses fixed released routes and carries the original revision/receipt with no
     card: null,
   });
 });
-it.effect("uses actual durable adoption routes and projects status without account or workspace data", () => Effect.gen(function* () {
-  expect(route({ operation: "templates.adopt", operationId: "original", kind: "template", sourceId: "source", timezone: "UTC", expectedRevision: "reviewed" })).toMatchObject({ path: "/v1/admin/agents/adoption/install", body: { operationId: "original", kind: "template", sourceId: "source", timezone: "UTC", expectedRevision: "reviewed" } });
-  expect(yield* project("templates.adopt", { operationId: "original", kind: "template", sourceId: "source", state: "interrupted", agentId: "retained", name: "Homework", accountToken: "secret", workspacePath: "/private" })).toEqual({ operationId: "original", kind: "template", sourceId: "source", state: "interrupted", agentId: "retained", name: "Homework" });
-}));
+it.effect(
+  "uses actual durable adoption routes and projects status without account or workspace data",
+  () =>
+    Effect.gen(function* () {
+      expect(
+        route({
+          operation: "templates.adopt",
+          operationId: "original",
+          kind: "template",
+          sourceId: "source",
+          timezone: "UTC",
+          expectedRevision: "reviewed",
+        }),
+      ).toMatchObject({
+        path: "/v1/admin/agents/adoption/install",
+        body: {
+          operationId: "original",
+          kind: "template",
+          sourceId: "source",
+          timezone: "UTC",
+          expectedRevision: "reviewed",
+        },
+      });
+      expect(
+        yield* project("templates.adopt", {
+          operationId: "original",
+          kind: "template",
+          sourceId: "source",
+          state: "interrupted",
+          agentId: "retained",
+          name: "Homework",
+          accountToken: "secret",
+          workspacePath: "/private",
+        }),
+      ).toEqual({
+        operationId: "original",
+        kind: "template",
+        sourceId: "source",
+        state: "interrupted",
+        agentId: "retained",
+        name: "Homework",
+      });
+    }),
+);

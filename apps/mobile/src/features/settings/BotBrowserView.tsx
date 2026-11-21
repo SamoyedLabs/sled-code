@@ -17,6 +17,8 @@ import { Menu } from "../../components/ui/Menu";
 import { BotIconButton } from "../bots/upstream/BotChrome";
 import { browserTextInput } from "./botBrowserInput";
 import { BrowserFrameDraw } from "@t3tools/client-runtime/openbot/presentation";
+import { m } from "../../i18n/messages";
+import { T, Var, msg, useGT } from "gt-react-native";
 
 export function BotBrowserView({
   connect,
@@ -28,6 +30,7 @@ export function BotBrowserView({
   }) => Promise<WebSocket & { browserFeatures?: OpenbotBrowserViewFeatures }>;
   interactive: boolean;
 }) {
+  const gt = useGT();
   const [attempt, setAttempt] = useState(0);
   const [viewport, setViewport] = useState<{ width: number; height: number } | undefined>();
   return (
@@ -35,8 +38,8 @@ export function BotBrowserView({
       <View className="flex-row justify-end">
         <Menu
           actions={[
-            { id: "retry", title: "Reconnect viewer" },
-            { id: "default", title: "Host page size", state: viewport ? "off" : "on" },
+            { id: "retry", title: gt("Reconnect viewer") },
+            { id: "default", title: gt("Host page size"), state: viewport ? "off" : "on" },
             { id: "wide", title: "1280 × 800", state: viewport?.width === 1280 ? "on" : "off" },
             { id: "compact", title: "800 × 600", state: viewport?.width === 800 ? "on" : "off" },
           ]}
@@ -57,7 +60,7 @@ export function BotBrowserView({
             }
           }}
         >
-          <BotIconButton label="Viewer options" icon="ellipsis" />
+          <BotIconButton label={gt("Viewer options")} icon="ellipsis" />
         </Menu>
       </View>
       <BrowserStream
@@ -82,6 +85,7 @@ function BrowserStream({
   interactive: boolean;
   viewport: { width: number; height: number } | undefined;
 }) {
+  const gt = useGT();
   const [status, setStatus] = useState("Connecting browser view…");
   const [connected, setConnected] = useState(false);
   const [features, setFeatures] = useState<OpenbotBrowserViewFeatures | null>(null);
@@ -144,7 +148,7 @@ function BrowserStream({
         const opened = () => {
           if (disposed) return;
           setConnected(true);
-          setStatus("Browser view connected");
+          setStatus(m(msg("Browser view connected")));
         };
         next.addEventListener("open", opened);
         if (next.readyState === WebSocket.OPEN) opened();
@@ -170,7 +174,7 @@ function BrowserStream({
               if (message.type === "copyTooLarge") {
                 copy.current = null;
                 setCopying(false);
-                setInputError("The page selection is too large to copy.");
+                setInputError(m(msg("The page selection is too large to copy.")));
               } else {
                 void Clipboard.setStringAsync(message.text)
                   .then(() => {
@@ -179,12 +183,12 @@ function BrowserStream({
                       next.send(JSON.stringify({ type: "cut", text: message.text }));
                     setStatus(
                       cut
-                        ? "Selection cut to your clipboard"
-                        : "Selection copied to your clipboard",
+                        ? m(msg("Selection cut to your clipboard"))
+                        : m(msg("Selection copied to your clipboard")),
                     );
                   })
                   .catch(() => {
-                    if (!disposed) setInputError("Clipboard access failed.");
+                    if (!disposed) setInputError(m(msg("Clipboard access failed.")));
                   })
                   .finally(() => {
                     copy.current = null;
@@ -264,7 +268,7 @@ function BrowserStream({
     const bytes = new TextEncoder().encode(packets.join("")).length;
     if (peer.bufferedAmount + bytes >= 8192) {
       peer.close();
-      setInputError("The connection is busy. Reconnect to continue.");
+      setInputError(gt("The connection is busy. Reconnect to continue."));
       return false;
     }
     for (const packet of packets) peer.send(packet);
@@ -329,20 +333,22 @@ function BrowserStream({
       .then((text) => {
         if (control.current && peer === socket.current) send([{ type: "paste", text }]);
       })
-      .catch(() => setInputError("Allow clipboard access to paste into the page."));
+      .catch(() => setInputError(gt("Allow clipboard access to paste into the page.")));
   }
   return (
     <View className="gap-3">
       <AppText accessibilityLiveRegion="polite">{status}</AppText>
       {!interactive && (
         <AppText textRole="footnote" className="text-foreground-muted">
-          Take control to interact with the page.
+          <T>Take control to interact with the page.</T>
         </AppText>
       )}
       <View
         accessible
         accessibilityRole="image"
-        accessibilityLabel="Live browser page. Touch controls require human control of this tab."
+        accessibilityLabel={gt(
+          "Live browser page. Touch controls require human control of this tab.",
+        )}
         className="w-full overflow-hidden rounded-2xl border border-border bg-subtle"
         style={{ aspectRatio: frame ? frame.width / frame.height : 1.5, borderCurve: "continuous" }}
         onLayout={(event) => {
@@ -426,8 +432,8 @@ function BrowserStream({
         ))}
       </ScrollView>
       <AppTextInput
-        accessibilityLabel="Text to type in the focused browser field"
-        placeholder="Text for the focused page field"
+        accessibilityLabel={gt("Text to type in the focused browser field")}
+        placeholder={gt("Text for the focused page field")}
         value={text}
         onChangeText={setText}
         editable={canInput}
@@ -438,7 +444,7 @@ function BrowserStream({
         autoComplete="off"
       />
       <Button
-        label="Type text in page"
+        label={gt("Type text in page")}
         disabled={!canInput || !text}
         onPress={() => {
           setInputError(null);
@@ -446,28 +452,36 @@ function BrowserStream({
           try {
             if (send(browserTextInput(text, { clipboard }))) setText("");
           } catch (cause) {
-            setInputError(cause instanceof Error ? cause.message : "This text could not be sent.");
+            setInputError(
+              cause instanceof Error ? cause.message : gt("This text could not be sent."),
+            );
           }
         }}
       />
-      {features?.cursor && <AppText textRole="footnote">Page pointer: {cursor}</AppText>}
+      {features?.cursor && (
+        <AppText textRole="footnote">
+          <T>
+            Page pointer: <Var>{cursor}</Var>
+          </T>
+        </AppText>
+      )}
       {features?.clipboard && (
         <View className="flex-row flex-wrap gap-2">
           <Button
-            label="Copy selection"
+            label={gt("Copy selection")}
             disabled={!canInput || copying}
             onPress={() => copySelection()}
           />
           <Button
-            label="Cut selection"
+            label={gt("Cut selection")}
             disabled={!canInput || copying}
             onPress={() => copySelection(true)}
           />
-          <Button label="Paste clipboard" disabled={!canInput} onPress={() => void paste()} />
+          <Button label={gt("Paste clipboard")} disabled={!canInput} onPress={() => void paste()} />
         </View>
       )}
       {menu && canInput && (
-        <View className="gap-2" accessibilityLabel="Page context menu">
+        <View className="gap-2" accessibilityLabel={gt("Page context menu")}>
           {menu.items.map((item) => (
             <Button
               key={item}
@@ -491,14 +505,14 @@ function BrowserStream({
                   const text = item === "copy-link" ? menu.link : menu.image;
                   if (text)
                     void Clipboard.setStringAsync(text).catch(() =>
-                      setInputError("Clipboard access failed."),
+                      setInputError(gt("Clipboard access failed.")),
                     );
                 }
                 setMenu(null);
               }}
             />
           ))}
-          <Button label="Close page menu" onPress={() => setMenu(null)} />
+          <Button label={gt("Close page menu")} onPress={() => setMenu(null)} />
         </View>
       )}
       <ScrollView

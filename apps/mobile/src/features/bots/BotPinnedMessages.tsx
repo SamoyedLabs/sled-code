@@ -19,6 +19,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { withNativeGlassHeaderItem } from "../layout/native-glass-header-items";
 import { SettingsSection } from "../settings/components/SettingsSection";
+import { T, useGT } from "gt-react-native";
 
 type Scope = {
   environmentId: EnvironmentId;
@@ -47,6 +48,7 @@ export function useBotMessagePins(
   scope: Pick<Scope, "environmentId" | "hostId" | "agentId">,
   enabled: boolean,
 ) {
+  const gt = useGT();
   const { environmentId, hostId, agentId } = scope;
   const input = { hostId, request: { operation: "conversation.pins.list" as const, agentId } };
   const query = useEnvironmentQuery(
@@ -82,7 +84,9 @@ export function useBotMessagePins(
           throw new Error("Unconfirmed pin");
       })()
         .catch(() => {
-          Dialog.alert(pinned ? "Could not pin the message" : "Could not unpin the message");
+          Dialog.alert(
+            pinned ? gt("Could not pin the message") : gt("Could not unpin the message"),
+          );
         })
         .finally(() => {
           query.refresh();
@@ -92,6 +96,7 @@ export function useBotMessagePins(
 }
 
 export function BotPinnedMessagesRoute({ route }: StaticScreenProps<Scope>) {
+  const gt = useGT();
   const scope = route.params;
   const currentTask = scope.taskId ?? null;
   const navigation = useNavigation();
@@ -112,7 +117,7 @@ export function BotPinnedMessagesRoute({ route }: StaticScreenProps<Scope>) {
               withNativeGlassHeaderItem({
                 type: "button",
                 label: "",
-                accessibilityLabel: "Close pinned messages",
+                accessibilityLabel: gt("Close pinned messages"),
                 icon: { type: "sfSymbol", name: "xmark" },
                 onPress: () => navigation.goBack(),
               }),
@@ -136,16 +141,20 @@ export function BotPinnedMessagesRoute({ route }: StaticScreenProps<Scope>) {
                   <Pressable
                     onPress={unpin}
                     accessibilityRole="button"
-                    accessibilityLabel="Unpin message"
+                    accessibilityLabel={gt("Unpin message")}
                     className="justify-center bg-red-700 px-4"
                   >
-                    <Text className="text-white">Unpin</Text>
+                    <Text className="text-white">
+                      <T>Unpin</T>
+                    </Text>
                   </Pressable>
                 )}
               >
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityActions={canWrite ? [{ name: "unpin", label: "Unpin message" }] : []}
+                  accessibilityActions={
+                    canWrite ? [{ name: "unpin", label: gt("Unpin message") }] : []
+                  }
                   onAccessibilityAction={(event) => {
                     if (canWrite && event.nativeEvent.actionName === "unpin") unpin();
                   }}
@@ -162,7 +171,7 @@ export function BotPinnedMessagesRoute({ route }: StaticScreenProps<Scope>) {
                   className="gap-1 bg-background px-4 py-3"
                 >
                   <Text className="font-semibold">{author}</Text>
-                  <Text numberOfLines={3}>{pin.text || "Attachment"}</Text>
+                  <Text numberOfLines={3}>{pin.text || gt("Attachment")}</Text>
                   <View className="flex-row gap-2">
                     {[pin.threadTitle ?? "Chat", pinnedBy ? `Pinned by ${pinnedBy}` : null]
                       .filter(Boolean)
@@ -178,13 +187,15 @@ export function BotPinnedMessagesRoute({ route }: StaticScreenProps<Scope>) {
           })}
         </SettingsSection>
       ) : rows ? (
-        <Text className="p-4 text-center text-foreground-muted">No pinned messages</Text>
+        <Text className="p-4 text-center text-foreground-muted">
+          <T>No pinned messages</T>
+        </Text>
       ) : (
         <>
           <Text className="p-4 text-center text-foreground-muted">
-            {loading ? "Loading pinned messages…" : "Pinned messages are unavailable."}
+            {loading ? gt("Loading pinned messages…") : gt("Pinned messages are unavailable.")}
           </Text>
-          {online && !loading && <ListActionRow label="Try again" onPress={retry} />}
+          {online && !loading && <ListActionRow label={gt("Try again")} onPress={retry} />}
         </>
       )}
     </ScreenScrollView>

@@ -132,10 +132,7 @@ const make = Effect.fn("ProfileRecovery.make")(
         .digest("hex");
     }, Effect.mapError(mapped));
     const prepare = Effect.fn("ProfileRecovery.prepare")(
-      function* (input: {
-        readonly id: string;
-        readonly identity: OpenbotCompatibilityIdentity;
-      }) {
+      function* (input: { readonly id: string; readonly identity: OpenbotCompatibilityIdentity }) {
         const home = yield* directory(input.id);
         if (yield* fs.exists(path.join(home, "manifest.json")))
           return yield* new ProfileRecoveryError({ reason: "state" });

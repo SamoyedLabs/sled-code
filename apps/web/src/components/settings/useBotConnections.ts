@@ -6,7 +6,9 @@ import {
   type BotConnectionExecute,
 } from "@t3tools/client-runtime/openbot/presentation";
 import type { OpenbotAdminRequest } from "@t3tools/contracts";
+import { useGT } from "gt-react";
 export function useBotConnections(execute: BotConnectionExecute) {
+  const gt = useGT();
   const [state, setState] = useState<BotConnectionState>(EMPTY_BOT_CONNECTIONS);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +25,7 @@ export function useBotConnections(execute: BotConnectionExecute) {
       const result = await execute(request).catch(
         (): Awaited<ReturnType<BotConnectionExecute>> => ({
           ok: false,
-          error: "Could not update this connection. Refresh and try again.",
+          error: gt("Could not update this connection. Refresh and try again."),
         }),
       );
       if (!result.ok) {
@@ -34,7 +36,7 @@ export function useBotConnections(execute: BotConnectionExecute) {
       const projected = botConnectionResult(next, request, result.value);
       if (!projected) {
         setError(
-          "This engine returned unsupported connection settings. Refresh before changing them.",
+          gt("This engine returned unsupported connection settings. Refresh before changing them."),
         );
         success = false;
         break;

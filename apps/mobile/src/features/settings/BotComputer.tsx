@@ -6,13 +6,15 @@ import type { ComputerActions } from "@t3tools/client-runtime/openbot/presentati
 import { Button } from "../../components/ui/Button";
 import { AppText as Text } from "../../components/ui/AppText";
 import { useBotComputer } from "./useBotComputer";
+import { T, Var, useGT } from "gt-react-native";
 
 export function BotComputer({ actions }: { actions: ComputerActions }) {
+  const gt = useGT();
   const [expanded, setExpanded] = useState(false);
   return (
     <View className="gap-3">
       <Button
-        label={expanded ? "Close computer" : "Computer"}
+        label={expanded ? gt("Close computer") : gt("Computer")}
         onPress={() => setExpanded(!expanded)}
       />
       {expanded && <ComputerPanel actions={actions} />}
@@ -20,20 +22,23 @@ export function BotComputer({ actions }: { actions: ComputerActions }) {
   );
 }
 function ComputerPanel({ actions }: { actions: ComputerActions }) {
+  const gt = useGT();
   const computer = useBotComputer(actions);
   return (
     <View className="gap-3">
       <Text>
-        Computer access controls the host desktop and affects every connected viewer. Grant OS
-        permissions on the host.
+        <T>
+          Computer access controls the host desktop and affects every connected viewer. Grant OS
+          permissions on the host.
+        </T>
       </Text>
       <Button
-        label="Refresh host capabilities"
+        label={gt("Refresh host capabilities")}
         disabled={computer.busy}
         onPress={computer.refresh}
       />
       <Button
-        label="Check host setup"
+        label={gt("Check host setup")}
         disabled={computer.busy || !actions.canCheckSetup}
         onPress={computer.checkSetup}
       />
@@ -50,10 +55,15 @@ function ComputerPanel({ actions }: { actions: ComputerActions }) {
       {computer.capabilities && (
         <>
           <Text>
-            {computer.capabilities.platform} · {computer.capabilities.activeSessions} /{" "}
-            {computer.capabilities.maxSessions} active sessions
+            <T>
+              <Var>{computer.capabilities.platform}</Var> ·{" "}
+              <Var>{computer.capabilities.activeSessions}</Var> /<Var> </Var>
+              <Var>{computer.capabilities.maxSessions}</Var> active sessions
+            </T>
           </Text>
-          <Text>Display shared by all viewers</Text>
+          <Text>
+            <T>Display shared by all viewers</T>
+          </Text>
           {computer.capabilities.displays.map((display) => (
             <Button
               key={display.id}
@@ -65,12 +75,12 @@ function ComputerPanel({ actions }: { actions: ComputerActions }) {
         </>
       )}
       <Button
-        label="Start computer viewer"
+        label={gt("Start computer viewer")}
         disabled={computer.busy || !!computer.viewer || !actions.viewer?.canOpen}
         onPress={computer.openViewer}
       />
       <Button
-        label="Stop my viewer"
+        label={gt("Stop my viewer")}
         disabled={computer.busy || !computer.viewer?.canClose()}
         onPress={computer.closeViewer}
       />

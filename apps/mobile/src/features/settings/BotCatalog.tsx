@@ -13,7 +13,9 @@ import { Button } from "../../components/ui/Button";
 import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
 import { Picker } from "./BotConnectionControls";
 import { useBotCatalog } from "./useBotCatalog";
+import { T, Var, useGT } from "gt-react-native";
 export function BotCatalog({ actions }: { actions: CatalogActions }) {
+  const gt = useGT();
   const catalog = useBotCatalog(actions);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<OpenbotRegistryEntry | null>(null);
@@ -26,26 +28,32 @@ export function BotCatalog({ actions }: { actions: CatalogActions }) {
   const showMore = Math.max(entryCount, installedCount) > visible;
   const install = selected ? registryInstall(selected, agentId, distribution, name) : null;
   const mutate = (request: OpenbotCatalogAdminRequest) =>
-    Alert.alert("Registry change on selected host", registryConfirmation(request), [
-      { text: "Cancel", style: "cancel" },
-      { text: "Confirm", onPress: () => void catalog.run(request) },
+    Alert.alert(gt("Registry change on selected host"), registryConfirmation(request), [
+      { text: gt("Cancel"), style: "cancel" },
+      { text: gt("Confirm"), onPress: () => void catalog.run(request) },
     ]);
   return (
     <View className="gap-3">
-      <Text accessibilityRole="header">ACP registry</Text>
-      <Text>
-        Commands download and run on the selected host. Host admin and provider-management
-        permissions are required. Refresh to check installation progress.
+      <Text accessibilityRole="header">
+        <T>ACP registry</T>
       </Text>
-      <Text>Search registry</Text>
+      <Text>
+        <T>
+          Commands download and run on the selected host. Host admin and provider-management
+          permissions are required. Refresh to check installation progress.
+        </T>
+      </Text>
+      <Text>
+        <T>Search registry</T>
+      </Text>
       <AppTextInput
-        accessibilityLabel="Search registry"
+        accessibilityLabel={gt("Search registry")}
         value={query}
         maxLength={256}
         onChangeText={setQuery}
       />
       <Button
-        label="Search registry"
+        label={gt("Search registry")}
         disabled={catalog.busy || !actions.can({ operation: "registry.search", query })}
         onPress={() => {
           setSelected(null);
@@ -54,19 +62,21 @@ export function BotCatalog({ actions }: { actions: CatalogActions }) {
         }}
       />
       <Button
-        label="Refresh host status"
+        label={gt("Refresh host status")}
         disabled={catalog.busy || !actions.can({ operation: "registry.status" })}
         onPress={() => void catalog.run({ operation: "registry.status" })}
       />
       <Button
-        label="Refresh installed agents"
+        label={gt("Refresh installed agents")}
         disabled={catalog.busy || !actions.can({ operation: "registry.installed" })}
         onPress={() => void catalog.run({ operation: "registry.installed" })}
       />
       {catalog.error && <Text accessibilityRole="alert">{catalog.error}</Text>}
       {catalog.state.notice && <Text accessibilityLiveRegion="polite">{catalog.state.notice}</Text>}
       {catalog.state.status?.length === 0 && (
-        <Text>No in-progress or failed registry operations reported.</Text>
+        <Text>
+          <T>No in-progress or failed registry operations reported.</T>
+        </Text>
       )}
       {catalog.state.status?.map((item) => (
         <View key={item.registryId}>
@@ -75,7 +85,7 @@ export function BotCatalog({ actions }: { actions: CatalogActions }) {
           </Text>
           {item.state === "installing" && (
             <Button
-              label={`Cancel ${item.registryId}`}
+              label={gt("Cancel {registryId}", { registryId: item.registryId })}
               disabled={
                 catalog.busy ||
                 catalog.uncertain ||
@@ -86,14 +96,18 @@ export function BotCatalog({ actions }: { actions: CatalogActions }) {
           )}
         </View>
       ))}
-      {catalog.state.installed?.length === 0 && <Text>No registry agents installed.</Text>}
+      {catalog.state.installed?.length === 0 && (
+        <Text>
+          <T>No registry agents installed.</T>
+        </Text>
+      )}
       {catalog.state.installed?.slice(0, visible).map((item) => (
         <View key={item.registryId}>
           <Text>
             {item.registryId} · {item.customAgentId} · v{item.version} · {item.distribution}
           </Text>
           <Button
-            label={`Remove ${item.registryId}`}
+            label={gt("Remove {registryId}", { registryId: item.registryId })}
             tone="danger"
             disabled={
               catalog.busy ||
@@ -104,7 +118,11 @@ export function BotCatalog({ actions }: { actions: CatalogActions }) {
           />
         </View>
       ))}
-      {catalog.state.entries?.length === 0 && <Text>No matching registry entries.</Text>}
+      {catalog.state.entries?.length === 0 && (
+        <Text>
+          <T>No matching registry entries.</T>
+        </Text>
+      )}
       {catalog.state.entries?.slice(0, visible).map((entry) => (
         <View key={entry.id} className="gap-2">
           <Text accessibilityRole="header">
@@ -112,11 +130,14 @@ export function BotCatalog({ actions }: { actions: CatalogActions }) {
           </Text>
           <Text>{entry.description}</Text>
           <Text>
-            Available {entry.version} · Installed {entry.installedVersion ?? "none"} · License{" "}
-            {entry.license ?? "unspecified"}
+            <T>
+              Available <Var>{entry.version}</Var> · Installed{" "}
+              <Var>{entry.installedVersion ?? "none"}</Var> · License<Var> </Var>
+              <Var>{entry.license ?? "unspecified"}</Var>
+            </T>
           </Text>
           <Button
-            label={`Select ${entry.name}`}
+            label={gt("Select {name}", { name: entry.name })}
             disabled={catalog.busy}
             onPress={() => {
               setSelected(entry);
@@ -128,39 +149,49 @@ export function BotCatalog({ actions }: { actions: CatalogActions }) {
         </View>
       ))}
       {showMore && (
-        <Button label="Show more registry entries" onPress={() => setVisible(visible + 40)} />
+        <Button label={gt("Show more registry entries")} onPress={() => setVisible(visible + 40)} />
       )}
       {selected && (
         <View className="gap-2">
-          <Text accessibilityRole="header">Install or update {selected.name}</Text>
-          <Text>Custom provider ID</Text>
+          <Text accessibilityRole="header">
+            <T>
+              Install or update <Var>{selected.name}</Var>
+            </T>
+          </Text>
+          <Text>
+            <T>Custom provider ID</T>
+          </Text>
           <AppTextInput
-            accessibilityLabel="Custom provider ID"
+            accessibilityLabel={gt("Custom provider ID")}
             value={agentId}
             maxLength={40}
             editable={!selected.customAgentId && !catalog.busy}
             onChangeText={setAgentId}
           />
-          <Text>Provider name</Text>
+          <Text>
+            <T>Provider name</T>
+          </Text>
           <AppTextInput
-            accessibilityLabel="Provider name"
+            accessibilityLabel={gt("Provider name")}
             value={name}
             maxLength={80}
             onChangeText={setName}
           />
           <Picker
-            label="Installation distribution"
+            label={gt("Installation distribution")}
             value={distribution}
             options={selected.distributions.map((id) => ({ id, name: id }))}
             disabled={catalog.busy}
             onChange={setDistribution}
           />
           <Text>
-            Use a unique lowercase provider ID with letters, digits or hyphens. The host validates
-            provider collisions.
+            <T>
+              Use a unique lowercase provider ID with letters, digits or hyphens. The host validates
+              provider collisions.
+            </T>
           </Text>
           <Button
-            label="Confirm install or update"
+            label={gt("Confirm install or update")}
             disabled={
               !install ||
               catalog.busy ||

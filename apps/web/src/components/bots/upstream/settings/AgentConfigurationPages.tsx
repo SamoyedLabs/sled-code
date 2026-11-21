@@ -10,6 +10,7 @@ import { useAgentSettingsValue, type AgentSettingsApi } from "./agent-settings-a
 import { SettingsLinkGroup, SettingsPanelContent, SettingsPanelHeader } from "./SettingsPanel";
 import { SourceButton } from "./SettingsParts";
 import { SourceSwitch } from "./SourceSwitch";
+import { T, Var, useGT } from "gt-react";
 const HostTools = Schema.Struct({
   computerUse: Schema.Boolean,
   allowAutomation: Schema.Boolean,
@@ -33,15 +34,18 @@ export function SettingsReadState({
   return error ? (
     <p role="alert" className="agent-settings-save-error">
       {error}
-      <SourceButton onClick={onRetry}>Retry</SourceButton>
+      <SourceButton onClick={onRetry}>
+        <T>Retry</T>
+      </SourceButton>
     </p>
   ) : busy ? (
     <p className="ui-text" data-variant="caption" data-tone="muted" role="status">
-      Loading…
+      <T>Loading…</T>
     </p>
   ) : null;
 }
 function HostToolSwitches({ api }: { api: AgentSettingsApi }) {
+  const gt = useGT();
   const c = useAgentSettingsValue(
     async () => decodeHostTools(await api.setting("settings.agent-host-settings.settings")),
     api.agentId,
@@ -56,8 +60,8 @@ function HostToolSwitches({ api }: { api: AgentSettingsApi }) {
       {c.value && (
         <>
           <SettingToggle
-            label="Computer Use"
-            description="Let this agent control apps on this computer"
+            label={gt("Computer Use")}
+            description={gt("Let this agent control apps on this computer")}
             value={c.value.computerUse}
             disabled={c.busy}
             onChange={(computerUse) =>
@@ -70,8 +74,10 @@ function HostToolSwitches({ api }: { api: AgentSettingsApi }) {
             }
           />
           <SettingToggle
-            label="Local scripts"
-            description="Let scripts on the host send messages, run routines, answer questions, and accept or decline approvals"
+            label={gt("Local scripts")}
+            description={gt(
+              "Let scripts on the host send messages, run routines, answer questions, and accept or decline approvals",
+            )}
             value={c.value.allowAutomation}
             disabled={c.busy}
             onChange={(allowAutomation) =>
@@ -89,6 +95,7 @@ function HostToolSwitches({ api }: { api: AgentSettingsApi }) {
   );
 }
 export function AgentPermissionsPage({ api }: { api: AgentSettingsApi }) {
+  const gt = useGT();
   const c = useAgentSettingsValue(async () => {
     const value = permissionView(
       await api.admin({ operation: "agent.permissions.read", agentId: api.agentId }),
@@ -128,10 +135,12 @@ export function AgentPermissionsPage({ api }: { api: AgentSettingsApi }) {
         <>
           <SettingsLinkGroup inset className="agent-settings-runtime-rows">
             <label className="agent-settings-runtime-row">
-              <span className="agent-settings-runtime-label">Access</span>
+              <span className="agent-settings-runtime-label">
+                <T>Access</T>
+              </span>
               <select
                 className="ui-native-select"
-                aria-label="Agent access"
+                aria-label={gt("Agent access")}
                 value={level}
                 disabled={
                   c.busy ||
@@ -144,9 +153,15 @@ export function AgentPermissionsPage({ api }: { api: AgentSettingsApi }) {
                 }
                 onChange={(event) => void change(event.target.value)}
               >
-                <option value="workspace">Workspace only</option>
-                <option value="ask">Ask first</option>
-                <option value="full">Full access</option>
+                <option value="workspace">
+                  <T>Workspace only</T>
+                </option>
+                <option value="ask">
+                  <T>Ask first</T>
+                </option>
+                <option value="full">
+                  <T>Full access</T>
+                </option>
               </select>
             </label>
           </SettingsLinkGroup>
@@ -156,12 +171,16 @@ export function AgentPermissionsPage({ api }: { api: AgentSettingsApi }) {
             data-tone="muted"
           >
             {value.autoApproveLocked
-              ? "Approval settings are locked by this host."
+              ? gt("Approval settings are locked by this host.")
               : level === "workspace"
-                ? "The agent works in its workspace and the folders you allow. Computer Use and the OpenBot browser are not limited; you can turn Computer Use off below."
+                ? gt(
+                    "The agent works in its workspace and the folders you allow. Computer Use and the OpenBot browser are not limited; you can turn Computer Use off below.",
+                  )
                 : level === "ask"
-                  ? "The agent can work outside its workspace and asks before sensitive actions."
-                  : "The agent can work outside its workspace without asking for approval."}
+                  ? gt(
+                      "The agent can work outside its workspace and asks before sensitive actions.",
+                    )
+                  : gt("The agent can work outside its workspace without asking for approval.")}
           </p>
         </>
       )}
@@ -231,6 +250,7 @@ function AdvancedBoolean({
   );
 }
 function BusyMessage({ api }: { api: AgentSettingsApi }) {
+  const gt = useGT();
   const c = useAgentSettingsValue(
     async () => decodeHostTools(await api.setting("settings.agent-host-settings.settings")),
     api.agentId,
@@ -244,10 +264,12 @@ function BusyMessage({ api }: { api: AgentSettingsApi }) {
       />
       {c.value && (
         <label className="agent-settings-runtime-row">
-          <span className="agent-settings-runtime-label">While working</span>
+          <span className="agent-settings-runtime-label">
+            <T>While working</T>
+          </span>
           <select
             className="ui-native-select"
-            aria-label="Messages while the agent works"
+            aria-label={gt("Messages while the agent works")}
             value={c.value.busyMessageMode ?? "default"}
             disabled={c.busy}
             onChange={(event) =>
@@ -260,10 +282,17 @@ function BusyMessage({ api }: { api: AgentSettingsApi }) {
             }
           >
             <option value="default">
-              Host default · {c.value.defaultBusyMessageMode === "queue" ? "Queue" : "Steer"}
+              <T>
+                Host default ·{" "}
+                <Var>{c.value.defaultBusyMessageMode === "queue" ? gt("Queue") : gt("Steer")}</Var>
+              </T>
             </option>
-            <option value="queue">Queue</option>
-            <option value="steer">Steer</option>
+            <option value="queue">
+              <T>Queue</T>
+            </option>
+            <option value="steer">
+              <T>Steer</T>
+            </option>
           </select>
         </label>
       )}
@@ -271,6 +300,7 @@ function BusyMessage({ api }: { api: AgentSettingsApi }) {
   );
 }
 function TaskLimit({ api }: { api: AgentSettingsApi }) {
+  const gt = useGT();
   const c = useAgentSettingsValue(
     async () => decodeTaskLimit(await api.setting("settings.agent-task-limit.settings")),
     api.agentId,
@@ -284,10 +314,12 @@ function TaskLimit({ api }: { api: AgentSettingsApi }) {
       />
       {c.value && (
         <label className="agent-settings-runtime-row">
-          <span className="agent-settings-runtime-label">Parallel threads</span>
+          <span className="agent-settings-runtime-label">
+            <T>Parallel threads</T>
+          </span>
           <select
             className="ui-native-select"
-            aria-label="Threads that run at the same time"
+            aria-label={gt("Threads that run at the same time")}
             value={c.value.taskLimit ?? "default"}
             disabled={c.busy}
             onChange={(event) =>
@@ -299,7 +331,9 @@ function TaskLimit({ api }: { api: AgentSettingsApi }) {
               )
             }
           >
-            <option value="default">Host default</option>
+            <option value="default">
+              <T>Host default</T>
+            </option>
             {[1, 2, 3, 4].map((limit) => (
               <option key={limit} value={limit}>
                 {limit}
@@ -312,6 +346,7 @@ function TaskLimit({ api }: { api: AgentSettingsApi }) {
   );
 }
 export function AgentAdvancedPage({ api }: { api: AgentSettingsApi }) {
+  const gt = useGT();
   return (
     <>
       <SettingsLinkGroup inset className="agent-settings-runtime-rows">
@@ -324,8 +359,10 @@ export function AgentAdvancedPage({ api }: { api: AgentSettingsApi }) {
           read="settings.agent-new-chat.settings"
           update="settings.agent-new-chat.update"
           field="allowNewChat"
-          label="Agent starts new chats"
-          description="Let the agent start a new chat when its chat gets long. It saves notes first."
+          label={gt("Agent starts new chats")}
+          description={gt(
+            "Let the agent start a new chat when its chat gets long. It saves notes first.",
+          )}
         />
       )}
       {api.capabilities.includes("agent-plan-card-v1") && (
@@ -334,8 +371,10 @@ export function AgentAdvancedPage({ api }: { api: AgentSettingsApi }) {
           read="settings.agent-plan-card.settings"
           update="settings.agent-plan-card.update"
           field="quickAcknowledgement"
-          label="Show the plan before long tasks"
-          description="Before a long task, the agent shows its plan. It starts after 10 s, or when you press Start."
+          label={gt("Show the plan before long tasks")}
+          description={gt(
+            "Before a long task, the agent shows its plan. It starts after 10 s, or when you press Start.",
+          )}
         />
       )}
     </>
@@ -350,6 +389,7 @@ export function AgentInstructionsPage({
   onBack: () => void;
   onClose: () => void;
 }) {
+  const gt = useGT();
   const c = useAgentSettingsValue(async () => {
     const value = instructionView(
       await api.admin({ operation: "agent.instructions.read", agentId: api.agentId }),
@@ -375,7 +415,7 @@ export function AgentInstructionsPage({
   return (
     <div className="agent-memories-view">
       <SettingsPanelHeader
-        title="Instructions"
+        title={gt("Instructions")}
         onBack={() => void back()}
         onClose={() => void close()}
       />
@@ -392,7 +432,7 @@ export function AgentInstructionsPage({
                 <>
                   <textarea
                     className="ui-textarea agent-instructions-input"
-                    aria-label="Agent instructions"
+                    aria-label={gt("Agent instructions")}
                     maxLength={32000}
                     value={draft.text}
                     disabled={c.busy}
@@ -416,7 +456,7 @@ export function AgentInstructionsPage({
                       })
                     }
                   >
-                    Save instructions
+                    <T>Save instructions</T>
                   </SourceButton>
                 </>
               ) : (
@@ -438,7 +478,7 @@ export function AgentInstructionsPage({
                       }
                       onClick={() => setDraft({ text: c.value!.text, expected: c.value!.text })}
                     >
-                      Edit
+                      <T>Edit</T>
                     </SourceButton>
                   </div>
                   {c.value.text.trim() ? (
@@ -446,7 +486,9 @@ export function AgentInstructionsPage({
                       <ReactMarkdown>{c.value.text}</ReactMarkdown>
                     </div>
                   ) : (
-                    <p className="agent-instructions-empty">Rules this agent always follows</p>
+                    <p className="agent-instructions-empty">
+                      <T>Rules this agent always follows</T>
+                    </p>
                   )}
                 </>
               )}

@@ -9,6 +9,7 @@ import {
 import type { OpenbotOriginalUploadIdentity } from "@t3tools/contracts";
 import { Button } from "../../components/ui/Button";
 import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
+import { T, useGT } from "gt-react-native";
 type Props = {
   initial: QueueAttachmentState;
   ports: QueueAttachmentPorts;
@@ -20,6 +21,7 @@ export function BotQueueAttachments(props: Props) {
   return <QueueAttachmentsForm key={JSON.stringify(props.initial.scope)} {...props} />;
 }
 function QueueAttachmentsForm({ initial, ports, available, pick, onComplete }: Props) {
+  const gt = useGT();
   const [controller] = useState(() => createQueueAttachments(initial, ports));
   const [text, setText] = useState(initial.edit.text);
   const [state, setState] = useState(controller.state),
@@ -31,27 +33,36 @@ function QueueAttachmentsForm({ initial, ports, available, pick, onComplete }: P
     const settled = await settlePromise(action);
     setStatus(
       settled._tag === "Success" && settled.value
-        ? "Updated."
+        ? gt("Updated.")
         : ports.current() === null
-          ? "The original connection or access changed. After reconnecting, close this editor and resume the original edit before continuing."
-          : "Not confirmed. Check the original result before continuing.",
+          ? gt(
+              "The original connection or access changed. After reconnecting, close this editor and resume the original edit before continuing.",
+            )
+          : gt("Not confirmed. Check the original result before continuing."),
     );
     setState(controller.state);
     setBusy(false);
     if (controller.state.phase === "saved" || controller.state.phase === "cancelled") onComplete();
   };
-  if (!available) return <Text>Adding files to queued edits is unavailable on this host.</Text>;
+  if (!available)
+    return (
+      <Text>
+        <T>Adding files to queued edits is unavailable on this host.</T>
+      </Text>
+    );
   const ready = state.phase === "ready";
   return (
     <View className="gap-2">
       <AppTextInput
-        accessibilityLabel="Queued message"
+        accessibilityLabel={gt("Queued message")}
         multiline
         value={text}
         editable={!busy && ready}
         onChangeText={setText}
       />
-      <Text>These files will be added to this queued message when you save.</Text>
+      <Text>
+        <T>These files will be added to this queued message when you save.</T>
+      </Text>
       {state.edit.keepAttachmentIds.map((id) => (
         <Button
           key={id}
@@ -64,7 +75,7 @@ function QueueAttachmentsForm({ initial, ports, available, pick, onComplete }: P
               ),
             )
           }
-          label={`Remove retained file ${id}`}
+          label={gt("Remove retained file {id}", { id })}
         />
       ))}
       {state.edit.uploads.map((u) => (
@@ -73,7 +84,7 @@ function QueueAttachmentsForm({ initial, ports, available, pick, onComplete }: P
           <Button
             disabled={busy || !ready}
             onPress={() => void act(() => controller.remove(u.identity.operationId))}
-            label={`Remove ${u.identity.name}`}
+            label={gt("Remove {name}", { name: u.identity.name })}
           />
         </View>
       ))}
@@ -85,22 +96,22 @@ function QueueAttachmentsForm({ initial, ports, available, pick, onComplete }: P
             return identity ? controller.attach(identity) : false;
           })
         }
-        label="Attach file"
+        label={gt("Attach file")}
       />
       {state.pendingUpload && (
         <>
           <Text>
-            Upload result is unknown. Recover it or remove this exact upload before saving.
+            <T>Upload result is unknown. Recover it or remove this exact upload before saving.</T>
           </Text>
           <Button
             disabled={busy}
             onPress={() => void act(() => controller.recoverUpload())}
-            label="Recover upload"
+            label={gt("Recover upload")}
           />
           <Button
             disabled={busy || !ready}
             onPress={() => void act(() => controller.remove(state.pendingUpload!.operationId))}
-            label="Remove pending upload"
+            label={gt("Remove pending upload")}
           />
         </>
       )}
@@ -112,25 +123,27 @@ function QueueAttachmentsForm({ initial, ports, available, pick, onComplete }: P
             return controller.save();
           })
         }
-        label="Save queued edit"
+        label={gt("Save queued edit")}
       />
       {(state.phase === "unknown" || state.phase === "saving") && (
         <>
-          <Text>The result is uncertain. Check the original receipt before continuing.</Text>
+          <Text>
+            <T>The result is uncertain. Check the original receipt before continuing.</T>
+          </Text>
           <Button
             disabled={busy}
             onPress={() => void act(() => controller.reconcile())}
-            label="Check edit result"
+            label={gt("Check edit result")}
           />
         </>
       )}
       <Button
         disabled={busy || !ready}
         onPress={() => void act(() => controller.cancel())}
-        label="Cancel edit"
+        label={gt("Cancel edit")}
       />
       <Text accessibilityLiveRegion="polite">
-        {state.phase === "saved" ? "Queued message updated." : status}
+        {state.phase === "saved" ? gt("Queued message updated.") : status}
       </Text>
     </View>
   );

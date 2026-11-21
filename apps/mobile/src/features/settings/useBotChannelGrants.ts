@@ -17,6 +17,7 @@ import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime"
 import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { useGT } from "gt-react-native";
 export type ChannelGrantsProps = {
   environmentId: EnvironmentId;
   hostId: string;
@@ -24,6 +25,7 @@ export type ChannelGrantsProps = {
   agentId: string;
 };
 export function useBotChannelGrants(props: ChannelGrantsProps) {
+  const gt = useGT();
   const [kind, setKind] = useState<"routine" | "agent">("routine");
   const [requester, setRequester] = useState("");
   const [hours, setHours] = useState("24");
@@ -86,7 +88,7 @@ export function useBotChannelGrants(props: ChannelGrantsProps) {
         if (command.action === "create") approval.current = null;
       }
     } catch {
-      setError("The permission request could not complete. Refresh before approving again.");
+      setError(gt("The permission request could not complete. Refresh before approving again."));
     }
     setBusy(false);
     lock.current = false;

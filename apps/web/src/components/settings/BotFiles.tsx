@@ -42,6 +42,7 @@ import { Input } from "../ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
 import { Textarea } from "../ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { T, Var, useGT } from "gt-react";
 
 type Props = {
   environmentId: EnvironmentId;
@@ -52,9 +53,10 @@ type Props = {
   initialTarget?: OpenbotFileTarget;
 };
 export function BotFiles(props: Props) {
+  const gt = useGT();
   const [expanded, setExpanded] = useState(props.initiallyExpanded ?? false);
   return (
-    <section className="space-y-3" aria-label="Bot files">
+    <section className="space-y-3" aria-label={gt("Bot files")}>
       {!props.workspace && (
         <Button
           variant="outline"
@@ -62,7 +64,7 @@ export function BotFiles(props: Props) {
           aria-expanded={expanded}
           onClick={() => setExpanded(!expanded)}
         >
-          {expanded ? "Close files" : "Files"}
+          {expanded ? gt("Close files") : gt("Files")}
         </Button>
       )}
       {(props.workspace || expanded) && (
@@ -75,6 +77,7 @@ export function BotFiles(props: Props) {
   );
 }
 function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
+  const gt = useGT();
   const scope = { hostId, agentId };
   const [path, setPath] = useState(".");
   const [trail, setTrail] = useState([{ path: ".", name: "Workspace" }]);
@@ -206,7 +209,7 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
       setError(
         cause instanceof Error
           ? cause.message
-          : "Could not transfer this file. Refresh and try again.",
+          : gt("Could not transfer this file. Refresh and try again."),
       );
     }
     lock.current = false;
@@ -214,11 +217,7 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
     drafts.refresh();
     taskQuery.refresh();
   };
-  const open = (
-    source: OpenbotAgentFileSource,
-    sourceAgentId: string,
-    save: boolean,
-  ) =>
+  const open = (source: OpenbotAgentFileSource, sourceAgentId: string, save: boolean) =>
     act(async () => {
       const result = await materialize({
         environmentId,
@@ -320,9 +319,11 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
       <div className="min-w-0 space-y-4">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Files</h2>
+            <h2 className="text-lg font-semibold">
+              <T>Files</T>
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Browse the workspace and files shared in conversations.
+              <T>Browse the workspace and files shared in conversations.</T>
             </p>
           </div>
           <Button
@@ -339,10 +340,10 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
             }}
           >
             <RefreshCw className="size-3.5" />
-            Refresh
+            <T>Refresh</T>
           </Button>
         </header>
-        <div className="flex gap-1 border-b pb-2" role="group" aria-label="File location">
+        <div className="flex gap-1 border-b pb-2" role="group" aria-label={gt("File location")}>
           <Button
             size="sm"
             variant="ghost"
@@ -351,7 +352,7 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
             onClick={() => setView("workspace")}
           >
             <FolderOpen className="size-4" />
-            Workspace
+            <T>Workspace</T>
           </Button>
           <Button
             size="sm"
@@ -360,13 +361,13 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
             aria-pressed={view === "conversation"}
             onClick={() => setView("conversation")}
           >
-            Conversation files
+            <T>Conversation files</T>
           </Button>
         </div>
         {view === "workspace" && (
           <>
             <nav
-              aria-label="Folder breadcrumb"
+              aria-label={gt("Folder breadcrumb")}
               className="flex flex-wrap items-center gap-1 text-sm"
             >
               {trail.map((part, index) => (
@@ -392,8 +393,8 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
                 </InputGroupAddon>
                 <InputGroupInput
                   type="search"
-                  aria-label="Find workspace files"
-                  placeholder="Find a file…"
+                  aria-label={gt("Find workspace files")}
+                  placeholder={gt("Find a file…")}
                   value={filter}
                   onChange={(event) => {
                     setFilter(event.target.value);
@@ -407,37 +408,43 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
                   if (value === "name" || value === "size") setSort(value);
                 }}
               >
-                <SelectTrigger className="w-32" aria-label="Sort files">
-                  <SelectValue>{sort === "name" ? "Name" : "Largest"}</SelectValue>
+                <SelectTrigger className="w-32" aria-label={gt("Sort files")}>
+                  <SelectValue>{sort === "name" ? gt("Name") : gt("Largest")}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="name">Name</SelectItem>
-                  <SelectItem value="size">Largest</SelectItem>
+                  <SelectItem value="name">
+                    <T>Name</T>
+                  </SelectItem>
+                  <SelectItem value="size">
+                    <T>Largest</T>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
             {workspace.isPending && !workspace.data && (
               <p role="status" className="py-8 text-center text-sm text-muted-foreground">
-                Loading files…
+                <T>Loading files…</T>
               </p>
             )}
             {entries?.length === 0 && (
               <div className="rounded-xl border border-dashed p-8 text-center">
                 <FolderOpen className="mx-auto mb-3 size-6 text-muted-foreground" />
                 <p className="text-sm font-medium">
-                  {filter ? "No matching files" : "This folder is empty"}
+                  {filter ? gt("No matching files") : gt("This folder is empty")}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {filter
-                    ? "Try a different file name."
-                    : "Files your bot creates here will appear in this list."}
+                    ? gt("Try a different file name.")
+                    : gt("Files your bot creates here will appear in this list.")}
                 </p>
               </div>
             )}
             {(entries?.length ?? 0) > 0 && (
               <div className="overflow-hidden rounded-xl border">
                 <div className="flex items-center justify-between bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
-                  <span>Name</span>
+                  <span>
+                    <T>Name</T>
+                  </span>
                   <span className="tabular-nums">{entries?.length} items</span>
                 </div>
                 <ul className="divide-y">
@@ -468,7 +475,7 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
                           <span className="block truncate text-sm">{entry.name}</span>
                           <span className="block text-xs tabular-nums text-muted-foreground">
                             {entry.kind === "directory"
-                              ? "Folder"
+                              ? gt("Folder")
                               : formatAttachmentSize(entry.size)}
                           </span>
                         </span>
@@ -481,7 +488,7 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
                           variant="ghost"
                           size="icon"
                           disabled={busy || !canRead}
-                          aria-label={`Download ${entry.name}`}
+                          aria-label={gt("Download {name}", { name: entry.name })}
                           onClick={() =>
                             void open({ kind: "workspace", path: entry.path }, agentId, true)
                           }
@@ -496,12 +503,12 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
             )}
             {(entries?.length ?? 0) > visible && (
               <Button size="sm" variant="outline" onClick={() => setVisible(visible + 25)}>
-                Show more files
+                <T>Show more files</T>
               </Button>
             )}
             {workspace.data?.truncated && (
               <p className="text-xs text-muted-foreground">
-                Showing the first 500 entries. Open a subfolder to see more.
+                <T>Showing the first 500 entries. Open a subfolder to see more.</T>
               </p>
             )}
           </>
@@ -520,8 +527,8 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
               >
                 <label className="text-sm font-medium" htmlFor={`bot-files-${agentId}`}>
                   {target.kind === "task"
-                    ? "Search files in this task"
-                    : "Search files across main bot conversations"}
+                    ? gt("Search files in this task")
+                    : gt("Search files across main bot conversations")}
                 </label>
                 <div className="flex gap-2">
                   <Input
@@ -529,26 +536,28 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
                     value={query}
                     maxLength={255}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="File name"
+                    placeholder={gt("File name")}
                   />
                   <Button type="submit" variant="outline" disabled={busy}>
-                    Search
+                    <T>Search</T>
                   </Button>
                 </div>
               </form>
             )}
             {target.kind === "channel" && (
-              <div className="space-y-2" aria-label="Channel message files">
-                <p>Recent channel attachments</p>
+              <div className="space-y-2" aria-label={gt("Channel message files")}>
+                <p>
+                  <T>Recent channel attachments</T>
+                </p>
                 {channelFilesQuery.isPending && !channelFiles && (
                   <p role="status" className="text-sm text-muted-foreground">
-                    Loading channel files…
+                    <T>Loading channel files…</T>
                   </p>
                 )}
                 {channelFiles &&
                   !channelFiles.messages.some((message) => message.message.attachments?.length) && (
                     <p className="text-sm text-muted-foreground">
-                      No attachments in these channel messages.
+                      <T>No attachments in these channel messages.</T>
                     </p>
                   )}
                 {channelFiles?.messages.flatMap((message) =>
@@ -576,22 +585,28 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
                   disabled={busy || channelFiles?.olderCursor == null}
                   onClick={() => setChannelBefore(channelFiles?.olderCursor ?? undefined)}
                 >
-                  Older channel files
+                  <T>Older channel files</T>
                 </Button>
                 <Button
                   disabled={busy || channelBefore === undefined}
                   onClick={() => setChannelBefore(undefined)}
                 >
-                  Latest channel files
+                  <T>Latest channel files</T>
                 </Button>
               </div>
             )}
             {target.kind !== "channel" &&
               target.kind !== "new-task" &&
               search.isPending &&
-              submitted !== null && <p role="status">Searching files…</p>}
+              submitted !== null && (
+                <p role="status">
+                  <T>Searching files…</T>
+                </p>
+              )}
             {search.data?.results.length === 0 && (
-              <p className="text-sm text-muted-foreground">No matching conversation files.</p>
+              <p className="text-sm text-muted-foreground">
+                <T>No matching conversation files.</T>
+              </p>
             )}
             {search.data?.results.map((hit) => {
               const source = {
@@ -619,7 +634,7 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
                   variant="outline"
                   onClick={() => setCursors(cursors.slice(0, -1))}
                 >
-                  Previous results
+                  <T>Previous results</T>
                 </Button>
               )}
               {search.data?.nextCursor && (
@@ -628,13 +643,13 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
                   variant="outline"
                   onClick={() => setCursors([...cursors, search.data!.nextCursor!])}
                 >
-                  Next results
+                  <T>Next results</T>
                 </Button>
               )}
             </div>
             {target.kind === "new-task" && (
               <p className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
-                Choose a file and send it to start a new task.
+                <T>Choose a file and send it to start a new task.</T>
               </p>
             )}
           </div>
@@ -661,7 +676,7 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
         )}
         {!canRead && (
           <p className="text-xs text-muted-foreground">
-            File read permission is required to preview or download bot files.
+            <T>File read permission is required to preview or download bot files.</T>
           </p>
         )}
       </div>
@@ -676,15 +691,15 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
       )}
       <aside
         className="space-y-4 rounded-xl border bg-muted/15 p-4 xl:self-start"
-        aria-label="Send files"
+        aria-label={gt("Send files")}
       >
         <h3 className="flex items-center gap-2 text-sm font-semibold">
           <Upload className="size-4" />
-          Send a file
+          <T>Send a file</T>
         </h3>
         <div className="space-y-2">
           <label htmlFor={`bot-file-target-${agentId}`} className="text-sm font-medium">
-            Conversation for files
+            <T>Conversation for files</T>
           </label>
           <Select
             value={targetValue}
@@ -696,11 +711,17 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
               <SelectValue>{targetLabel}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="main">Main conversation</SelectItem>
-              <SelectItem value="new-task">Start a new task</SelectItem>
+              <SelectItem value="main">
+                <T>Main conversation</T>
+              </SelectItem>
+              <SelectItem value="new-task">
+                <T>Start a new task</T>
+              </SelectItem>
               {channels?.map((channel) => (
                 <SelectItem key={channel.id} value={`channel:${channel.id}`}>
-                  Channel: {channel.name}
+                  <T>
+                    Channel: <Var>{channel.name}</Var>
+                  </T>
                 </SelectItem>
               ))}
               {tasks?.map((task) => (
@@ -713,23 +734,27 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Send files to {targetLabel}.{" "}
-          {target.kind === "task"
-            ? "Task file search covers the latest conversation snapshot."
-            : target.kind === "channel"
-              ? "The group’s bots can use files sent here."
-              : "Choose an existing task or start a new one above."}
+          <T>
+            Send files to <Var>{targetLabel}</Var>.<Var> </Var>
+            <Var>
+              {target.kind === "task"
+                ? gt("Task file search covers the latest conversation snapshot.")
+                : target.kind === "channel"
+                  ? gt("The group’s bots can use files sent here.")
+                  : gt("Choose an existing task or start a new one above.")}
+            </Var>
+          </T>
         </p>
         {targetClosed && (
           <p className="text-xs text-muted-foreground">
-            Reopen this task from its task controls before sending another file.
+            <T>Reopen this task from its task controls before sending another file.</T>
           </p>
         )}
         <input
           ref={picker}
           type="file"
           className="hidden"
-          aria-label="Choose a file for this bot"
+          aria-label={gt("Choose a file for this bot")}
           onChange={(event) => {
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = "";
@@ -743,11 +768,11 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
           onClick={() => picker.current?.click()}
         >
           <Upload className="size-4" />
-          Choose file
+          <T>Choose file</T>
         </Button>
         <Textarea
-          aria-label="Message to send with a file"
-          placeholder="Tell the bot what to do with this file"
+          aria-label={gt("Message to send with a file")}
+          placeholder={gt("Tell the bot what to do with this file")}
           maxLength={100_000}
           value={text}
           onChange={(event) => setText(event.target.value)}
@@ -761,23 +786,29 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
             {draft.state === "sending" && (
               <p className="text-xs text-muted-foreground">
                 {draft.target?.kind === "new-task"
-                  ? "Creation could not be confirmed. Check task conversations before starting another task."
-                  : "Delivery was not confirmed. Retry sends the same file and original message using its saved receipt."}
+                  ? gt(
+                      "Creation could not be confirmed. Check task conversations before starting another task.",
+                    )
+                  : gt(
+                      "Delivery was not confirmed. Retry sends the same file and original message using its saved receipt.",
+                    )}
               </p>
             )}
             {draft.state === "reconciliation-required" && (
               <p className="text-xs text-muted-foreground">
-                Check the target conversation before sending again. Delivery could not be safely
-                confirmed.
+                <T>
+                  Check the target conversation before sending again. Delivery could not be safely
+                  confirmed.
+                </T>
               </p>
             )}
             {draft.state === "sent" && (
               <p className="text-xs text-muted-foreground">
                 {draft.target?.kind === "channel"
-                  ? `Delivered to channel ${draft.target.channelId}.`
+                  ? gt("Delivered to channel {channelId}.", { channelId: draft.target.channelId })
                   : draft.taskId
-                    ? `Delivered to task ${draft.taskId}.`
-                    : "Delivered to the main conversation."}
+                    ? gt("Delivered to task {taskId}.", { taskId: draft.taskId })
+                    : gt("Delivered to the main conversation.")}
               </p>
             )}
             {draft.state === "sent" &&
@@ -802,7 +833,7 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
                     })
                   }
                 >
-                  Refresh sent file
+                  <T>Refresh sent file</T>
                 </Button>
               )}
             {draft.state === "sent" &&
@@ -831,7 +862,7 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
                       )
                     }
                   >
-                    Preview sent file
+                    <T>Preview sent file</T>
                   </Button>
                   <Button
                     size="sm"
@@ -854,13 +885,13 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
                       )
                     }
                   >
-                    Download sent file
+                    <T>Download sent file</T>
                   </Button>
                 </div>
               ))}
             {draft.state === "sent" && !draft.conversationMessageId && (
               <p className="text-xs text-muted-foreground">
-                File details are available through conversation file search.
+                <T>File details are available through conversation file search.</T>
               </p>
             )}
             {draft.state === "sent" && draft.taskId && (
@@ -874,7 +905,7 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
                   setSubmitted(draft.attachment.name);
                 }}
               >
-                Task files
+                <T>Task files</T>
               </Button>
             )}
             {(draft.state === "ready" || draft.state === "sending") && (
@@ -899,11 +930,11 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
                 >
                   {draft.state === "sending"
                     ? draft.target?.kind === "new-task"
-                      ? "Review delivery"
-                      : "Retry delivery"
+                      ? gt("Review delivery")
+                      : gt("Retry delivery")
                     : target.kind === "new-task"
-                      ? "Start task with file"
-                      : "Send file"}
+                      ? gt("Start task with file")
+                      : gt("Send file")}
                 </Button>
                 {draft.state === "ready" && (
                   <Button
@@ -920,7 +951,7 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
                       })
                     }
                   >
-                    Discard draft
+                    <T>Discard draft</T>
                   </Button>
                 )}
               </div>
@@ -929,7 +960,7 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
         ))}
         {busy && (
           <p role="status" className="text-sm text-muted-foreground">
-            Transferring file…
+            <T>Transferring file…</T>
           </p>
         )}
       </aside>
@@ -952,6 +983,7 @@ function ConversationFileRow({
   onPreview: () => void;
   onDownload: () => void;
 }) {
+  const gt = useGT();
   return (
     <div className="flex min-w-0 items-center gap-2 rounded-lg border p-2">
       <Button
@@ -959,7 +991,7 @@ function ConversationFileRow({
         size="multiline"
         className="min-w-0 flex-1 justify-start text-left"
         disabled={disabled}
-        aria-label={`Preview ${name}`}
+        aria-label={gt("Preview {name}", { name })}
         onClick={onPreview}
       >
         <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
@@ -977,7 +1009,7 @@ function ConversationFileRow({
         variant="ghost"
         size="icon"
         disabled={disabled}
-        aria-label={`Download ${name}`}
+        aria-label={gt("Download {name}", { name })}
         onClick={onDownload}
       >
         <Download className="size-4" />

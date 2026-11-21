@@ -17,6 +17,7 @@ import { useSourceSettingsAdmin } from "./upstream/settings/useSourceSettingsAdm
 import { SourceMcpRelay } from "./upstream/marketplace-apps/SourceMcpRelay";
 import { retainedMcpPatch } from "./upstream/settings/mcp-patch";
 import { SourceButton } from "./upstream/settings/SettingsParts";
+import { T, Var } from "gt-react";
 const decodeRows = Schema.decodeUnknownSync(
   Schema.Array(
     Schema.Struct({
@@ -157,7 +158,7 @@ function Ready({
               }
               onClick={() => setRelay({ ...config, id: config.id || `mcp-${randomUUID()}` })}
             >
-              Sign in
+              <T>Sign in</T>
             </SourceButton>
           ) : null
         }
@@ -170,9 +171,15 @@ function Ready({
                 <Dialog.Popup className="integration-wizard-dialog">
                   <div className="integration-wizard">
                     <header className="integration-wizard-head">
-                      <Dialog.Title>Connect {relay.name}</Dialog.Title>
+                      <Dialog.Title>
+                        <T>
+                          Connect <Var>{relay.name}</Var>
+                        </T>
+                      </Dialog.Title>
                       <Dialog.Description>
-                        Sign in to use this MCP server on {hostName}.
+                        <T>
+                          Sign in to use this MCP server on <Var>{hostName}</Var>.
+                        </T>
                       </Dialog.Description>
                     </header>
                     <div className="integration-wizard-body">

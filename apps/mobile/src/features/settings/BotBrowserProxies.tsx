@@ -14,6 +14,7 @@ import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { OpenBotText as Text } from "../bots/upstream/OpenBotTypography";
 import { useBotPalette } from "../bots/upstream/BotChrome";
+import { T, useGT } from "gt-react-native";
 
 const schemes = ["http", "https", "socks5"] as const;
 type Scheme = (typeof schemes)[number];
@@ -77,6 +78,7 @@ export function BotBrowserProxies({
   profiles,
   onChanged,
 }: Scope & { profiles: readonly Profile[]; onChanged: () => void }) {
+  const gt = useGT();
   const p = useBotPalette();
   const compatibility = useEnvironmentQuery(
     openbot.readFromHost({
@@ -126,7 +128,7 @@ export function BotBrowserProxies({
         input: { hostId, request: { operation, parameters } },
       });
       if (result._tag !== "Success") {
-        setError("The proxy could not be updated. Check the address and refresh the list.");
+        setError(gt("The proxy could not be updated. Check the address and refresh the list."));
         return false;
       }
       query.refresh();
@@ -134,7 +136,7 @@ export function BotBrowserProxies({
       return true;
     })()
       .catch(() => {
-        setError("The browser proxy request did not complete.");
+        setError(gt("The browser proxy request did not complete."));
         return false;
       })
       .finally(() => {
@@ -151,19 +153,21 @@ export function BotBrowserProxies({
     })) ?? []),
     ...(items?.computers.map((entry) => ({
       id: entry.id,
-      label: entry.mine ? "Your computer" : (entry.name ?? "Computer"),
+      label: entry.mine ? gt("Your computer") : (entry.name ?? gt("Computer")),
       profileIds: entry.profileIds,
     })) ?? []),
   ];
   return (
     <View style={{ gap: 12 }}>
-      <Text style={{ color: p.text, fontSize: 18, fontWeight: "600" }}>Proxies</Text>
+      <Text style={{ color: p.text, fontSize: 18, fontWeight: "600" }}>
+        <T>Proxies</T>
+      </Text>
       {error && (
         <Text accessibilityRole="alert" style={{ color: p.text }}>
           {error}
         </Text>
       )}
-      {query.error && <Button label="Retry loading proxies" onPress={query.refresh} />}
+      {query.error && <Button label={gt("Retry loading proxies")} onPress={query.refresh} />}
       {editing ? (
         <ProxyEditor
           key={editing === "new" ? "new" : editing.id}
@@ -180,16 +184,16 @@ export function BotBrowserProxies({
             <Menu
               key={entry.id}
               actions={[
-                { id: "edit", title: "Edit proxy" },
-                { id: "delete", title: "Delete proxy", attributes: { destructive: true } },
+                { id: "edit", title: gt("Edit proxy") },
+                { id: "delete", title: gt("Delete proxy"), attributes: { destructive: true } },
               ]}
               onPressAction={({ nativeEvent }) => {
                 if (nativeEvent.event === "edit") setEditing(entry);
                 else if (nativeEvent.event === "delete")
                   Dialog.confirm({
-                    title: "Delete this proxy?",
-                    message: "Profiles using it return to Automatic. Their tabs close.",
-                    confirmText: "Delete proxy",
+                    title: gt("Delete this proxy?"),
+                    message: gt("Profiles using it return to Automatic. Their tabs close."),
+                    confirmText: gt("Delete proxy"),
                     destructive: true,
                     onConfirm: () =>
                       void act("settings.browser-proxies.delete", {
@@ -201,7 +205,7 @@ export function BotBrowserProxies({
             >
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Proxy ${entry.host}`}
+                accessibilityLabel={gt("Proxy {host}", { host: entry.host })}
                 style={{ backgroundColor: p.control, padding: 13, borderRadius: 14, gap: 4 }}
               >
                 <Text style={{ color: p.text, fontWeight: "600" }}>{entry.host}</Text>
@@ -209,21 +213,21 @@ export function BotBrowserProxies({
                   {entry.scheme.toUpperCase()} · {entry.port} · {entry.profileIds.length} profiles
                   {entry.failure
                     ? entry.failure === "signIn"
-                      ? " · Sign-in refused"
-                      : " · Unreachable"
+                      ? gt(" · Sign-in refused")
+                      : gt(" · Unreachable")
                     : ""}
                 </Text>
               </Pressable>
             </Menu>
           ))}
-          <Button label="Add proxy" disabled={busy} onPress={() => setEditing("new")} />
+          <Button label={gt("Add proxy")} disabled={busy} onPress={() => setEditing("new")} />
           {profiles.map((profile) => {
             const selected = options.find((entry) => entry.profileIds.includes(profile.id));
             return (
               <Menu
                 key={profile.id}
                 actions={[
-                  { id: "auto", title: "Automatic", state: selected ? "off" : "on" },
+                  { id: "auto", title: gt("Automatic"), state: selected ? "off" : "on" },
                   ...options.map((entry) => ({
                     id: entry.id,
                     title: entry.label,
@@ -234,9 +238,9 @@ export function BotBrowserProxies({
                   const proxyId = nativeEvent.event === "auto" ? null : nativeEvent.event;
                   if (proxyId === (selected?.id ?? null) || busy) return;
                   Dialog.confirm({
-                    title: "Change the profile’s proxy?",
-                    message: "This closes the tabs using this profile.",
-                    confirmText: "Change proxy",
+                    title: gt("Change the profile’s proxy?"),
+                    message: gt("This closes the tabs using this profile."),
+                    confirmText: gt("Change proxy"),
                     onConfirm: () =>
                       void act("settings.browser-proxies.assign", {
                         profileId: profile.id,
@@ -247,12 +251,12 @@ export function BotBrowserProxies({
               >
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Proxy for ${profile.name}`}
+                  accessibilityLabel={gt("Proxy for {name}", { name: profile.name })}
                   style={{ backgroundColor: p.control, padding: 13, borderRadius: 14 }}
                 >
                   <Text style={{ color: p.text }}>{profile.name}</Text>
                   <Text style={{ color: p.muted, fontSize: 13 }}>
-                    {selected?.label ?? "Automatic"}
+                    {selected?.label ?? gt("Automatic")}
                   </Text>
                 </Pressable>
               </Menu>
@@ -275,6 +279,7 @@ function ProxyEditor({
   onCancel: () => void;
   onSave: (parameters: Schema.Json) => Promise<void>;
 }) {
+  const gt = useGT();
   const p = useBotPalette();
   const [scheme, setScheme] = useState<Scheme>(existing?.scheme ?? "http");
   const [host, setHost] = useState(existing?.host ?? "");
@@ -300,7 +305,7 @@ function ProxyEditor({
   return (
     <View style={{ gap: 10 }}>
       <Text style={{ color: p.text, fontWeight: "600" }}>
-        {existing ? "Edit proxy" : "Add proxy"}
+        {existing ? gt("Edit proxy") : gt("Add proxy")}
       </Text>
       <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
         {schemes.map((item) => (
@@ -314,16 +319,16 @@ function ProxyEditor({
       </View>
       <AppTextInput
         {...field}
-        accessibilityLabel="Proxy host"
-        placeholder="Host"
+        accessibilityLabel={gt("Proxy host")}
+        placeholder={gt("Host")}
         value={host}
         maxLength={255}
         onChangeText={setHost}
       />
       <AppTextInput
         {...field}
-        accessibilityLabel="Proxy port"
-        placeholder="Port"
+        accessibilityLabel={gt("Proxy port")}
+        placeholder={gt("Port")}
         value={port}
         keyboardType="number-pad"
         maxLength={5}
@@ -331,24 +336,24 @@ function ProxyEditor({
       />
       <AppTextInput
         {...field}
-        accessibilityLabel="Proxy username"
-        placeholder="Username (optional)"
+        accessibilityLabel={gt("Proxy username")}
+        placeholder={gt("Username (optional)")}
         value={username}
         onChangeText={setUsername}
       />
       <AppTextInput
         {...field}
-        accessibilityLabel="Proxy password"
-        placeholder={existing?.hasPassword ? "Password saved" : "Password (optional)"}
+        accessibilityLabel={gt("Proxy password")}
+        placeholder={existing?.hasPassword ? gt("Password saved") : gt("Password (optional)")}
         secureTextEntry
         textContentType="none"
         value={password}
         onChangeText={setPassword}
       />
       <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
-        <Button label="Cancel" tone="text" disabled={busy} onPress={onCancel} />
+        <Button label={gt("Cancel")} tone="text" disabled={busy} onPress={onCancel} />
         <Button
-          label="Save proxy"
+          label={gt("Save proxy")}
           disabled={busy || !address || (!!existing && !previousAddress)}
           onPress={() => {
             if (!address) return;

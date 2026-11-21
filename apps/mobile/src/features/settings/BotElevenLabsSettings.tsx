@@ -15,10 +15,12 @@ import { selectBotRecognition, useBotRecognition } from "../bots/upstream/voice/
 import { SPEECH_MODELS, elevenLabsVoiceParts } from "../bots/upstream/voice/elevenlabs";
 import { useBotMessageReading } from "../bots/upstream/voice/BotMessageReading";
 import { SettingsSection } from "./components/SettingsSection";
+import { T, Var, useGT } from "gt-react-native";
 
 const SAMPLE = "elevenlabs-sample";
 
 export function BotElevenLabsSettings({ disabled }: { disabled: boolean }) {
+  const gt = useGT();
   const settings = useBotElevenLabs();
   const listening = useBotRecognition();
   const sample = useBotMessageReading("voice-settings-elevenlabs");
@@ -33,7 +35,7 @@ export function BotElevenLabsSettings({ disabled }: { disabled: boolean }) {
     try {
       await action();
     } catch {
-      Dialog.alert(message, "Check the ElevenLabs API key and its permissions.");
+      Dialog.alert(message, gt("Check the ElevenLabs API key and its permissions."));
     }
     setBusy(false);
   }
@@ -46,8 +48,8 @@ export function BotElevenLabsSettings({ disabled }: { disabled: boolean }) {
       {editing ? (
         <View className="gap-2 px-4 py-2">
           <AppTextInput
-            accessibilityLabel="ElevenLabs API key"
-            placeholder="API key"
+            accessibilityLabel={gt("ElevenLabs API key")}
+            placeholder={gt("API key")}
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
@@ -57,7 +59,7 @@ export function BotElevenLabsSettings({ disabled }: { disabled: boolean }) {
             onChangeText={setKey}
           />
           <ListActionRow
-            label="Connect"
+            label={gt("Connect")}
             loading={busy}
             disabled={locked || !key.trim()}
             onPress={() =>
@@ -70,7 +72,7 @@ export function BotElevenLabsSettings({ disabled }: { disabled: boolean }) {
             }
           />
           <ListActionRow
-            label="Cancel"
+            label={gt("Cancel")}
             disabled={busy}
             onPress={() => {
               setKey("");
@@ -81,8 +83,8 @@ export function BotElevenLabsSettings({ disabled }: { disabled: boolean }) {
       ) : settings ? (
         <>
           <ListActionRow
-            label="Read replies with ElevenLabs"
-            detail={settings.readReplies ? "Selected" : undefined}
+            label={gt("Read replies with ElevenLabs")}
+            detail={settings.readReplies ? gt("Selected") : undefined}
             disabled={locked || !settings.voice}
             onPress={() =>
               void run(
@@ -93,7 +95,7 @@ export function BotElevenLabsSettings({ disabled }: { disabled: boolean }) {
             }
           />
           <ListActionRow
-            label="Refresh voices"
+            label={gt("Refresh voices")}
             disabled={locked}
             onPress={() =>
               void run(async () => setVoices(await botElevenLabsVoices()), "Could not load voices")
@@ -120,7 +122,7 @@ export function BotElevenLabsSettings({ disabled }: { disabled: boolean }) {
                 className="min-h-11 justify-center px-4"
               >
                 <Text>
-                  {voices.find(({ id }) => id === settings.voice)?.name ?? "Choose a voice"}
+                  {voices.find(({ id }) => id === settings.voice)?.name ?? gt("Choose a voice")}
                 </Text>
               </Pressable>
             </Menu>
@@ -148,22 +150,25 @@ export function BotElevenLabsSettings({ disabled }: { disabled: boolean }) {
               className="min-h-11 justify-center px-4"
             >
               <Text>
-                Speech model · {settings.model.replace("elevenlabs-", "").replaceAll("-", " ")}
+                <T>
+                  Speech model ·{" "}
+                  <Var>{settings.model.replace("elevenlabs-", "").replaceAll("-", " ")}</Var>
+                </T>
               </Text>
             </Pressable>
           </Menu>
           <ListActionRow
-            label={sample.messageId === SAMPLE ? "Stop preview" : "Listen to ElevenLabs"}
+            label={sample.messageId === SAMPLE ? gt("Stop preview") : gt("Listen to ElevenLabs")}
             disabled={locked || !settings.voice || !sample.available}
             onPress={() => sample.previewElevenLabs(SAMPLE, "Hi. This is what I sound like.")}
           />
           <ListActionRow
-            label="Remove ElevenLabs key"
+            label={gt("Remove ElevenLabs key")}
             disabled={locked}
             onPress={() =>
               Dialog.confirm({
-                title: "Remove the ElevenLabs key?",
-                confirmText: "Remove",
+                title: gt("Remove the ElevenLabs key?"),
+                confirmText: gt("Remove"),
                 destructive: true,
                 onConfirm: () => {
                   sample.stop();
@@ -178,7 +183,7 @@ export function BotElevenLabsSettings({ disabled }: { disabled: boolean }) {
         </>
       ) : (
         <ListActionRow
-          label="Connect ElevenLabs"
+          label={gt("Connect ElevenLabs")}
           disabled={locked}
           onPress={() => setEditing(true)}
         />

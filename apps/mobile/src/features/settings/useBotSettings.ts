@@ -8,7 +8,9 @@ import {
   type SettingsActions,
 } from "@t3tools/client-runtime/openbot/settings";
 import type { OpenbotSettingsRequest } from "@t3tools/contracts/openbot-settings";
+import { useGT } from "gt-react-native";
 export function useBotSettings(actions: SettingsActions) {
+  const gt = useGT();
   const [results, setResults] = useState<Readonly<Record<string, Json>>>({});
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -40,14 +42,16 @@ export function useBotSettings(actions: SettingsActions) {
         [latestParametersKey]: parameters,
       }));
       if (!settingIsRead(request))
-        setNotice("Saved on the selected host. Refresh to read the current setting.");
+        setNotice(gt("Saved on the selected host. Refresh to read the current setting."));
       return result;
     })()
       .catch(() => {
         setNotice(
           settingIsRead(request)
-            ? "This setting could not be read. Check host support and access."
-            : "The connection ended before confirmation. Refresh this setting before changing it again.",
+            ? gt("This setting could not be read. Check host support and access.")
+            : gt(
+                "The connection ended before confirmation. Refresh this setting before changing it again.",
+              ),
         );
         return null;
       })

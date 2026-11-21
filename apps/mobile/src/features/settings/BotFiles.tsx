@@ -1,9 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import type {
-  EnvironmentId,
-  OpenbotAgentFileSource,
-  OpenbotFileTarget,
-} from "@t3tools/contracts";
+import type { EnvironmentId, OpenbotAgentFileSource, OpenbotFileTarget } from "@t3tools/contracts";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import { channelPage, channelList, taskViews } from "@t3tools/client-runtime/openbot/presentation";
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
@@ -20,14 +16,16 @@ import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useBotFileUpload } from "./useBotFileUpload";
+import { T, Var, useGT } from "gt-react-native";
 
 type Props = { environmentId: EnvironmentId; hostId: string; agentId: string };
 export function BotFiles(props: Props) {
+  const gt = useGT();
   const [expanded, setExpanded] = useState(false);
   return (
     <View className="gap-3">
       <Button
-        label={expanded ? "Close files" : "Files"}
+        label={expanded ? gt("Close files") : gt("Files")}
         size="compact"
         onPress={() => setExpanded(!expanded)}
       />
@@ -41,6 +39,7 @@ export function BotFilesWorkspace(props: Props) {
   return <FilesPanel key={JSON.stringify(props)} {...props} />;
 }
 function FilesPanel({ environmentId, hostId, agentId }: Props) {
+  const gt = useGT();
   const scope = { hostId, agentId };
   const [path, setPath] = useState(".");
   const [visible, setVisible] = useState(25);
@@ -154,7 +153,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
       setError(
         cause instanceof Error
           ? cause.message
-          : "Could not transfer this file. Refresh and try again.",
+          : gt("Could not transfer this file. Refresh and try again."),
       );
     }
     lock.current = false;
@@ -162,11 +161,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
     drafts.refresh();
     taskQuery.refresh();
   };
-  const open = (
-    source: OpenbotAgentFileSource,
-    sourceAgentId: string,
-    save: boolean,
-  ) =>
+  const open = (source: OpenbotAgentFileSource, sourceAgentId: string, save: boolean) =>
     act(async () => {
       const result = await materialize({
         environmentId,
@@ -214,13 +209,15 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
     });
   return (
     <View className="gap-4 rounded-xl bg-grouped-card p-3">
-      <Text className="font-t3-medium">Workspace files</Text>
+      <Text className="font-t3-medium">
+        <T>Workspace files</T>
+      </Text>
       <Text selectable textRole="footnote" className="text-foreground-muted">
         {workspace.data?.path ?? path}
       </Text>
       <View className="flex-row flex-wrap gap-2">
         <Button
-          label="Refresh files"
+          label={gt("Refresh files")}
           size="compact"
           disabled={busy}
           onPress={() => {
@@ -232,7 +229,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
         />
         {workspace.data?.parentPath && (
           <Button
-            label="Parent folder"
+            label={gt("Parent folder")}
             size="compact"
             disabled={busy}
             onPress={() => {
@@ -243,10 +240,14 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
         )}
       </View>
       {workspace.isPending && !workspace.data && (
-        <Text accessibilityLiveRegion="polite">Loading files…</Text>
+        <Text accessibilityLiveRegion="polite">
+          <T>Loading files…</T>
+        </Text>
       )}
       {workspace.data?.entries.length === 0 && (
-        <Text className="text-foreground-muted">No files in this folder.</Text>
+        <Text className="text-foreground-muted">
+          <T>No files in this folder.</T>
+        </Text>
       )}
       {workspace.data?.entries.slice(0, visible).map((entry) => (
         <View key={entry.path} className="gap-2 border-b border-border py-2">
@@ -259,7 +260,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
           <View className="flex-row flex-wrap gap-2">
             {entry.kind === "directory" ? (
               <Button
-                label="Open folder"
+                label={gt("Open folder")}
                 size="compact"
                 disabled={busy}
                 onPress={() => {
@@ -270,15 +271,15 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
             ) : (
               <>
                 <Button
-                  label="Preview"
-                  accessibilityLabel={`Preview ${entry.name}`}
+                  label={gt("Preview")}
+                  accessibilityLabel={gt("Preview {name}", { name: entry.name })}
                   size="compact"
                   disabled={busy || !canRead}
                   onPress={() => void open({ kind: "workspace", path: entry.path }, agentId, false)}
                 />
                 <Button
-                  label="Save or share"
-                  accessibilityLabel={`Save or share ${entry.name}`}
+                  label={gt("Save or share")}
+                  accessibilityLabel={gt("Save or share {name}", { name: entry.name })}
                   size="compact"
                   disabled={busy || !canRead}
                   onPress={() => void open({ kind: "workspace", path: entry.path }, agentId, true)}
@@ -289,24 +290,30 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
         </View>
       ))}
       {(workspace.data?.entries.length ?? 0) > visible && (
-        <Button label="Show more files" size="compact" onPress={() => setVisible(visible + 25)} />
+        <Button
+          label={gt("Show more files")}
+          size="compact"
+          onPress={() => setVisible(visible + 25)}
+        />
       )}
       {workspace.data?.truncated && (
         <Text textRole="footnote" className="text-foreground-muted">
-          This engine returned the first 500 entries. Open a subfolder to narrow the list.
+          <T>This engine returned the first 500 entries. Open a subfolder to narrow the list.</T>
         </Text>
       )}
       <View className="gap-2">
-        <Text>Conversation for files</Text>
+        <Text>
+          <T>Conversation for files</T>
+        </Text>
         <Menu
-          title="Conversation for files"
-          accessibilityLabel="Choose conversation for files"
+          title={gt("Conversation for files")}
+          accessibilityLabel={gt("Choose conversation for files")}
           actions={[
-            { id: "main", title: "Main conversation" },
-            { id: "new-task", title: "Start a new task" },
+            { id: "main", title: gt("Main conversation") },
+            { id: "new-task", title: gt("Start a new task") },
             ...(channels ?? []).map((channel) => ({
               id: `channel:${channel.id}`,
-              title: `Channel: ${channel.name}`,
+              title: gt("Channel: {name}", { name: channel.name }),
             })),
             ...(tasks?.map((task) => ({
               id: `task:${task.id}`,
@@ -326,15 +333,15 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
       </View>
       <Text className="font-t3-medium">
         {target.kind === "task"
-          ? "Search files in this task"
-          : "Search files across main bot conversations"}
+          ? gt("Search files in this task")
+          : gt("Search files across main bot conversations")}
       </Text>
       <AppTextInput
-        accessibilityLabel="Conversation file name"
+        accessibilityLabel={gt("Conversation file name")}
         value={query}
         maxLength={255}
         onChangeText={setQuery}
-        placeholder="File name"
+        placeholder={gt("File name")}
         className="min-h-12 rounded-xl bg-subtle p-3"
         returnKeyType="search"
         onSubmitEditing={() => {
@@ -344,7 +351,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
         }}
       />
       <Button
-        label="Search"
+        label={gt("Search")}
         size="compact"
         disabled={busy}
         onPress={() => {
@@ -354,14 +361,16 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
         }}
       />
       {target.kind === "channel" && (
-        <View className="gap-2" accessibilityLabel="Channel message files">
-          <Text>Recent channel attachments</Text>
+        <View className="gap-2" accessibilityLabel={gt("Channel message files")}>
+          <Text>
+            <T>Recent channel attachments</T>
+          </Text>
           {channelFiles?.messages.flatMap((message) =>
             (message.message.attachments ?? []).map((attachment) => (
               <Button
                 key={`${message.id}:${attachment.id}`}
                 disabled={busy || !canRead}
-                label={`Save or share ${attachment.name}`}
+                label={gt("Save or share {name}", { name: attachment.name })}
                 onPress={() =>
                   void open(
                     {
@@ -380,21 +389,25 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
           )}
           <Button
             disabled={busy || channelFiles?.olderCursor == null}
-            label="Older channel files"
+            label={gt("Older channel files")}
             onPress={() => setChannelBefore(channelFiles?.olderCursor ?? undefined)}
           />
           <Button
             disabled={busy || channelBefore === undefined}
-            label="Latest channel files"
+            label={gt("Latest channel files")}
             onPress={() => setChannelBefore(undefined)}
           />
         </View>
       )}
       {search.isPending && submitted !== null && (
-        <Text accessibilityLiveRegion="polite">Searching files…</Text>
+        <Text accessibilityLiveRegion="polite">
+          <T>Searching files…</T>
+        </Text>
       )}
       {search.data?.results.length === 0 && (
-        <Text className="text-foreground-muted">No matching conversation files.</Text>
+        <Text className="text-foreground-muted">
+          <T>No matching conversation files.</T>
+        </Text>
       )}
       {search.data?.results.slice(0, visibleSearch).map((hit) => (
         <View
@@ -407,7 +420,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
           </Text>
           <View className="flex-row flex-wrap gap-2">
             <Button
-              label="Preview"
+              label={gt("Preview")}
               size="compact"
               disabled={busy || !canRead}
               onPress={() =>
@@ -424,7 +437,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
               }
             />
             <Button
-              label="Save or share"
+              label={gt("Save or share")}
               size="compact"
               disabled={busy || !canRead}
               onPress={() =>
@@ -445,7 +458,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
       ))}
       {(search.data?.results.length ?? 0) > visibleSearch && (
         <Button
-          label="Show more results"
+          label={gt("Show more results")}
           size="compact"
           onPress={() => setVisibleSearch(visibleSearch + 25)}
         />
@@ -453,7 +466,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
       <View className="flex-row flex-wrap gap-2">
         {cursors.length > 0 && (
           <Button
-            label="Previous results"
+            label={gt("Previous results")}
             size="compact"
             onPress={() => {
               setCursors(cursors.slice(0, -1));
@@ -463,7 +476,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
         )}
         {search.data?.nextCursor && (
           <Button
-            label="Next results"
+            label={gt("Next results")}
             size="compact"
             onPress={() => {
               setCursors([...cursors, search.data!.nextCursor!]);
@@ -472,27 +485,33 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
           />
         )}
       </View>
-      <Text className="font-t3-medium">Send a file to this bot</Text>
+      <Text className="font-t3-medium">
+        <T>Send a file to this bot</T>
+      </Text>
       <Text textRole="footnote" className="text-foreground-muted">
-        Send files to {targetLabel}.{" "}
-        {target.kind === "task"
-          ? "Task file search covers the latest conversation snapshot."
-          : "Choose an existing task or start a new one above."}
+        <T>
+          Send files to <Var>{targetLabel}</Var>.<Var> </Var>
+          <Var>
+            {target.kind === "task"
+              ? gt("Task file search covers the latest conversation snapshot.")
+              : gt("Choose an existing task or start a new one above.")}
+          </Var>
+        </T>
       </Text>
       {targetClosed && (
         <Text textRole="footnote" className="text-foreground-muted">
-          Reopen this task from its task controls before sending another file.
+          <T>Reopen this task from its task controls before sending another file.</T>
         </Text>
       )}
       <Button
-        label="Choose file"
+        label={gt("Choose file")}
         size="compact"
         disabled={busy || !canUpload}
         onPress={() => void pick()}
       />
       <AppTextInput
-        accessibilityLabel="Message to send with a file"
-        placeholder="Tell the bot what to do with this file"
+        accessibilityLabel={gt("Message to send with a file")}
+        placeholder={gt("Tell the bot what to do with this file")}
         value={text}
         onChangeText={setText}
         multiline
@@ -510,30 +529,36 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
           {draft.state === "sending" && (
             <Text textRole="footnote" className="text-foreground-muted">
               {draft.target?.kind === "new-task"
-                ? "Creation could not be confirmed. Check task conversations before starting another task."
-                : "Delivery was not confirmed. Retry sends the same file and original message using its saved receipt."}
+                ? gt(
+                    "Creation could not be confirmed. Check task conversations before starting another task.",
+                  )
+                : gt(
+                    "Delivery was not confirmed. Retry sends the same file and original message using its saved receipt.",
+                  )}
             </Text>
           )}
           {draft.state === "reconciliation-required" && (
             <Text textRole="footnote" className="text-foreground-muted">
-              Check the target conversation before sending again. Delivery could not be safely
-              confirmed.
+              <T>
+                Check the target conversation before sending again. Delivery could not be safely
+                confirmed.
+              </T>
             </Text>
           )}
           {draft.state === "sent" && (
             <Text textRole="footnote" className="text-foreground-muted">
               {draft.target?.kind === "channel"
-                ? `Delivered to channel ${draft.target.channelId}.`
+                ? gt("Delivered to channel {channelId}.", { channelId: draft.target.channelId })
                 : draft.taskId
-                  ? `Delivered to task ${draft.taskId}.`
-                  : "Delivered to the main conversation."}
+                  ? gt("Delivered to task {taskId}.", { taskId: draft.taskId })
+                  : gt("Delivered to the main conversation.")}
             </Text>
           )}
           {draft.state === "sent" &&
             draft.conversationMessageId &&
             draft.committedAttachments === null && (
               <Button
-                label="Refresh sent file"
+                label={gt("Refresh sent file")}
                 size="compact"
                 disabled={busy || !canSend}
                 onPress={() =>
@@ -559,7 +584,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
                 <Text selectable>{file.name}</Text>
                 <View className="flex-row flex-wrap gap-2">
                   <Button
-                    label="Preview sent file"
+                    label={gt("Preview sent file")}
                     size="compact"
                     disabled={busy || !canRead}
                     onPress={() =>
@@ -576,7 +601,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
                     }
                   />
                   <Button
-                    label="Save sent file"
+                    label={gt("Save sent file")}
                     size="compact"
                     disabled={busy || !canRead}
                     onPress={() =>
@@ -597,12 +622,12 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
             ))}
           {draft.state === "sent" && !draft.conversationMessageId && (
             <Text textRole="footnote" className="text-foreground-muted">
-              File details are available through conversation file search.
+              <T>File details are available through conversation file search.</T>
             </Text>
           )}
           {draft.state === "sent" && draft.taskId && (
             <Button
-              label="Task files"
+              label={gt("Task files")}
               size="compact"
               disabled={busy}
               onPress={() => {
@@ -618,11 +643,11 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
                 label={
                   draft.state === "sending"
                     ? draft.target?.kind === "new-task"
-                      ? "Review delivery"
-                      : "Retry delivery"
+                      ? gt("Review delivery")
+                      : gt("Retry delivery")
                     : target.kind === "new-task"
-                      ? "Start task with file"
-                      : "Send file"
+                      ? gt("Start task with file")
+                      : gt("Send file")
                 }
                 size="compact"
                 disabled={busy || !canSend || (draft.state === "ready" && targetClosed)}
@@ -643,7 +668,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
               />
               {draft.state === "ready" && (
                 <Button
-                  label="Discard draft"
+                  label={gt("Discard draft")}
                   size="compact"
                   tone="danger"
                   disabled={busy || !canSend || (draft.state === "ready" && targetClosed)}
@@ -664,7 +689,7 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
       ))}
       {busy && (
         <Text accessibilityLiveRegion="polite" className="text-foreground-muted">
-          Transferring file…
+          <T>Transferring file…</T>
         </Text>
       )}
       {(error || workspace.error || search.error || drafts.error || taskQuery.error) && (
@@ -674,14 +699,14 @@ function FilesPanel({ environmentId, hostId, agentId }: Props) {
       )}
       {!canRead && (
         <Text textRole="footnote" className="text-foreground-muted">
-          File read permission is required to preview or download bot files.
+          <T>File read permission is required to preview or download bot files.</T>
         </Text>
       )}
       <FilePreviewModal
         source={preview}
         onRequestClose={() => setPreview(null)}
         onOpenError={() => {
-          setError("Could not preview this file. Try saving it instead.");
+          setError(gt("Could not preview this file. Try saving it instead."));
           setPreview(null);
         }}
       />

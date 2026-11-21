@@ -35,7 +35,9 @@ import { ListRow } from "../../components/ui/ListRow";
 import { ScreenScrollView } from "../../components/ui/ScreenScrollView";
 import { Sheet } from "../../components/ui/Sheet";
 import { Picker } from "./BotConnectionControls";
+import { T, Var, useGT } from "gt-react-native";
 export function BotVaultEntry(scope: { environmentId: EnvironmentId; hostId: string }) {
+  const gt = useGT();
   const [open, setOpen] = useState(false);
   const compatibility = useEnvironmentQuery(
     openbot.readFromHost({
@@ -52,11 +54,15 @@ export function BotVaultEntry(scope: { environmentId: EnvironmentId; hostId: str
   if (!canManage || !settingsCapabilities(compatibility.data).includes("vault-v1")) return null;
   return (
     <>
-      <SettingsSection title="Vault">
-        <ListRow icon="lock" label="Vault and password managers" onPress={() => setOpen(true)} />
+      <SettingsSection title={gt("Vault")}>
+        <ListRow
+          icon="lock"
+          label={gt("Vault and password managers")}
+          onPress={() => setOpen(true)}
+        />
       </SettingsSection>
       {open && (
-        <Sheet title="Vault" onClose={() => setOpen(false)}>
+        <Sheet title={gt("Vault")} onClose={() => setOpen(false)}>
           <ScreenScrollView
             contentInsetAdjustmentBehavior="automatic"
             keyboardShouldPersistTaps="handled"
@@ -82,6 +88,7 @@ export function BotVault({
   );
 }
 function VaultHost({ environmentId, hostId }: { environmentId: EnvironmentId; hostId: string }) {
+  const gt = useGT();
   const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
   const compatibility = useEnvironmentQuery(
     openbot.readFromHost({
@@ -100,10 +107,15 @@ function VaultHost({ environmentId, hostId }: { environmentId: EnvironmentId; ho
   const controller = useBotVault(async (request) => {
     const result = await admin({ environmentId, input: { hostId, request } });
     return result._tag === "Failure"
-      ? { ok: false, error: "Vault request failed." }
+      ? { ok: false, error: gt("Vault request failed.") }
       : { ok: true, value: result.value };
   });
-  if (compatibility.isPending) return <Text>Opening vault…</Text>;
+  if (compatibility.isPending)
+    return (
+      <Text>
+        <T>Opening vault…</T>
+      </Text>
+    );
   return (
     <VaultPanel
       key={`${environmentId}:${hostId}:${version}`}
@@ -140,6 +152,7 @@ function VaultPanel({
   version,
   ...authority
 }: Authority & { controller: VaultController; version: OpenbotVaultVersion }) {
+  const gt = useGT();
   const hasTwoStep = version === "v3" || version === "v4";
   const agentQuery = useEnvironmentQuery(
     version === "v4"
@@ -221,7 +234,7 @@ function VaultPanel({
     );
     clear();
     if (request === null) {
-      setLocalError("Check the item fields and try again.");
+      setLocalError(gt("Check the item fields and try again."));
       return;
     }
     setLocalError(null);
@@ -273,7 +286,7 @@ function VaultPanel({
         <Action
           {...authority}
           request={{ operation: "vault.list", version }}
-          label={"Refresh vault"}
+          label={gt("Refresh vault")}
           disabled={c.busy}
           onAction={() => {
             choose(null);
@@ -281,7 +294,13 @@ function VaultPanel({
           }}
         />
       }
-      {c.state && c.state.status !== "ready" && <Text>Vault {c.state.status}</Text>}
+      {c.state && c.state.status !== "ready" && (
+        <Text>
+          <T>
+            Vault <Var>{c.state.status}</Var>
+          </T>
+        </Text>
+      )}
       {(c.error || localError) && <Text>{c.error || localError}</Text>}
       {c.notice && <Text>{c.notice}</Text>}
       {c.state?.items.map((item) => (
@@ -289,9 +308,9 @@ function VaultPanel({
           <Plain label={vaultLabel(item)} onClick={() => choose(item)} disabled={c.busy} />
         </View>
       ))}
-      <Plain label="New entry" onClick={() => choose(null)} disabled={c.busy} />
+      <Plain label={gt("New entry")} onClick={() => choose(null)} disabled={c.busy} />
       <Picker
-        label="Item kind"
+        label={gt("Item kind")}
         value={kind}
         options={(version !== "v1"
           ? ["login", "card", "contact", "apiKey"]
@@ -321,7 +340,7 @@ function VaultPanel({
         {vaultPrivateFields[kind].map((key) => (
           <Private
             key={key}
-            label={`Replacement ${key}`}
+            label={gt("Replacement {key}", { key })}
             onChange={(value) => {
               secrets.current[key] = value;
             }}
@@ -330,26 +349,26 @@ function VaultPanel({
         ))}
       </View>
       {hasTwoStep && kind === "login" && (
-        <SettingsSection title="Two-step verification">
+        <SettingsSection title={gt("Two-step verification")}>
           <View className="gap-2 px-4 py-3">
             <Text className="text-foreground-muted">
               {keyChange === "update"
-                ? "New key ready to save"
+                ? gt("New key ready to save")
                 : keyChange === "remove"
-                  ? "Key will be removed when saved"
+                  ? gt("Key will be removed when saved")
                   : selection?.kind === "login" && selection.hasTwoStep
-                    ? "Verification key saved"
-                    : "No verification key"}
+                    ? gt("Verification key saved")
+                    : gt("No verification key")}
             </Text>
             <Button
-              label="Set up verification key"
+              label={gt("Set up verification key")}
               disabled={c.busy || c.state?.status !== "ready"}
               onPress={() => setSetup(true)}
             />
             {selection?.kind === "login" && selection.hasTwoStep && (
               <>
                 <Button
-                  label="Show verification code"
+                  label={gt("Show verification code")}
                   disabled={c.busy || codeOpen}
                   onPress={() => {
                     setCodeOpen(true);
@@ -358,7 +377,9 @@ function VaultPanel({
                 />
                 <Button
                   label={
-                    keyChange === "remove" ? "Keep verification key" : "Remove verification key"
+                    keyChange === "remove"
+                      ? gt("Keep verification key")
+                      : gt("Remove verification key")
                   }
                   disabled={c.busy}
                   onPress={() => {
@@ -385,13 +406,13 @@ function VaultPanel({
         />
       )}
       {version === "v4" && (
-        <SettingsSection title="Agent access">
+        <SettingsSection title={gt("Agent access")}>
           <View className="gap-2 px-4 py-3">
             <Text className="text-foreground-muted">
-              {effectiveScope === null ? "Every agent" : `${effectiveScope.length} selected`}
+              {effectiveScope === null ? gt("Every agent") : `${effectiveScope.length} selected`}
             </Text>
             <Button
-              label={accessOpen ? "Close agent access" : "Edit agent access"}
+              label={accessOpen ? gt("Close agent access") : gt("Edit agent access")}
               disabled={c.busy}
               onPress={() => setAccessOpen(!accessOpen)}
             />
@@ -400,7 +421,7 @@ function VaultPanel({
             <>
               <SettingsSwitchRow
                 icon="person.2"
-                label="Every agent"
+                label={gt("Every agent")}
                 value={effectiveScope === null}
                 disabled={c.busy}
                 onValueChange={(include) => setAgentScope(include ? null : [])}
@@ -441,7 +462,7 @@ function VaultPanel({
               password: null,
             },
           }}
-          label={"Save entry"}
+          label={gt("Save entry")}
           disabled={c.busy || c.state?.status !== "ready"}
           onAction={save}
         />
@@ -466,7 +487,7 @@ function VaultPanel({
             />
           ))}
           <Plain
-            label={confirmDelete ? "Cancel removal" : "Remove entry"}
+            label={confirmDelete ? gt("Cancel removal") : gt("Remove entry")}
             onClick={() => setConfirmDelete(!confirmDelete)}
             disabled={c.busy}
           />
@@ -474,7 +495,7 @@ function VaultPanel({
             <Action
               {...authority}
               request={{ operation: "vault.delete", version, id: selection.id }}
-              label={"Confirm removal"}
+              label={gt("Confirm removal")}
               disabled={c.busy}
               onAction={() => {
                 void run({ operation: "vault.delete", version, id: selection.id }).then((ok) => {
@@ -487,9 +508,11 @@ function VaultPanel({
       )}
       {c.state?.status === "unreadable" && (
         <View>
-          <Text>Reset permanently removes unreadable vault data.</Text>
+          <Text>
+            <T>Reset permanently removes unreadable vault data.</T>
+          </Text>
           <Plain
-            label="Prepare unreadable vault reset"
+            label={gt("Prepare unreadable vault reset")}
             onClick={() => setConfirmReset(!confirmReset)}
             disabled={c.busy}
           />
@@ -497,7 +520,7 @@ function VaultPanel({
             <Action
               {...authority}
               request={{ operation: "vault.reset", version }}
-              label={"Confirm vault reset"}
+              label={gt("Confirm vault reset")}
               disabled={c.busy}
               onAction={() => {
                 void run({ operation: "vault.reset", version });
@@ -509,7 +532,7 @@ function VaultPanel({
       <Action
         {...authority}
         request={{ operation: "vault.import", csv: "" }}
-        label="Import login CSV file"
+        label={gt("Import login CSV file")}
         disabled={c.busy || c.state?.status !== "ready"}
         onAction={() => {
           clear();
@@ -521,33 +544,38 @@ function VaultPanel({
               if (result.canceled || !c.isActive()) return;
               const asset = result.assets[0];
               if (!asset || (asset.size !== undefined && asset.size > 1048576)) {
-                setLocalError("Choose a CSV export smaller than 1 MiB.");
+                setLocalError(gt("Choose a CSV export smaller than 1 MiB."));
                 return;
               }
               const csv = await new File(asset.uri).text();
               if (csv.length > 262144) {
-                setLocalError("CSV exports must be at most 262144 characters.");
+                setLocalError(gt("CSV exports must be at most 262144 characters."));
                 return;
               }
               await c.run({ operation: "vault.import", csv });
             })
-            .catch(() => setLocalError("Could not read the selected CSV export."));
+            .catch(() => setLocalError(gt("Could not read the selected CSV export.")));
         }}
       />
       <Text>
-        Import adds login rows from a password-export CSV; other item kinds are skipped. Refresh
-        after importing. Existing entries are not replaced.
+        <T>
+          Import adds login rows from a password-export CSV; other item kinds are skipped. Refresh
+          after importing. Existing entries are not replaced.
+        </T>
       </Text>
       <View key={`connectors:${epoch}`}>
-        <Text>1Password: {c.onepassword?.state ?? "Not loaded"}</Text>
+        <Text>1Password: {c.onepassword?.state ?? gt("Not loaded")}</Text>
         {c.onepassword && (
           <Text>
-            {c.onepassword.vaultNames.join(", ")} · {c.onepassword.loginCount ?? 0} logins ·{" "}
-            {c.onepassword.error ?? ""}
+            <T>
+              <Var>{c.onepassword.vaultNames.join(", ")}</Var> ·{" "}
+              <Var>{c.onepassword.loginCount ?? 0}</Var> logins ·<Var> </Var>
+              <Var>{c.onepassword.error ?? ""}</Var>
+            </T>
           </Text>
         )}
         <Private
-          label="1Password service account token"
+          label={gt("1Password service account token")}
           onChange={(value) => {
             secrets.current.token = value;
           }}
@@ -557,7 +585,7 @@ function VaultPanel({
           <Action
             {...authority}
             request={{ operation: "vault.onepassword.connect", token: "" }}
-            label={"Connect 1Password"}
+            label={gt("Connect 1Password")}
             disabled={c.busy}
             onAction={() => {
               const token = secrets.current.token ?? "";
@@ -570,7 +598,7 @@ function VaultPanel({
           <Action
             {...authority}
             request={{ operation: "vault.onepassword.status" }}
-            label={"Refresh 1Password / check access"}
+            label={gt("Refresh 1Password / check access")}
             disabled={c.busy}
             onAction={() => {
               void run({ operation: "vault.onepassword.status" });
@@ -581,7 +609,7 @@ function VaultPanel({
           <Action
             {...authority}
             request={{ operation: "vault.onepassword.disconnect" }}
-            label={"Disconnect 1Password"}
+            label={gt("Disconnect 1Password")}
             disabled={c.busy}
             onAction={() => {
               void run({ operation: "vault.onepassword.disconnect" });
@@ -589,13 +617,17 @@ function VaultPanel({
           />
         }
         <Text>
-          Bitwarden: {c.bitwarden?.state ?? "Not loaded"} {c.bitwarden?.serverUrl}{" "}
-          {c.bitwarden?.error}
+          <T>
+            Bitwarden: <Var>{c.bitwarden?.state ?? gt("Not loaded")}</Var>{" "}
+            <Var>{c.bitwarden?.serverUrl}</Var>
+            <Var> </Var>
+            <Var>{c.bitwarden?.error}</Var>
+          </T>
         </Text>
         {["serverUrl", "clientId", "clientSecret", "masterPassword"].map((key) => (
           <Private
             key={key}
-            label={`Bitwarden ${key}`}
+            label={gt("Bitwarden {key}", { key })}
             onChange={(value) => {
               secrets.current[key] = value;
             }}
@@ -612,7 +644,7 @@ function VaultPanel({
               clientSecret: "",
               masterPassword: "",
             }}
-            label={"Connect Bitwarden"}
+            label={gt("Connect Bitwarden")}
             disabled={c.busy}
             onAction={() => {
               const {
@@ -636,7 +668,7 @@ function VaultPanel({
           <Action
             {...authority}
             request={{ operation: "vault.bitwarden.status" }}
-            label={"Refresh Bitwarden status"}
+            label={gt("Refresh Bitwarden status")}
             disabled={c.busy}
             onAction={() => {
               void run({ operation: "vault.bitwarden.status" });
@@ -647,7 +679,7 @@ function VaultPanel({
           <Action
             {...authority}
             request={{ operation: "vault.bitwarden.disconnect" }}
-            label={"Disconnect Bitwarden"}
+            label={gt("Disconnect Bitwarden")}
             disabled={c.busy}
             onAction={() => {
               void run({ operation: "vault.bitwarden.disconnect" });
@@ -656,8 +688,10 @@ function VaultPanel({
         }
       </View>
       <Text>
-        These released connectors have no separate test endpoint. Connect validates credentials;
-        refresh checks host status. Bitwarden may remain connecting until a later refresh.
+        <T>
+          These released connectors have no separate test endpoint. Connect validates credentials;
+          refresh checks host status. Bitwarden may remain connecting until a later refresh.
+        </T>
       </Text>
     </View>
   );
@@ -719,6 +753,7 @@ function SecretField({
   controller: VaultController;
   request: Extract<OpenbotVaultRequest, { operation: "vault.reveal" }>;
 }) {
+  const gt = useGT();
   const [value, setValue] = useState<string | null>(null);
   const active = useRef(true);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Hide revealed native secrets when the app leaves the foreground.
@@ -755,21 +790,21 @@ function SecretField({
       <Action
         {...authority}
         request={request}
-        label={`Reveal ${request.field}`}
+        label={gt("Reveal {field}", { field: request.field })}
         disabled={c.busy}
         onAction={reveal}
       />
       <Action
         {...authority}
         request={request}
-        label={`Copy ${request.field}`}
+        label={gt("Copy {field}", { field: request.field })}
         disabled={c.busy}
         onAction={copy}
       />
       {value !== null && (
         <View>
           <AppTextInput
-            accessibilityLabel="Revealed secret"
+            accessibilityLabel={gt("Revealed secret")}
             value={value}
             editable={false}
             autoCorrect={false}
@@ -778,7 +813,7 @@ function SecretField({
             textContentType="none"
             onBlur={() => setValue(null)}
           />
-          <Plain label="Hide secret" onClick={() => setValue(null)} disabled={false} />
+          <Plain label={gt("Hide secret")} onClick={() => setValue(null)} disabled={false} />
         </View>
       )}
     </View>

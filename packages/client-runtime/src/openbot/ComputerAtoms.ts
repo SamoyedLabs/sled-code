@@ -5,13 +5,14 @@ import type * as EnvironmentRegistry from "../connection/registry.ts";
 import { createEnvironmentQueryAtomFamily, createEnvironmentRpcCommand } from "../state/runtime.ts";
 
 import { resolveComputerViewerAccess } from "./rpc/computerView.ts";
+import { mFallback, msg } from "gt-i18n";
 
 export function createOpenbotComputerAtoms<R, E>(
   runtime: Atom.AtomRuntime<HttpClient.HttpClient | EnvironmentRegistry.EnvironmentRegistry | R, E>,
 ) {
   return {
     computerViewCommand: createEnvironmentRpcCommand(runtime, {
-      label: "Control host computer viewer",
+      label: mFallback(msg("Control host computer viewer")),
       tag: WS_METHODS.openbotComputerViewCommand,
     }),
     computerViewAccess: createEnvironmentQueryAtomFamily(runtime, {
@@ -21,7 +22,7 @@ export function createOpenbotComputerAtoms<R, E>(
       execute: (_input: Record<string, never>) => resolveComputerViewerAccess(),
     }),
     computerCapabilities: createEnvironmentRpcCommand(runtime, {
-      label: "Read host computer capabilities",
+      label: mFallback(msg("Read host computer capabilities")),
       tag: WS_METHODS.openbotReadToHost,
     }),
   };

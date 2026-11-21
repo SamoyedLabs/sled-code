@@ -31,17 +31,19 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { useBotAttachmentPreview } from "../bots/BotAttachmentPreview";
 import { BotStorageRing } from "./BotStorageRing";
 import { SettingsSection } from "./components/SettingsSection";
+import { m } from "../../i18n/messages";
+import { T, msg, useGT } from "gt-react-native";
 
 type Scope = { environmentId: EnvironmentId; hostId: string; name: string };
 type Clearable = "caches" | "logs";
 type Change = { category: Clearable } | { fileId: string };
 const categories = [
-  { key: "workspaces", label: "Workspaces", color: "#578cf6" },
-  { key: "files", label: "Chat files", color: "#8e72e8" },
-  { key: "chats", label: "Chats", color: "#51ac90" },
-  { key: "downloads", label: "Downloads", color: "#e59d49" },
-  { key: "runtimes", label: "Runtimes", color: "#e2749b" },
-  { key: "app", label: "App data", color: "#7894a9" },
+  { key: "workspaces", label: m(msg("Workspaces")), color: "#578cf6" },
+  { key: "files", label: m(msg("Chat files")), color: "#8e72e8" },
+  { key: "chats", label: m(msg("Chats")), color: "#51ac90" },
+  { key: "downloads", label: m(msg("Downloads")), color: "#e59d49" },
+  { key: "runtimes", label: m(msg("Runtimes")), color: "#e2749b" },
+  { key: "app", label: m(msg("App data")), color: "#7894a9" },
 ] as const;
 const groupOf: Record<StorageCategory, (typeof categories)[number]["key"]> = {
   workspaces: "workspaces",
@@ -60,6 +62,7 @@ const size = (bytes: number) =>
     : formatAttachmentSize(bytes);
 
 export function BotServerStorage(scope: Scope) {
+  const gt = useGT();
   const [open, setOpen] = useState(false);
   const compatibility = useEnvironmentQuery(
     openbot.readFromHost({
@@ -70,8 +73,8 @@ export function BotServerStorage(scope: Scope) {
   if (!settingsCapabilities(compatibility.data).includes("storage-v1")) return null;
   return (
     <>
-      <SettingsSection title="Storage">
-        <ListRow icon="internaldrive" label="Server storage" onPress={() => setOpen(true)} />
+      <SettingsSection title={gt("Storage")}>
+        <ListRow icon="internaldrive" label={gt("Server storage")} onPress={() => setOpen(true)} />
       </SettingsSection>
       {open && <StorageSheet {...scope} onClose={() => setOpen(false)} />}
     </>
@@ -79,6 +82,7 @@ export function BotServerStorage(scope: Scope) {
 }
 
 function StorageSheet({ environmentId, hostId, name, onClose }: Scope & { onClose: () => void }) {
+  const gt = useGT();
   const [usage, setUsage] = useState<StorageUsage | null>(null);
   const [detail, setDetail] = useState(false);
   const [fileLimit, setFileLimit] = useState(100);
@@ -151,7 +155,7 @@ function StorageSheet({ environmentId, hostId, name, onClose }: Scope & { onClos
     })()
       .catch((cause) => {
         if (!controller.signal.aborted)
-          setError(cause instanceof Error ? cause.message : "Storage measurement failed.");
+          setError(cause instanceof Error ? cause.message : gt("Storage measurement failed."));
       })
       .finally(() => {
         if (active.current === controller) {
@@ -195,9 +199,9 @@ function StorageSheet({ environmentId, hostId, name, onClose }: Scope & { onClos
   );
   const confirmClear = (category: Clearable) => {
     Dialog.confirm({
-      title: category === "caches" ? "Clear server caches?" : "Clear server logs?",
-      message: "This removes the selected data from this bot server.",
-      confirmText: "Clear",
+      title: category === "caches" ? gt("Clear server caches?") : gt("Clear server logs?"),
+      message: gt("This removes the selected data from this bot server."),
+      confirmText: gt("Clear"),
       destructive: true,
       onConfirm: () => void measure(true, { category }),
     });
@@ -214,7 +218,7 @@ function StorageSheet({ environmentId, hostId, name, onClose }: Scope & { onClos
   const confirmDelete = (file: StoredFileRow) => {
     if (!file.deletable || !canDelete) return;
     Dialog.confirm({
-      title: "Delete this stored file?",
+      title: gt("Delete this stored file?"),
       message: file.name,
       confirmText: "Delete",
       destructive: true,
@@ -223,19 +227,23 @@ function StorageSheet({ environmentId, hostId, name, onClose }: Scope & { onClos
   };
   return (
     <>
-      <Sheet title={detail ? "Stored files" : "Storage"} onClose={onClose}>
+      <Sheet title={detail ? gt("Stored files") : gt("Storage")} onClose={onClose}>
         <ScreenScrollView
           contentInsetAdjustmentBehavior="automatic"
           contentContainerClassName="gap-4 px-5 pb-6 pt-4"
         >
           {detail && (
-            <Button tone="text" label="Back to Storage" onPress={() => setDetail(false)} />
+            <Button tone="text" label={gt("Back to Storage")} onPress={() => setDetail(false)} />
           )}
-          {!operationalConnection && <Text>Reconnect to this server to measure storage.</Text>}
+          {!operationalConnection && (
+            <Text>
+              <T>Reconnect to this server to measure storage.</T>
+            </Text>
+          )}
           {error && <Text accessibilityRole="alert">{error}</Text>}
           {!detail && (
             <Button
-              label={busy ? "Measuring…" : "Measure again"}
+              label={busy ? gt("Measuring…") : gt("Measure again")}
               icon="arrow.clockwise"
               loading={busy && Boolean(operationalConnection)}
               disabled={!operationalConnection}
@@ -258,8 +266,12 @@ function StorageSheet({ environmentId, hostId, name, onClose }: Scope & { onClos
                       segments={groups}
                       selected={focused?.key ?? null}
                       value={size(focused?.bytes ?? total)}
-                      caption={focused?.label ?? "Used"}
-                      label={`Storage by type: ${groups.map((group) => `${group.label} ${size(group.bytes)}`).join(", ")}`}
+                      caption={focused?.label ?? gt("Used")}
+                      label={gt("Storage by type: {value}", {
+                        value: groups
+                          .map((group) => `${group.label} ${size(group.bytes)}`)
+                          .join(", "),
+                      })}
                     />
                     {groups.map((group) => (
                       <RowPressable
@@ -288,39 +300,46 @@ function StorageSheet({ environmentId, hostId, name, onClose }: Scope & { onClos
                     ))}
                   </>
                 ) : (
-                  <ListRowLayout label="No measured storage" />
+                  <ListRowLayout label={gt("No measured storage")} />
                 )}
               </SettingsSection>
               {sortedAgents.length > 0 && (
-                <SettingsSection title="Storage by agent">
+                <SettingsSection title={gt("Storage by agent")}>
                   {sortedAgents.map((agent) => (
                     <ListRowLayout
                       key={agent.agentId}
                       icon="person.crop.circle"
-                      label={agentsById.get(agent.agentId) ?? "Removed agent"}
-                      description={`${agent.fileCount} files · ${agent.conversationCount} chats`}
+                      label={agentsById.get(agent.agentId) ?? gt("Removed agent")}
+                      description={gt("{fileCount} files · {conversationCount} chats", {
+                        fileCount: agent.fileCount,
+                        conversationCount: agent.conversationCount,
+                      })}
                       detail={size(agent.bytes)}
                     />
                   ))}
                 </SettingsSection>
               )}
               {largest.length > 0 && (
-                <SettingsSection title="Largest chats">
+                <SettingsSection title={gt("Largest chats")}>
                   {largest.map((chat) => (
                     <ListRowLayout
                       key={JSON.stringify([chat.agentId, chat.id])}
                       label={chat.title}
-                      description={`${agentsById.get(chat.agentId) ?? "Removed agent"} · ${chat.messageCount} messages · ${chat.fileCount} files`}
+                      description={gt("{value} · {messageCount} messages · {fileCount} files", {
+                        value: agentsById.get(chat.agentId) ?? "Removed agent",
+                        messageCount: chat.messageCount,
+                        fileCount: chat.fileCount,
+                      })}
                       detail={size(chat.bytes)}
                     />
                   ))}
                 </SettingsSection>
               )}
               {files.length > 0 && (
-                <SettingsSection title="Files">
+                <SettingsSection title={gt("Files")}>
                   <ListRow
                     icon="doc"
-                    label="All stored files"
+                    label={gt("All stored files")}
                     description={`${files.length} files`}
                     detail={size(files.reduce((sum, item) => sum + item.size, 0))}
                     onPress={() => setDetail(true)}
@@ -328,12 +347,12 @@ function StorageSheet({ environmentId, hostId, name, onClose }: Scope & { onClos
                 </SettingsSection>
               )}
               {canClear && clearable.length > 0 && (
-                <SettingsSection title="Clean up">
+                <SettingsSection title={gt("Clean up")}>
                   {clearable.map((item) => (
                     <ListRow
                       key={item.category}
                       icon="trash"
-                      label={item.category === "caches" ? "Clear caches" : "Clear logs"}
+                      label={item.category === "caches" ? gt("Clear caches") : gt("Clear logs")}
                       detail={size(item.bytes)}
                       disabled={busy || !operationalConnection}
                       onPress={() => confirmClear(item.category)}
@@ -345,7 +364,7 @@ function StorageSheet({ environmentId, hostId, name, onClose }: Scope & { onClos
           )}
           {detail && (
             <SettingsSection
-              title={`${files.length} stored files`}
+              title={gt("{length} stored files", { length: files.length })}
               footer={
                 usage?.truncated
                   ? "The inventory is limited to the storage records this server lists."
@@ -367,12 +386,12 @@ function StorageSheet({ environmentId, hostId, name, onClose }: Scope & { onClos
                     key={JSON.stringify([file.agentId, file.id])}
                     shouldOpenOnLongPress
                     actions={[
-                      { id: "open", title: "Preview", attributes: { disabled: !viewable } },
+                      { id: "open", title: gt("Preview"), attributes: { disabled: !viewable } },
                       ...(deletable
                         ? [
                             {
                               id: "delete",
-                              title: "Delete file",
+                              title: gt("Delete file"),
                               attributes: { destructive: true },
                             },
                           ]
@@ -395,7 +414,7 @@ function StorageSheet({ environmentId, hostId, name, onClose }: Scope & { onClos
               })}
               {files.length > fileLimit && (
                 <ListRow
-                  label="Show more files"
+                  label={gt("Show more files")}
                   onPress={() => setFileLimit((count) => count + 100)}
                 />
               )}

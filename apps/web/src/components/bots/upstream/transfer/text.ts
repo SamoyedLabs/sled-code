@@ -1,3 +1,5 @@
+import { m } from "../../../../i18n/messages";
+import { msg } from "gt-react";
 const messages: Record<string, string | { one: string; other: string }> = {
   "settings.transfer.title": "Move this server to another computer",
   "settings.transfer.lede":
@@ -22,14 +24,16 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "settings.transfer.includeAgent": "Include {name}",
   "settings.transfer.export.title": "Export this server",
   "settings.transfer.export.files": "Include workspace files",
-  "settings.transfer.export.filesDescription":
-    "Files your agents made, and the Shared folder. Turn off for a small file.",
+  "settings.transfer.export.filesDescription": m(
+    msg("Files your agents made, and the Shared folder. Turn off for a small file."),
+  ),
   "settings.transfer.export.settings": "Include server settings",
-  "settings.transfer.export.settingsDescription":
-    "MCP servers, custom model providers, sidebar sections, and routine flows.",
+  "settings.transfer.export.settingsDescription": m(
+    msg("MCP servers, custom model providers, sidebar sections, and routine flows."),
+  ),
   "settings.transfer.export.chooseAgents": "Choose agents ({selected} of {total})",
   "settings.transfer.export.hideAgents": "Hide agents",
-  "settings.transfer.export.agentsLabel": "Agents to export",
+  "settings.transfer.export.agentsLabel": m(msg("Agents to export")),
   "settings.transfer.export.save": "Save export file…",
   "settings.transfer.export.saving": "Exporting…",
   "settings.transfer.export.failed": "The export did not finish",
@@ -51,11 +55,14 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "settings.transfer.import.source": "OpenBot {version} · exported {date}",
   "settings.transfer.import.sourceNoDate": "OpenBot {version}",
   "settings.transfer.import.warnings": "Before the import starts",
-  "settings.transfer.import.agentsLabel": "Agents in the file",
+  "settings.transfer.import.agentsLabel": m(msg("Agents in the file")),
   "settings.transfer.import.nameExists": "Name already used",
   "settings.transfer.import.settings": "Import server settings",
-  "settings.transfer.import.settingsDescription":
-    "Adds the MCP servers, custom model providers, and sidebar sections that this server does not have.",
+  "settings.transfer.import.settingsDescription": m(
+    msg(
+      "Adds the MCP servers, custom model providers, and sidebar sections that this server does not have.",
+    ),
+  ),
   "settings.transfer.import.submit": {
     one: "Import {count} agent",
     other: "Import {count} agents",
@@ -69,8 +76,9 @@ const messages: Record<string, string | { one: string; other: string }> = {
   },
   "settings.transfer.result.next": "Imported agents use the approval rules of this server.",
   "settings.transfer.result.signIn": "Sign in again",
-  "settings.transfer.result.signInText":
-    "These providers were signed in on the other server and are not signed in here.",
+  "settings.transfer.result.signInText": m(
+    msg("These providers were signed in on the other server and are not signed in here."),
+  ),
   "settings.transfer.result.signInButton": "Sign in to {provider}",
   "settings.transfer.result.notImported": "Not imported",
   "settings.transfer.result.warnings": "Check these",

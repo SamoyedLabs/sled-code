@@ -2,6 +2,7 @@
 import { useId, useState } from "react";
 import { BotIcon, ChevronRightIcon } from "lucide-react";
 import type { GroupCommentary } from "./group-conversation";
+import { T } from "gt-react";
 
 export function GroupCommentarySteps({
   group,
@@ -41,7 +42,12 @@ export function GroupCommentarySteps({
                   <BotIcon aria-hidden="true" />
                   <span dir="auto">
                     {entry.message.text}
-                    {entry.superseded && <span className="ob-group-earlier"> Earlier attempt</span>}
+                    {entry.superseded && (
+                      <span className="ob-group-earlier">
+                        {" "}
+                        <T>Earlier attempt</T>
+                      </span>
+                    )}
                     {entry.message.status !== "completed" && (
                       <span className="ob-chat-message-status"> {entry.message.status}</span>
                     )}

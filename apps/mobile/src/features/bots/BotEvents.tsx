@@ -8,6 +8,8 @@ import * as Dialog from "../../components/ui/Dialog";
 import { Button } from "../../components/ui/Button";
 import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
 import { Picker } from "../settings/BotConnectionControls";
+import { m } from "../../i18n/messages";
+import { T, Var, msg, useGT } from "gt-react-native";
 export function RoutineGroup({ children }: { children: ReactNode }) {
   return <View className="gap-3">{children}</View>;
 }
@@ -37,12 +39,13 @@ export function RoutineAction({
   return <Button label={label} onPress={onClick} disabled={disabled} />;
 }
 export function RoutineDisclosure({ label, children }: { label: string; children: ReactNode }) {
+  const gt = useGT();
   const [expanded, setExpanded] = useState(false);
   return (
     <View className="gap-3">
       <Button
-        label={expanded ? `Close ${label.toLowerCase()}` : label}
-        accessibilityHint={expanded ? "Expanded" : "Collapsed"}
+        label={expanded ? gt("Close {value}", { value: label.toLowerCase() }) : label}
+        accessibilityHint={expanded ? gt("Expanded") : gt("Collapsed")}
         onPress={() => setExpanded(!expanded)}
       />
       {expanded && children}
@@ -118,8 +121,8 @@ function RoutineToggle({
   );
 }
 function confirmDelete(action: () => void) {
-  Dialog.alert("Delete routine?", "This removes its trigger from Openbot.", [
-    { text: "Cancel", style: "cancel" },
+  Dialog.alert(m(msg("Delete routine?")), m(msg("This removes its trigger from Openbot.")), [
+    { text: m(msg("Cancel")), style: "cancel" },
     { text: "Delete", style: "destructive", onPress: action },
   ]);
 }
@@ -131,8 +134,9 @@ function copyPrivate(text: string) {
 }
 type Props = { environmentId: EnvironmentId; hostId: string };
 export function BotEvents(props: Props) {
+  const gt = useGT();
   return (
-    <RoutineDisclosure label="Event routines and recovery">
+    <RoutineDisclosure label={gt("Event routines and recovery")}>
       <EventPanel key={`${props.environmentId}:${props.hostId}`} {...props} />
     </RoutineDisclosure>
   );
@@ -142,6 +146,7 @@ export function EventPanel({
   hostId,
   initial,
 }: Props & { initial?: BotRoutineEditTarget }) {
+  const gt = useGT();
   const c = useBotEvents(environmentId, hostId, initial);
   const loadInitial = useEffectEvent(() => {
     if (initial) void c.act({ operation: "events.list", owner: initial.owner }, initial.routineId);
@@ -215,16 +220,24 @@ export function EventPanel({
   return (
     <RoutineGroup>
       <RoutineText>
-        Choose who owns the routine, then set its trigger and instructions. Running a test starts
-        real bot work.
+        <T>
+          Choose who owns the routine, then set its trigger and instructions. Running a test starts
+          real bot work.
+        </T>
       </RoutineText>
       {!c.canAdmin && (
-        <RoutineText alert>Settings access is required to manage event routines.</RoutineText>
+        <RoutineText alert>
+          <T>Settings access is required to manage event routines.</T>
+        </RoutineText>
       )}
-      <RoutineAction label="Refresh bots and channels" onClick={c.refresh} disabled={c.busy} />
+      <RoutineAction
+        label={gt("Refresh bots and channels")}
+        onClick={c.refresh}
+        disabled={c.busy}
+      />
       {c.error && <RoutineText alert>{c.error}</RoutineText>}
       <RoutineChoice
-        label="Routine owner type"
+        label={gt("Routine owner type")}
         value={c.owner.kind}
         options={[
           { id: "agent", name: "Bot" },
@@ -234,7 +247,7 @@ export function EventPanel({
         onChange={(kind) => c.selectOwner(kind === "channel" ? "channel" : "agent", "")}
       />
       <RoutineChoice
-        label={c.owner.kind === "agent" ? "Bot" : "Channel"}
+        label={c.owner.kind === "agent" ? gt("Bot") : gt("Channel")}
         value={c.owner.id}
         options={c.owners}
         disabled={c.busy}
@@ -242,19 +255,21 @@ export function EventPanel({
       />
       {c.owners.length === 0 && (
         <RoutineText>
-          No visible {c.owner.kind === "agent" ? "bots" : "channels"}. Create one in the workspace
-          or refresh the connection.
+          <T>
+            No visible <Var>{c.owner.kind === "agent" ? "bots" : "channels"}</Var>. Create one in
+            the workspace or refresh the connection.
+          </T>
         </RoutineText>
       )}
       <RoutineAction
-        label="Load routines"
+        label={gt("Load routines")}
         disabled={disabled || !c.ownerAvailable}
         onClick={() =>
           void c.act({ operation: "events.list", owner: c.owner }, c.routineId || undefined)
         }
       />
       <RoutineChoice
-        label="Routine"
+        label={gt("Routine")}
         value={c.routineId}
         options={c.rows.map((row) => ({
           id: String(row.id),
@@ -264,51 +279,55 @@ export function EventPanel({
         onChange={c.selectRoutine}
       />
       <RoutineAction
-        label="New scheduled routine"
+        label={gt("New scheduled routine")}
         disabled={disabled || !c.ownerAvailable}
         onClick={() => c.newRoutine("schedule")}
       />
       <RoutineAction
-        label="New webhook routine"
+        label={gt("New webhook routine")}
         disabled={disabled || !c.ownerAvailable}
         onClick={() => c.newRoutine("webhook")}
       />
-      <RoutineHeading>{c.routineId ? `Edit ${selectedName}` : "New routine"}</RoutineHeading>
+      <RoutineHeading>
+        {c.routineId ? gt("Edit {selectedName}", { selectedName }) : gt("New routine")}
+      </RoutineHeading>
       {c.readOnly && (
         <RoutineText alert>
-          This routine uses configuration this client cannot safely edit. Its complete data is
-          preserved below; use an updated client to change it.
+          <T>
+            This routine uses configuration this client cannot safely edit. Its complete data is
+            preserved below; use an updated client to change it.
+          </T>
         </RoutineText>
       )}
       {!c.readOnly && (
         <RoutineGroup>
           <RoutineField
-            label="Routine name"
+            label={gt("Routine name")}
             value={form.name}
             onChange={(name) => c.patch({ name })}
             disabled={editable}
           />
           <RoutineField
-            label="Instructions"
+            label={gt("Instructions")}
             value={form.instruction}
             onChange={(instruction) => c.patch({ instruction })}
             multiline
             disabled={editable}
           />
           <RoutineToggle
-            label="Routine active"
+            label={gt("Routine active")}
             value={form.active}
             onChange={(active) => c.patch({ active })}
             disabled={editable}
           />
           <RoutineField
-            label="Time zone"
+            label={gt("Time zone")}
             value={form.timezone}
             onChange={(timezone) => c.patch({ timezone })}
             disabled={editable}
           />
           <RoutineChoice
-            label="Trigger"
+            label={gt("Trigger")}
             value={form.trigger.kind}
             options={[
               { id: "schedule", name: "Schedule" },
@@ -327,7 +346,7 @@ export function EventPanel({
           {trigger?.kind === "webhook" && (
             <RoutineGroup>
               <RoutineField
-                label="Event type (leave empty for any event)"
+                label={gt("Event type (leave empty for any event)")}
                 value={trigger.eventType ?? ""}
                 onChange={(eventType) =>
                   c.patch({ trigger: { ...trigger, eventType: eventType || null } })
@@ -335,16 +354,18 @@ export function EventPanel({
                 disabled={editable}
               />
               <RoutineText>
-                {trigger.filters.length} payload{" "}
-                {trigger.filters.length === 1 ? "filter" : "filters"} retained. Change payload
-                filters in advanced configuration.
+                <T>
+                  <Var>{trigger.filters.length}</Var> payload<Var> </Var>
+                  <Var>{trigger.filters.length === 1 ? "filter" : "filters"}</Var> retained. Change
+                  payload filters in advanced configuration.
+                </T>
               </RoutineText>
             </RoutineGroup>
           )}
           {schedule && (
             <RoutineGroup>
               <RoutineChoice
-                label="Schedule"
+                label={gt("Schedule")}
                 value={commonKind}
                 options={[
                   ...(commonKind === "preserve"
@@ -363,7 +384,7 @@ export function EventPanel({
                 schedule.kind === "weekdays" ||
                 schedule.kind === "weekly") && (
                 <RoutineField
-                  label="Time (24-hour HH:MM)"
+                  label={gt("Time (24-hour HH:MM)")}
                   value={schedule.time}
                   onChange={(time) => patchSchedule({ time })}
                   disabled={editable}
@@ -371,7 +392,7 @@ export function EventPanel({
               )}
               {schedule.kind === "weekly" && (
                 <RoutineChoice
-                  label="Day"
+                  label={gt("Day")}
                   value={String(schedule.weekday)}
                   options={[
                     "Sunday",
@@ -389,13 +410,13 @@ export function EventPanel({
               {schedule.kind === "interval" && (
                 <RoutineGroup>
                   <RoutineField
-                    label="Repeat every"
+                    label={gt("Repeat every")}
                     value={String(schedule.amount)}
                     onChange={(amount) => patchSchedule({ amount: Number(amount) })}
                     disabled={editable}
                   />
                   <RoutineChoice
-                    label="Interval unit"
+                    label={gt("Interval unit")}
                     value={schedule.unit}
                     options={[
                       { id: "minutes", name: "Minutes" },
@@ -409,13 +430,15 @@ export function EventPanel({
                       })
                     }
                   />
-                  <RoutineDisclosure label="Interval start time">
+                  <RoutineDisclosure label={gt("Interval start time")}>
                     <RoutineText>
-                      The first occurrence is retained when you edit the interval. Change it only to
-                      move the schedule's start.
+                      <T>
+                        The first occurrence is retained when you edit the interval. Change it only
+                        to move the schedule's start.
+                      </T>
                     </RoutineText>
                     <RoutineField
-                      label="First occurrence (ISO date and time)"
+                      label={gt("First occurrence (ISO date and time)")}
                       value={schedule.anchorAt}
                       onChange={(anchorAt) => patchSchedule({ anchorAt })}
                       disabled={editable}
@@ -425,7 +448,7 @@ export function EventPanel({
               )}
               {schedule.kind === "custom" && (
                 <RoutineField
-                  label="Cron expression"
+                  label={gt("Cron expression")}
                   value={schedule.expression}
                   onChange={(expression) => patchSchedule({ expression })}
                   disabled={editable}
@@ -434,7 +457,7 @@ export function EventPanel({
             </RoutineGroup>
           )}
           <RoutineChoice
-            label="When a scheduled occurrence was missed"
+            label={gt("When a scheduled occurrence was missed")}
             value={form.missedPolicy ?? ""}
             options={[
               { id: "", name: "Use engine default" },
@@ -450,7 +473,7 @@ export function EventPanel({
             }
           />
           <RoutineChoice
-            label="When the bot is at its work limit"
+            label={gt("When the bot is at its work limit")}
             value={form.limitPolicy ?? ""}
             options={[
               { id: "", name: "Use engine default" },
@@ -467,13 +490,17 @@ export function EventPanel({
           />
         </RoutineGroup>
       )}
-      <RoutineDisclosure label={c.readOnly ? "Preserved configuration" : "Advanced configuration"}>
+      <RoutineDisclosure
+        label={c.readOnly ? gt("Preserved configuration") : gt("Advanced configuration")}
+      >
         <RoutineText>
-          Keep the selected routine identity. Editing common fields retains its existing trigger
-          filters and policies. Unrecognized future fields cannot be saved by this client.
+          <T>
+            Keep the selected routine identity. Editing common fields retains its existing trigger
+            filters and policies. Unrecognized future fields cannot be saved by this client.
+          </T>
         </RoutineText>
         <RoutineField
-          label="Complete routine configuration"
+          label={gt("Complete routine configuration")}
           value={c.draft}
           onChange={c.updateDraft}
           multiline
@@ -483,12 +510,14 @@ export function EventPanel({
       {!request && !c.readOnly && (
         <RoutineText alert>
           {c.ownerAvailable
-            ? "Configuration is invalid, or its identity differs from the selected routine. Correct the advanced configuration or start a new draft."
-            : "Choose a visible bot or channel before editing a routine."}
+            ? gt(
+                "Configuration is invalid, or its identity differs from the selected routine. Correct the advanced configuration or start a new draft.",
+              )
+            : gt("Choose a visible bot or channel before editing a routine.")}
         </RoutineText>
       )}
       <RoutineAction
-        label={c.routineId ? "Save changes" : "Create routine"}
+        label={c.routineId ? gt("Save changes") : gt("Create routine")}
         disabled={
           editable || !c.canRun || !request || !form.name.trim() || !form.instruction.trim()
         }
@@ -497,29 +526,31 @@ export function EventPanel({
         }}
       />
       {!c.canRun && c.canAdmin && (
-        <RoutineText>Bot operation access is required to save, delete or run routines.</RoutineText>
+        <RoutineText>
+          <T>Bot operation access is required to save, delete or run routines.</T>
+        </RoutineText>
       )}
       <RoutineAction
-        label="Run selected routine now"
+        label={gt("Run selected routine now")}
         disabled={selectedDisabled}
         onClick={() => void c.act({ operation: "events.test", owner: c.owner, id: c.routineId })}
       />
       <RoutineAction
-        label="Send signed webhook test"
+        label={gt("Send signed webhook test")}
         disabled={selectedDisabled || trigger?.kind !== "webhook" || c.service?.connected === false}
         onClick={() =>
           void c.act({ operation: "events.sendTest", owner: c.owner, id: c.routineId })
         }
       />
       <RoutineAction
-        label="Rotate webhook secret"
+        label={gt("Rotate webhook secret")}
         disabled={selectedReadDisabled || trigger?.kind !== "webhook"}
         onClick={() =>
           void c.act({ operation: "events.rotateSecret", owner: c.owner, id: c.routineId })
         }
       />
       <RoutineAction
-        label="Load activity and receipts"
+        label={gt("Load activity and receipts")}
         disabled={selectedReadDisabled}
         onClick={() =>
           void c.act({
@@ -531,7 +562,7 @@ export function EventPanel({
         }
       />
       <RoutineAction
-        label="Load runs and recovery"
+        label={gt("Load runs and recovery")}
         disabled={selectedReadDisabled}
         onClick={() =>
           void c.act({
@@ -543,7 +574,7 @@ export function EventPanel({
         }
       />
       <RoutineAction
-        label="Delete selected routine"
+        label={gt("Delete selected routine")}
         disabled={selectedDisabled}
         onClick={() =>
           confirmDelete(
@@ -552,44 +583,53 @@ export function EventPanel({
         }
       />
       <RoutineText>
-        Webhook delivery and signed tests require a connected Openbot account on the host. Creating
-        or rotating a webhook does not connect that account.
+        <T>
+          Webhook delivery and signed tests require a connected Openbot account on the host.
+          Creating or rotating a webhook does not connect that account.
+        </T>
       </RoutineText>
       {c.service?.connected === false && (
         <RoutineText alert>
-          The host event service is disconnected. Connect its Openbot account before testing webhook
-          delivery.
+          <T>
+            The host event service is disconnected. Connect its Openbot account before testing
+            webhook delivery.
+          </T>
         </RoutineText>
       )}
       <RoutineAction
-        label="Check event service"
+        label={gt("Check event service")}
         disabled={disabled}
         onClick={() => void c.act({ operation: "events.status" })}
       />
       {c.result !== null && <EventResult value={c.result} kind={c.resultKind} />}
       {c.configuration && (
         <RoutineGroup>
-          <RoutineHeading>Private webhook configuration</RoutineHeading>
+          <RoutineHeading>
+            <T>Private webhook configuration</T>
+          </RoutineHeading>
           <RoutineText>
-            {c.configuration.name} · {c.owner.kind === "agent" ? "Bot" : "Channel"}: {c.ownerName}.
-            Store this configuration privately before dismissing it.
+            <T>
+              <Var>{c.configuration.name}</Var> ·{" "}
+              <Var>{c.owner.kind === "agent" ? gt("Bot") : gt("Channel")}</Var>:{" "}
+              <Var>{c.ownerName}</Var>. Store this configuration privately before dismissing it.
+            </T>
           </RoutineText>
           <RoutineAction
-            label={c.revealed ? "Hide configuration" : "Reveal configuration"}
+            label={c.revealed ? gt("Hide configuration") : gt("Reveal configuration")}
             onClick={() => c.setRevealed(!c.revealed)}
           />
           <RoutineAction
-            label="Copy private configuration"
+            label={gt("Copy private configuration")}
             onClick={() => {
               void copyPrivate(JSON.stringify(c.configuration?.value, null, 2)).then((ok) =>
-                setNotice(ok ? "Configuration copied." : "Could not copy configuration."),
+                setNotice(ok ? gt("Configuration copied.") : gt("Could not copy configuration.")),
               );
             }}
           />
           {c.revealed && (
             <RoutineText>{JSON.stringify(c.configuration.value, null, 2)}</RoutineText>
           )}
-          <RoutineAction label="Dismiss configuration" onClick={c.dismissConfiguration} />
+          <RoutineAction label={gt("Dismiss configuration")} onClick={c.dismissConfiguration} />
         </RoutineGroup>
       )}
       {notice && <RoutineText>{notice}</RoutineText>}
@@ -597,6 +637,7 @@ export function EventPanel({
   );
 }
 function EventResult({ value, kind }: { value: unknown; kind: string | null }) {
+  const gt = useGT();
   const rows = routineRows(value);
   const status =
     value && typeof value === "object" && !Array.isArray(value)
@@ -606,12 +647,16 @@ function EventResult({ value, kind }: { value: unknown; kind: string | null }) {
     <RoutineGroup>
       <RoutineHeading>
         {kind === "events.runs"
-          ? "Recent runs"
+          ? gt("Recent runs")
           : kind === "events.activity"
-            ? "Event activity"
-            : "Request result"}
+            ? gt("Event activity")
+            : gt("Request result")}
       </RoutineHeading>
-      {Array.isArray(value) && rows.length === 0 && <RoutineText>No records yet.</RoutineText>}
+      {Array.isArray(value) && rows.length === 0 && (
+        <RoutineText>
+          <T>No records yet.</T>
+        </RoutineText>
+      )}
       {rows.map((row, index) => (
         <RoutineGroup key={String(row.id ?? index)}>
           <RoutineText>
@@ -622,26 +667,36 @@ function EventResult({ value, kind }: { value: unknown; kind: string | null }) {
           {typeof row.error === "string" && row.error && (
             <RoutineText alert>{row.error}</RoutineText>
           )}
-          {Boolean(row.reason) && <RoutineText>Not started: {String(row.reason)}</RoutineText>}
+          {Boolean(row.reason) && (
+            <RoutineText>
+              <T>
+                Not started: <Var>{String(row.reason)}</Var>
+              </T>
+            </RoutineText>
+          )}
         </RoutineGroup>
       ))}
       {kind === "events.status" && status && (
         <RoutineText>
-          {status.supported ? "Events supported" : "Events unavailable"} ·{" "}
-          {status.connected ? "Connected" : "Disconnected"}
+          {status.supported ? gt("Events supported") : gt("Events unavailable")} ·{" "}
+          {status.connected ? gt("Connected") : gt("Disconnected")}
         </RoutineText>
       )}
       {kind === "events.sendTest" && status && (
         <RoutineText>
           {status.status === "started"
-            ? "Webhook accepted and work started."
-            : `Webhook ignored: ${String(status.reason ?? "no matching trigger")}`}
+            ? gt("Webhook accepted and work started.")
+            : gt("Webhook ignored: {String}", {
+                String: String(status.reason ?? "no matching trigger"),
+              })}
         </RoutineText>
       )}
       {kind === "events.test" && (
-        <RoutineText>Test request accepted. Load recent runs to follow its outcome.</RoutineText>
+        <RoutineText>
+          <T>Test request accepted. Load recent runs to follow its outcome.</T>
+        </RoutineText>
       )}
-      <RoutineDisclosure label="Detailed response">
+      <RoutineDisclosure label={gt("Detailed response")}>
         <RoutineText>{JSON.stringify(value, null, 2)}</RoutineText>
       </RoutineDisclosure>
     </RoutineGroup>

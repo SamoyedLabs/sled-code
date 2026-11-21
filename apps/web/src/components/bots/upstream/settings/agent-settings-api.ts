@@ -4,6 +4,7 @@ import type { OpenbotAdminRequest } from "@t3tools/contracts";
 import type { OpenbotSettingsRequest } from "@t3tools/contracts/openbot-settings";
 import type { Json } from "effect/Schema";
 import { useStableCallback } from "../../../../hooks/useStableCallback";
+import { useGT } from "gt-react";
 export interface AgentSettingsApi {
   agentId: string;
   capabilities: readonly string[];
@@ -12,6 +13,7 @@ export interface AgentSettingsApi {
   setting: (operation: OpenbotSettingsRequest["operation"], parameters?: Json) => Promise<unknown>;
 }
 export function useAgentSettingsValue<T>(load: () => Promise<T>, key: string) {
+  const gt = useGT();
   const [value, setValue] = useState<T | null>(null),
     [error, setError] = useState<string | null>(null),
     [busy, setBusy] = useState(false);
@@ -26,7 +28,7 @@ export function useAgentSettingsValue<T>(load: () => Promise<T>, key: string) {
       if (generation.current === current) setValue(settled.value);
     } else if (generation.current === current) {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "The setting could not be read.");
+      setError(cause instanceof Error ? cause.message : gt("The setting could not be read."));
     }
     if (generation.current === current) setBusy(false);
   });
@@ -48,7 +50,7 @@ export function useAgentSettingsValue<T>(load: () => Promise<T>, key: string) {
     });
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "The setting could not be saved.");
+      setError(cause instanceof Error ? cause.message : gt("The setting could not be saved."));
     }
     lock.current = false;
     setBusy(false);

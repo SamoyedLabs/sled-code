@@ -46,6 +46,7 @@ import { MemoryEnvironment } from "./upstream/memory/MemoryEnvironment";
 import { FilesEnvironment } from "./upstream/files/FilesEnvironment";
 import { avatarImageDataUrl } from "./upstream/settings/avatar-image";
 import { SourceButton } from "./upstream/settings/SettingsParts";
+import { T, useGT } from "gt-react";
 const decodeAdmin = Schema.decodeSync(OpenbotAdminRequest);
 export interface SourceAgentSettingsProps {
   layout?: "page" | "panel";
@@ -84,6 +85,7 @@ function Ready({
   onOpenRoutines,
   connection,
 }: SourceAgentSettingsProps & { connection: ReturnType<typeof readPreparedConnection> }) {
+  const gt = useGT();
   const registry = useContext(RegistryContext);
   const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
   const read = useAtomCommand(openbot.settingsRead, { reportFailure: false });
@@ -171,7 +173,7 @@ function Ready({
   const sections: AgentSettingsSection[] = [
     {
       id: "instructions",
-      label: "Instructions",
+      label: gt("Instructions"),
       icon: <FileText aria-hidden="true" />,
       group: "Knows",
       fullPage: true,
@@ -180,7 +182,7 @@ function Ready({
     {
       id: "memory",
       onOpen: onOpenMemory,
-      label: "Memory",
+      label: gt("Memory"),
       icon: <BookMarked aria-hidden="true" />,
       group: "Knows" as const,
       fullPage: true,
@@ -199,7 +201,7 @@ function Ready({
       ? [
           {
             id: "shared-tables",
-            label: "Shared tables",
+            label: gt("Shared tables"),
             icon: <Table2 aria-hidden="true" />,
             group: "Knows" as const,
             onOpen: onOpenSharedTables,
@@ -211,7 +213,7 @@ function Ready({
       ? [
           {
             id: "routines",
-            label: "Routines",
+            label: gt("Routines"),
             icon: <Clock3 aria-hidden="true" />,
             group: "Does" as const,
             onOpen: onOpenRoutines,
@@ -224,7 +226,7 @@ function Ready({
           {
             id: "files",
             onOpen: onOpenFiles ? () => onOpenFiles() : undefined,
-            label: "Files",
+            label: gt("Files"),
             icon: <HardDrive aria-hidden="true" />,
             group: "Knows" as const,
             fullPage: true,
@@ -235,7 +237,7 @@ function Ready({
                 agentId={agent.id}
                 agentName={agent.name}
                 {...(fileConversation
-                  ? { conversation: { id: fileConversation, title: "Conversation files" } }
+                  ? { conversation: { id: fileConversation, title: gt("Conversation files") } }
                   : {})}
                 onBack={() => (fileConversation ? setFileConversation(null) : onBack())}
                 onClose={onClose}
@@ -252,7 +254,7 @@ function Ready({
       ? [
           {
             id: "skills",
-            label: "Skills",
+            label: gt("Skills"),
             icon: <Puzzle aria-hidden="true" />,
             group: "Does" as const,
             fullPage: true,
@@ -264,7 +266,7 @@ function Ready({
       : []),
     {
       id: "permissions",
-      label: "Permissions",
+      label: gt("Permissions"),
       icon: <ShieldCheck aria-hidden="true" />,
       group: "Rules",
       content: <AgentPermissionsPage api={api} />,
@@ -273,7 +275,7 @@ function Ready({
       ? [
           {
             id: "folders",
-            label: "Folders",
+            label: gt("Folders"),
             icon: <Folder aria-hidden="true" />,
             group: "Rules" as const,
             content: <AgentFoldersPage api={api} />,
@@ -282,7 +284,7 @@ function Ready({
       : []),
     {
       id: "advanced",
-      label: "Advanced",
+      label: gt("Advanced"),
       icon: <SlidersHorizontal aria-hidden="true" />,
       group: "Rules",
       content: <AgentAdvancedPage api={api} />,
@@ -291,7 +293,7 @@ function Ready({
       ? [
           {
             id: "backup-models",
-            label: "Backup models",
+            label: gt("Backup models"),
             icon: <ArrowLeftRight aria-hidden="true" />,
             group: "Brain" as const,
             content: (
@@ -309,7 +311,9 @@ function Ready({
     return (
       <p role="alert">
         {compatibility.error}
-        <SourceButton onClick={compatibility.refresh}>Retry</SourceButton>
+        <SourceButton onClick={compatibility.refresh}>
+          <T>Retry</T>
+        </SourceButton>
       </p>
     );
   return (

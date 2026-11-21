@@ -8,6 +8,7 @@ import { AppText as Text } from "../../components/ui/AppText";
 import { ScreenScrollView } from "../../components/ui/ScreenScrollView";
 import { Sheet } from "../../components/ui/Sheet";
 import { useBotPalette } from "./upstream/BotChrome";
+import { T, useGT } from "gt-react-native";
 
 export function BotMessageActivity({
   scope,
@@ -18,6 +19,7 @@ export function BotMessageActivity({
   summary: unknown;
   deferred: boolean;
 }) {
+  const gt = useGT();
   const p = useBotPalette();
   const [open, setOpen] = useState(false);
   const [stepLimit, setStepLimit] = useState(50);
@@ -31,7 +33,7 @@ export function BotMessageActivity({
     <>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Activity"
+        accessibilityLabel={gt("Activity")}
         style={{
           flexDirection: "row",
           alignItems: "center",
@@ -44,12 +46,14 @@ export function BotMessageActivity({
           if (deferred) void load("trace");
         }}
       >
-        <Text style={{ color: p.muted, fontSize: 13 }}>Activity</Text>
+        <Text style={{ color: p.muted, fontSize: 13 }}>
+          <T>Activity</T>
+        </Text>
         <SymbolView name="chevron.right" size={12} tintColor={p.muted} />
       </Pressable>
       {open && (
         <Sheet
-          title="Activity"
+          title={gt("Activity")}
           onClose={() => {
             clear();
             setOpen(false);
@@ -59,33 +63,47 @@ export function BotMessageActivity({
             contentInsetAdjustmentBehavior="automatic"
             contentContainerClassName="gap-3 px-5 py-4"
           >
-            {phase === "loading" && <Text accessibilityLiveRegion="polite">Loading activity…</Text>}
+            {phase === "loading" && (
+              <Text accessibilityLiveRegion="polite">
+                <T>Loading activity…</T>
+              </Text>
+            )}
             {phase === "error" && (
               <Pressable accessibilityRole="button" onPress={() => void load("trace")}>
-                <Text>Could not load full activity. Tap to retry.</Text>
+                <Text>
+                  <T>Could not load full activity. Tap to retry.</T>
+                </Text>
               </Pressable>
             )}
             {!steps.length && phase !== "loading" && phase !== "error" && (
-              <Text>No activity recorded.</Text>
+              <Text>
+                <T>No activity recorded.</T>
+              </Text>
             )}
             {steps.slice(0, stepLimit).map((step) => (
               <View key={step.id} className="gap-1 rounded-xl bg-grouped-card px-4 py-3">
                 <Text className="font-t3-medium">
                   {step.kind === "reasoning"
-                    ? (trace?.thoughtTitles?.[step.id] ?? "Thinking")
-                    : step.text || "Tool call"}
+                    ? (trace?.thoughtTitles?.[step.id] ?? gt("Thinking"))
+                    : step.text || gt("Tool call")}
                 </Text>
                 {step.command && (
                   <Text selectable className="text-foreground-muted">
                     {step.command}
                   </Text>
                 )}
-                {step.failed && <Text className="text-danger-foreground">Failed</Text>}
+                {step.failed && (
+                  <Text className="text-danger-foreground">
+                    <T>Failed</T>
+                  </Text>
+                )}
               </View>
             ))}
             {steps.length > stepLimit && (
               <Pressable accessibilityRole="button" onPress={() => setStepLimit(stepLimit + 50)}>
-                <Text>Show more steps</Text>
+                <Text>
+                  <T>Show more steps</T>
+                </Text>
               </Pressable>
             )}
           </ScreenScrollView>

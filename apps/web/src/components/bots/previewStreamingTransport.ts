@@ -1,4 +1,6 @@
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
+import { m } from "../../i18n/messages";
+import { msg } from "gt-react";
 
 export type PreviewTraceMetadata = {
   sampleAttachment?: boolean;
@@ -30,7 +32,7 @@ export function createPreviewStreamingTransport(): ChatTransport<PreviewChatMess
             type: "tool-input-start",
             toolCallId: searchId,
             toolName: "search_product_notes",
-            title: "Search product notes",
+            title: m(msg("Search product notes")),
           },
         },
         {
@@ -39,7 +41,7 @@ export function createPreviewStreamingTransport(): ChatTransport<PreviewChatMess
             type: "tool-input-available",
             toolCallId: searchId,
             toolName: "search_product_notes",
-            title: "Search product notes",
+            title: m(msg("Search product notes")),
             input: { query: "launch positioning" },
           },
         },
@@ -57,7 +59,7 @@ export function createPreviewStreamingTransport(): ChatTransport<PreviewChatMess
             type: "tool-input-start",
             toolCallId: readId,
             toolName: "read_launch_brief",
-            title: "Read launch brief",
+            title: m(msg("Read launch brief")),
           },
         },
         {
@@ -66,7 +68,7 @@ export function createPreviewStreamingTransport(): ChatTransport<PreviewChatMess
             type: "tool-input-available",
             toolCallId: readId,
             toolName: "read_launch_brief",
-            title: "Read launch brief",
+            title: m(msg("Read launch brief")),
             input: { file: "launch-brief.md" },
           },
         },
@@ -76,7 +78,7 @@ export function createPreviewStreamingTransport(): ChatTransport<PreviewChatMess
             ? {
                 type: "tool-output-error",
                 toolCallId: readId,
-                errorText: "Sample failure: the launch brief could not be read.",
+                errorText: m(msg("Sample failure: the launch brief could not be read.")),
               }
             : {
                 type: "tool-output-available",

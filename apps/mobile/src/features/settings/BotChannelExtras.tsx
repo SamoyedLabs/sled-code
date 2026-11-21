@@ -15,6 +15,7 @@ import * as Dialog from "../../components/ui/Dialog";
 import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
 import { Picker } from "./BotConnectionControls";
 import { Button as NativeButton } from "../../components/ui/Button";
+import { T, Var, useGT } from "gt-react-native";
 function Button({
   children,
   onPress,
@@ -31,24 +32,26 @@ function Button({
 type Props = { environmentId: EnvironmentId; hostId: string };
 type Controller = ReturnType<typeof useBotChannelExtras>;
 export function BotChannelExtras(props: Props) {
+  const gt = useGT();
   const [expanded, setExpanded] = useState(false);
   return (
-    <View accessibilityLabel="Channel responsibilities" className="gap-3">
+    <View accessibilityLabel={gt("Channel responsibilities")} className="gap-3">
       <Button variant="outline" onPress={() => setExpanded(!expanded)}>
-        Channel memory and routines
+        {gt("Channel memory and routines")}
       </Button>
       {expanded && <Panel key={`${props.environmentId}:${props.hostId}`} {...props} />}
     </View>
   );
 }
 function Panel(props: Props) {
+  const gt = useGT();
   const c = useBotChannelExtras(props.environmentId, props.hostId);
   const [text, setText] = useState("");
   const disabled = c.busy || !c.canManage;
   return (
     <View className="gap-3">
       <Picker
-        label="Channel"
+        label={gt("Channel")}
         value={c.channelId}
         options={[
           { id: "", name: "Choose a channel" },
@@ -58,16 +61,22 @@ function Panel(props: Props) {
         disabled={c.busy}
       />
       <Button variant="outline" onPress={c.refresh}>
-        Refresh
+        {gt("Refresh")}
       </Button>
       {c.error && <Text accessibilityRole="alert">{String(c.error)}</Text>}
       {c.channelId !== "" && (
         <>
-          <Text>Shared memory</Text>
+          <Text>
+            <T>Shared memory</T>
+          </Text>
           {c.memories === null ? (
-            <Text>Loading channel memory…</Text>
+            <Text>
+              <T>Loading channel memory…</T>
+            </Text>
           ) : c.memories.length === 0 ? (
-            <Text>No saved memories.</Text>
+            <Text>
+              <T>No saved memories.</T>
+            </Text>
           ) : (
             c.memories.map((memory) => (
               <Memory key={memory.id + memory.updatedAt} memory={memory} c={c} />
@@ -75,7 +84,7 @@ function Panel(props: Props) {
           )}
           <AppTextInput
             multiline
-            accessibilityLabel="New channel memory"
+            accessibilityLabel={gt("New channel memory")}
             maxLength={500}
             value={text}
             onChangeText={setText}
@@ -86,36 +95,48 @@ function Panel(props: Props) {
               void c.act({ operation: "channel.memory.create", channelId: c.channelId, text })
             }
           >
-            Add memory
+            {gt("Add memory")}
           </Button>
           <Button
             disabled={disabled || !c.memories?.length}
             onPress={() =>
-              Dialog.alert("Clear channel memory?", "All shared memories will be deleted.", [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Clear",
-                  style: "destructive",
-                  onPress: () =>
-                    void c.act({ operation: "channel.memory.clear", channelId: c.channelId }),
-                },
-              ])
+              Dialog.alert(
+                gt("Clear channel memory?"),
+                gt("All shared memories will be deleted."),
+                [
+                  { text: gt("Cancel"), style: "cancel" },
+                  {
+                    text: gt("Clear"),
+                    style: "destructive",
+                    onPress: () =>
+                      void c.act({ operation: "channel.memory.clear", channelId: c.channelId }),
+                  },
+                ],
+              )
             }
           >
-            Clear memory
+            {gt("Clear memory")}
           </Button>
-          <Text>Routines</Text>
+          <Text>
+            <T>Routines</T>
+          </Text>
           <Routine key={`new:${c.channelId}`} c={c} />
           {c.routines?.map((routine) => (
             <Routine key={routine.id + routine.updatedAt} c={c} routine={routine} />
           ))}
           {c.routineId && (
-            <View accessibilityLabel="Routine run history">
-              <Text>Run history</Text>
+            <View accessibilityLabel={gt("Routine run history")}>
+              <Text>
+                <T>Run history</T>
+              </Text>
               {c.runs === null ? (
-                <Text>Loading runs…</Text>
+                <Text>
+                  <T>Loading runs…</T>
+                </Text>
               ) : c.runs.length === 0 ? (
-                <Text>No runs yet.</Text>
+                <Text>
+                  <T>No runs yet.</T>
+                </Text>
               ) : (
                 c.runs.map((run) => (
                   <Text key={run.id}>
@@ -132,12 +153,13 @@ function Panel(props: Props) {
   );
 }
 function Memory({ memory, c }: { memory: OpenbotChannelMemory; c: Controller }) {
+  const gt = useGT();
   const [text, setText] = useState(memory.text);
   return (
     <View className="gap-2">
       <AppTextInput
         multiline
-        accessibilityLabel="Saved channel memory"
+        accessibilityLabel={gt("Saved channel memory")}
         maxLength={500}
         value={text}
         onChangeText={setText}
@@ -153,7 +175,7 @@ function Memory({ memory, c }: { memory: OpenbotChannelMemory; c: Controller }) 
           })
         }
       >
-        Save memory
+        {gt("Save memory")}
       </Button>
       <Button
         disabled={c.busy || !c.canManage}
@@ -165,12 +187,13 @@ function Memory({ memory, c }: { memory: OpenbotChannelMemory; c: Controller }) 
           })
         }
       >
-        Delete memory
+        {gt("Delete memory")}
       </Button>
     </View>
   );
 }
 function Routine({ routine, c }: { routine?: OpenbotChannelRoutine; c: Controller }) {
+  const gt = useGT();
   const [name, setName] = useState(routine?.name ?? "");
   const [instruction, setInstruction] = useState(routine?.instruction ?? "");
   const [schedule, setSchedule] = useState(() => channelScheduleDraft(routine?.trigger.schedule));
@@ -180,28 +203,35 @@ function Routine({ routine, c }: { routine?: OpenbotChannelRoutine; c: Controlle
   return (
     <View className="gap-2 rounded border p-3">
       <AppTextInput
-        accessibilityLabel="Routine name"
+        accessibilityLabel={gt("Routine name")}
         maxLength={80}
         value={name}
         onChangeText={setName}
       />
       <AppTextInput
         multiline
-        accessibilityLabel="Routine instruction"
+        accessibilityLabel={gt("Routine instruction")}
         maxLength={100000}
         value={instruction}
         onChangeText={setInstruction}
       />
       {!routine && (
         <>
-          <AppTextInput accessibilityLabel="Timezone" value={timezone} onChangeText={setTimezone} />
+          <AppTextInput
+            accessibilityLabel={gt("Timezone")}
+            value={timezone}
+            onChangeText={setTimezone}
+          />
         </>
       )}
       <ScheduleEditor value={schedule} onChange={setSchedule} disabled={disabled} />
       {routine && (
         <Text>
-          {routine.active ? "Active" : "Paused"} · {routine.trigger.schedule.kind} ·{" "}
-          {routine.timezone} · Next: {routine.trigger.nextRunAt}
+          <T>
+            <Var>{routine.active ? gt("Active") : gt("Paused")}</Var> ·{" "}
+            <Var>{routine.trigger.schedule.kind}</Var> ·<Var> </Var>
+            <Var>{routine.timezone}</Var> · Next: <Var>{routine.trigger.nextRunAt}</Var>
+          </T>
         </Text>
       )}
       <Button
@@ -229,7 +259,7 @@ function Routine({ routine, c }: { routine?: OpenbotChannelRoutine; c: Controlle
           )
         }
       >
-        {routine ? "Save routine" : "Create routine"}
+        {routine ? gt("Save routine") : gt("Create routine")}
       </Button>
       {routine && (
         <>
@@ -244,7 +274,7 @@ function Routine({ routine, c }: { routine?: OpenbotChannelRoutine; c: Controlle
               })
             }
           >
-            {routine.active ? "Pause" : "Resume"}
+            {routine.active ? gt("Pause") : gt("Resume")}
           </Button>
           <Button
             disabled={c.busy || !c.canRun}
@@ -256,7 +286,7 @@ function Routine({ routine, c }: { routine?: OpenbotChannelRoutine; c: Controlle
               })
             }
           >
-            Run now
+            {gt("Run now")}
           </Button>
           <Button
             disabled={disabled}
@@ -268,10 +298,10 @@ function Routine({ routine, c }: { routine?: OpenbotChannelRoutine; c: Controlle
               })
             }
           >
-            Delete routine
+            {gt("Delete routine")}
           </Button>
           <Button variant="outline" onPress={() => c.setRoutineId(routine.id)}>
-            Run history
+            {gt("Run history")}
           </Button>
         </>
       )}
@@ -288,6 +318,7 @@ function ScheduleEditor({
   onChange: (value: ChannelScheduleDraft) => void;
   disabled: boolean;
 }) {
+  const gt = useGT();
   const fields: {
     key:
       | "time"
@@ -305,25 +336,25 @@ function ScheduleEditor({
     ["daily", "weekdays", "weekly", "monthly"].includes(value.kind) ||
     (value.kind === "advanced" && value.timeKind === "at-time")
   )
-    fields.push({ key: "time", label: "Time (HH:MM)" });
-  if (value.kind === "hourly") fields.push({ key: "minute", label: "Minute (0–59)" });
+    fields.push({ key: "time", label: gt("Time (HH:MM)") });
+  if (value.kind === "hourly") fields.push({ key: "minute", label: gt("Minute (0–59)") });
   if (value.kind === "weekly")
-    fields.push({ key: "weekday", label: "Weekday (0 Sunday–6 Saturday)" });
-  if (value.kind === "monthly") fields.push({ key: "day", label: "Day of month (1–31)" });
+    fields.push({ key: "weekday", label: gt("Weekday (0 Sunday–6 Saturday)") });
+  if (value.kind === "monthly") fields.push({ key: "day", label: gt("Day of month (1–31)") });
   if (value.kind === "interval" || (value.kind === "advanced" && value.timeKind === "every"))
-    fields.push({ key: "amount", label: "Repeat every" });
+    fields.push({ key: "amount", label: gt("Repeat every") });
   if (value.kind === "interval")
-    fields.push({ key: "anchorAt", label: "Start at (ISO date and time)" });
-  if (value.kind === "custom") fields.push({ key: "expression", label: "Cron expression" });
+    fields.push({ key: "anchorAt", label: gt("Start at (ISO date and time)") });
+  if (value.kind === "custom") fields.push({ key: "expression", label: gt("Cron expression") });
   if (value.kind === "advanced") {
-    fields.push({ key: "months", label: "Months (1–12, comma separated)" });
+    fields.push({ key: "months", label: gt("Months (1–12, comma separated)") });
     if (value.dayKind !== "every-day")
       fields.push({
         key: "days",
         label:
           value.dayKind === "days-of-week"
-            ? "Weekdays (0–6, comma separated)"
-            : "Month days (1–31, comma separated)",
+            ? gt("Weekdays (0–6, comma separated)")
+            : gt("Month days (1–31, comma separated)"),
       });
   }
   const choice = (
@@ -375,7 +406,9 @@ function ScheduleEditor({
         />
       ))}
       {channelScheduleValue(value) === null && (
-        <Text accessibilityRole="alert">Complete the schedule with valid values.</Text>
+        <Text accessibilityRole="alert">
+          <T>Complete the schedule with valid values.</T>
+        </Text>
       )}
     </View>
   );

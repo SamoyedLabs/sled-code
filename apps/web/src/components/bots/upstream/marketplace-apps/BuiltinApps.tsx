@@ -30,6 +30,7 @@ import type { McpExecute } from "./SourceMcpRelay";
 import "./github-connector.css";
 import "./slack-integration.css";
 import "./integration-layout.css";
+import { T, Var, useGT } from "gt-react";
 type Props = {
   environmentId: EnvironmentId;
   hostId: string;
@@ -40,13 +41,14 @@ type Props = {
 };
 type Controller = ReturnType<typeof useBotConnections>;
 function useController(execute: McpExecute) {
+  const gt = useGT();
   return useBotConnections(async (request) => {
     try {
       return { ok: true, value: await execute(request) };
     } catch (cause) {
       return {
         ok: false,
-        error: cause instanceof Error ? cause.message : "Could not update the connection.",
+        error: cause instanceof Error ? cause.message : gt("Could not update the connection."),
       };
     }
   });
@@ -72,7 +74,9 @@ function Failure({ error, retry }: { error: string | null; retry: () => void }) 
         <p className="ui-alert-description">{error}</p>
       </div>
       <div className="ui-alert-actions">
-        <SourceButton onClick={retry}>Retry</SourceButton>
+        <SourceButton onClick={retry}>
+          <T>Retry</T>
+        </SourceButton>
       </div>
     </div>
   ) : null;
@@ -109,7 +113,7 @@ export function Wizard({
                 <div className="integration-wizard-body">{children}</div>
                 <footer className="integration-wizard-foot">
                   <SourceButton variant="ghost" disabled={busy} onClick={close}>
-                    Close
+                    <T>Close</T>
                   </SourceButton>
                 </footer>
               </div>
@@ -137,6 +141,7 @@ function Stepper({ labels, current }: { labels: readonly string[]; current: numb
   );
 }
 function useGithub(props: Props) {
+  const gt = useGT();
   const c = useController(props.execute),
     [dialog, setDialog] = useState(false),
     [confirm, setConfirm] = useState(false);
@@ -244,11 +249,11 @@ function useGithub(props: Props) {
                     ))}
                   </output>
                   <SourceButton
-                    aria-label="Copy code"
+                    aria-label={gt("Copy code")}
                     onClick={() =>
                       void navigator.clipboard
                         .writeText(state.userCode ?? "")
-                        .catch(() => c.setError("Could not copy the code."))
+                        .catch(() => c.setError(gt("Could not copy the code.")))
                     }
                   >
                     <Copy />
@@ -259,8 +264,8 @@ function useGithub(props: Props) {
               ) : (
                 <p role="status">
                   {c.busy
-                    ? "Requesting a code…"
-                    : (state?.error ?? c.error ?? "Sign-in has ended.")}
+                    ? gt("Requesting a code…")
+                    : (state?.error ?? c.error ?? gt("Sign-in has ended."))}
                 </p>
               )}
             </div>
@@ -301,6 +306,7 @@ function GithubPage({
   refresh: () => Promise<void>;
   disconnect: () => void;
 }) {
+  const gt = useGT();
   const [query, setQuery] = useState("");
   const state = c.state.github,
     rows = c.state.repositories?.repositories.filter((row) =>
@@ -315,31 +321,33 @@ function GithubPage({
         status={state && !state.available ? "unavailable" : status}
         statusLabel={
           !state
-            ? "Loading connection…"
+            ? gt("Loading connection…")
             : !state.available
-              ? "Unavailable"
+              ? gt("Unavailable")
               : status === "connected"
-                ? "Connected"
+                ? gt("Connected")
                 : status === "connecting"
-                  ? "Connecting"
+                  ? gt("Connecting")
                   : status === "attention"
-                    ? "Needs attention"
-                    : "Not connected"
+                    ? gt("Needs attention")
+                    : gt("Not connected")
         }
         actions={
           allowed && state?.available && state.state !== "connected" ? (
             <SourceButton variant="default" disabled={c.busy} onClick={() => void connect()}>
-              {state.state === "expired" ? "Reconnect" : "Connect GitHub"}
+              {state.state === "expired" ? gt("Reconnect") : gt("Connect GitHub")}
             </SourceButton>
           ) : null
         }
       />
       <Failure
-        error={!allowed ? "You do not have permission to manage this connection." : c.error}
+        error={!allowed ? gt("You do not have permission to manage this connection.") : c.error}
         retry={() => void refresh()}
       />
       {state && !state.available && (
-        <p className="integration-card-note">This host has no GitHub App configured.</p>
+        <p className="integration-card-note">
+          <T>This host has no GitHub App configured.</T>
+        </p>
       )}
       {state?.state === "expired" && (
         <div className="ui-alert" data-tone="warning">
@@ -365,35 +373,41 @@ function GithubPage({
               <input
                 className="ui-input"
                 type="search"
-                aria-label="Filter repositories"
-                placeholder={`Filter ${c.state.repositories?.total ?? 0} repositories`}
+                aria-label={gt("Filter repositories")}
+                placeholder={gt("Filter {value} repositories", {
+                  value: c.state.repositories?.total ?? 0,
+                })}
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
             </div>
             {!rows ? (
-              <p className="integration-card-note">Reading repositories…</p>
+              <p className="integration-card-note">
+                <T>Reading repositories…</T>
+              </p>
             ) : rows.length ? (
               rows.map((row) => (
                 <SettingsRow key={row.fullName} title={row.fullName}>
                   {row.private && (
                     <span className="z-badge">
                       <Lock size={12} />
-                      Private
+                      <T>Private</T>
                     </span>
                   )}
                 </SettingsRow>
               ))
             ) : (
               <p className="integration-card-note">
-                {query ? `No repository matches “${query}”.` : t("connector.github.noRepositories")}
+                {query
+                  ? gt("No repository matches “{query}”.", { query })
+                  : t("connector.github.noRepositories")}
               </p>
             )}
           </SettingsCard>
         </SettingsSection>
       )}
       {state && (state.state === "connected" || state.state === "expired") && (
-        <SettingsSection title="Danger zone">
+        <SettingsSection title={gt("Danger zone")}>
           <SettingsCard>
             <SettingsRow
               title={t("connector.github.disconnectTitle")}
@@ -416,6 +430,7 @@ function GithubPage({
 const NAMES = { slack: "Slack", discord: "Discord", telegram: "Telegram" };
 const MARKS = { slack: SlackMark, discord: DiscordMark, telegram: TelegramMark };
 function useMessaging(props: Props, platform: BotMessagingPlatform) {
+  const gt = useGT();
   const c = useController(props.execute),
     [dialog, setDialog] = useState(false),
     [callback, setCallback] = useState(""),
@@ -507,12 +522,12 @@ function useMessaging(props: Props, platform: BotMessagingPlatform) {
           status={status}
           statusLabel={
             !rows
-              ? "Connection unknown"
+              ? gt("Connection unknown")
               : status === "attention"
-                ? "Needs attention"
+                ? gt("Needs attention")
                 : status === "connected"
-                  ? "Connected"
-                  : "Not connected"
+                  ? gt("Connected")
+                  : gt("Not connected")
           }
           actions={
             rows && props.allowed ? (
@@ -523,7 +538,9 @@ function useMessaging(props: Props, platform: BotMessagingPlatform) {
           }
         />
         <Failure
-          error={!props.allowed ? "You do not have permission to manage this connection." : c.error}
+          error={
+            !props.allowed ? gt("You do not have permission to manage this connection.") : c.error
+          }
           retry={() => void refresh()}
         />
         {attention > 0 && (
@@ -537,18 +554,18 @@ function useMessaging(props: Props, platform: BotMessagingPlatform) {
             <SettingsSection
               title={
                 platform === "telegram"
-                  ? "Chats"
+                  ? gt("Chats")
                   : platform === "discord"
-                    ? "Servers"
-                    : "Workspaces"
+                    ? gt("Servers")
+                    : gt("Workspaces")
               }
               actions={
                 <SourceButton disabled={!props.allowed || c.busy} onClick={() => void connect()}>
                   {platform === "telegram"
-                    ? "Add chat"
+                    ? gt("Add chat")
                     : platform === "discord"
-                      ? "Add server"
-                      : "Add workspace"}
+                      ? gt("Add server")
+                      : gt("Add workspace")}
                 </SourceButton>
               }
             >
@@ -559,9 +576,13 @@ function useMessaging(props: Props, platform: BotMessagingPlatform) {
                     title={row.workspaceName}
                     description={
                       row.missingScopes.length
-                        ? `Missing permissions: ${row.missingScopes.join(", ")}`
+                        ? gt("Missing permissions: {value}", {
+                            value: row.missingScopes.join(", "),
+                          })
                         : row.retryAt
-                          ? `Retry at ${new Date(row.retryAt).toLocaleTimeString()}`
+                          ? gt("Retry at {value}", {
+                              value: new Date(row.retryAt).toLocaleTimeString(),
+                            })
                           : platform === "telegram"
                             ? row.workspaceId.startsWith("-")
                               ? t("connector.telegram.groupDescription")
@@ -573,14 +594,14 @@ function useMessaging(props: Props, platform: BotMessagingPlatform) {
                       disabled={!props.allowed || c.busy}
                       onClick={() => void toggle(row.workspaceId, !row.enabled)}
                     >
-                      {row.enabled ? "Pause" : "Resume"}
+                      {row.enabled ? gt("Pause") : gt("Resume")}
                     </SourceButton>
                     {!["connected", "paused"].includes(row.state) && (
                       <SourceButton
                         disabled={!props.allowed || c.busy}
                         onClick={() => void reconnect(row.workspaceId)}
                       >
-                        Reconnect
+                        <T>Reconnect</T>
                       </SourceButton>
                     )}
                     <SourceButton
@@ -588,7 +609,7 @@ function useMessaging(props: Props, platform: BotMessagingPlatform) {
                       disabled={!props.allowed || c.busy}
                       onClick={() => setRemoving([row.workspaceId])}
                     >
-                      Disconnect
+                      <T>Disconnect</T>
                     </SourceButton>
                   </SettingsRow>
                 ))}
@@ -609,7 +630,7 @@ function useMessaging(props: Props, platform: BotMessagingPlatform) {
                     <SettingsRow
                       key={entry.agent!.id}
                       title={entry.agent!.name}
-                      description={`${name} Orchestrator`}
+                      description={gt("{name} Orchestrator", { name })}
                     />
                   ))}
                 {missing && (
@@ -643,18 +664,20 @@ function useMessaging(props: Props, platform: BotMessagingPlatform) {
                 execute={props.execute}
               />
             )}
-            <SettingsSection title="Danger zone">
+            <SettingsSection title={gt("Danger zone")}>
               <SettingsCard>
                 <SettingsRow
                   title={t(`${prefix}.disconnectAllTitle`)}
-                  description="Disconnecting removes every linked place. An orchestrator used by no remaining place is also deleted."
+                  description={gt(
+                    "Disconnecting removes every linked place. An orchestrator used by no remaining place is also deleted.",
+                  )}
                 >
                   <SourceButton
                     variant="destructive-ghost"
                     disabled={!props.allowed || c.busy}
                     onClick={() => setRemoving(rows.map((row) => row.workspaceId))}
                   >
-                    Disconnect
+                    <T>Disconnect</T>
                   </SourceButton>
                 </SettingsRow>
               </SettingsCard>
@@ -668,7 +691,7 @@ function useMessaging(props: Props, platform: BotMessagingPlatform) {
     if (!page?.nonce || platform === "telegram") return;
     const request = botMessagingGrant(platform, callback, page.nonce);
     if (!request) {
-      c.setError("Paste the return link for this pending connection.");
+      c.setError(gt("Paste the return link for this pending connection."));
       return;
     }
     setCallback("");
@@ -700,7 +723,7 @@ function useMessaging(props: Props, platform: BotMessagingPlatform) {
                   ])
                 }
               >
-                Connect group chat
+                <T>Connect group chat</T>
               </SourceButton>
               <SourceButton
                 disabled={c.busy}
@@ -710,22 +733,32 @@ function useMessaging(props: Props, platform: BotMessagingPlatform) {
                   ])
                 }
               >
-                Connect direct chat
+                <T>Connect direct chat</T>
               </SourceButton>
             </div>
           )}
           {page && (
             <>
               <ol className="channel-checklist">
-                <li>Open {name}.</li>
+                <li>
+                  <T>
+                    Open <Var>{name}</Var>.
+                  </T>
+                </li>
                 <li>
                   {platform === "telegram"
-                    ? "Choose the chat and add OpenBot."
-                    : "Allow OpenBot to join your workspace."}
+                    ? gt("Choose the chat and add OpenBot.")
+                    : gt("Allow OpenBot to join your workspace.")}
                 </li>
-                <li>Return here to finish the connection.</li>
+                <li>
+                  <T>Return here to finish the connection.</T>
+                </li>
               </ol>
-              <Link url={page.url}>Open {name}</Link>
+              <Link url={page.url}>
+                <T>
+                  Open <Var>{name}</Var>
+                </T>
+              </Link>
               {page.nonce && platform !== "telegram" && (
                 <form
                   onSubmit={(event) => {
@@ -734,7 +767,9 @@ function useMessaging(props: Props, platform: BotMessagingPlatform) {
                   }}
                 >
                   <label className="ui-field">
-                    <span className="ui-label">Paste the OpenBot return link</span>
+                    <span className="ui-label">
+                      <T>Paste the OpenBot return link</T>
+                    </span>
                     <input
                       className="ui-input"
                       type="password"
@@ -745,7 +780,7 @@ function useMessaging(props: Props, platform: BotMessagingPlatform) {
                     />
                   </label>
                   <SourceButton type="submit" disabled={c.busy || !callback.trim()}>
-                    Complete connection
+                    <T>Complete connection</T>
                   </SourceButton>
                 </form>
               )}
@@ -774,9 +809,12 @@ function useMessaging(props: Props, platform: BotMessagingPlatform) {
       )}
       <SourceConfirmDialog
         open={removing !== null}
-        title={`Disconnect ${name}?`}
-        description={`This removes the selected connections from ${props.hostName}. If no other linked place uses an orchestrator, that agent is also deleted. Active work may need to finish first.`}
-        confirmLabel="Disconnect"
+        title={gt("Disconnect {name}?", { name })}
+        description={gt(
+          "This removes the selected connections from {hostName}. If no other linked place uses an orchestrator, that agent is also deleted. Active work may need to finish first.",
+          { hostName: props.hostName },
+        )}
+        confirmLabel={gt("Disconnect")}
         pending={c.busy}
         error={c.error}
         onCancel={() => setRemoving(null)}
@@ -798,6 +836,7 @@ function useMessaging(props: Props, platform: BotMessagingPlatform) {
   return { app, overlay };
 }
 export function useBuiltinApps(props: Props) {
+  const gt = useGT();
   const github = useGithub(props),
     slack = useMessaging(props, "slack"),
     discord = useMessaging(props, "discord"),
@@ -815,16 +854,20 @@ export function useBuiltinApps(props: Props) {
           name="WhatsApp"
           logo={<WhatsAppMark />}
           status="unavailable"
-          statusLabel="Unavailable on a joined host"
+          statusLabel={gt("Unavailable on a joined host")}
           subtitle={t("connector.whatsapp.description")}
         />
         <div className="ui-alert" data-tone="warning" role="status">
           <div className="ui-alert-content">
-            <strong>Open WhatsApp settings on the host</strong>
+            <strong>
+              <T>Open WhatsApp settings on the host</T>
+            </strong>
             <p className="ui-alert-description">
-              This host’s remote interface does not support linking WhatsApp numbers, scanning
-              pairing codes, or managing allowed senders. Open OpenBot on {props.hostName} to manage
-              this connection.
+              <T>
+                This host’s remote interface does not support linking WhatsApp numbers, scanning
+                pairing codes, or managing allowed senders. Open OpenBot on{" "}
+                <Var>{props.hostName}</Var> to manage this connection.
+              </T>
             </p>
           </div>
         </div>

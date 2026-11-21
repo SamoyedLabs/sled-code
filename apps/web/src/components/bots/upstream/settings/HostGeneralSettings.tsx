@@ -11,6 +11,7 @@ import type { OpenbotSettingsRequest } from "@t3tools/contracts/openbot-settings
 import type { Json } from "effect/Schema";
 import { useStableCallback } from "../../../../hooks/useStableCallback";
 import { SettingsCard, SettingsRow, SettingsSection, SourceButton } from "./SettingsParts";
+import { T, Var, useGT } from "gt-react";
 const memory = Schema.Struct({ limit: Schema.Number, choices: Schema.Array(Schema.Number) });
 const review = Schema.Struct({ interval: Schema.Number, choices: Schema.Array(Schema.Number) });
 const timezone = Schema.Struct({
@@ -28,13 +29,14 @@ export function HostGeneralSettings({
   identity?: ReactNode;
   danger?: ReactNode;
 }) {
+  const gt = useGT();
   return (
     <>
       {identity}
       {capabilities.some((capability) =>
         ["host-timezone-v1", "agent-memory-limit-v1", "memory-review-v1"].includes(capability),
       ) && (
-        <SettingsSection title="Bot defaults">
+        <SettingsSection title={gt("Bot defaults")}>
           <SettingsCard>
             {capabilities.includes("host-timezone-v1") && <TimezoneSetting actions={actions} />}
             {capabilities.includes("agent-memory-limit-v1") && <MemorySetting actions={actions} />}
@@ -51,6 +53,7 @@ function useSetting<T>(
   operation: OpenbotSettingsRequest["operation"],
   decode: (input: unknown) => T,
 ) {
+  const gt = useGT();
   const [value, setValue] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -60,7 +63,7 @@ function useSetting<T>(
       if (lock.current) return;
       const request = settingRequest(next, parameters);
       if (!request || !actions.can(request)) {
-        setError("You need permission to manage this server setting.");
+        setError(gt("You need permission to manage this server setting."));
         return;
       }
       lock.current = true;
@@ -72,7 +75,7 @@ function useSetting<T>(
       });
       if (settled._tag === "Failure") {
         const cause = squashAtomCommandFailure(settled);
-        setError(cause instanceof Error ? cause.message : "Could not load the server setting.");
+        setError(cause instanceof Error ? cause.message : gt("Could not load the server setting."));
       }
       lock.current = false;
       setBusy(false);
@@ -85,6 +88,7 @@ function useSetting<T>(
   return { value, error, busy, run, retry: () => void run(operation, {}) };
 }
 function TimezoneSetting({ actions }: { actions: SettingsActions }) {
+  const gt = useGT();
   const c = useSetting(
     actions,
     "settings.host-timezone.settings",
@@ -95,11 +99,11 @@ function TimezoneSetting({ actions }: { actions: SettingsActions }) {
   if (c.value?.timezone && !zones.includes(c.value.timezone)) zones.unshift(c.value.timezone);
   return (
     <SettingsRow
-      title="Timezone"
+      title={gt("Timezone")}
       id={id}
       description={
         c.error ??
-        "New routines use this timezone when the message does not give the sender's timezone."
+        gt("New routines use this timezone when the message does not give the sender's timezone.")
       }
     >
       {c.value && (
@@ -115,7 +119,11 @@ function TimezoneSetting({ actions }: { actions: SettingsActions }) {
             })
           }
         >
-          <option value="automatic">Automatic ({c.value.systemTimezone})</option>
+          <option value="automatic">
+            <T>
+              Automatic (<Var>{c.value.systemTimezone}</Var>)
+            </T>
+          </option>
           {zones.map((zone) => (
             <option key={zone} value={zone}>
               {zone.replaceAll("_", " ")}
@@ -123,11 +131,16 @@ function TimezoneSetting({ actions }: { actions: SettingsActions }) {
           ))}
         </select>
       )}
-      {c.error && <SourceButton onClick={c.retry}>Retry</SourceButton>}
+      {c.error && (
+        <SourceButton onClick={c.retry}>
+          <T>Retry</T>
+        </SourceButton>
+      )}
     </SettingsRow>
   );
 }
 function MemorySetting({ actions }: { actions: SettingsActions }) {
+  const gt = useGT();
   const c = useSetting(
     actions,
     "settings.agent-memory-limit.settings",
@@ -137,9 +150,9 @@ function MemorySetting({ actions }: { actions: SettingsActions }) {
   const choices = c.value ? [...new Set([c.value.limit, ...c.value.choices])] : [];
   return (
     <SettingsRow
-      title="Memories per agent"
+      title={gt("Memories per agent")}
       id={id}
-      description={c.error ?? "How many memories each agent on this server can keep."}
+      description={c.error ?? gt("How many memories each agent on this server can keep.")}
     >
       {c.value && (
         <select
@@ -159,11 +172,16 @@ function MemorySetting({ actions }: { actions: SettingsActions }) {
           ))}
         </select>
       )}
-      {c.error && <SourceButton onClick={c.retry}>Retry</SourceButton>}
+      {c.error && (
+        <SourceButton onClick={c.retry}>
+          <T>Retry</T>
+        </SourceButton>
+      )}
     </SettingsRow>
   );
 }
 function MemoryReviewSetting({ actions }: { actions: SettingsActions }) {
+  const gt = useGT();
   const c = useSetting(
     actions,
     "settings.memory-review.settings",
@@ -173,11 +191,11 @@ function MemoryReviewSetting({ actions }: { actions: SettingsActions }) {
   const choices = c.value ? [...new Set([c.value.interval, ...c.value.choices])] : [];
   return (
     <SettingsRow
-      title="Memory review"
+      title={gt("Memory review")}
       id={id}
       description={
         c.error ??
-        "How often agents on this server save lasting facts from their chats in the background."
+        gt("How often agents on this server save lasting facts from their chats in the background.")
       }
     >
       {c.value && (
@@ -193,12 +211,18 @@ function MemoryReviewSetting({ actions }: { actions: SettingsActions }) {
         >
           {choices.map((value) => (
             <option key={value} value={value}>
-              {value === 0 ? "Off" : `Every ${value} ${value === 1 ? "turn" : "turns"}`}
+              {value === 0
+                ? gt("Off")
+                : gt("Every {value} {value2}", { value, value2: value === 1 ? "turn" : "turns" })}
             </option>
           ))}
         </select>
       )}
-      {c.error && <SourceButton onClick={c.retry}>Retry</SourceButton>}
+      {c.error && (
+        <SourceButton onClick={c.retry}>
+          <T>Retry</T>
+        </SourceButton>
+      )}
     </SettingsRow>
   );
 }

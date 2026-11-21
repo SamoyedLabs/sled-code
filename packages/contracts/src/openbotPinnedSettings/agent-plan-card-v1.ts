@@ -8,7 +8,14 @@
 // host default. The card starts the work after 10 s, or when a person presses Start. A member cannot
 // use either route; `requireAdmin` on the host is the only gate. A protocol 9 capability only.
 // Widening any of it needs a second capability string.
-import { type AdminDecoder, adminRoute, boolean, fields, identifier, type OptionalRouteCodec } from "./admin-wire.ts";
+import {
+  type AdminDecoder,
+  adminRoute,
+  boolean,
+  fields,
+  identifier,
+  type OptionalRouteCodec,
+} from "./admin-wire.ts";
 
 export const AGENT_PLAN_CARD_CAPABILITY = "agent-plan-card-v1";
 
@@ -21,5 +28,8 @@ const settings: AdminDecoder = fields({ quickAcknowledgement: boolean });
 
 export const AGENT_PLAN_CARD_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   [AGENT_PLAN_CARD_ROUTES.settings, adminRoute(fields({ agentId: identifier }), settings)],
-  [AGENT_PLAN_CARD_ROUTES.update, adminRoute(fields({ agentId: identifier, quickAcknowledgement: boolean }), settings)],
+  [
+    AGENT_PLAN_CARD_ROUTES.update,
+    adminRoute(fields({ agentId: identifier, quickAcknowledgement: boolean }), settings),
+  ],
 ]);

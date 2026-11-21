@@ -1,7 +1,4 @@
-import {
-  botFileQuoteId,
-  botFileQuoteTarget,
-} from "@t3tools/client-runtime/openbot/presentation";
+import { botFileQuoteId, botFileQuoteTarget } from "@t3tools/client-runtime/openbot/presentation";
 export {
   botFileQuoteId,
   botFileQuoteTarget,

@@ -12,6 +12,7 @@ import {
 import { AppText as Text } from "../../components/ui/AppText";
 import { ControlPill } from "../../components/ui/ControlPill";
 import { Menu } from "../../components/ui/Menu";
+import { T, useGT } from "gt-react-native";
 
 const HOST_DEFAULT = "__host_default__";
 export function BotProviderChoice({
@@ -27,16 +28,19 @@ export function BotProviderChoice({
   providers: readonly BotProvider[];
   disabled?: boolean;
 }) {
+  const gt = useGT();
   const options = providerOptions(models, providers);
   const modelOptions = models.filter((model) => model.provider === value.provider);
   const selected = selectedProviderModel(models, value);
   const provider = providers.find((provider) => provider.id === value.provider);
   return (
     <View className="gap-3">
-      <Text>Provider</Text>
+      <Text>
+        <T>Provider</T>
+      </Text>
       <Menu
-        title="Bot provider"
-        accessibilityLabel="Choose bot provider"
+        title={gt("Bot provider")}
+        accessibilityLabel={gt("Choose bot provider")}
         actions={options.map((option) => ({
           id: option.id,
           title: option.name,
@@ -50,7 +54,7 @@ export function BotProviderChoice({
       >
         <ControlPill
           label={
-            options.find((option) => option.id === value.provider)?.name ?? "Choose a provider"
+            options.find((option) => option.id === value.provider)?.name ?? gt("Choose a provider")
           }
           disabled={disabled || options.length === 0}
           variant="pill"
@@ -62,10 +66,12 @@ export function BotProviderChoice({
           {botProviderSetupMessage(provider) ? ` · ${botProviderSetupMessage(provider)}` : ""}
         </Text>
       )}
-      <Text>Model</Text>
+      <Text>
+        <T>Model</T>
+      </Text>
       <Menu
-        title="Bot model"
-        accessibilityLabel="Choose bot model"
+        title={gt("Bot model")}
+        accessibilityLabel={gt("Choose bot model")}
         actions={modelOptions.map((model) => ({
           id: model.id,
           title: model.name,
@@ -78,14 +84,14 @@ export function BotProviderChoice({
         }}
       >
         <ControlPill
-          label={selected?.name ?? "Choose a model"}
+          label={selected?.name ?? gt("Choose a model")}
           disabled={disabled || !value.provider || modelOptions.length === 0}
           variant="pill"
         />
       </Menu>
       {value.provider && modelOptions.length === 0 && (
         <Text className="text-foreground-muted">
-          No models are available. Complete this provider's setup, then refresh.
+          <T>No models are available. Complete this provider's setup, then refresh.</T>
         </Text>
       )}
       {selected?.description && (
@@ -93,14 +99,18 @@ export function BotProviderChoice({
       )}
       {selected && selected.supportedReasoningEfforts.length > 1 && (
         <>
-          <Text>Reasoning effort</Text>
+          <Text>
+            <T>Reasoning effort</T>
+          </Text>
           <Menu
-            title="Reasoning effort"
-            accessibilityLabel="Choose bot reasoning effort"
+            title={gt("Reasoning effort")}
+            accessibilityLabel={gt("Choose bot reasoning effort")}
             actions={[
               {
                 id: HOST_DEFAULT,
-                title: `Host default (${selected.defaultReasoningEffort})`,
+                title: gt("Host default ({defaultReasoningEffort})", {
+                  defaultReasoningEffort: selected.defaultReasoningEffort,
+                }),
                 state: value.reasoningEffort === null ? "on" : undefined,
                 attributes: { disabled },
               },
@@ -121,7 +131,12 @@ export function BotProviderChoice({
             }}
           >
             <ControlPill
-              label={value.reasoningEffort ?? `Host default (${selected.defaultReasoningEffort})`}
+              label={
+                value.reasoningEffort ??
+                gt("Host default ({defaultReasoningEffort})", {
+                  defaultReasoningEffort: selected.defaultReasoningEffort,
+                })
+              }
               disabled={disabled}
               variant="pill"
             />

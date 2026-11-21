@@ -321,7 +321,7 @@ function openIntentView(
     case "new-bot-chat":
       return {
         addonIcon: <SquarePenIcon className={ADDON_ICON_CLASS} />,
-        groups: [{ value: "bot-create", label: "New conversation", items: [] }],
+        groups: [{ value: "bot-create", label: m(msg("New conversation")), items: [] }],
       };
     case "change-theme":
       return {
@@ -1776,7 +1776,7 @@ function OpenCommandPaletteDialog(props: {
       "channels",
       "workflows",
     ],
-    title: "Open bot workspace",
+    title: gt("Open bot workspace"),
     icon: <MonitorIcon className={ITEM_ICON_CLASS} />,
     run: async () => {
       await navigate({ to: "/bots" });
@@ -1972,7 +1972,7 @@ function OpenCommandPaletteDialog(props: {
                           ),
                       },
                     ]
-                : (currentView?.groups ?? rootGroups);
+                  : (currentView?.groups ?? rootGroups);
 
   const isLinkedThreadSearch =
     linkedThreadSearch?.linkedThreads !== undefined && deferredQuery === linkedThreadSearch.query;
@@ -1986,7 +1986,9 @@ function OpenCommandPaletteDialog(props: {
             allOptions: {
               rootGroups,
               nestedItems:
-                workspaceFilter === "bots" ? [] : buildNestedSearchItems(actionItems, deferredQuery),
+                workspaceFilter === "bots"
+                  ? []
+                  : buildNestedSearchItems(actionItems, deferredQuery),
             },
           }
         : {}),
@@ -2017,7 +2019,9 @@ function OpenCommandPaletteDialog(props: {
                   runThread: async (thread) => {
                     await navigate({
                       to: "/$environmentId/$threadId",
-                      params: buildThreadRouteParams(scopeThreadRef(thread.environmentId, thread.id)),
+                      params: buildThreadRouteParams(
+                        scopeThreadRef(thread.environmentId, thread.id),
+                      ),
                     });
                   },
                 },
@@ -3168,7 +3172,7 @@ function OpenCommandPaletteDialog(props: {
       filters={
         !currentView && !isBrowsing && !newProjectFlow && !addProjectCloneFlow ? (
           <nav
-            aria-label="Search scope"
+            aria-label={gt("Search scope")}
             className="command-palette-filters"
             ref={trackCommandPaletteFilters}
           >

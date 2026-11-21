@@ -1,4 +1,6 @@
 import type { OpenbotConversationMessage, OpenbotConversationPage } from "@t3tools/contracts";
+import { m as i18nMessage } from "../../../../i18n/messages";
+import { msg } from "gt-react";
 export interface AssistantAttempt {
   clientMessageId: string;
   deliveryId: string;
@@ -56,7 +58,11 @@ export function resolveRoutineAssistant(
   if (["failed", "cancelled", "interrupted"].includes(status))
     return {
       kind: "failed",
-      error: `The canvas request was ${status}. Open the agent conversation for details.`,
+      error: i18nMessage(
+        msg("The canvas request was {status}. Open the agent conversation for details.", {
+          status,
+        }),
+      ),
     };
   if (status === "queued" || !asked.turnId || page.activeTurnId === asked.turnId)
     return { kind: "waiting" };

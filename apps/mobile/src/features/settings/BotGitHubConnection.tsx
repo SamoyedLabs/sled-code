@@ -4,18 +4,20 @@ import { Button } from "../../components/ui/Button";
 import { AppText as Text } from "../../components/ui/AppText";
 import type { BotConnectionPanelProps as PanelProps } from "./useBotConnections";
 import { confirm, ExternalLink } from "./BotConnectionControls";
+import { T, Var, useGT } from "gt-react-native";
 
 export function GitHubPanel({ controller: { state, run, busy, setError }, allowed }: PanelProps) {
+  const gt = useGT();
   const [visible, setVisible] = useState(40);
   const status = state.github;
-  const failed = () => setError("Could not open the connection page.");
+  const failed = () => setError(gt("Could not open the connection page."));
   return (
     <View className="gap-3">
       <Text className="text-foreground-muted">
-        The GitHub connection is shared by bots on this host.
+        <T>The GitHub connection is shared by bots on this host.</T>
       </Text>
       <Button
-        label="Check GitHub connection"
+        label={gt("Check GitHub connection")}
         disabled={!allowed || busy}
         onPress={() => void run([{ operation: "connector.github.status" }])}
       />
@@ -26,19 +28,21 @@ export function GitHubPanel({ controller: { state, run, busy, setError }, allowe
             {status.login ? ` · ${status.login}` : ""}
           </Text>
           {!status.available ? (
-            <Text className="text-foreground-muted">This host has no GitHub App configured.</Text>
+            <Text className="text-foreground-muted">
+              <T>This host has no GitHub App configured.</T>
+            </Text>
           ) : (
             <View className="flex-row flex-wrap gap-2">
               {status.state !== "connected" && (
                 <Button
-                  label="Connect GitHub"
+                  label={gt("Connect GitHub")}
                   disabled={!allowed || busy || status.state === "pending"}
                   onPress={() => void run([{ operation: "connector.github.connect" }])}
                 />
               )}
               {status.state === "pending" && (
                 <Button
-                  label="Cancel sign-in"
+                  label={gt("Cancel sign-in")}
                   disabled={!allowed || busy}
                   onPress={() => void run([{ operation: "connector.github.cancel" }])}
                 />
@@ -46,17 +50,17 @@ export function GitHubPanel({ controller: { state, run, busy, setError }, allowe
               {status.state === "connected" && (
                 <>
                   <Button
-                    label="Load repositories"
+                    label={gt("Load repositories")}
                     disabled={!allowed || busy}
                     onPress={() => void run([{ operation: "connector.github.repositories" }])}
                   />
                   <Button
-                    label="Disconnect GitHub"
+                    label={gt("Disconnect GitHub")}
                     tone="danger"
                     disabled={!allowed || busy}
                     onPress={() =>
                       confirm(
-                        "Disconnect GitHub from every bot on this host?",
+                        gt("Disconnect GitHub from every bot on this host?"),
                         () => void run([{ operation: "connector.github.disconnect" }]),
                       )
                     }
@@ -67,45 +71,51 @@ export function GitHubPanel({ controller: { state, run, busy, setError }, allowe
           )}
           {status.userCode && (
             <Text selectable>
-              Enter code {status.userCode} on GitHub, then check the connection again.
+              <T>
+                Enter code <Var>{status.userCode}</Var> on GitHub, then check the connection again.
+              </T>
             </Text>
           )}
           <ExternalLink
             disabled={!allowed || busy}
             address={status.verificationUri}
-            label="Open GitHub sign-in"
+            label={gt("Open GitHub sign-in")}
             onFailure={failed}
           />
           <ExternalLink
             disabled={!allowed || busy}
             address={status.installUrl}
-            label="Manage repository access"
+            label={gt("Manage repository access")}
             onFailure={failed}
           />
           <ExternalLink
             disabled={!allowed || busy}
             address={status.revokeUrl}
-            label="Manage GitHub authorization"
+            label={gt("Manage GitHub authorization")}
             onFailure={failed}
           />
           {status.error && (
             <Text accessibilityRole="alert" className="text-danger">
-              GitHub sign-in failed. Reconnect to try again.
+              <T>GitHub sign-in failed. Reconnect to try again.</T>
             </Text>
           )}
         </>
       )}
       {state.repositories && (
         <View className="gap-1">
-          <Text>{state.repositories.total} accessible repositories</Text>
+          <Text>
+            <T>
+              <Var>{state.repositories.total}</Var> accessible repositories
+            </T>
+          </Text>
           {state.repositories.repositories.slice(0, visible).map((row) => (
             <Text key={row.fullName}>
               {row.fullName}
-              {row.private ? " · Private" : ""}
+              {row.private ? gt(" · Private") : ""}
             </Text>
           ))}
           {state.repositories.repositories.length > visible && (
-            <Button label="Show more repositories" onPress={() => setVisible(visible + 40)} />
+            <Button label={gt("Show more repositories")} onPress={() => setVisible(visible + 40)} />
           )}
         </View>
       )}

@@ -14,6 +14,7 @@ import { readPreparedConnection } from "../../../../state/session";
 import { openbot } from "../../../../state/openbot";
 import * as Effect from "effect/Effect";
 import { useAtomCommand } from "../../../../state/use-atom-command";
+import { useGT } from "gt-react";
 
 /** Reuse the Files upload/draft service; first-turn delivery stays in its durable new-task journal. */
 export function useNewThreadAttachments(
@@ -23,6 +24,7 @@ export function useNewThreadAttachments(
   disabled: boolean,
   onReady: (draft: OpenbotDraftFile) => void,
 ) {
+  const gt = useGT();
   const upload = useAtomCommand(openbot.fileUploadDraft, { reportFailure: false });
   const discard = useAtomCommand(openbot.fileDiscardDraft, { reportFailure: false });
   const originals = useRef(new Map<string, File>());
@@ -49,12 +51,12 @@ export function useNewThreadAttachments(
   ) => {
     if (lock.current || (disabled && notify) || !canUpload || !files.length) return;
     if (selectedCount + files.length > 10) {
-      setError("Choose up to 10 files for the first message.");
+      setError(gt("Choose up to 10 files for the first message."));
       return;
     }
     const connection = readPreparedConnection(environmentId);
     if (!connection) {
-      setError("Reconnect before adding files.");
+      setError(gt("Reconnect before adding files."));
       return;
     }
     lock.current = true;
@@ -146,7 +148,7 @@ export function useNewThreadAttachments(
         setError(
           cause instanceof Error
             ? cause.message
-            : "The file upload could not be confirmed. Check Files before uploading again.",
+            : gt("The file upload could not be confirmed. Check Files before uploading again."),
         );
     }
     lock.current = false;

@@ -17,6 +17,7 @@ import { BotCodePreview } from "./BotCodePreview";
 import { botReplyTick, useBotMotion, useBotReducedMotion } from "./botFeedback";
 import { useBotPalette } from "./upstream/BotChrome";
 import { startReplyPlayback } from "./upstream/openbot-mobile/chat-preview/reply-playback";
+import { useGT } from "gt-react-native";
 
 export function BotReplyMarkdown({
   body,
@@ -99,6 +100,7 @@ function TypingDot({
 }
 
 export function BotTypingBubble() {
+  const gt = useGT();
   const palette = useBotPalette();
   const reduced = useBotReducedMotion();
   const phase = useSharedValue(0);
@@ -111,7 +113,7 @@ export function BotTypingBubble() {
   return (
     <View
       accessible
-      accessibilityLabel="Bot is typing"
+      accessibilityLabel={gt("Bot is typing")}
       style={{
         alignSelf: "flex-start",
         flexDirection: "row",

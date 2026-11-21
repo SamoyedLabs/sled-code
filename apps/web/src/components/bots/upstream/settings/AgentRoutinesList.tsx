@@ -6,6 +6,7 @@ import { SourceButton } from "./SettingsParts";
 import { SourceSwitch } from "./SourceSwitch";
 import { SettingsPanelContent } from "./SettingsPanel";
 import "./agent-settings.css";
+import { T, useGT } from "gt-react";
 export interface AgentRoutineRow {
   id: string;
   name: string;
@@ -36,6 +37,7 @@ export function AgentRoutinesList({
   onRetry?: () => void;
   editor?: ReactNode;
 }) {
+  const gt = useGT();
   const [pending, setPending] = useState<ReadonlySet<string>>(() => new Set());
   const locks = useRef(new Set<string>());
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export function AgentRoutinesList({
     const settled = await settlePromise(() => onSetActive(routine.id, active));
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "Could not change the routine.");
+      setError(cause instanceof Error ? cause.message : gt("Could not change the routine."));
     }
     locks.current.delete(routine.id);
     setPending(new Set(locks.current));
@@ -70,7 +72,7 @@ export function AgentRoutinesList({
         <SourceButton
           variant="ghost"
           className="settings-panel-nav-button"
-          aria-label="Back to settings"
+          aria-label={gt("Back to settings")}
           onClick={onBack}
         >
           <svg
@@ -84,12 +86,14 @@ export function AgentRoutinesList({
           </svg>
         </SourceButton>
         <div className="agent-routines-heading">
-          <h2>Routines</h2>
+          <h2>
+            <T>Routines</T>
+          </h2>
         </div>
         <SourceButton
           variant="ghost"
           className="settings-panel-nav-button"
-          aria-label="Create Routine"
+          aria-label={gt("Create Routine")}
           disabled={!onCreate}
           onClick={onCreate}
         >
@@ -100,15 +104,21 @@ export function AgentRoutinesList({
         <div className="agent-routines-list-view">
           {loading ? (
             <p className="agent-routines-empty" role="status">
-              Loading routines…
+              <T>Loading routines…</T>
             </p>
           ) : loadError ? (
             <p className="agent-routines-empty" role="alert">
               {loadError}
-              {onRetry && <SourceButton onClick={onRetry}>Retry</SourceButton>}
+              {onRetry && (
+                <SourceButton onClick={onRetry}>
+                  <T>Retry</T>
+                </SourceButton>
+              )}
             </p>
           ) : listed.length === 0 ? (
-            <p className="agent-routines-empty">No routines yet.</p>
+            <p className="agent-routines-empty">
+              <T>No routines yet.</T>
+            </p>
           ) : (
             <div className="agent-routines-list">
               {listed.map((routine) => (
@@ -137,7 +147,9 @@ export function AgentRoutinesList({
                       <span>
                         <strong>{routine.name}</strong>
                         <small>
-                          {routine.completed ? `Completed · ${routine.summary}` : routine.summary}
+                          {routine.completed
+                            ? gt("Completed · {summary}", { summary: routine.summary })
+                            : routine.summary}
                         </small>
                       </span>
                     </SourceButton>

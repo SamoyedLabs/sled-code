@@ -17,6 +17,7 @@ import { Menu } from "../../components/ui/Menu";
 import { useBotPalette } from "./upstream/BotChrome";
 import { OpenBotText as Text } from "./upstream/OpenBotTypography";
 import { type FlowItem, type GraphPlace, workflowFlowTree } from "./upstream/workflow-flow-tree";
+import { T, useGT } from "gt-react-native";
 
 const cardWidth = 174;
 const cardHeight = 74;
@@ -94,6 +95,7 @@ export function BotWorkflowFlow({
   onEdit?: (id: string, action: "duplicate" | "move") => void;
   onRemove?: (id: string) => void;
 }) {
+  const gt = useGT();
   const palette = useBotPalette();
   const tree = useMemo(() => workflowFlowTree(graph), [graph]);
   const nodes = useMemo(() => new Map(graph.nodes.map((node) => [node.id, node])), [graph.nodes]);
@@ -151,9 +153,9 @@ export function BotWorkflowFlow({
       <Menu
         shouldOpenOnLongPress
         actions={[
-          { id: "move", title: "Move step" },
-          { id: "duplicate", title: "Duplicate step" },
-          { id: "delete", title: "Delete step", attributes: { destructive: true } },
+          { id: "move", title: gt("Move step") },
+          { id: "duplicate", title: gt("Duplicate step") },
+          { id: "delete", title: gt("Delete step"), attributes: { destructive: true } },
         ]}
         onPressAction={({ nativeEvent: { event } }) => {
           if (event === "delete") onRemove(id);
@@ -179,10 +181,10 @@ export function BotWorkflowFlow({
               accessibilityRole="button"
               accessibilityLabel={
                 place.kind === "edge"
-                  ? "Add step on connection"
+                  ? gt("Add step on connection")
                   : place.branch
-                    ? `Add step to ${place.branch} path`
-                    : "Add next step"
+                    ? gt("Add step to {branch} path", { branch: place.branch })
+                    : gt("Add next step")
               }
               onPress={() => onAdd(place)}
               style={{
@@ -211,7 +213,7 @@ export function BotWorkflowFlow({
             style={{ minHeight: 42, justifyContent: "center", paddingHorizontal: 10 }}
           >
             <Text style={{ color: palette.muted, fontSize: 12 }}>
-              {item.loop ? "Loop to" : "Go to"} {workflowNodeTitle(graph, item.to)}
+              {item.loop ? gt("Loop to") : gt("Go to")} {workflowNodeTitle(graph, item.to)}
             </Text>
           </Pressable>
         );
@@ -240,7 +242,7 @@ export function BotWorkflowFlow({
                 }}
               >
                 <Text style={{ color: palette.muted, fontSize: 12 }}>
-                  {path.branch === "yes" ? "Yes" : path.branch === "no" ? "No" : "Path"}
+                  {path.branch === "yes" ? gt("Yes") : path.branch === "no" ? gt("No") : gt("Path")}
                 </Text>
                 <View style={{ flexDirection: "row", alignItems: "center" }}>
                   {sequence(path.items, key)}
@@ -263,7 +265,7 @@ export function BotWorkflowFlow({
     >
       <ScrollView
         horizontal
-        accessibilityLabel={steps ? "Workflow run flow" : "Workflow flow"}
+        accessibilityLabel={steps ? gt("Workflow run flow") : gt("Workflow flow")}
         contentContainerStyle={{ gap: 18, padding: 14, minHeight: 132 }}
         keyboardShouldPersistTaps="handled"
       >
@@ -274,7 +276,9 @@ export function BotWorkflowFlow({
         )}
         {tree.loose.length > 0 && (
           <View style={{ alignSelf: "center", gap: 8 }}>
-            <Text style={{ color: palette.muted, fontSize: 12 }}>Unconnected steps</Text>
+            <Text style={{ color: palette.muted, fontSize: 12 }}>
+              <T>Unconnected steps</T>
+            </Text>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
               {tree.loose.map((id) => (
                 <View key={id}>{card(id)}</View>

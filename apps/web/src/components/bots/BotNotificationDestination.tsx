@@ -3,7 +3,9 @@ import { BotDetail } from "./BotEnvironment";
 import { BotChannels } from "../settings/BotChannels";
 import { useEnvironmentQuery } from "../../state/query";
 import { openbot } from "../../state/openbot";
+import { useGT } from "gt-react";
 export function BotNotificationDestination({ target }: { target: OpenbotNotificationTarget }) {
+  const gt = useGT();
   const host = useEnvironmentQuery(
     openbot.status({ environmentId: target.environmentId, input: {} }),
   );
@@ -17,10 +19,12 @@ export function BotNotificationDestination({ target }: { target: OpenbotNotifica
     return (
       <p role="status">
         {host.isPending || agents.isPending
-          ? "Connecting to the notification’s bot…"
+          ? gt("Connecting to the notification’s bot…")
           : host.error ||
             agents.error ||
-            "This bot or host is unavailable. Reconnect its environment to review the notification."}
+            gt(
+              "This bot or host is unavailable. Reconnect its environment to review the notification.",
+            )}
       </p>
     );
   if (target.channelId)

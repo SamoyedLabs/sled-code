@@ -27,6 +27,7 @@ import {
   type StoredFileRow,
   type StoredFileAction,
 } from "./types";
+import { useGT } from "gt-react";
 const decodeAgents = Schema.decodeUnknownResult(OpenbotAgentList);
 export interface SourceHostStorageProps {
   environmentId: EnvironmentId;
@@ -43,6 +44,7 @@ export function SourceHostStorage(props: SourceHostStorageProps) {
   return <HostStorage key={`${props.environmentId}:${props.hostId}:${session.epoch}`} {...props} />;
 }
 function HostStorage(props: SourceHostStorageProps) {
+  const gt = useGT();
   const { environmentId, hostId } = props;
   const registry = useContext(RegistryContext);
   const read = useAtomCommand(openbot.settingsRead, { reportFailure: false }),
@@ -124,7 +126,7 @@ function HostStorage(props: SourceHostStorageProps) {
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
       if (alive.current && currentScan())
-        setError(cause instanceof Error ? cause.message : "Could not measure storage.");
+        setError(cause instanceof Error ? cause.message : gt("Could not measure storage."));
       throw cause;
     }
   };
@@ -211,7 +213,7 @@ function HostStorage(props: SourceHostStorageProps) {
       await fileAction(file, kind);
     } catch (cause) {
       if (alive.current)
-        setError(cause instanceof Error ? cause.message : "Could not open the file.");
+        setError(cause instanceof Error ? cause.message : gt("Could not open the file."));
       if (kind === "delete") throw cause;
     }
   };
@@ -220,7 +222,7 @@ function HostStorage(props: SourceHostStorageProps) {
       <StorageOverview
         hostName={props.hostName ?? hostId}
         state={!canRead || error ? "error" : loading || !usage ? "scanning" : "ready"}
-        error={canRead ? error : "You do not have permission to view this host’s storage."}
+        error={canRead ? error : gt("You do not have permission to view this host’s storage.")}
         usage={canRead ? usage : null}
         agents={agents}
         renderAvatar={(id) => {

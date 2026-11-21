@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import type { OpenbotRoutineFlowCanvas } from "@t3tools/contracts";
 import { cn } from "../../lib/utils";
+import { useGT } from "gt-react";
 
 type Point = { x: number; y: number };
 export function BotRoutineCanvas({
@@ -18,6 +19,7 @@ export function BotRoutineCanvas({
   onSelect: (nodeKey: string) => void;
   onMove: (nodeKey: string, point: Point) => void;
 }) {
+  const gt = useGT();
   const pattern = useId();
   const [drag, setDrag] = useState<{
     key: string;
@@ -36,7 +38,7 @@ export function BotRoutineCanvas({
       .map((agent) => ({ key: `agent:${agent.id}`, label: agent.name, kind: "Bot" })),
     ...canvas.routines.map((flow) => ({
       key: `routine:${flow.routine.id}`,
-      label: flow.routine.name || "Untitled routine",
+      label: flow.routine.name || gt("Untitled routine"),
       kind: flow.routine.active ? "Scheduled" : "Paused",
     })),
   ].map((node, index) => ({
@@ -78,7 +80,7 @@ export function BotRoutineCanvas({
     <div className="overflow-hidden rounded-xl border bg-muted/10">
       <svg
         role="group"
-        aria-label="Routine canvas"
+        aria-label={gt("Routine canvas")}
         viewBox={`${left} ${top} ${width} ${height}`}
         className="min-h-80 w-full touch-none"
       >
@@ -109,7 +111,10 @@ export function BotRoutineCanvas({
               key={node.key}
               role="button"
               tabIndex={0}
-              aria-label={`${node.kind}: ${node.label}. Use arrow keys to move.`}
+              aria-label={gt("{kind}: {label}. Use arrow keys to move.", {
+                kind: node.kind,
+                label: node.label,
+              })}
               transform={`translate(${p.x} ${p.y})`}
               className="cursor-grab outline-none focus-visible:stroke-primary"
               onClick={() => onSelect(node.key)}
@@ -193,8 +198,8 @@ export function BotRoutineCanvas({
       </svg>
       <p className="border-t px-4 py-2 text-xs text-muted-foreground">
         {disabled
-          ? "View your routines and connected bots."
-          : "Drag a card to arrange it. Select a card to edit its connections below."}
+          ? gt("View your routines and connected bots.")
+          : gt("Drag a card to arrange it. Select a card to edit its connections below.")}
       </p>
     </div>
   );

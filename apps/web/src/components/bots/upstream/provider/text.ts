@@ -1,5 +1,7 @@
 /* oxlint-disable t3code/no-em-dash-copy -- Verbatim English strings from pinned OpenBot 0.60.0; source copy fidelity is required. */
 // English copy from the pinned OpenBot catalog; T3 currently has no application locale context.
+import { m } from "../../../../i18n/messages";
+import { msg } from "gt-react";
 const messages: Record<string, string | { one: string; other: string }> = {
   "account.usage.window.hours": { one: "{count}-hour", other: "{count}-hour" },
   "provider.endpointCount": { one: "1 endpoint", other: "{count} endpoints" },
@@ -8,11 +10,11 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "provider.availableOnHost": "Runs on {name}",
   "provider.custom.name": "Custom provider",
   "provider.custom.description": "Your own model endpoint",
-  "provider.custom.addLabel": "Add custom provider",
-  "provider.custom.installLabel": "Install custom provider",
+  "provider.custom.addLabel": m(msg("Add custom provider")),
+  "provider.custom.installLabel": m(msg("Install custom provider")),
   "provider.refresh": "Refresh",
-  "provider.refreshLabel": "Refresh providers",
-  "provider.refreshingLabel": "Checking providers",
+  "provider.refreshLabel": m(msg("Refresh providers")),
+  "provider.refreshingLabel": m(msg("Checking providers")),
   "provider.refreshing": "Checking…",
   "provider.status.connecting": "Connecting",
   "provider.status.updateAvailable": "Update available",
@@ -55,7 +57,7 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "provider.aria.retry": "Retry {name}",
   "provider.aria.cancelSignIn": "Cancel the {name} sign-in",
   "provider.aria.apiKey": "{name} API key",
-  "provider.connecting.browserHint": "Finish the sign-in if a browser page opens.",
+  "provider.connecting.browserHint": m(msg("Finish the sign-in if a browser page opens.")),
   "provider.connecting.cancelFailed": "OpenBot could not cancel the {name} sign-in. Try again.",
   "provider.aria.install": "Install {name}",
   "provider.aria.signIn": "Sign in to {name}",
@@ -67,23 +69,25 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "provider.codeLogin.title": "Log in to {name} with a code",
   "provider.codeLogin.description": "Finish on your phone or another browser. OpenBot waits here.",
   "provider.codeLogin.starting": "Getting a code from {name}…",
-  "provider.codeLogin.qrLabel": "QR code for the {name} login page",
+  "provider.codeLogin.qrLabel": m(msg("QR code for the '{'name'}' login page")),
   "provider.codeLogin.open": "Open",
   "provider.codeLogin.enterCode": "Enter this code",
-  "provider.codeLogin.codeLabel": "Login code {code}",
+  "provider.codeLogin.codeLabel": m(msg("Login code '{'code'}'")),
   "provider.codeLogin.copyCode": "Copy code",
   "provider.codeLogin.expired": "This code has expired.",
   "provider.codeLogin.expiresIn": "Waiting for you. The code expires in {time}.",
   "provider.codeLogin.verifying": "Code accepted. Finishing the {name} sign-in…",
-  "provider.codeLogin.closeLabel": "Close log in to {name}",
+  "provider.codeLogin.closeLabel": m(msg("Close log in to '{'name'}'")),
   "provider.codeLogin.pasteStep": "Log in to {name}, then copy the code that the page shows",
-  "provider.codeLogin.pasteLabel": "Code from the page",
+  "provider.codeLogin.pasteLabel": m(msg("Code from the page")),
   "provider.codeLogin.pasteSubmit": "Continue",
   "provider.codeLogin.pasteExpired": "This login has stopped.",
   "provider.codeLogin.pasteExpiresIn": "Waiting for you. This login stops in {time}.",
-  "provider.codeLogin.linkTitle": "Log in to {name} on another device",
-  "provider.codeLogin.pageTitle": "Sign in to {name}",
-  "provider.codeLogin.pageDescription": "This page is open in the browser on {host}. Sign in here.",
+  "provider.codeLogin.linkTitle": m(msg("Log in to '{'name'}' on another device")),
+  "provider.codeLogin.pageTitle": m(msg("Sign in to '{'name'}'")),
+  "provider.codeLogin.pageDescription": m(
+    msg("This page is open in the browser on '{'host'}'. Sign in here."),
+  ),
   "provider.codeLogin.relayStarting": "Starting the {name} sign-in on {host}…",
   "provider.codeLogin.pageOpening": "Opening the {name} sign-in page on {host}…",
   "provider.codeLogin.linkStep": "Log in to {name}. OpenBot continues by itself.",
@@ -110,17 +114,19 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "provider.picker.noModels": "No models are available from {name}.",
   "provider.picker.customEmpty":
     "Add an OpenAI-compatible endpoint — a model server on this computer, or any service with a base URL and a key.",
-  "provider.picker.defaultModelLabel": "{name}, default",
+  "provider.picker.defaultModelLabel": m(msg("'{'name'}', default")),
   "provider.picker.usageLimit": "Usage limit reached",
   "provider.picker.usageLimitWindow": "{window} limit",
   "provider.picker.usageLimitResets": "{limit} · Resets {time}",
-  "provider.picker.usageLimitLabel": "{name}, usage limit reached",
-  "provider.picker.usageLimitResetsLabel": "{name}, usage limit reached, resets {time}",
+  "provider.picker.usageLimitLabel": m(msg("'{'name'}', usage limit reached")),
+  "provider.picker.usageLimitResetsLabel": m(
+    msg("'{'name'}', usage limit reached, resets '{'time'}'"),
+  ),
   "provider.picker.effort": "Effort",
-  "provider.picker.effortLabel": "Agent reasoning effort",
+  "provider.picker.effortLabel": m(msg("Agent reasoning effort")),
   "provider.picker.effortFixed": "{effort}, set by {provider}",
   "provider.picker.fast": "Fast",
-  "provider.picker.fastLabel": "Fast mode",
+  "provider.picker.fastLabel": m(msg("Fast mode")),
   "provider.picker.selectEffort": "Select effort",
   "provider.picker.custom": "Custom",
   "provider.picker.cliReady": "{cli} ready",
@@ -178,14 +184,14 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "provider.openCodeKey.removeFailed": "Could not remove the key.",
   "provider.openCodeKey.reconnectFailed": "Could not reconnect.",
   "provider.account.add": "Add account",
-  "provider.account.addLabel": "Add another {name} account",
+  "provider.account.addLabel": m(msg("Add another '{'name'}' account")),
   "provider.account.numbered": "Account {number}",
   "provider.account.apiKey": "API key",
-  "provider.account.listLabel": "{name} accounts",
+  "provider.account.listLabel": m(msg("'{'name'}' accounts")),
   "provider.account.usedBy": "Used by {agents}",
   "provider.account.failed": "Sign-in failed",
   "provider.account.moreActions": "More actions for {name}",
-  "provider.account.renameLabel": "Name of {name}",
+  "provider.account.renameLabel": m(msg("Name of '{'name'}'")),
   "provider.account.signInAgain": "Sign in again",
   "provider.account.cancelSignIn": "Cancel sign-in",
   "provider.account.finishSignIn": "Finish the sign-in in the browser.",
@@ -193,7 +199,7 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "provider.account.disconnect": "Disconnect",
   "provider.account.actionFailed": "Could not change the {name} account.",
   "provider.account.resetUsage": "Reset usage",
-  "provider.account.resetUsageTitle": "Reset the usage of {name}?",
+  "provider.account.resetUsageTitle": m(msg("Reset the usage of '{'name'}'?")),
   "provider.account.resetUsagePending": "Resetting…",
   "provider.account.resetUsageDone": "The usage limits of {name} start again now.",
   "provider.account.resetUsageNothing": "{name} has no spent usage limit. No credit was used.",
@@ -205,7 +211,7 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "provider.settings.search": "Search providers",
   "provider.settings.open": "Open {name}",
   "provider.settings.noneConnected": "No provider is connected.",
-  "provider.settings.defaultHint": "New agents start with this provider.",
+  "provider.settings.defaultHint": m(msg("New agents start with this provider.")),
   "provider.settings.badge.signIn": "Sign in",
   "provider.settings.badge.error": "Error",
   "provider.settings.status.needsSignIn": "Needs sign-in",
@@ -213,14 +219,16 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "provider.settings.unused": "No agent uses it",
   "provider.settings.defaultSubtitle": "Default for new agents · {use}",
   "provider.settings.accounts": "Accounts",
-  "provider.settings.accountsDescription": "{count} of {max}. Each agent uses one account.",
+  "provider.settings.accountsDescription": m(
+    msg("'{'count'}' of '{'max'}'. Each agent uses one account."),
+  ),
   "provider.settings.accountBlocked": "{agents} cannot run until you sign in again.",
-  "provider.settings.removeTitle": "Remove {name}?",
+  "provider.settings.removeTitle": m(msg("Remove '{'name'}'?")),
   "provider.settings.removeMoves": "{agents} will use {name}.",
   "provider.settings.removeUnused": "No agent uses this account.",
   "provider.settings.removeCredentials":
     "OpenBot deletes the sign-in of this account from this computer.",
-  "provider.settings.disconnectTitle": "Disconnect {name}?",
+  "provider.settings.disconnectTitle": m(msg("Disconnect '{'name'}'?")),
   "provider.settings.disconnectOthers":
     "The other {provider} accounts wait until you connect {provider} again.",
   "provider.settings.disconnectLocal":
@@ -250,12 +258,13 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "provider.settings.versionInstalledByUser": "{version} · installed by you",
   "provider.settings.versionDownloaded": "{version} · downloaded by OpenBot",
   "provider.settings.update": "Update",
-  "provider.settings.downloadLabel": "Download of {name}",
+  "provider.settings.downloadLabel": m(msg("Download of '{'name'}'")),
   "provider.settings.diagnostics": "Diagnostics",
   "provider.settings.cache": "Cache",
   "provider.settings.promptCache": "Prompt cache",
-  "provider.settings.promptCacheDescription":
-    "How long Claude keeps the context of an agent in the cache between turns.",
+  "provider.settings.promptCacheDescription": m(
+    msg("How long Claude keeps the context of an agent in the cache between turns."),
+  ),
   "provider.settings.promptCacheHour": "1 hour",
   "provider.settings.promptCacheDefault": "Claude Code default",
   "provider.settings.promptCacheLoadFailed": "Could not load the prompt cache time of this server.",
@@ -273,7 +282,7 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "provider.settings.connectFirst": "Connect {name} first.",
   "provider.settings.turnOnFirst": "Turn {name} on first.",
   "provider.settings.makeDefault": "Make default",
-  "provider.settings.useTitle": "Use {name}",
+  "provider.settings.useTitle": m(msg("Use '{'name'}'")),
   "provider.settings.download": "Download",
   "provider.settings.downloadedCli": "{name} CLI",
   "provider.settings.downloadAgain": "When you turn {name} on, OpenBot downloads its CLI again.",
@@ -287,7 +296,7 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "account.usage.title": "Usage",
   "account.usage.refresh": "Refresh",
   "account.usage.refreshing": "Refreshing",
-  "account.usage.refreshTitle": "Refresh usage",
+  "account.usage.refreshTitle": m(msg("Refresh usage")),
   "account.usage.loading": "Loading usage…",
   "account.usage.empty": "No usage to show",
   "account.usage.providers": "Provider usage",
@@ -323,12 +332,18 @@ const messages: Record<string, string | { one: string; other: string }> = {
   "usage.unavailable": "Unavailable",
   "usage.exactCost": "{amount} USD",
   "usage.tokensAmount": "{tokens} tokens",
-  "usage.chart.costDescription":
-    "Daily estimated cost in USD by provider. Exact values are available with View daily data.",
-  "usage.chart.tokensDescription":
-    "Daily tokens without cache reads by provider. Exact values are available with View daily data.",
-  "usage.chart.costLabel": "Daily estimated cost in USD by provider",
-  "usage.chart.tokensLabel": "Daily tokens without cache reads by provider",
+  "usage.chart.costDescription": m(
+    msg(
+      "Daily estimated cost in USD by provider. Exact values are available with View daily data.",
+    ),
+  ),
+  "usage.chart.tokensDescription": m(
+    msg(
+      "Daily tokens without cache reads by provider. Exact values are available with View daily data.",
+    ),
+  ),
+  "usage.chart.costLabel": m(msg("Daily estimated cost in USD by provider")),
+  "usage.chart.tokensLabel": m(msg("Daily tokens without cache reads by provider")),
   "usage.column.cost": "Cost",
   "usage.column.share": "Share",
   "usage.column.tokens": "Tokens",
@@ -490,36 +505,42 @@ Object.assign(messages, {
 
   // The add dialog.
   "customProvider.form.title": "Add a custom provider",
-  "customProvider.form.editTitle": "Edit a custom provider",
+  "customProvider.form.editTitle": m(msg("Edit a custom provider")),
   "customProvider.form.description":
     "Describe an OpenAI-compatible endpoint and the models it serves.",
   "customProvider.form.heading": "Custom provider",
   "customProvider.form.subtitle": "Any OpenAI-compatible endpoint.",
   "customProvider.field.providerId": "Provider ID",
-  "customProvider.field.providerIdHint": "Lowercase letters, numbers, hyphens, or underscores.",
+  "customProvider.field.providerIdHint": m(
+    msg("Lowercase letters, numbers, hyphens, or underscores."),
+  ),
   "customProvider.field.displayName": "Display name",
-  "customProvider.field.displayNamePlaceholder": "My Provider",
+  "customProvider.field.displayNamePlaceholder": m(msg("My Provider")),
   "customProvider.field.baseUrl": "Base URL",
   "customProvider.field.harness": "Runs on",
-  "customProvider.field.harnessHint": "The provider that sends the requests to this endpoint.",
+  "customProvider.field.harnessHint": m(
+    msg("The provider that sends the requests to this endpoint."),
+  ),
   "customProvider.field.apiKey": "API key",
-  "customProvider.field.apiKeyHint": "Optional. Leave empty if you manage auth via headers.",
-  "customProvider.field.apiKeyKeptHint": "A key is saved. Leave this empty to keep it.",
+  "customProvider.field.apiKeyHint": m(
+    msg("Optional. Leave empty if you manage auth via headers."),
+  ),
+  "customProvider.field.apiKeyKeptHint": m(msg("A key is saved. Leave this empty to keep it.")),
   "customProvider.models": "Models",
   "customProvider.model.id": "Model {number} ID",
   "customProvider.model.name": "Model {number} display name",
-  "customProvider.model.namePlaceholder": "Display Name",
+  "customProvider.model.namePlaceholder": m(msg("Display Name")),
   "customProvider.model.contextWindow": "Model {number} context window",
-  "customProvider.model.contextWindowPlaceholder": "Tokens",
+  "customProvider.model.contextWindowPlaceholder": m(msg("Tokens")),
   "customProvider.model.maxOutput": "Model {number} max output",
-  "customProvider.model.maxOutputPlaceholder": "Tokens",
+  "customProvider.model.maxOutputPlaceholder": m(msg("Tokens")),
   "customProvider.model.remove": "Remove model {number}",
   "customProvider.model.add": "Add model",
   "customProvider.headers": "Headers",
   "customProvider.header.name": "Header {number} name",
   "customProvider.header.value": "Header {number} value",
   "customProvider.header.valuePlaceholder": "value",
-  "customProvider.header.keptPlaceholder": "Saved. Leave empty to keep it.",
+  "customProvider.header.keptPlaceholder": m(msg("Saved. Leave empty to keep it.")),
   "customProvider.header.remove": "Remove header {number}",
   "customProvider.header.add": "Add header",
   "customProvider.submit": "Submit",
@@ -543,13 +564,17 @@ Object.assign(messages, {
   "customProvider.preset.models": "Models",
   "customProvider.preset.agents": "Agents",
   "customProvider.preset.ollama": "Ollama",
-  "customProvider.preset.ollamaDescription": "Local models at 127.0.0.1:11434.",
+  "customProvider.preset.ollamaDescription": m(msg("Local models at 127.0.0.1:11434.")),
   "customProvider.preset.lmstudio": "LM Studio",
-  "customProvider.preset.lmstudioDescription": "Local models at 127.0.0.1:1234.",
+  "customProvider.preset.lmstudioDescription": m(msg("Local models at 127.0.0.1:1234.")),
   "customProvider.preset.openaiCompatible": "OpenAI-compatible endpoint",
-  "customProvider.preset.openaiCompatibleDescription": "Any server that has the OpenAI chat API.",
+  "customProvider.preset.openaiCompatibleDescription": m(
+    msg("Any server that has the OpenAI chat API."),
+  ),
   "customProvider.preset.acp": "Custom ACP agent",
-  "customProvider.preset.acpDescription": "Cursor, Copilot CLI, Qwen Code, Goose and others.",
+  "customProvider.preset.acpDescription": m(
+    msg("Cursor, Copilot CLI, Qwen Code, Goose and others."),
+  ),
   "customProvider.probe.checking": "Checking",
   "customProvider.probe.running": {
     one: "Running · {count} model",
@@ -563,7 +588,7 @@ Object.assign(messages, {
   "customProvider.detected.scanAgain": "Scan again",
   "customProvider.detected.empty": "OpenBot found no local model server or ACP agent.",
   "customProvider.detected.add": "Add",
-  "customProvider.detected.addLabel": "Add {name}",
+  "customProvider.detected.addLabel": m(msg("Add '{'name'}'")),
   "customProvider.detected.added": "Added",
   "customProvider.detected.nameVersion": "{name} {version}",
   "customProvider.detected.modelsDetail": {
@@ -572,7 +597,7 @@ Object.assign(messages, {
   },
   "customProvider.detected.agentDetail": "ACP agent · {location}",
   "customProvider.detected.edit": "Edit",
-  "customProvider.detected.editLabel": "Edit {name}",
+  "customProvider.detected.editLabel": m(msg("Edit '{'name'}'")),
   "customProvider.detected.hide": "Hide {name}",
   "customProvider.detected.showHidden": "Show hidden ({count})",
 
@@ -582,8 +607,11 @@ Object.assign(messages, {
   "customProvider.detection.description":
     "Where OpenBot looks for local model servers and ACP agents.",
   "customProvider.detection.enabled": "Look for local models and agents",
-  "customProvider.detection.enabledDescription":
-    "OpenBot checks the default addresses of Ollama and LM Studio, and looks for known ACP agents on your PATH.",
+  "customProvider.detection.enabledDescription": m(
+    msg(
+      "OpenBot checks the default addresses of Ollama and LM Studio, and looks for known ACP agents on your PATH.",
+    ),
+  ),
   "customProvider.detection.addresses": "Other model server addresses",
   "customProvider.detection.address.label": "Address {number}",
   "customProvider.detection.address.remove": "Remove address {number}",
@@ -600,18 +628,25 @@ Object.assign(messages, {
   "customProvider.acp.heading": "Custom ACP agent",
   "customProvider.acp.subtitle": "Any agent that speaks the Agent Client Protocol.",
   "customProvider.acp.presets": "Start from",
-  "customProvider.acp.displayNamePlaceholder": "My Agent",
+  "customProvider.acp.displayNamePlaceholder": m(msg("My Agent")),
   "customProvider.acp.agentId": "Agent ID",
-  "customProvider.acp.agentIdHint":
-    "Lowercase letters, numbers, or hyphens. You cannot change it later.",
+  "customProvider.acp.agentIdHint": m(
+    msg("Lowercase letters, numbers, or hyphens. You cannot change it later."),
+  ),
   "customProvider.acp.command": "Command",
-  "customProvider.acp.commandHint": "The program to start. OpenBot looks for it on your PATH.",
+  "customProvider.acp.commandHint": m(
+    msg("The program to start. OpenBot looks for it on your PATH."),
+  ),
   "customProvider.acp.args": "Arguments",
-  "customProvider.acp.argsHint":
-    "Separate arguments with spaces. Put quotes around an argument that has spaces.",
+  "customProvider.acp.argsHint": m(
+    msg("Separate arguments with spaces. Put quotes around an argument that has spaces."),
+  ),
   "customProvider.acp.usagePrompt": "Usage command",
-  "customProvider.acp.usagePromptHint":
-    "OpenBot sends it at most every 5 minutes and shows the last answer. Use a command that the agent answers itself, such as /usage.",
+  "customProvider.acp.usagePromptHint": m(
+    msg(
+      "OpenBot sends it at most every 5 minutes and shows the last answer. Use a command that the agent answers itself, such as /usage.",
+    ),
+  ),
   "customProvider.acp.env": "Environment variables",
   "customProvider.acp.env.name": "Variable {number} name",
   "customProvider.acp.env.value": "Variable {number} value",
@@ -629,13 +664,16 @@ Object.assign(messages, {
     other: "{count} models: {models}",
   },
   "customProvider.acp.checkFailed": "The agent did not answer",
-  "customProvider.acp.trustTitle": "This command runs on your computer",
-  "customProvider.acp.trustDescription":
-    "OpenBot starts it with your user account. The agent can read and change files and run commands. Add only an agent that you trust.",
+  "customProvider.acp.trustTitle": m(msg("This command runs on your computer")),
+  "customProvider.acp.trustDescription": m(
+    msg(
+      "OpenBot starts it with your user account. The agent can read and change files and run commands. Add only an agent that you trust.",
+    ),
+  ),
   "customProvider.acp.submit": "Add agent",
-  "customProvider.acp.editTitle": "Edit a custom ACP agent",
+  "customProvider.acp.editTitle": m(msg("Edit a custom ACP agent")),
   "customProvider.acp.submitEdit": "Save agent",
-  "customProvider.acp.env.keptPlaceholder": "Saved. Leave empty to keep it.",
+  "customProvider.acp.env.keptPlaceholder": m(msg("Saved. Leave empty to keep it.")),
   "customProvider.acp.error.agentIdRequired": "Enter an agent ID.",
   "customProvider.acp.error.agentIdTaken":
     "An agent called {id} already exists. Choose another ID.",
@@ -659,10 +697,11 @@ Object.assign(messages, {
   "customProvider.agents.restartPending": "The custom agents restart after the current tasks stop.",
   "customProvider.agents.commandMissing": "{command} · Command not found",
   "customProvider.agents.envCount": { one: "1 variable", other: "{count} variables" },
-  "customProvider.agents.editLabel": "Edit {name}",
-  "customProvider.agents.deleteLabel": "Delete {name}",
-  "customProvider.agents.confirmDescription":
-    "Its saved variables are discarded, and each agent that uses it moves to a default model.",
+  "customProvider.agents.editLabel": m(msg("Edit '{'name'}'")),
+  "customProvider.agents.deleteLabel": m(msg("Delete '{'name'}'")),
+  "customProvider.agents.confirmDescription": m(
+    msg("Its saved variables are discarded, and each agent that uses it moves to a default model."),
+  ),
   "customProvider.agents.saveFailed": "OpenBot could not save this agent.",
   "customProvider.agents.saved.restarted": "Saved. OpenBot restarted the custom agents.",
   "customProvider.agents.saved.skippedBusy":
@@ -684,36 +723,45 @@ Object.assign(messages, {
   "customProvider.list.label": "Custom endpoints",
   "customProvider.list.apiKeySaved": "API key saved",
   "customProvider.list.runsOn": "Runs on {name}",
-  "customProvider.list.editLabel": "Edit {name}",
-  "customProvider.list.deleteLabel": "Delete {name}",
-  "customProvider.list.confirmTitle": "Remove {name}?",
-  "customProvider.list.confirmDescription":
-    "Its API key is discarded, its models disappear from the picker, and any agent using one falls back to a default model.",
+  "customProvider.list.editLabel": m(msg("Edit '{'name'}'")),
+  "customProvider.list.deleteLabel": m(msg("Delete '{'name'}'")),
+  "customProvider.list.confirmTitle": m(msg("Remove '{'name'}'?")),
+  "customProvider.list.confirmDescription": m(
+    msg(
+      "Its API key is discarded, its models disappear from the picker, and any agent using one falls back to a default model.",
+    ),
+  ),
 
   "mcp.connect.unreachable": "That server could not be reached.",
   "mcp.connect.title": "Connect {name}",
   "mcp.connect.notConnected": "Not connected",
   "mcp.connect.close": "Close connect {name}",
   "mcp.connect.getKey": "Get a key",
-  "mcp.connect.keyDescription":
-    "Paste a credential from your {name} account. OpenBot connects with it and keeps it on {host}.",
+  "mcp.connect.keyDescription": m(
+    msg(
+      "Paste a credential from your '{'name'}' account. OpenBot connects with it and keeps it on '{'host'}'.",
+    ),
+  ),
   "mcp.connect.thisComputer": "this computer",
-  "mcp.connect.noCredentialDescription":
-    "{name} asks for no credential. OpenBot connects once to see which tools it offers.",
+  "mcp.connect.noCredentialDescription": m(
+    msg("'{'name'}' asks for no credential. OpenBot connects once to see which tools it offers."),
+  ),
   "mcp.connect.connect": "Connect",
   "mcp.connect.required": "Required.",
   "mcp.connect.keptOn": "Kept on {host}.",
   "mcp.connect.httpsLinkRequired": "Enter an https link from {hostname}.",
   "mcp.local.description":
     "{name} runs this server in its desktop app, on this computer. Turn it on there, then connect.",
-  "mcp.local.stepsTitle": "Turn on the server in {name}",
+  "mcp.local.stepsTitle": m(msg("Turn on the server in '{'name'}'")),
   "mcp.local.address": "Address",
   "mcp.local.docs": "Setup guide",
   "mcp.signIn.description":
     "Sign in to your {name} account. OpenBot gets the tools that account can reach, and no password.",
   "mcp.signIn.waiting": "Waiting for the browser…",
   "mcp.signIn.continue": "Continue to {name}",
-  "mcp.signIn.pageDescription": "This page is open in the browser on {host}. Sign in here.",
+  "mcp.signIn.pageDescription": m(
+    msg("This page is open in the browser on '{'host'}'. Sign in here."),
+  ),
   "mcp.server.loadFailed": "The MCP servers could not load.",
   "mcp.test.connected": { one: "Connected · {count} tool", other: "Connected · {count} tools" },
   "mcp.status.testing": "Testing…",
@@ -738,8 +786,8 @@ Object.assign(messages, {
     "The runtime a STDIO server is started with did not download. A server still starts if this computer has Node.",
   "mcp.panel.saveFailed": "That change could not be saved.",
   "mcp.panel.noAnswer": "That server did not answer.",
-  "mcp.panel.connectTitle": "Connect to a custom MCP",
-  "mcp.panel.editTitle": "Edit MCP server",
+  "mcp.panel.connectTitle": m(msg("Connect to a custom MCP")),
+  "mcp.panel.editTitle": m(msg("Edit MCP server")),
   "mcp.panel.changesNotSaved": "Changes not saved",
   "mcp.panel.title": "MCP servers",
   "mcp.panel.description":
@@ -747,15 +795,18 @@ Object.assign(messages, {
   "mcp.panel.connectCustom": "Connect a custom MCP",
   "mcp.panel.empty": "No MCP servers yet.",
   "mcp.panel.enable": "Enable {name}",
-  "mcp.panel.detailsTitle": "Details",
-  "mcp.panel.detailsDescription": "Name this server and choose how OpenBot reaches it.",
+  "mcp.panel.detailsTitle": m(msg("Details")),
+  "mcp.panel.detailsDescription": m(msg("Name this server and choose how OpenBot reaches it.")),
   "mcp.panel.transport": "Transport",
   "mcp.panel.name": "Name",
-  "mcp.panel.namePlaceholder": "MCP server name",
-  "mcp.panel.launchTitle": "Launch",
+  "mcp.panel.namePlaceholder": m(msg("MCP server name")),
+  "mcp.panel.launchTitle": m(msg("Launch")),
   "mcp.panel.command": "Command to launch",
-  "mcp.panel.commandDescription":
-    "The program only. The launch does not read this field as a command line, so a word such as serve-sqlite goes in Arguments below.",
+  "mcp.panel.commandDescription": m(
+    msg(
+      "The program only. The launch does not read this field as a command line, so a word such as serve-sqlite goes in Arguments below.",
+    ),
+  ),
   "mcp.panel.arguments": "Arguments",
   "mcp.panel.addArgument": "Add argument",
   "mcp.panel.argument": "Argument {position}",
@@ -770,10 +821,13 @@ Object.assign(messages, {
   "mcp.panel.passthroughVariable": "Passthrough variable {position}",
   "mcp.panel.removePassthroughVariable": "Remove passthrough variable {position}",
   "mcp.panel.workingDirectory": "Working directory",
-  "mcp.panel.workingDirectoryDescription":
-    "Claude and Codex agents and the connection test start the server here. Leave it empty to give this server to every provider: the other providers cannot set a directory, so they skip a server that names one.",
-  "mcp.panel.endpointTitle": "Endpoint",
-  "mcp.panel.endpointDescription": "Every provider can use an HTTP MCP server.",
+  "mcp.panel.workingDirectoryDescription": m(
+    msg(
+      "Claude and Codex agents and the connection test start the server here. Leave it empty to give this server to every provider: the other providers cannot set a directory, so they skip a server that names one.",
+    ),
+  ),
+  "mcp.panel.endpointTitle": m(msg("Endpoint")),
+  "mcp.panel.endpointDescription": m(msg("Every provider can use an HTTP MCP server.")),
   "mcp.panel.serverUrl": "Server URL",
   "mcp.panel.headers": "Headers",
   "mcp.panel.addHeader": "Add header",
@@ -782,14 +836,18 @@ Object.assign(messages, {
   "mcp.panel.removeHeader": "Remove header {position}",
   "mcp.panel.key": "Key",
   "mcp.panel.value": "Value",
-  "mcp.panel.testTitle": "Test",
-  "mcp.panel.testDescription":
-    "Connects once with these settings and reports the tools it offers. Nothing is saved or kept.",
+  "mcp.panel.testTitle": m(msg("Test")),
+  "mcp.panel.testDescription": m(
+    msg(
+      "Connects once with these settings and reports the tools it offers. Nothing is saved or kept.",
+    ),
+  ),
   "mcp.panel.testConnection": "Test connection",
   "mcp.panel.notTested": "Not tested yet.",
-  "mcp.panel.removeTitle": "Remove {name}?",
-  "mcp.panel.removeDescription":
-    "Its tools stop being offered to this server’s agents. The configuration is not kept.",
+  "mcp.panel.removeTitle": m(msg("Remove '{'name'}'?")),
+  "mcp.panel.removeDescription": m(
+    msg("Its tools stop being offered to this server’s agents. The configuration is not kept."),
+  ),
   "mcp.panel.removeConfirm": "Remove MCP server",
   "mcp.panel.actionsFor": "Actions for {name}",
   "mcp.panel.testUnavailable": "This server cannot be tested here.",
@@ -806,40 +864,57 @@ Object.assign(messages, {
     one: "Opening the sign-in page on {host}. OpenBot stops waiting after {count} minute.",
     other: "Opening the sign-in page on {host}. OpenBot stops waiting after {count} minutes.",
   },
-  "mcp.panel.appTitle": "Sign-in app",
-  "mcp.panel.appDescription":
-    "Use an OAuth app that you registered with the server’s provider. OpenBot uses it when the server cannot register OpenBot by itself. Leave it empty to let OpenBot register.",
+  "mcp.panel.appTitle": m(msg("Sign-in app")),
+  "mcp.panel.appDescription": m(
+    msg(
+      "Use an OAuth app that you registered with the server’s provider. OpenBot uses it when the server cannot register OpenBot by itself. Leave it empty to let OpenBot register.",
+    ),
+  ),
   "mcp.panel.appSaveFirst": "Save this server first. Then you can add a sign-in app.",
   "mcp.panel.appUrlChanged":
     "Save the new server URL first. The sign-in app belongs to the saved URL.",
   "mcp.panel.appLoadFailed": "Could not read the sign-in app.",
   "mcp.panel.callbackUrl": "Callback URL",
-  "mcp.panel.callbackUrlDescription": "Add this exact URL to the allowed redirect URLs of the app.",
+  "mcp.panel.callbackUrlDescription": m(
+    msg("Add this exact URL to the allowed redirect URLs of the app."),
+  ),
   "mcp.panel.callbackUrlOnHost":
     "{host} signs in with its own browser, so this URL is on {host}. Add this exact URL to the allowed redirect URLs of the app.",
   "mcp.panel.callbackUrlUnavailable": "No callback URL is available.",
   "mcp.panel.copyCallbackUrl": "Copy callback URL",
   "mcp.panel.clientId": "Client ID",
   "mcp.panel.clientSecret": "Client secret",
-  "mcp.panel.clientSecretDescription": "Optional. Only for an app that has a secret.",
+  "mcp.panel.clientSecretDescription": m(msg("Optional. Only for an app that has a secret.")),
   "mcp.panel.clientSecretSaved": "Secret saved. Enter a new secret to replace it.",
   "mcp.panel.clientSecretRemoved": "The secret is removed when you save the app.",
   "mcp.panel.removeClientSecret": "Remove secret",
   "mcp.panel.scopes": "Scopes",
-  "mcp.panel.scopesDescription": "Optional. Separate scopes with spaces.",
+  "mcp.panel.scopesDescription": m(msg("Optional. Separate scopes with spaces.")),
   "mcp.panel.saveApp": "Save app",
   "mcp.panel.removeApp": "Remove app",
   "mcp.panel.appSaved": "App saved. Sign in to use it.",
   "mcp.panel.appRemoved": "App removed.",
-  "mcp.signIn.relayDescription":
-    "Check that the sign-in page is on {page}, then open it in your browser. When you finish, OpenBot sends the sign-in to {host}.",
-  "mcp.signIn.relayOpenDescription":
-    "Open the sign-in page of {page} in your browser. When you finish, paste the address that the browser shows here. OpenBot then sends the sign-in to {host}.",
-  "mcp.signIn.relayDeviceDescription":
-    "Check that the sign-in page is on {page}, then open it in your browser and finish there. {host} sees the sign-in by itself.",
+  "mcp.signIn.relayDescription": m(
+    msg(
+      "Check that the sign-in page is on '{'page'}', then open it in your browser. When you finish, OpenBot sends the sign-in to '{'host'}'.",
+    ),
+  ),
+  "mcp.signIn.relayOpenDescription": m(
+    msg(
+      "Open the sign-in page of '{'page'}' in your browser. When you finish, paste the address that the browser shows here. OpenBot then sends the sign-in to '{'host'}'.",
+    ),
+  ),
+  "mcp.signIn.relayDeviceDescription": m(
+    msg(
+      "Check that the sign-in page is on '{'page'}', then open it in your browser and finish there. '{'host'}' sees the sign-in by itself.",
+    ),
+  ),
   "mcp.signIn.relayOpen": "Open sign-in page",
-  "mcp.signIn.relayPasteHint":
-    "If the browser does not come back to OpenBot, copy the address that it shows and paste it here.",
+  "mcp.signIn.relayPasteHint": m(
+    msg(
+      "If the browser does not come back to OpenBot, copy the address that it shows and paste it here.",
+    ),
+  ),
   "mcp.signIn.relayPasteRequired":
     "OpenBot cannot get the sign-in from the browser by itself. When you finish, copy the address that the browser shows and paste it here.",
   "mcp.signIn.relayAddress": "Browser address",

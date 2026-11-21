@@ -2,6 +2,7 @@ import type { DynamicToolUIPart } from "ai";
 import { BotTurnSteps } from "./BotTurnSteps";
 import { BotDeferredToolActivity, type BotTraceScope } from "./BotDeferredToolActivity";
 import { botToolActivity, botTraceSpans } from "./bot-tool-activity";
+import { useGT } from "gt-react";
 
 const clockOffset = Date.now() - performance.now();
 function time(value: string | null | undefined) {
@@ -19,6 +20,7 @@ export function BotToolActivity({
   initialOpen?: boolean;
   deferred?: BotTraceScope | undefined;
 }) {
+  const gt = useGT();
   if (deferred && (!trace || deferred.channelId))
     return <BotDeferredToolActivity key={JSON.stringify(deferred)} scope={deferred} />;
   const steps = botToolActivity(trace);
@@ -28,12 +30,12 @@ export function BotToolActivity({
     type: "dynamic-tool",
     toolName: step.command ? "terminal_command" : "tool",
     toolCallId: step.id,
-    title: step.command ? "Terminal command" : step.text || "Tool call",
+    title: step.command ? gt("Terminal command") : step.text || gt("Tool call"),
     ...(step.failed
       ? {
           state: "output-error" as const,
           input: step.command ? { command: step.command } : {},
-          errorText: "The provider reported this step as failed or declined.",
+          errorText: gt("The provider reported this step as failed or declined."),
         }
       : step.endedAt || !streaming
         ? {

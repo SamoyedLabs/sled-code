@@ -12,8 +12,10 @@ import {
 } from "@t3tools/client-runtime/openbot/presentation";
 import { AppTextInput } from "../../components/ui/AppText";
 import { confirm, Picker } from "./BotConnectionControls";
+import { T, useGT } from "gt-react-native";
 
 export function McpPanel({ controller: { state, run, busy, setError }, allowed }: PanelProps) {
+  const gt = useGT();
   const [draft, setDraft] = useState<BotMcpDraft | null>(null);
   const [editing, setEditing] = useState<{ id: string; patch: string } | null>(null);
   const [visible, setVisible] = useState(20);
@@ -21,7 +23,7 @@ export function McpPanel({ controller: { state, run, busy, setError }, allowed }
     if (!editing) return;
     const request = botMcpPatchRequest(editing.id, editing.patch);
     if (!request) {
-      setError("Enter a JSON object containing MCP configuration fields to replace.");
+      setError(gt("Enter a JSON object containing MCP configuration fields to replace."));
       return;
     }
     setEditing(null);
@@ -35,7 +37,9 @@ export function McpPanel({ controller: { state, run, busy, setError }, allowed }
     const request = botMcpRequest(draft);
     if (!request || request.operation !== "mcp.save") {
       setError(
-        "Enter a name and address or command, a JSON argument array, and JSON objects for environment variables and headers.",
+        gt(
+          "Enter a name and address or command, a JSON argument array, and JSON objects for environment variables and headers.",
+        ),
       );
       return;
     }
@@ -43,71 +47,76 @@ export function McpPanel({ controller: { state, run, busy, setError }, allowed }
     await run(test ? [{ operation: "mcp.test", config: request.config }] : [request]);
   };
   const remove = (id: string) =>
-    confirm("Delete this MCP server connection? Its saved configuration will be removed.", () => {
-      const requests: OpenbotAdminRequest[] =
-        state.activeMcpId === id ? [{ operation: "mcp.signIn.cancelById", mcpServerId: id }] : [];
-      void run([...requests, { operation: "mcp.delete", mcpServerId: id }]);
-    });
+    confirm(
+      gt("Delete this MCP server connection? Its saved configuration will be removed."),
+      () => {
+        const requests: OpenbotAdminRequest[] =
+          state.activeMcpId === id ? [{ operation: "mcp.signIn.cancelById", mcpServerId: id }] : [];
+        void run([...requests, { operation: "mcp.delete", mcpServerId: id }]);
+      },
+    );
   return (
     <View className="gap-3">
       <Text className="text-foreground-muted">
-        Connect tools on this host. Saved credentials stay on the host.
+        <T>Connect tools on this host. Saved credentials stay on the host.</T>
       </Text>
       <View className="flex-row flex-wrap gap-2">
         <Button
-          label="Load MCP servers"
+          label={gt("Load MCP servers")}
           disabled={!allowed || busy}
           onPress={() => void run([{ operation: "mcp.list" }, { operation: "mcp.signIn.list" }])}
         />
         <Button
-          label="Add MCP server"
+          label={gt("Add MCP server")}
           disabled={!allowed || busy}
           onPress={() => setDraft({ ...EMPTY_BOT_MCP_DRAFT })}
         />
       </View>
       {state.mcps?.length === 0 && (
-        <Text className="text-foreground-muted">No MCP servers connected.</Text>
+        <Text className="text-foreground-muted">
+          <T>No MCP servers connected.</T>
+        </Text>
       )}
       {state.mcps?.slice(0, visible).map((row) => (
         <View key={row.id} className="gap-2 border-t border-border pt-3">
           <Text className="font-t3-medium">
-            {row.name} · {row.enabled ? "Enabled" : "Disabled"}
+            {row.name} · {row.enabled ? gt("Enabled") : gt("Disabled")}
           </Text>
           <Text className="text-foreground-muted">
-            {row.transport === "http" ? row.url : "Command on this host"}
+            {row.transport === "http" ? row.url : gt("Command on this host")}
             {state.signIns?.find((signIn) => signIn.mcpServerId === row.id)?.signedIn
-              ? " · Signed in"
+              ? gt(" · Signed in")
               : ""}
           </Text>
           <View className="flex-row flex-wrap gap-2">
             <Button
-              label="Edit configuration"
+              label={gt("Edit configuration")}
               disabled={!allowed || busy}
               onPress={() => setEditing({ id: row.id, patch: "{}" })}
             />
             <Button
-              label={row.enabled ? "Disable" : "Enable"}
+              label={row.enabled ? gt("Disable") : gt("Enable")}
               disabled={!allowed || busy}
               onPress={() =>
                 void run([{ operation: "mcp.toggle", mcpServerId: row.id, enabled: !row.enabled }])
               }
             />
             <Button
-              label="Test connection"
+              label={gt("Test connection")}
               disabled={!allowed || busy}
               onPress={() => void run([{ operation: "mcp.testById", mcpServerId: row.id }])}
             />
             {row.transport === "http" && (
               <>
                 <Button
-                  label="Sign in on host"
+                  label={gt("Sign in on host")}
                   disabled={!allowed || busy}
                   onPress={() =>
                     void run([{ operation: "mcp.signIn.startById", mcpServerId: row.id }])
                   }
                 />
                 <Button
-                  label="Check sign-in"
+                  label={gt("Check sign-in")}
                   disabled={!allowed || busy}
                   onPress={() =>
                     void run([
@@ -117,7 +126,7 @@ export function McpPanel({ controller: { state, run, busy, setError }, allowed }
                   }
                 />
                 <Button
-                  label="Sign out"
+                  label={gt("Sign out")}
                   disabled={!allowed || busy}
                   onPress={() => void run([{ operation: "mcp.signOut", mcpServerId: row.id }])}
                 />
@@ -125,7 +134,7 @@ export function McpPanel({ controller: { state, run, busy, setError }, allowed }
             )}
             {state.activeMcpId === row.id && (
               <Button
-                label="Cancel sign-in"
+                label={gt("Cancel sign-in")}
                 disabled={!allowed || busy}
                 onPress={() =>
                   void run([{ operation: "mcp.signIn.cancelById", mcpServerId: row.id }])
@@ -142,13 +151,15 @@ export function McpPanel({ controller: { state, run, busy, setError }, allowed }
         </View>
       ))}
       {state.mcps && state.mcps.length > visible && (
-        <Button label="Show more MCP servers" onPress={() => setVisible(visible + 20)} />
+        <Button label={gt("Show more MCP servers")} onPress={() => setVisible(visible + 20)} />
       )}
       {editing && (
         <View className="gap-2 border-t border-border pt-3">
-          <Text>Configuration changes (JSON object)</Text>
+          <Text>
+            <T>Configuration changes (JSON object)</T>
+          </Text>
           <AppTextInput
-            accessibilityLabel="MCP configuration changes"
+            accessibilityLabel={gt("MCP configuration changes")}
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
@@ -157,30 +168,34 @@ export function McpPanel({ controller: { state, run, busy, setError }, allowed }
             onChangeText={(value) => setEditing({ ...editing, patch: value })}
           />
           <Text textRole="footnote" className="text-foreground-muted">
-            Omitted fields keep their saved values. Use an empty array to clear headers or
-            environment variables. Changes clear after submission.
+            <T>
+              Omitted fields keep their saved values. Use an empty array to clear headers or
+              environment variables. Changes clear after submission.
+            </T>
           </Text>
           <View className="flex-row flex-wrap gap-2">
             <Button
-              label="Save changes"
+              label={gt("Save changes")}
               disabled={!allowed || busy}
               onPress={() => void savePatch()}
             />
-            <Button label="Cancel changes" disabled={busy} onPress={() => setEditing(null)} />
+            <Button label={gt("Cancel changes")} disabled={busy} onPress={() => setEditing(null)} />
           </View>
         </View>
       )}
       {draft && (
         <View className="gap-3 border-t border-border pt-3">
-          <Text>Name</Text>
+          <Text>
+            <T>Name</T>
+          </Text>
           <AppTextInput
-            accessibilityLabel="MCP server name"
+            accessibilityLabel={gt("MCP server name")}
             value={draft.name}
             editable={!busy && allowed}
             onChangeText={(value) => update("name", value)}
           />
           <Picker
-            label="Transport"
+            label={gt("Transport")}
             value={draft.transport}
             options={[
               { id: "http", name: "HTTP" },
@@ -220,21 +235,23 @@ export function McpPanel({ controller: { state, run, busy, setError }, allowed }
             </View>
           ))}
           <Text textRole="footnote" className="text-foreground-muted">
-            Arguments are literal JSON strings. Private fields clear after testing, saving or
-            cancelling.
+            <T>
+              Arguments are literal JSON strings. Private fields clear after testing, saving or
+              cancelling.
+            </T>
           </Text>
           <View className="flex-row flex-wrap gap-2">
             <Button
-              label="Save MCP server"
+              label={gt("Save MCP server")}
               disabled={busy || !allowed}
               onPress={() => void save(false)}
             />
             <Button
-              label="Test draft"
+              label={gt("Test draft")}
               disabled={busy || !allowed}
               onPress={() => void save(true)}
             />
-            <Button label="Cancel" disabled={busy} onPress={() => setDraft(null)} />
+            <Button label={gt("Cancel")} disabled={busy} onPress={() => setDraft(null)} />
           </View>
         </View>
       )}

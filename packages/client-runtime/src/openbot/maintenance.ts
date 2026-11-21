@@ -1,18 +1,19 @@
 import type { OpenbotMaintenanceProposal } from "@t3tools/contracts";
+import { mFallback, msg } from "gt-i18n";
 
 export function openbotMaintenanceProgress(proposal: OpenbotMaintenanceProposal): string {
   switch (proposal.state) {
     case "proposed":
-      return "Ready for source review";
+      return mFallback(msg("Ready for source review"));
     case "review-queued":
-      return "Review launch needs confirmation";
+      return mFallback(msg("Review launch needs confirmation"));
     case "reviewing":
-      return "Review in progress";
+      return mFallback(msg("Review in progress"));
     case "decision-required":
-      return "Your decision is needed";
+      return mFallback(msg("Your decision is needed"));
     case "accepted":
-      return "Review accepted";
+      return mFallback(msg("Review accepted"));
     case "rejected":
-      return "Release rejected";
+      return mFallback(msg("Release rejected"));
   }
 }

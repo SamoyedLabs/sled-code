@@ -7,6 +7,7 @@ import { ScreenScrollView } from "../../components/ui/ScreenScrollView";
 import { useBotPalette } from "../bots/upstream/BotChrome";
 import { OpenBotText as Text } from "../bots/upstream/OpenBotTypography";
 import { BotBrowserProxies } from "./BotBrowserProxies";
+import { T, Var, useGT } from "gt-react-native";
 
 type Profile = {
   id: string;
@@ -44,14 +45,15 @@ export function BotBrowserProfiles({
   busy: boolean;
   act: (request: OpenbotAdminRequest) => Promise<unknown>;
 }) {
+  const gt = useGT();
   const p = useBotPalette();
   const clearOrDelete = (profile: Profile, remove: boolean) =>
     Dialog.confirm({
-      title: remove ? "Delete browser profile?" : "Clear browser data?",
+      title: remove ? gt("Delete browser profile?") : gt("Clear browser data?"),
       message: remove
-        ? "This closes its tabs and moves its bots to the shared profile."
-        : "This closes its tabs and signs it out of every site.",
-      confirmText: remove ? "Delete profile" : "Clear data",
+        ? gt("This closes its tabs and moves its bots to the shared profile.")
+        : gt("This closes its tabs and signs it out of every site."),
+      confirmText: remove ? gt("Delete profile") : gt("Clear data"),
       destructive: true,
       onConfirm: () =>
         void act({
@@ -64,18 +66,18 @@ export function BotBrowserProfiles({
   ) => {
     if (!agentId) return;
     Dialog.confirm({
-      title: "Switch browser profile?",
-      message: "This closes the bot’s current tabs.",
-      confirmText: "Switch profile",
+      title: gt("Switch browser profile?"),
+      message: gt("This closes the bot’s current tabs."),
+      confirmText: gt("Switch profile"),
       onConfirm: () => void act({ operation: "browser.profile.assign", agentId, profile }),
     });
   };
   const named = (profile?: Profile) =>
     Dialog.prompt({
-      title: profile ? "Rename browser profile" : "New browser profile",
+      title: profile ? gt("Rename browser profile") : gt("New browser profile"),
       initialValue: profile?.name ?? "",
-      placeholder: "Profile name",
-      confirmText: profile ? "Save" : "Create",
+      placeholder: gt("Profile name"),
+      confirmText: profile ? gt("Save") : gt("Create"),
       onConfirm: (value) => {
         const name = value.trim().slice(0, 60);
         if (name)
@@ -94,7 +96,7 @@ export function BotBrowserProfiles({
     >
       {profiles === null ? (
         <Button
-          label={busy ? "Loading profiles…" : "Load profiles"}
+          label={busy ? gt("Loading profiles…") : gt("Load profiles")}
           disabled={busy}
           onPress={() => void act({ operation: "browser.profiles.list" })}
         />
@@ -104,19 +106,19 @@ export function BotBrowserProfiles({
             <Menu
               key={profile.id}
               actions={[
-                { id: "rename", title: "Rename" },
+                { id: "rename", title: gt("Rename") },
                 {
                   id: "color",
-                  title: "Color",
+                  title: gt("Color"),
                   subactions: colors.map((hue, index) => ({
                     id: `color:${hue}`,
                     title: colorLabels[index]!,
                     state: hue === profile.hue ? "on" : "off",
                   })),
                 },
-                ...(agentId ? [{ id: "assign", title: "Use for this bot" }] : []),
-                { id: "clear", title: "Clear browser data", attributes: { destructive: true } },
-                { id: "delete", title: "Delete profile", attributes: { destructive: true } },
+                ...(agentId ? [{ id: "assign", title: gt("Use for this bot") }] : []),
+                { id: "clear", title: gt("Clear browser data"), attributes: { destructive: true } },
+                { id: "delete", title: gt("Delete profile"), attributes: { destructive: true } },
               ]}
               onPressAction={({ nativeEvent }) => {
                 const event = nativeEvent.event;
@@ -137,7 +139,7 @@ export function BotBrowserProfiles({
             >
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`${profile.name}, browser profile`}
+                accessibilityLabel={gt("{name}, browser profile", { name: profile.name })}
                 style={{
                   padding: 13,
                   borderRadius: 14,
@@ -160,21 +162,23 @@ export function BotBrowserProfiles({
                     {profile.name}
                   </Text>
                   <Text style={{ color: p.muted, fontSize: 13 }}>
-                    {profile.agentIds.length} bots · {profile.tabCount} tabs
+                    <T>
+                      <Var>{profile.agentIds.length}</Var> bots · <Var>{profile.tabCount}</Var> tabs
+                    </T>
                   </Text>
                 </View>
               </Pressable>
             </Menu>
           ))}
-          <Button label="New profile" onPress={() => named()} disabled={busy} />
+          <Button label={gt("New profile")} onPress={() => named()} disabled={busy} />
           {agentId && (
             <Menu
               actions={[
-                { id: "shared", title: "Shared profile" },
-                { id: "agent", title: "Bot-only profile" },
+                { id: "shared", title: gt("Shared profile") },
+                { id: "agent", title: gt("Bot-only profile") },
                 {
                   id: "clear-agent",
-                  title: "Clear bot browser data",
+                  title: gt("Clear bot browser data"),
                   attributes: { destructive: true },
                 },
               ]}
@@ -183,9 +187,9 @@ export function BotBrowserProfiles({
                 if (event === "shared" || event === "agent") assign({ kind: event });
                 else if (event === "clear-agent")
                   Dialog.confirm({
-                    title: "Clear this bot’s browser data?",
-                    message: "This closes its private tabs and signs it out.",
-                    confirmText: "Clear data",
+                    title: gt("Clear this bot’s browser data?"),
+                    message: gt("This closes its private tabs and signs it out."),
+                    confirmText: gt("Clear data"),
                     destructive: true,
                     onConfirm: () => void act({ operation: "browser.profile.clearAgent", agentId }),
                   });
@@ -193,10 +197,12 @@ export function BotBrowserProfiles({
             >
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Choose bot browser profile"
+                accessibilityLabel={gt("Choose bot browser profile")}
                 style={{ padding: 13, borderRadius: 14, backgroundColor: p.control }}
               >
-                <Text style={{ color: p.text }}>Bot browser profile</Text>
+                <Text style={{ color: p.text }}>
+                  <T>Bot browser profile</T>
+                </Text>
               </Pressable>
             </Menu>
           )}

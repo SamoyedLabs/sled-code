@@ -45,6 +45,7 @@ import {
 } from "./provider-settings-model";
 import "./ProviderSettingsPage.css";
 import "./AccountUsage.css";
+import { useGT } from "gt-react";
 const { t, format } = currentText();
 const names = (values: readonly string[]) =>
   new Intl.ListFormat(undefined, { style: "long", type: "conjunction" }).format(values);
@@ -532,6 +533,7 @@ function Accounts({
   usage: readonly AccountUsageProviderRow[];
   disabled?: boolean | undefined;
 }) {
+  const gt = useGT();
   const [removing, setRemoving] = useState<ProviderSettingsAccount | null>(null),
     [disconnect, setDisconnect] = useState<ProviderSettingsAccount | null>(null),
     [error, setError] = useState<string | null>(null);
@@ -565,7 +567,7 @@ function Accounts({
     try {
       await action();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Account change failed.");
+      setError(cause instanceof Error ? cause.message : gt("Account change failed."));
     }
   };
   const name = (id: string) => providerAccountName(t, accounts, id);

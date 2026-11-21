@@ -78,7 +78,11 @@ export const TemplateAdoption = Schema.Struct({
   state: Schema.Literals(["pending", "complete", "failed", "interrupted"]),
   agentId: Schema.NullOr(Id),
   name: Schema.NullOr(text(256)),
-}).check(Schema.makeFilter(result => result.state !== "complete" || (result.agentId !== null && result.name !== null)));
+}).check(
+  Schema.makeFilter(
+    (result) => result.state !== "complete" || (result.agentId !== null && result.name !== null),
+  ),
+);
 export const OpenbotTemplateReadRequest = Schema.Union([
   Schema.Struct({ operation: Schema.Literal("templates.preview"), agentId: Id }),
   Schema.Struct({ operation: Schema.Literal("templates.detail"), templateId: Id }),
@@ -96,7 +100,9 @@ export const OpenbotTemplateAdminRequest = Schema.Union([
     timezone: text(255),
     expectedRevision: text(128).check(Schema.isMinLength(1)),
     agentId: Schema.optional(Id),
-  }).check(Schema.makeFilter(request => request.agentId === undefined || request.kind === "marketplace")),
+  }).check(
+    Schema.makeFilter((request) => request.agentId === undefined || request.kind === "marketplace"),
+  ),
   Schema.Struct({
     operation: Schema.Literal("templates.installMarketplace"),
     listingId: Id,
@@ -124,15 +130,31 @@ export type TemplateAdoption = typeof TemplateAdoption.Type;
 export type TemplateRequest =
   | typeof OpenbotTemplateReadRequest.Type
   | typeof OpenbotTemplateAdminRequest.Type;
-export function templateIsRead(request: TemplateRequest): request is typeof OpenbotTemplateReadRequest.Type {
-  return ["templates.preview", "templates.detail", "templates.listing", "templates.publication", "templates.adoptions", "templates.adoptionStatus"].includes(request.operation);
+export function templateIsRead(
+  request: TemplateRequest,
+): request is typeof OpenbotTemplateReadRequest.Type {
+  return [
+    "templates.preview",
+    "templates.detail",
+    "templates.listing",
+    "templates.publication",
+    "templates.adoptions",
+    "templates.adoptionStatus",
+  ].includes(request.operation);
 }
 export function templateRequiredScopes(
   operation: unknown,
   kind: "read" | "admin",
 ): readonly AuthEnvironmentScope[] | null {
   if (operation === "templates.listing" && kind === "read") return [AuthSettingsWriteScope];
-  const read = ["templates.preview", "templates.detail", "templates.listing", "templates.publication", "templates.adoptions", "templates.adoptionStatus"];
+  const read = [
+    "templates.preview",
+    "templates.detail",
+    "templates.listing",
+    "templates.publication",
+    "templates.adoptions",
+    "templates.adoptionStatus",
+  ];
   const admin = [
     "templates.adopt",
     "templates.installMarketplace",

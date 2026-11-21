@@ -75,6 +75,7 @@ import {
 import { GroupAvatar } from "./upstream/GroupAvatar";
 import { useReturnToCode } from "./useReturnToCode";
 import { chatDayLabels } from "./upstream/chat-day-markers";
+import { T, Var, useGT } from "gt-react-native";
 
 type Host = { environmentId: EnvironmentId; hostId: string };
 type Group = Host & { channelId: string; name?: string };
@@ -87,10 +88,11 @@ export function BotGroupChatRoute({ route }: StaticScreenProps<Group>) {
 export function BotGroupsRoute({
   route,
 }: StaticScreenProps<Host & { channelId?: string; create?: boolean }>) {
+  const gt = useGT();
   const navigation = useNavigation();
   const { environmentId, hostId, channelId, create } = route.params;
   return (
-    <SettingsScreen title={create ? "New group chat" : "Group chats"}>
+    <SettingsScreen title={create ? gt("New group chat") : gt("Group chats")}>
       <ScreenScrollView contentContainerClassName="gap-3 px-5 py-4">
         <BotChannels
           environmentId={environmentId}
@@ -117,6 +119,7 @@ export function BotGroupsRoute({
 }
 
 export function BotGroupChat(props: Group) {
+  const gt = useGT();
   const online = useBotEnvironmentOnline(props.environmentId);
   const host = useEnvironmentQuery(
     online ? openbot.status({ environmentId: props.environmentId, input: {} }) : null,
@@ -135,13 +138,17 @@ export function BotGroupChat(props: Group) {
     <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: palette.canvas }}>
       <NativeStackScreenOptions options={{ headerShown: false }} />
       <BotHeaderRow>
-        <BotIconButton label="Go back" icon="chevron.left" onPress={navigation.goBack} />
-        <Text style={{ color: palette.text }}>{props.name ?? "Group chat"}</Text>
-        <BotIconButton label="Retry connection" icon="arrow.clockwise" onPress={host.refresh} />
+        <BotIconButton label={gt("Go back")} icon="chevron.left" onPress={navigation.goBack} />
+        <Text style={{ color: palette.text }}>{props.name ?? gt("Group chat")}</Text>
+        <BotIconButton
+          label={gt("Retry connection")}
+          icon="arrow.clockwise"
+          onPress={host.refresh}
+        />
       </BotHeaderRow>
       {host.data?.state === "ready" ? (
         <Text accessibilityRole="alert" style={{ padding: 20, color: palette.muted }}>
-          Reconnect to this group’s host.
+          <T>Reconnect to this group’s host.</T>
         </Text>
       ) : (
         <OpenBotTypography>
@@ -158,6 +165,7 @@ export function BotGroupChat(props: Group) {
 }
 
 function GroupConversation({ environmentId, hostId, channelId, name }: Group) {
+  const gt = useGT();
   const focused = useIsFocused();
   const editingQueued = useEditingBotOutbox({
     environmentId,
@@ -217,16 +225,18 @@ function GroupConversation({ environmentId, hostId, channelId, name }: Group) {
       members.find(
         (candidate) => entry.author.kind === "agent" && candidate.agentId === entry.author.id,
       ) ?? members[0];
-    return member && {
-      agentId: member.agentId,
-      source: {
-        kind: "attachment" as const,
-        channelId,
-        messageId: entry.id,
-        attachmentId,
-        beforeSequence: entry.sequence + 1,
-      },
-    };
+    return (
+      member && {
+        agentId: member.agentId,
+        source: {
+          kind: "attachment" as const,
+          channelId,
+          messageId: entry.id,
+          attachmentId,
+          beforeSequence: entry.sequence + 1,
+        },
+      }
+    );
   };
   const visibleItems = useRef<readonly VisibleGroupMessage[]>([]);
   const prefetchView = useRef<(items: readonly VisibleGroupMessage[]) => void>(() => {});
@@ -338,11 +348,11 @@ function GroupConversation({ environmentId, hostId, channelId, name }: Group) {
       <NativeStackScreenOptions options={{ headerShown: false }} />
       <BotHeaderRow>
         <BotGlass>
-          <BotIconButton label="Go back" icon="chevron.left" onPress={navigation.goBack} />
+          <BotIconButton label={gt("Go back")} icon="chevron.left" onPress={navigation.goBack} />
         </BotGlass>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Group info and tasks"
+          accessibilityLabel={gt("Group info and tasks")}
           onPress={openInfo}
           style={{
             flex: 1,
@@ -357,26 +367,26 @@ function GroupConversation({ environmentId, hostId, channelId, name }: Group) {
             numberOfLines={1}
             style={{ color: palette.text, flexShrink: 1, fontSize: 16, fontWeight: "600" }}
           >
-            {c.channel?.name ?? name ?? "Group chat"}
+            {c.channel?.name ?? name ?? gt("Group chat")}
           </Text>
         </Pressable>
         <BotCodeButton onPress={returnToCode} />
         <Menu
           actions={[
-            { id: "info", title: "Group info and tasks" },
-            { id: "refresh", title: "Refresh conversation", attributes: { disabled: c.busy } },
+            { id: "info", title: gt("Group info and tasks") },
+            { id: "refresh", title: gt("Refresh conversation"), attributes: { disabled: c.busy } },
             ...(c.canManage && c.channel
               ? [
                   {
                     id: c.channel.archived ? "restore" : "archive",
-                    title: c.channel.archived ? "Restore chat" : "Delete chat",
+                    title: c.channel.archived ? gt("Restore chat") : gt("Delete chat"),
                     attributes: { destructive: !c.channel.archived, disabled: c.busy },
                   },
                 ]
               : []),
             {
               id: "read",
-              title: "Mark read",
+              title: gt("Mark read"),
               attributes: { disabled: !c.canSettings || !c.throughSequence || c.busy },
             },
           ]}
@@ -387,9 +397,9 @@ function GroupConversation({ environmentId, hostId, channelId, name }: Group) {
               void c.act({ operation: "channel.restore", channelId });
             if (nativeEvent.event === "archive")
               Dialog.confirm({
-                title: "Delete this group chat?",
-                message: "You can restore it from Deleted chats.",
-                confirmText: "Delete chat",
+                title: gt("Delete this group chat?"),
+                message: gt("You can restore it from Deleted chats."),
+                confirmText: gt("Delete chat"),
                 destructive: true,
                 onConfirm: () => void c.act({ operation: "channel.archive", channelId }),
               });
@@ -402,7 +412,7 @@ function GroupConversation({ environmentId, hostId, channelId, name }: Group) {
           }}
         >
           <BotGlass>
-            <BotIconButton label="Group menu" icon="ellipsis" />
+            <BotIconButton label={gt("Group menu")} icon="ellipsis" />
           </BotGlass>
         </Menu>
       </BotHeaderRow>
@@ -441,17 +451,19 @@ function GroupConversation({ environmentId, hostId, channelId, name }: Group) {
                 void c.older();
               }}
             >
-              <Text style={{ textAlign: "center", color: palette.muted }}>Earlier messages</Text>
+              <Text style={{ textAlign: "center", color: palette.muted }}>
+                <T>Earlier messages</T>
+              </Text>
             </Pressable>
           )
         }
         ListEmptyComponent={
           <Text style={{ textAlign: "center", color: palette.muted, marginTop: 32 }}>
             {c.loading
-              ? "Loading conversation…"
+              ? gt("Loading conversation…")
               : c.channel
-                ? "Start a conversation"
-                : "This group is unavailable."}
+                ? gt("Start a conversation")
+                : gt("This group is unavailable.")}
           </Text>
         }
         renderItem={({ item: entry }) => {
@@ -483,13 +495,16 @@ function GroupConversation({ environmentId, hostId, channelId, name }: Group) {
                 own={ownSide}
                 createdAt={message.createdAt}
                 timeOffset={timeOffset}
-                actions={showMessageActionButtons && !streaming && (
-                  <BotIconButton
-                    label="Message actions"
-                    icon="ellipsis"
-                    onPress={() => setActionsId(entry.id)}
-                  />
-                )}
+                actions={
+                  showMessageActionButtons &&
+                  !streaming && (
+                    <BotIconButton
+                      label={gt("Message actions")}
+                      icon="ellipsis"
+                      onPress={() => setActionsId(entry.id)}
+                    />
+                  )
+                }
                 onReply={
                   disabled || streaming || attachments.busy || attachments.attempt
                     ? undefined
@@ -520,7 +535,7 @@ function GroupConversation({ environmentId, hostId, channelId, name }: Group) {
                   >
                     <Text style={{ color: palette.muted, fontSize: 12 }}>
                       {author.name}
-                      {entry.superseded ? " · Earlier attempt" : ""}
+                      {entry.superseded ? gt(" · Earlier attempt") : ""}
                     </Text>
                     {author.kind === "agent" && appearance.showActivity && !!message.trace && (
                       <BotMessageActivity
@@ -660,7 +675,9 @@ function GroupConversation({ environmentId, hostId, channelId, name }: Group) {
           />
         )}
         {c.channel?.archived ? (
-          <Text style={{ color: palette.muted }}>This group is archived.</Text>
+          <Text style={{ color: palette.muted }}>
+            <T>This group is archived.</T>
+          </Text>
         ) : c.channel && !editingQueued ? (
           <>
             {c.reply && (
@@ -670,13 +687,15 @@ function GroupConversation({ environmentId, hostId, channelId, name }: Group) {
                 onPress={() => c.setReply(null)}
               >
                 <Text numberOfLines={1} style={{ color: palette.muted }}>
-                  Replying to {reply?.author.name ?? "an earlier message"} · Cancel
+                  <T>
+                    Replying to <Var>{reply?.author.name ?? gt("an earlier message")}</Var> · Cancel
+                  </T>
                 </Text>
               </Pressable>
             )}
             {attachments.uploading && (
               <Text accessibilityRole="status" style={{ color: palette.muted }}>
-                Attaching…
+                <T>Attaching…</T>
               </Text>
             )}
             {attachments.files.length > 0 && (
@@ -685,7 +704,7 @@ function GroupConversation({ environmentId, hostId, channelId, name }: Group) {
                   <Pressable
                     key={attachment.id}
                     accessibilityRole="button"
-                    accessibilityLabel={`Remove attachment ${attachment.name}`}
+                    accessibilityLabel={gt("Remove attachment {name}", { name: attachment.name })}
                     disabled={attachments.busy || Boolean(attachments.attempt)}
                     onPress={() => attachments.remove(attachment.id)}
                     style={{
@@ -709,9 +728,9 @@ function GroupConversation({ environmentId, hostId, channelId, name }: Group) {
               <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8 }}>
                 <Menu
                   actions={[
-                    { id: "files", title: "Files" },
-                    { id: "photos", title: "Photos" },
-                    { id: "camera", title: "Camera" },
+                    { id: "files", title: gt("Files") },
+                    { id: "photos", title: gt("Photos") },
+                    { id: "camera", title: gt("Camera") },
                   ]}
                   onPressAction={({ nativeEvent }) => {
                     const source = nativeEvent.event;
@@ -727,7 +746,7 @@ function GroupConversation({ environmentId, hostId, channelId, name }: Group) {
                 >
                   <BotGlass>
                     <BotIconButton
-                      label="Add to group message"
+                      label={gt("Add to group message")}
                       icon="plus"
                       disabled={disabled || !attachments.canAttach || !attachmentRecipientAvailable}
                     />
@@ -735,7 +754,7 @@ function GroupConversation({ environmentId, hostId, channelId, name }: Group) {
                 </Menu>
                 <Menu
                   actions={[
-                    { id: "auto", title: "Auto", state: c.recipient ? "off" : "on" },
+                    { id: "auto", title: gt("Auto"), state: c.recipient ? "off" : "on" },
                     ...members.flatMap(({ agentId }) => {
                       const agent = c.agents.find((candidate) => candidate.id === agentId);
                       return agent
@@ -760,14 +779,16 @@ function GroupConversation({ environmentId, hostId, channelId, name }: Group) {
                 >
                   <BotGlass>
                     <BotIconButton
-                      label={recipient ? "Send to " + recipient.name : "Choose recipient · Auto"}
+                      label={
+                        recipient ? "Send to " + recipient.name : gt("Choose recipient · Auto")
+                      }
                       icon="person.2"
                       disabled={attachments.busy || attachments.files.length > 0}
                     />
                   </BotGlass>
                 </Menu>
                 <BotMessageComposer
-                  label="Message to group"
+                  label={gt("Message to group")}
                   text={c.text}
                   onChangeText={c.setText}
                   editable={!disabled && !attachments.attempt && !voice.freezesEditor}
@@ -787,7 +808,7 @@ function GroupConversation({ environmentId, hostId, channelId, name }: Group) {
                     !attachments.attempt &&
                     !attachments.files.length
                   }
-                  voiceLabel={live.available ? "Start voice conversation" : undefined}
+                  voiceLabel={live.available ? gt("Start voice conversation") : undefined}
                   onDictate={
                     live.available
                       ? () => void live.start()

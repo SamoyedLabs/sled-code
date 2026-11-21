@@ -6,6 +6,7 @@ import { LockIcon, ArrowDownIcon } from "lucide-react";
 import { SourcePersonAvatar } from "./SourcePersonAvatar";
 import { personName } from "./directModel";
 import "./People.css";
+import { T, Var, useGT } from "gt-react";
 
 export function SourceDirectConversation({
   member,
@@ -50,6 +51,7 @@ export function SourceDirectConversation({
   onMarkRead: () => void;
   onRefresh: () => void;
 }) {
+  const gt = useGT();
   const list = useRef<HTMLDivElement>(null),
     sticky = useRef(true),
     previousHeight = useRef<{ height: number; first: string | undefined } | null>(null);
@@ -109,7 +111,10 @@ export function SourceDirectConversation({
   };
   const unreadId = readState?.firstUnreadMessageId;
   return (
-    <section className="direct-conversation" aria-label={`Conversation with ${personName(member)}`}>
+    <section
+      className="direct-conversation"
+      aria-label={gt("Conversation with {personName}", { personName: personName(member) })}
+    >
       <header className="direct-conversation-header">
         <div className="direct-conversation-person">
           <SourcePersonAvatar member={member} size={30} />
@@ -117,13 +122,13 @@ export function SourceDirectConversation({
             <h1>{personName(member)}</h1>
             <span className={member.online ? "online" : undefined}>
               <i />
-              {member.online ? "Online" : "Offline"}
+              {member.online ? gt("Online") : gt("Offline")}
             </span>
           </div>
         </div>
         <span className="direct-private-label">
           <LockIcon />
-          Private
+          <T>Private</T>
         </span>
       </header>
       {(readState?.unreadCount ?? 0) > 0 && (
@@ -139,7 +144,9 @@ export function SourceDirectConversation({
               if (!messages.some((message) => message.id === unreadId)) onOpenMessage?.(unreadId);
             }}
           >
-            {readState!.unreadCount} new messages
+            <T>
+              <Var>{readState!.unreadCount}</Var> new messages
+            </T>
           </button>
           <button
             type="button"
@@ -147,7 +154,9 @@ export function SourceDirectConversation({
             disabled={busy || !canSend}
             onClick={onMarkRead}
           >
-            <span className="unread-messages-mark-read-label">Mark as read</span>
+            <span className="unread-messages-mark-read-label">
+              <T>Mark as read</T>
+            </span>
           </button>
         </div>
       )}
@@ -155,7 +164,7 @@ export function SourceDirectConversation({
         ref={list}
         className="direct-message-list"
         role="log"
-        aria-label="Direct messages"
+        aria-label={gt("Direct messages")}
         onScroll={(event) => {
           const element = event.currentTarget;
           sticky.current = element.scrollHeight - element.scrollTop - element.clientHeight <= 80;
@@ -163,12 +172,16 @@ export function SourceDirectConversation({
         }}
       >
         {loading ? (
-          <div className="direct-conversation-state">Loading conversation…</div>
+          <div className="direct-conversation-state">
+            <T>Loading conversation…</T>
+          </div>
         ) : !messages.length ? (
           <div className="direct-conversation-empty">
             <SourcePersonAvatar member={member} size={48} />
             <h2>{personName(member)}</h2>
-            <p>Send a private message to start a conversation.</p>
+            <p>
+              <T>Send a private message to start a conversation.</T>
+            </p>
           </div>
         ) : (
           <>
@@ -183,7 +196,7 @@ export function SourceDirectConversation({
                   onOlder();
                 }}
               >
-                Load older messages
+                <T>Load older messages</T>
               </button>
             )}
             <div
@@ -219,7 +232,9 @@ export function SourceDirectConversation({
                     {message.id === unreadId && (
                       <div className="unread-messages-divider">
                         <hr />
-                        <span>New messages</span>
+                        <span>
+                          <T>New messages</T>
+                        </span>
                         <hr />
                       </div>
                     )}
@@ -255,7 +270,7 @@ export function SourceDirectConversation({
                 <button
                   type="button"
                   className="scroll-to-latest-button"
-                  aria-label="Scroll to latest message"
+                  aria-label={gt("Scroll to latest message")}
                   onClick={latest}
                 >
                   <ArrowDownIcon />
@@ -270,13 +285,13 @@ export function SourceDirectConversation({
           <p className="direct-message-error" role="alert">
             {error}{" "}
             <button type="button" onClick={onRefresh}>
-              Refresh
+              <T>Refresh</T>
             </button>
           </p>
         )}
         {uncertain && (
           <p className="direct-message-error" role="status">
-            Delivery is unconfirmed. Retry uses the same message identity.
+            <T>Delivery is unconfirmed. Retry uses the same message identity.</T>
           </p>
         )}
         <div className="direct-composer">
@@ -284,8 +299,8 @@ export function SourceDirectConversation({
             value={text}
             rows={1}
             maxLength={20_000}
-            aria-label={`Message ${personName(member)}`}
-            placeholder={`Message ${personName(member)}`}
+            aria-label={gt("Message {personName}", { personName: personName(member) })}
+            placeholder={gt("Message {personName}", { personName: personName(member) })}
             disabled={busy || uncertain || !canSend}
             onChange={(event) => onText(event.currentTarget.value)}
             onKeyDown={(event) => {
@@ -303,7 +318,7 @@ export function SourceDirectConversation({
           />
           <button
             type="button"
-            aria-label={uncertain ? "Retry same message" : "Send message"}
+            aria-label={uncertain ? gt("Retry same message") : gt("Send message")}
             disabled={!text.trim() || busy || !canSend}
             onClick={send}
           >

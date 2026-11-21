@@ -20,6 +20,7 @@ import type { ProviderSettingsExecute } from "./SourceHostProviders";
 import { isAgentProvider } from "./identity";
 import { currentText } from "./text";
 import "./CustomProvider.css";
+import { useGT } from "gt-react";
 const { t } = currentText();
 type Endpoint = NonNullable<ReturnType<typeof customProviderEndpoints>>[number];
 export function CustomEndpoints({
@@ -169,6 +170,7 @@ export function CustomProviderDialog({
   onClose: () => void;
   onSave: (input: unknown) => Promise<void>;
 }) {
+  const gt = useGT();
   const [id, setId] = useState(""),
     [name, setName] = useState(""),
     [url, setUrl] = useState(""),
@@ -285,7 +287,7 @@ export function CustomProviderDialog({
               aria-label={t(`customProvider.${kind}.${kind === "model" ? "id" : "name"}`, {
                 number: index + 1,
               })}
-              placeholder={kind === "model" ? "model-id" : "Header-Name"}
+              placeholder={kind === "model" ? "model-id" : gt("Header-Name")}
               value={row.id}
               autoComplete="off"
               spellCheck={false}

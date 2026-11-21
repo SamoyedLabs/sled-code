@@ -21,6 +21,7 @@ import {
   type BotTransferHost,
   type BotTransferSummary,
 } from "./bot-instance-transfer-client";
+import { T, Var, useGT } from "gt-react-native";
 
 type Tab = "home" | "export" | "import" | "copy";
 type Transfer = Awaited<ReturnType<typeof bindBotTransfer>>;
@@ -52,15 +53,16 @@ function useCanTransfer(environmentId: EnvironmentId, hostId: string | null) {
 }
 
 export function BotInstanceTransfer(scope: BotTransferHost) {
+  const gt = useGT();
   const [open, setOpen] = useState(false);
   const available = useCanTransfer(scope.environmentId, scope.hostId);
   if (!available) return null;
   return (
     <>
-      <SettingsSection title="Transfer">
+      <SettingsSection title={gt("Transfer")}>
         <ListRow
           icon="square.and.arrow.up"
-          label="Transfer agents and settings"
+          label={gt("Transfer agents and settings")}
           onPress={() => setOpen(true)}
         />
       </SettingsSection>
@@ -80,6 +82,7 @@ function TransferTarget({
   disabled: boolean;
   onChoose: (target: Target) => void;
 }) {
+  const gt = useGT();
   const { environmentId, label, displayUrl } = environment;
   const status = useEnvironmentQuery(openbot.status({ environmentId, input: {} }));
   const hostId = status.data?.state === "ready" ? (status.data.hostId ?? null) : null;
@@ -90,7 +93,7 @@ function TransferTarget({
       icon="desktopcomputer"
       label={label}
       description={displayUrl ?? undefined}
-      detail={selected?.environmentId === environmentId ? "Selected" : undefined}
+      detail={selected?.environmentId === environmentId ? gt("Selected") : undefined}
       disabled={disabled}
       onPress={() => onChoose({ environmentId, hostId, label })}
     />
@@ -102,6 +105,7 @@ function TransferSheet({
   hostId,
   onClose,
 }: BotTransferHost & { onClose: () => void }) {
+  const gt = useGT();
   const { environments } = useEnvironments();
   const [tab, setTab] = useState<Tab>("home");
   const [summary, setSummary] = useState<BotTransferSummary | null>(null);
@@ -126,7 +130,7 @@ function TransferSheet({
       await action(controller.signal);
     } catch (cause) {
       if (!controller.signal.aborted)
-        setError(cause instanceof Error ? cause.message : "The transfer did not complete.");
+        setError(cause instanceof Error ? cause.message : gt("The transfer did not complete."));
     }
     if (active.current === controller) {
       active.current = null;
@@ -226,7 +230,7 @@ function TransferSheet({
       await (async () => {
         await local.share(signal);
         signal.throwIfAborted();
-        setNotice("Export ready to save or share.");
+        setNotice(gt("Export ready to save or share."));
       })().finally(() => {
         local.dispose();
       });
@@ -309,7 +313,7 @@ function TransferSheet({
       >
         {tab !== "home" && (
           <Button
-            label="Back to Transfer"
+            label={gt("Back to Transfer")}
             tone="text"
             disabled={!editable}
             onPress={() => changeTab("home")}
@@ -324,7 +328,7 @@ function TransferSheet({
         {notice && <Text accessibilityRole="status">{notice}</Text>}
         {!summary && error && (
           <Button
-            label="Retry"
+            label={gt("Retry")}
             tone="secondary"
             disabled={!editable}
             onPress={() => void refresh()}
@@ -332,7 +336,7 @@ function TransferSheet({
         )}
         {tab === "home" && (
           <SettingsSection
-            title="Server transfer"
+            title={gt("Server transfer")}
             footer="Chat history and account sign-ins stay on their original server."
           >
             <ListRow
@@ -359,7 +363,7 @@ function TransferSheet({
         )}
         {tab === "copy" && (
           <SettingsSection
-            title="Destination"
+            title={gt("Destination")}
             footer="Only connected servers that support transfers are listed."
           >
             {candidates.map((environment) => (
@@ -375,7 +379,7 @@ function TransferSheet({
         )}
         {(tab === "export" || tab === "copy") && summary && (
           <SettingsSection
-            title="Agents"
+            title={gt("Agents")}
             footer={
               tab === "copy"
                 ? "Copies include workspace files. Server settings stay on this server."
@@ -393,30 +397,32 @@ function TransferSheet({
               />
             ))}
             {summary.agents.length === 0 && (
-              <Text className="px-4 py-3">No agents to transfer.</Text>
+              <Text className="px-4 py-3">
+                <T>No agents to transfer.</T>
+              </Text>
             )}
           </SettingsSection>
         )}
         {tab === "export" && (
           <>
-            <SettingsSection title="Include">
+            <SettingsSection title={gt("Include")}>
               <SettingsSwitchRow
                 icon="folder"
-                label="Workspace files"
+                label={gt("Workspace files")}
                 value={includeFiles}
                 disabled={!editable}
                 onValueChange={setIncludeFiles}
               />
               <SettingsSwitchRow
                 icon="gearshape"
-                label="Server settings"
+                label={gt("Server settings")}
                 value={includeSettings}
                 disabled={!editable}
                 onValueChange={setIncludeSettings}
               />
             </SettingsSection>
             <Button
-              label="Export ZIP"
+              label={gt("Export ZIP")}
               disabled={!editable || !selected.size}
               onPress={() => void exportArchive()}
             />
@@ -424,7 +430,7 @@ function TransferSheet({
         )}
         {tab === "copy" && (
           <Button
-            label="Copy selected agents"
+            label={gt("Copy selected agents")}
             disabled={!editable || !selected.size || !destination}
             onPress={() => void copy()}
           />
@@ -432,11 +438,11 @@ function TransferSheet({
         {tab === "import" && (
           <>
             {!recovery && (
-              <Button label="Choose ZIP" disabled={!editable} onPress={() => void choose()} />
+              <Button label={gt("Choose ZIP")} disabled={!editable} onPress={() => void choose()} />
             )}
             {review && (
               <>
-                <SettingsSection title="Review agents">
+                <SettingsSection title={gt("Review agents")}>
                   {review.agents.map((agent) => (
                     <SettingsSwitchRow
                       key={agent.key}
@@ -450,7 +456,7 @@ function TransferSheet({
                   {review.hasSettings && (
                     <SettingsSwitchRow
                       icon="gearshape"
-                      label="Import server settings"
+                      label={gt("Import server settings")}
                       value={includeSettings}
                       disabled={!editable}
                       onValueChange={setIncludeSettings}
@@ -461,16 +467,20 @@ function TransferSheet({
                   <Text key={warning}>{warning}</Text>
                 ))}
                 <Button
-                  label="Import selected"
+                  label={gt("Import selected")}
                   disabled={!editable || (!selected.size && !includeSettings)}
                   onPress={() => void importArchive()}
                 />
               </>
             )}
             {receipt?.result && (
-              <SettingsSection title="Import complete">
+              <SettingsSection title={gt("Import complete")}>
                 <View className="gap-2 px-4 py-3">
-                  <Text>{receipt.result.agents.length} agents imported</Text>
+                  <Text>
+                    <T>
+                      <Var>{receipt.result.agents.length}</Var> agents imported
+                    </T>
+                  </Text>
                   {receipt.result.skipped.map((item) => (
                     <Text key={item.key}>
                       {item.name}: {item.reason}
@@ -486,11 +496,13 @@ function TransferSheet({
               (!receipt || receipt.state === "uncertain" || receipt.state === "applying") && (
                 <>
                   <Text>
-                    The original import is unconfirmed. Check its status before starting another
-                    transfer.
+                    <T>
+                      The original import is unconfirmed. Check its status before starting another
+                      transfer.
+                    </T>
                   </Text>
                   <Button
-                    label="Recover transfer status"
+                    label={gt("Recover transfer status")}
                     tone="secondary"
                     disabled={!editable}
                     onPress={() => void refresh()}
@@ -499,7 +511,7 @@ function TransferSheet({
               )}
             {recovery && (review || canClear) && (
               <Button
-                label={review ? "Discard staged import" : "Clear this receipt"}
+                label={review ? gt("Discard staged import") : gt("Clear this receipt")}
                 tone="secondary"
                 disabled={!editable}
                 onPress={() => void dismissReceipt()}

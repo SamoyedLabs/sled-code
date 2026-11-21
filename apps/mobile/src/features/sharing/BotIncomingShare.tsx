@@ -10,6 +10,7 @@ import {
 import { AppText } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
 import type { IncomingShareDraft } from "./incoming-share-model";
+import { T, Var, useGT } from "gt-react-native";
 
 /** Parent supplies authenticated Files ports and the existing inbox. No mount effect sends. */
 export function BotIncomingShare({
@@ -23,6 +24,7 @@ export function BotIncomingShare({
   destinationLabel: string;
   ports: BotSharePorts;
 }) {
+  const gt = useGT();
   const controller = useMemo(
     () => createBotShareTransfer(destination, ports),
     [destination, ports],
@@ -41,7 +43,9 @@ export function BotIncomingShare({
     const result = await settlePromise(action);
     if (result._tag === "Failure") {
       setError(
-        "The last action did not complete. Your share is retained; follow the recovery status below.",
+        gt(
+          "The last action did not complete. Your share is retained; follow the recovery status below.",
+        ),
       );
     }
     setBusy(false);
@@ -49,7 +53,11 @@ export function BotIncomingShare({
   const phase = share.botTransfer?.phase;
   return (
     <View className="gap-3 rounded-xl bg-grouped-card p-3">
-      <AppText>Share with {destinationLabel}</AppText>
+      <AppText>
+        <T>
+          Share with <Var>{destinationLabel}</Var>
+        </T>
+      </AppText>
       <AppText selectable>{share.text}</AppText>
       {share.attachments.map((a) => (
         <AppText key={a.id}>
@@ -60,28 +68,28 @@ export function BotIncomingShare({
         <AppText key={warning}>{warning}</AppText>
       ))}
       <AppText>
-        Staging keeps this share in your inbox. Only Send delivers it to this conversation.
+        <T>Staging keeps this share in your inbox. Only Send delivers it to this conversation.</T>
       </AppText>
       <AppText accessibilityLiveRegion="polite">{recovery.message}</AppText>
       {error && <AppText accessibilityRole="alert">{error}</AppText>}
       <View className="flex-row flex-wrap gap-2">
         <Button
-          label="Stage attachments"
+          label={gt("Stage attachments")}
           disabled={busy || !recovery.canStage}
           onPress={() => void act(controller.stage)}
         />
         <Button
-          label="Send"
+          label={gt("Send")}
           disabled={busy || !recovery.canSend}
           onPress={() => void act(controller.send)}
         />
         <Button
-          label="Reconcile operation"
+          label={gt("Reconcile operation")}
           disabled={busy || !recovery.canReconcile}
           onPress={() => void act(controller.reconcile)}
         />
         <Button
-          label="Cancel staging"
+          label={gt("Cancel staging")}
           disabled={
             busy ||
             recovery.reason === "session-mismatch" ||

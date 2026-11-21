@@ -18,6 +18,7 @@ import {
 } from "@t3tools/client-runtime/openbot/rich-conversation";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { T, useGT } from "gt-react";
 type Props = {
   environmentId: EnvironmentId;
   hostId: string;
@@ -36,6 +37,7 @@ export function BotUiBlock({
   disabled,
   respond,
 }: Props) {
+  const gt = useGT();
   const block = normalizeConversationUiBlock(message.uiBlock);
   const [values, setValues] = useState<Record<string, string | string[]>>(() =>
     blockInitialValues(message.uiBlock),
@@ -44,7 +46,9 @@ export function BotUiBlock({
   const [submitted, setSubmitted] = useState(false);
   if (!block)
     return message.uiBlock == null ? null : (
-      <p>Unsupported UI block. Readonly data is available in the uiBlock details.</p>
+      <p>
+        <T>Unsupported UI block. Readonly data is available in the uiBlock details.</T>
+      </p>
     );
   const { spec } = block;
   const protectedBlock =
@@ -63,7 +67,10 @@ export function BotUiBlock({
   if (spec.type === "form" && spec.fields.some(isSecretFormField))
     return (
       <p>
-        This secret form requires a dedicated secure response path, which is not available here yet.
+        <T>
+          This secret form requires a dedicated secure response path, which is not available here
+          yet.
+        </T>
       </p>
     );
   const prompt = message.questionPrompt;
@@ -114,7 +121,7 @@ export function BotUiBlock({
   return (
     <fieldset disabled={frozen} className="space-y-2 rounded border p-3">
       <legend>
-        {spec.title ?? "Choose a reply"} · {block.state.status}
+        {spec.title ?? gt("Choose a reply")} · {block.state.status}
       </legend>
       {block.state.outcome && <p>{block.state.outcome}</p>}
       {spec.type === "confirm" && (
@@ -131,7 +138,9 @@ export function BotUiBlock({
                   value={String(values[f.select] ?? "")}
                   onChange={(e) => update(f.select, e.target.value)}
                 >
-                  <option value="">Choose…</option>
+                  <option value="">
+                    <T>Choose…</T>
+                  </option>
                   {f.options.map((v) => (
                     <option key={v}>{v}</option>
                   ))}
@@ -166,14 +175,16 @@ export function BotUiBlock({
         spec.fields.map((f) => (
           <label key={f.id} className="block">
             {f.label ?? f.id}
-            {f.required ? " (required)" : ""}
+            {f.required ? gt(" (required)") : ""}
             {"options" in f ? (
               <select
                 aria-label={f.label ?? f.id}
                 value={String(values[f.id] ?? "")}
                 onChange={(e) => update(f.id, e.target.value)}
               >
-                <option value="">Choose…</option>
+                <option value="">
+                  <T>Choose…</T>
+                </option>
                 {f.options.map((v) => (
                   <option key={v}>{v}</option>
                 ))}
@@ -193,9 +204,9 @@ export function BotUiBlock({
         ))}
       {spec.type === "quick_replies" && spec.allowText && (
         <label>
-          Reply in your own words
+          <T>Reply in your own words</T>
           <Input
-            aria-label="Reply in your own words"
+            aria-label={gt("Reply in your own words")}
             value={replyText}
             maxLength={8000}
             onChange={(event) => setReplyText(event.target.value)}
@@ -205,7 +216,7 @@ export function BotUiBlock({
             hostId={hostId}
             command={command("_text")}
             disabled={frozen || !replyText.trim()}
-            label="Send reply"
+            label={gt("Send reply")}
             onPress={() => void send("_text")}
           />
         </label>
@@ -214,7 +225,7 @@ export function BotUiBlock({
         ? spec.actions
         : spec.type === "quick_replies"
           ? spec.options
-          : [{ id: "submit", label: spec.submit ?? "Submit" }]
+          : [{ id: "submit", label: spec.submit ?? gt("Submit") }]
       ).map((a) => {
         const c = command(a.id);
         return (
@@ -236,9 +247,11 @@ export function BotUiBlock({
         );
       })}
       <p className="text-xs">
-        Privileged actions require the original approval owner. Unknown or stale blocks cannot be
-        answered here. Refresh after an uncertain answer; no answer is shown as accepted before the
-        host updates it.
+        <T>
+          Privileged actions require the original approval owner. Unknown or stale blocks cannot be
+          answered here. Refresh after an uncertain answer; no answer is shown as accepted before
+          the host updates it.
+        </T>
       </p>
     </fieldset>
   );

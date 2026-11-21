@@ -26,6 +26,8 @@ import { BotUsageLimits } from "./BotUsageLimits";
 import { BotUsageDateRange } from "./BotUsageDateRange";
 import { UsageChart, useUsageSeriesColor } from "./upstream/BotUsageChart";
 import { BotAvatar } from "./upstream/BotAvatar";
+import { m } from "../../i18n/messages";
+import { msg, useGT } from "gt-react-native";
 
 type Host = { environmentId: EnvironmentId; hostId: string };
 type UsageRange = ReturnType<typeof lastUsageDays>;
@@ -39,33 +41,49 @@ export function BotWorkspaceUtilityRoute({ route }: StaticScreenProps<Utility>) 
 }
 
 export function BotScheduleRoute({ route }: StaticScreenProps<Host>) {
+  const gt = useGT();
   const { environmentId, hostId } = route.params;
   const status = useEnvironmentQuery(openbot.status({ environmentId, input: {} }));
   if (status.data?.state === "ready" && status.data.hostId === hostId)
     return <BotWorkspaceUtility page="routines" environmentId={environmentId} hostId={hostId} />;
   return (
-    <SettingsScreen title="Routines">
+    <SettingsScreen title={gt("Routines")}>
       <ScreenScrollView contentContainerClassName="gap-3 px-5 py-4">
         <Text className="text-foreground-muted">
           {status.error ??
-            (status.isPending ? "Connecting to the bot computer…" : "This bot computer is unavailable.")}
+            (status.isPending
+              ? gt("Connecting to the bot computer…")
+              : gt("This bot computer is unavailable."))}
         </Text>
-        {!status.isPending && <Button label="Retry" size="compact" onPress={status.refresh} />}
+        {!status.isPending && (
+          <Button label={gt("Retry")} size="compact" onPress={status.refresh} />
+        )}
       </ScreenScrollView>
     </SettingsScreen>
   );
 }
 
 function BotWorkspaceUtility({ page, environmentId, hostId, agent }: Utility) {
+  const gt = useGT();
   return (
     <SettingsScreen
-      title={page === "marketplace" ? "Marketplace" : page === "routines" ? "Routines" : agent ? `${agent.name} usage` : "Usage"}
+      title={
+        page === "marketplace"
+          ? gt("Marketplace")
+          : page === "routines"
+            ? gt("Routines")
+            : agent
+              ? `${agent.name} usage`
+              : gt("Usage")
+      }
     >
       <ScreenScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerClassName="gap-4 px-5 py-4"
       >
-        {page === "marketplace" ? <BotMarketplace environmentId={environmentId} hostId={hostId} /> : page === "routines" ? (
+        {page === "marketplace" ? (
+          <BotMarketplace environmentId={environmentId} hostId={hostId} />
+        ) : page === "routines" ? (
           <>
             <BotRoutineCalendar environmentId={environmentId} hostId={hostId} />
             <BotEvents environmentId={environmentId} hostId={hostId} />
@@ -80,15 +98,15 @@ function BotWorkspaceUtility({ page, environmentId, hostId, agent }: Utility) {
 }
 
 const usagePeriods = [
-  { value: 7, label: "7 days" },
-  { value: 30, label: "30 days" },
-  { value: 90, label: "90 days" },
-  { value: 365, label: "1 year" },
+  { value: 7, label: m(msg("7 days")) },
+  { value: 30, label: m(msg("30 days")) },
+  { value: 90, label: m(msg("90 days")) },
+  { value: 365, label: m(msg("1 year")) },
 ] as const;
-const customUsagePeriods = [...usagePeriods, { value: "custom", label: "Custom" }] as const;
+const customUsagePeriods = [...usagePeriods, { value: "custom", label: m(msg("Custom")) }] as const;
 const chartMetrics = [
-  { value: "tokens", label: "Tokens" },
-  { value: "cost", label: "Cost" },
+  { value: "tokens", label: m(msg("Tokens")) },
+  { value: "cost", label: m(msg("Cost")) },
 ] as const;
 
 function isoDay(day: Date) {
@@ -122,6 +140,7 @@ function BotWorkspaceUsage({
   hostId,
   agent,
 }: Host & { agent?: UsageTarget | undefined }) {
+  const gt = useGT();
   const navigation = useNavigation();
   const [period, setPeriod] = useState<UsagePeriod>(agent?.period ?? 30);
   const [range, setRange] = useState(() => agent?.range ?? lastUsageDays(30));
@@ -205,9 +224,9 @@ function BotWorkspaceUsage({
       {report === null ? (
         <View className="gap-2 px-2 py-3">
           <Text accessibilityRole={usage.error ? "alert" : "status"}>
-            {usage.error ?? (usage.isPending ? "Loading usage…" : "Usage is unavailable.")}
+            {usage.error ?? (usage.isPending ? gt("Loading usage…") : gt("Usage is unavailable."))}
           </Text>
-          {usage.error && <Button label="Retry" tone="secondary" onPress={usage.refresh} />}
+          {usage.error && <Button label={gt("Retry")} tone="secondary" onPress={usage.refresh} />}
         </View>
       ) : (
         <>
@@ -216,11 +235,11 @@ function BotWorkspaceUsage({
           </Text>
           <View className="flex-row gap-3">
             <UsageTotal
-              label="Tokens without cache reads"
+              label={gt("Tokens without cache reads")}
               value={number.format(analyticsTokens(report.totals))}
             />
             <UsageTotal
-              label="Estimated cost"
+              label={gt("Estimated cost")}
               value={
                 report.totals.estimatedCostUsd === null
                   ? "Unavailable"
@@ -229,24 +248,24 @@ function BotWorkspaceUsage({
             />
           </View>
           <UsageDaily report={report} />
-          <SettingsSection title="Activity">
-            <UsageRow label="Sessions" value={summarize(report.totals.sessions)} />
-            <UsageRow label="User messages" value={summarize(report.totals.userMessages)} />
+          <SettingsSection title={gt("Activity")}>
+            <UsageRow label={gt("Sessions")} value={summarize(report.totals.sessions)} />
+            <UsageRow label={gt("User messages")} value={summarize(report.totals.userMessages)} />
             <UsageRow
-              label="Assistant messages"
+              label={gt("Assistant messages")}
               value={summarize(report.totals.assistantMessages)}
             />
           </SettingsSection>
-          <SettingsSection title="Token breakdown">
-            <UsageRow label="Uncached input" value={summarize(report.totals.uncachedInput)} />
-            <UsageRow label="Cache reads" value={summarize(report.totals.cachedInput)} />
-            <UsageRow label="Cache writes" value={summarize(report.totals.cacheCreation)} />
-            <UsageRow label="Output" value={summarize(report.totals.output)} />
+          <SettingsSection title={gt("Token breakdown")}>
+            <UsageRow label={gt("Uncached input")} value={summarize(report.totals.uncachedInput)} />
+            <UsageRow label={gt("Cache reads")} value={summarize(report.totals.cachedInput)} />
+            <UsageRow label={gt("Cache writes")} value={summarize(report.totals.cacheCreation)} />
+            <UsageRow label={gt("Output")} value={summarize(report.totals.output)} />
           </SettingsSection>
           {!agent && (
-            <SettingsSection title="Agents">
+            <SettingsSection title={gt("Agents")}>
               {report.agents.length === 0 && (
-                <UsageRow label="No usage recorded for agents" value="" />
+                <UsageRow label={gt("No usage recorded for agents")} value="" />
               )}
               {[...report.agents]
                 .sort((a, b) => analyticsTokens(b) - analyticsTokens(a))
@@ -303,13 +322,15 @@ function BotWorkspaceUsage({
                 })}
             </SettingsSection>
           )}
-          <SettingsSection title="Models">
-            {report.models.length === 0 && <UsageRow label="No model usage recorded" value="" />}
+          <SettingsSection title={gt("Models")}>
+            {report.models.length === 0 && (
+              <UsageRow label={gt("No model usage recorded")} value="" />
+            )}
             {[...report.models]
               .sort((a, b) => analyticsTokens(b) - analyticsTokens(a))
               .map((model) => (
                 <View key={`${model.provider}:${model.model}`} className="gap-1 px-4 py-3">
-                  <Text>{model.model || "Unknown model"}</Text>
+                  <Text>{model.model || gt("Unknown model")}</Text>
                   <Text className="text-xs text-foreground-muted">
                     {model.provider} · {summarize(analyticsTokens(model))} tokens
                     {model.estimatedCostUsd !== null
@@ -326,6 +347,7 @@ function BotWorkspaceUsage({
 }
 
 function UsageDaily({ report }: { report: UsageReport }) {
+  const gt = useGT();
   const [metric, setMetric] = useState<"tokens" | "cost">("tokens");
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const color = useUsageSeriesColor();
@@ -353,7 +375,7 @@ function UsageDaily({ report }: { report: UsageReport }) {
   );
   const measure = day ? (metric === "cost" ? day.estimatedCostUsd : analyticsTokens(day)) : null;
   return (
-    <SettingsSection title="Daily usage">
+    <SettingsSection title={gt("Daily usage")}>
       <View className="gap-3 p-4">
         <SegmentedControl
           options={chartMetrics}
@@ -370,7 +392,7 @@ function UsageDaily({ report }: { report: UsageReport }) {
             metric === "tokens" ? compactTokens(value) : amount.format(value)
           }
           formatDate={(value) => dateFormatter.format(localDay(value)).toUpperCase()}
-          label={metric === "cost" ? "Daily estimated cost chart" : "Daily tokens chart"}
+          label={metric === "cost" ? gt("Daily estimated cost chart") : gt("Daily tokens chart")}
           value={
             day
               ? `${dateFormatter.format(localDay(day.date))}, ${measure === null ? "Unavailable" : amount.format(measure)}`
@@ -391,7 +413,7 @@ function UsageDaily({ report }: { report: UsageReport }) {
                 <View className="size-2 rounded-full" style={{ backgroundColor: series.color }} />
                 <Text className="flex-1 text-xs">{series.key}</Text>
                 <Text className="text-xs text-foreground-muted">
-                  {value == null ? "Unavailable" : amount.format(value)}
+                  {value == null ? gt("Unavailable") : amount.format(value)}
                 </Text>
               </View>
             );

@@ -16,11 +16,13 @@ import { SettingsRow } from "./components/SettingsRow";
 import { SettingsPictureChoice } from "./components/BotSettingsPictureChoice";
 import { ComposerPicture, SwipePicture } from "./components/BotSettingsPictures";
 import { saveBotFeedback, useBotFeedback, useBotReducedMotion } from "../bots/botFeedback";
+import { m } from "../../i18n/messages";
+import { T, msg, useGT } from "gt-react-native";
 
 const swipeActions: readonly { value: BotChatSwipeAction; label: string }[] = [
-  { value: "threads", label: "Threads" },
-  { value: "browser", label: "Browser" },
-  { value: "off", label: "Off" },
+  { value: "threads", label: m(msg("Threads")) },
+  { value: "browser", label: m(msg("Browser")) },
+  { value: "off", label: m(msg("Off")) },
 ];
 const swipePictures = swipeActions.map(({ value, label }) => ({
   value,
@@ -30,12 +32,12 @@ const swipePictures = swipeActions.map(({ value, label }) => ({
 const composerPictures = [
   {
     value: true,
-    label: "Compact",
+    label: m(msg("Compact")),
     picture: (play: number) => <ComposerPicture compact play={play} />,
   },
   {
     value: false,
-    label: "Always full",
+    label: m(msg("Always full")),
     picture: (play: number) => <ComposerPicture compact={false} play={play} />,
   },
 ];
@@ -80,6 +82,7 @@ function ConversationToggle({
 }
 
 export function SettingsBotConversationsRouteScreen() {
+  const gt = useGT();
   const navigation = useNavigation();
   const appearance = useBotChatAppearance();
   const [failed, setFailed] = useState(false);
@@ -94,7 +97,7 @@ export function SettingsBotConversationsRouteScreen() {
     }
   };
   return (
-    <SettingsScreen title="Bot conversations">
+    <SettingsScreen title={gt("Bot conversations")}>
       <ScreenScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerClassName="gap-6 px-5 py-4"
@@ -102,7 +105,7 @@ export function SettingsBotConversationsRouteScreen() {
         <SettingsSection>
           <SettingsRow
             icon="eye.slash"
-            label="Hidden chats"
+            label={gt("Hidden chats")}
             onPress={() =>
               navigation.dispatch(
                 StackActions.push("Bots", { openRoster: true, showHiddenChats: true }),
@@ -110,9 +113,12 @@ export function SettingsBotConversationsRouteScreen() {
             }
           />
         </SettingsSection>
-        <SettingsSection title="Message field" footer="Compact expands as the keyboard opens.">
+        <SettingsSection
+          title={gt("Message field")}
+          footer="Compact expands as the keyboard opens."
+        >
           <SettingsPictureChoice
-            label="Message field"
+            label={gt("Message field")}
             value={feedback.compactComposer && !reducedMotion}
             disabled={reducedMotion}
             options={composerPictures}
@@ -126,9 +132,12 @@ export function SettingsBotConversationsRouteScreen() {
             }}
           />
         </SettingsSection>
-        <SettingsSection title="Swipe left" footer="Choose what opens from a direct bot chat.">
+        <SettingsSection
+          title={gt("Swipe left")}
+          footer="Choose what opens from a direct bot chat."
+        >
           <SettingsPictureChoice
-            label="Swipe left"
+            label={gt("Swipe left")}
             value={appearance.swipeAction}
             options={swipePictures}
             onChange={(swipeAction) => save({ swipeAction })}
@@ -136,27 +145,33 @@ export function SettingsBotConversationsRouteScreen() {
         </SettingsSection>
         <SettingsSection>
           <ConversationToggle
-            label="Pull up for chat info"
-            description="Pull past the latest message to open details for the bot or group."
+            label={gt("Pull up for chat info")}
+            description={gt("Pull past the latest message to open details for the bot or group.")}
             value={appearance.pullInfo}
             onValueChange={(pullInfo) => save({ pullInfo })}
           />
         </SettingsSection>
-        <SettingsSection title="Media">
+        <SettingsSection title={gt("Media")}>
           <ConversationToggle
-            label="Download large files automatically"
-            description="Download visible attachments from 10 to 100 MB while the chat is open."
+            label={gt("Download large files automatically")}
+            description={gt(
+              "Download visible attachments from 10 to 100 MB while the chat is open.",
+            )}
             value={appearance.automaticLargeFiles}
             onValueChange={(automaticLargeFiles) => save({ automaticLargeFiles })}
           />
           <ConversationToggle
-            label="Send photos at full quality"
-            description="Keep the original size and format of photos you attach."
+            label={gt("Send photos at full quality")}
+            description={gt("Keep the original size and format of photos you attach.")}
             value={appearance.fullQualityPhotos}
             onValueChange={(fullQualityPhotos) => save({ fullQualityPhotos })}
           />
         </SettingsSection>
-        {failed && <Text accessibilityRole="alert">Could not save your conversation setting.</Text>}
+        {failed && (
+          <Text accessibilityRole="alert">
+            <T>Could not save your conversation setting.</T>
+          </Text>
+        )}
       </ScreenScrollView>
     </SettingsScreen>
   );

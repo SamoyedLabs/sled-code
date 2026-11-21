@@ -64,12 +64,18 @@ export function GlassCapsule({
   const { theme } = useUniwind();
   const blurFill = String(useCSSVariable("--openbot-bg-chrome-blur"));
   const blurs = ANDROID_BLUR && !liquidGlass && blurTarget !== undefined && !blurPaused;
-  const fallback = isAndroid ? milky : { backgroundColor: String(fallbackBackground), boxShadow: CAPSULE_SHADOW };
+  const fallback = isAndroid
+    ? milky
+    : { backgroundColor: String(fallbackBackground), boxShadow: CAPSULE_SHADOW };
   return (
     <GlassView
       glassEffectStyle={
         animateGlass
-          ? { style: liquidGlass && !glassHidden ? "regular" : "none", animate: true, animationDuration: 0.36 }
+          ? {
+              style: liquidGlass && !glassHidden ? "regular" : "none",
+              animate: true,
+              animationDuration: 0.36,
+            }
           : liquidGlass
             ? "regular"
             : "none"
@@ -105,7 +111,10 @@ export function GlassCapsule({
           ) : null}
           <View
             pointerEvents="none"
-            style={[StyleSheet.absoluteFill, { backgroundColor: blurs ? blurFill : milky.backgroundColor }]}
+            style={[
+              StyleSheet.absoluteFill,
+              { backgroundColor: blurs ? blurFill : milky.backgroundColor },
+            ]}
           />
           <ChromeGlassSheen />
         </>

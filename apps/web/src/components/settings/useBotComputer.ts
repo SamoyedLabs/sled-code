@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { computerCapabilities, computerSetup } from "@t3tools/client-runtime/openbot/presentation";
 import type { ComputerActions } from "@t3tools/client-runtime/openbot/presentation";
+import { m } from "../../i18n/messages";
+import { msg, useGT } from "gt-react";
 
 export function useBotComputer(actions: ComputerActions) {
+  const gt = useGT();
   const generation = useRef(0);
   const active = useRef(true);
   const owned = useRef<{
@@ -41,7 +44,7 @@ export function useBotComputer(actions: ComputerActions) {
       setBusy(false);
       void current
         ?.close()
-        .catch(() => setError("The viewer could not stop. Its server lease will expire."));
+        .catch(() => setError(m(msg("The viewer could not stop. Its server lease will expire."))));
     };
     const changed = () => suspend(!document.hidden);
     changed();
@@ -79,7 +82,7 @@ export function useBotComputer(actions: ComputerActions) {
     if (result._tag === "Failure" || !result.value) {
       setCapabilities(null);
       setSetup(null);
-      setError("The computer request failed. Refresh host capabilities before retrying.");
+      setError(gt("The computer request failed. Refresh host capabilities before retrying."));
     }
     lock.current = false;
     setBusy(false);
@@ -98,7 +101,7 @@ export function useBotComputer(actions: ComputerActions) {
     if (result._tag === "Success") {
       owned.current = result.value;
       setViewer(result.value);
-    } else setError("The computer viewer could not start. Check host setup and retry.");
+    } else setError(gt("The computer viewer could not start. Check host setup and retry."));
     lock.current = false;
     setBusy(false);
   };
@@ -111,7 +114,7 @@ export function useBotComputer(actions: ComputerActions) {
     if (result._tag === "Success") {
       owned.current = null;
       setViewer(null);
-    } else setError("The viewer could not stop. Retry to close your session.");
+    } else setError(gt("The viewer could not stop. Retry to close your session."));
     lock.current = false;
     setBusy(false);
   };

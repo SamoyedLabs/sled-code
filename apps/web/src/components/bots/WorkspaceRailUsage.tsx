@@ -8,8 +8,10 @@ import { openbot } from "../../state/openbot";
 import { OpenbotAccountUsageRail } from "./upstream/provider/OpenbotAccountUsageRail";
 import { Tooltip, TooltipTrigger, TooltipPopup, TooltipProvider } from "./upstream/OpenbotTooltip";
 import "./upstream/provider/AccountUsage.css";
+import { T, useGT } from "gt-react";
 
 export function WorkspaceRailUsage() {
+  const gt = useGT();
   const navigate = useNavigate();
   const { environments } = useEnvironments();
   const primary = usePrimaryEnvironmentId();
@@ -36,19 +38,21 @@ export function WorkspaceRailUsage() {
           <button
             type="button"
             className="workspace-rail-usage-fallback"
-            aria-label="Usage"
+            aria-label={gt("Usage")}
             onClick={openUsage}
           />
         }
       >
         <GaugeIcon className="size-5" aria-hidden="true" />
       </TooltipTrigger>
-      <TooltipPopup side="right">Usage</TooltipPopup>
+      <TooltipPopup side="right">
+        <T>Usage</T>
+      </TooltipPopup>
     </Tooltip>
   );
   return (
     <TooltipProvider>
-      <div className="openbot-react workspace-rail-usage" aria-label="Provider usage">
+      <div className="openbot-react workspace-rail-usage" aria-label={gt("Provider usage")}>
         {environmentId && hostId ? (
           <OpenbotAccountUsageRail
             environmentId={environmentId}

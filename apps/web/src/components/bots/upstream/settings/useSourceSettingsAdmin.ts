@@ -39,7 +39,10 @@ export function useSourceSettingsAdmin(environmentId: EnvironmentId, hostId: str
         : can(request)),
     );
   };
-  const setting = async (operation: OpenbotSettingsRequest["operation"], parameters: Json = {}): Promise<unknown> => {
+  const setting = async (
+    operation: OpenbotSettingsRequest["operation"],
+    parameters: Json = {},
+  ): Promise<unknown> => {
     const request = settingRequest(operation, parameters);
     if (!request || !canSetting(operation, parameters))
       throw new Error("You do not have permission to use this host setting.");

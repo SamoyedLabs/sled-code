@@ -33,14 +33,17 @@ import {
   placeKinds,
   type AddableKind,
 } from "../bots/upstream/workflow-flow-edit";
+import { m } from "../../i18n/messages";
+import { T, Var, msg, useGT } from "gt-react-native";
 
 type Props = { environmentId: EnvironmentId; hostId: string };
 export function BotWorkflows(props: Props) {
+  const gt = useGT();
   const [expanded, setExpanded] = useState(false);
   return (
     <View className="gap-3">
       <Button
-        label={expanded ? "Close workflows" : "Workflows"}
+        label={expanded ? gt("Close workflows") : gt("Workflows")}
         onPress={() => setExpanded(!expanded)}
       />
       {expanded && <WorkflowPanel key={`${props.environmentId}:${props.hostId}`} {...props} />}
@@ -49,11 +52,12 @@ export function BotWorkflows(props: Props) {
 }
 function confirm(title: string, message: string, action: () => void) {
   Dialog.alert(title, message, [
-    { text: "Cancel", style: "cancel" },
-    { text: "Continue", style: "destructive", onPress: action },
+    { text: m(msg("Cancel")), style: "cancel" },
+    { text: m(msg("Continue")), style: "destructive", onPress: action },
   ]);
 }
 function WorkflowPanel({ environmentId, hostId }: Props) {
+  const gt = useGT();
   const controller = useBotWorkflows(environmentId, hostId, Crypto.randomUUID);
   const [title, setTitle] = useState("");
   const [rename, setRename] = useState("");
@@ -83,7 +87,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
     const created = workflowAddNode(graph, kind, id).nodes.find((item) => item.id === id);
     const next = created && insertAtPlace(graph, place, kind, created, Crypto.randomUUID);
     if (!next) {
-      controller.reportError("This step can no longer be added here.");
+      controller.reportError(gt("This step can no longer be added here."));
       return;
     }
     changeGraph(next);
@@ -132,7 +136,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
       before.length > 1 ||
       after.length > 1
     ) {
-      controller.reportError("Move is available for unlocked steps on a single path.");
+      controller.reportError(gt("Move is available for unlocked steps on a single path."));
       setMoving(null);
       return;
     }
@@ -148,7 +152,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
       changeGraph(moved);
       setNodeId(source.id);
       setMoving(null);
-    } else controller.reportError("Choose a compatible connection or path for this step.");
+    } else controller.reportError(gt("Choose a compatible connection or path for this step."));
   };
   const addConnection = () => {
     if (!graph) return;
@@ -162,13 +166,13 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
     if (next) changeGraph(next);
     else
       controller.reportError(
-        "Choose compatible steps and content. A condition needs a Yes or No branch.",
+        gt("Choose compatible steps and content. A condition needs a Yes or No branch."),
       );
   };
   return (
     <View className="gap-4">
       {graph && place && editing && (
-        <Sheet title="Add a step" onClose={() => setPlace(null)}>
+        <Sheet title={gt("Add a step")} onClose={() => setPlace(null)}>
           <ScreenScrollView contentContainerClassName="gap-2 px-5 py-4">
             {placeKinds(graph, place, addableKinds).map((option) => (
               <ListActionRow
@@ -176,9 +180,9 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
                 icon="plus"
                 label={
                   option === "llm"
-                    ? "Model"
+                    ? gt("Model")
                     : option === "agent"
-                      ? "Bot"
+                      ? gt("Bot")
                       : option[0]!.toUpperCase() + option.slice(1)
                 }
                 disabled={disabled}
@@ -186,16 +190,29 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
               />
             ))}
             {placeKinds(graph, place, addableKinds).length === 0 && (
-              <Text className="text-foreground-muted">No supported steps fit here.</Text>
+              <Text className="text-foreground-muted">
+                <T>No supported steps fit here.</T>
+              </Text>
             )}
           </ScreenScrollView>
         </Sheet>
       )}
       <Text className="text-foreground-muted">
-        Workflows connect bots, models and decisions. Runs and schedules stay with this bot engine.
+        <T>
+          Workflows connect bots, models and decisions. Runs and schedules stay with this bot
+          engine.
+        </T>
       </Text>
-      <Button label="Refresh workflows" disabled={controller.busy} onPress={controller.refresh} />
-      {controller.loading && <Text accessibilityLiveRegion="polite">Loading workflows…</Text>}
+      <Button
+        label={gt("Refresh workflows")}
+        disabled={controller.busy}
+        onPress={controller.refresh}
+      />
+      {controller.loading && (
+        <Text accessibilityLiveRegion="polite">
+          <T>Loading workflows…</T>
+        </Text>
+      )}
       {controller.error && (
         <Text accessibilityRole="alert" className="text-danger">
           {controller.error}
@@ -204,13 +221,15 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
       {controller.notice && <Text accessibilityLiveRegion="polite">{controller.notice}</Text>}
       {!controller.canManage && (
         <Text className="text-foreground-muted">
-          Settings permission is required to change workflows.
+          <T>Settings permission is required to change workflows.</T>
         </Text>
       )}
       <View className="gap-2">
-        <Text>New workflow name</Text>
+        <Text>
+          <T>New workflow name</T>
+        </Text>
         <AppTextInput
-          accessibilityLabel="New workflow name"
+          accessibilityLabel={gt("New workflow name")}
           value={title}
           maxLength={160}
           editable={!disabled}
@@ -219,17 +238,23 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
         />
       </View>
       <Button
-        label="Create workflow"
+        label={gt("Create workflow")}
         disabled={disabled || !title.trim() || Boolean(controller.draft)}
         onPress={() => void controller.act({ operation: "workflow.create", title: title.trim() })}
       />
       {controller.workflows?.length === 0 && (
-        <Text className="text-foreground-muted">No workflows yet.</Text>
+        <Text className="text-foreground-muted">
+          <T>No workflows yet.</T>
+        </Text>
       )}
       {controller.workflows?.map((workflow) => (
         <Button
           key={workflow.id}
-          label={`${workflow.title} · ${workflow.steps} steps${workflow.lastRun ? ` · ${workflow.lastRun.status}` : ""}`}
+          label={gt("{title} · {steps} steps{value}", {
+            title: workflow.title,
+            steps: workflow.steps,
+            value: workflow.lastRun ? ` · ${workflow.lastRun.status}` : "",
+          })}
           tone={controller.selected === workflow.id ? "primary" : "secondary"}
           disabled={controller.busy || Boolean(controller.draft)}
           onPress={() => {
@@ -247,18 +272,24 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
             {detail.summary.title}
           </Text>
           <Text className="text-foreground-muted">
-            Revision {detail.revision} · {graph.nodes.length} nodes · {graph.edges.length}{" "}
-            connections
+            <T>
+              Revision <Var>{detail.revision}</Var> · <Var>{graph.nodes.length}</Var> nodes ·{" "}
+              <Var>{graph.edges.length}</Var>
+              <Var> </Var>
+              connections
+            </T>
           </Text>
           {!workflowEditable(graph) && (
             <Text accessibilityLiveRegion="polite">
-              This workflow includes a newer node or connection type. Inspect it here; update Sled
-              before editing.
+              <T>
+                This workflow includes a newer node or connection type. Inspect it here; update Sled
+                before editing.
+              </T>
             </Text>
           )}
           {!controller.draft && (
             <Button
-              label="Edit workflow"
+              label={gt("Edit workflow")}
               disabled={disabled || !workflowEditable(graph)}
               onPress={() => controller.setDraft(workflowDraft(detail))}
             />
@@ -266,19 +297,19 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
           {controller.draft && (
             <View className="gap-2">
               <Button
-                label="Save workflow"
+                label={gt("Save workflow")}
                 disabled={disabled || !editing || Boolean(controller.draft.conflict)}
                 onPress={controller.save}
               />
               <Button
-                label="Discard draft"
+                label={gt("Discard draft")}
                 disabled={controller.busy}
                 onPress={() => controller.setDraft(null)}
               />
             </View>
           )}
           <Button
-            label="Run workflow"
+            label={gt("Run workflow")}
             disabled={
               controller.busy ||
               !controller.canRun ||
@@ -288,12 +319,12 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
             onPress={() => controller.start("workflow.startRun")}
           />
           <Button
-            label="Delete workflow"
+            label={gt("Delete workflow")}
             tone="danger"
             disabled={disabled || Boolean(controller.draft)}
             onPress={() =>
               confirm(
-                `Delete ${detail.summary.title}?`,
+                gt("Delete {title}?", { title: detail.summary.title }),
                 "This removes the workflow and its history.",
                 () =>
                   void controller.act({
@@ -305,17 +336,19 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
           />
           {!workflowExecutable(graph) && workflowEditable(graph) && (
             <Text accessibilityLiveRegion="polite">
-              This graph includes a step that this upstream engine cannot run yet.
+              <T>This graph includes a step that this upstream engine cannot run yet.</T>
             </Text>
           )}
           {controller.draft && controller.draft.baseRevision !== detail.revision && (
             <Text accessibilityLiveRegion="polite">
-              The server has a newer revision. Your draft is retained.
+              <T>The server has a newer revision. Your draft is retained.</T>
             </Text>
           )}
           {controller.draft?.conflict && (
             <Button
-              label={`Discard my changes and use server revision ${controller.draft.conflict.revision}`}
+              label={gt("Discard my changes and use server revision {revision}", {
+                revision: controller.draft.conflict.revision,
+              })}
               disabled={controller.busy}
               onPress={() => {
                 const conflict = controller.draft?.conflict;
@@ -325,12 +358,12 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
           )}
           <View className="flex-row gap-2">
             <Button
-              label="Flow"
+              label={gt("Flow")}
               tone={view === "flow" ? "primary" : "secondary"}
               onPress={() => setView("flow")}
             />
             <Button
-              label="List"
+              label={gt("List")}
               tone={view === "list" ? "primary" : "secondary"}
               onPress={() => setView("list")}
             />
@@ -340,9 +373,11 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
               {moving && (
                 <View className="flex-row items-center gap-2">
                   <Text className="flex-1">
-                    Choose where to move {workflowNodeTitle(graph, moving)}.
+                    <T>
+                      Choose where to move <Var>{workflowNodeTitle(graph, moving)}</Var>.
+                    </T>
                   </Text>
-                  <Button label="Cancel move" onPress={() => setMoving(null)} />
+                  <Button label={gt("Cancel move")} onPress={() => setMoving(null)} />
                 </View>
               )}
               <BotWorkflowFlow
@@ -364,7 +399,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
           )}
           {view === "list" && (
             <Picker
-              label="Workflow step"
+              label={gt("Workflow step")}
               value={nodeId}
               options={graph.nodes.map((item) => ({
                 id: item.id,
@@ -376,12 +411,16 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
           )}
           {node && (
             <View className="gap-3">
-              {node.locked && <Text className="text-foreground-muted">This step is locked.</Text>}
+              {node.locked && (
+                <Text className="text-foreground-muted">
+                  <T>This step is locked.</T>
+                </Text>
+              )}
               {Object.entries(node.fields).map(([field, value]) => (
                 <View key={field} className="gap-2">
                   {field === "agentId" && typeof value === "string" ? (
                     <Picker
-                      label="Assigned bot"
+                      label={gt("Assigned bot")}
                       value={value}
                       options={controller.agents.map((bot) => ({ id: bot.id, name: bot.name }))}
                       disabled={!editing || disabled || Boolean(node.locked)}
@@ -426,7 +465,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
               ))}
               {editing && (
                 <Button
-                  label={node.locked ? "Unlock step" : "Lock step"}
+                  label={node.locked ? gt("Unlock step") : gt("Lock step")}
                   disabled={disabled}
                   onPress={() =>
                     changeGraph({
@@ -440,12 +479,14 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
               )}
               {node.schedule !== undefined && (
                 <Text className="text-foreground-muted">
-                  This trigger has a saved schedule. Its complete settings are retained when editing
-                  other fields.
+                  <T>
+                    This trigger has a saved schedule. Its complete settings are retained when
+                    editing other fields.
+                  </T>
                 </Text>
               )}
               <Button
-                label="Run this step"
+                label={gt("Run this step")}
                 disabled={
                   controller.busy ||
                   !controller.canRun ||
@@ -455,7 +496,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
                 onPress={() => controller.start("workflow.runStep", node.id)}
               />
               <Button
-                label="Remove step"
+                label={gt("Remove step")}
                 tone="danger"
                 disabled={!editing || disabled || Boolean(node.locked)}
                 onPress={() => changeGraph(workflowRemoveNode(graph, node.id))}
@@ -465,7 +506,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
           {editing && (
             <View className="gap-3">
               <Picker
-                label="New step type"
+                label={gt("New step type")}
                 value={kind}
                 options={WORKFLOW_NODE_CHOICES.filter(
                   (value) => value !== "asset" && value !== "image",
@@ -477,7 +518,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
                 onChange={setKind}
               />
               <Button
-                label="Add step"
+                label={gt("Add step")}
                 disabled={disabled}
                 onPress={() => {
                   const id = Crypto.randomUUID();
@@ -496,7 +537,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
               </Text>
               {editing && (
                 <Button
-                  label="Disconnect"
+                  label={gt("Disconnect")}
                   disabled={disabled}
                   onPress={() =>
                     changeGraph({
@@ -511,7 +552,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
           {editing && (
             <View className="gap-3">
               <Picker
-                label="Connect from"
+                label={gt("Connect from")}
                 value={from}
                 options={graph.nodes.map((item) => ({
                   id: item.id,
@@ -521,7 +562,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
                 onChange={setFrom}
               />
               <Picker
-                label="Connect to"
+                label={gt("Connect to")}
                 value={to}
                 options={graph.nodes.map((item) => ({
                   id: item.id,
@@ -531,14 +572,14 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
                 onChange={setTo}
               />
               <Picker
-                label="Connection content"
+                label={gt("Connection content")}
                 value={port}
                 options={["text", "image", "file"].map((value) => ({ id: value, name: value }))}
                 disabled={disabled}
                 onChange={setPort}
               />
               <Picker
-                label="Condition branch"
+                label={gt("Condition branch")}
                 value={branch}
                 options={[
                   { id: "none", name: "No condition" },
@@ -549,7 +590,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
                 onChange={setBranch}
               />
               <Button
-                label="Connect steps"
+                label={gt("Connect steps")}
                 disabled={disabled || !from || !to}
                 onPress={addConnection}
               />
@@ -558,17 +599,21 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
           {detail.triggers.map((trigger) => (
             <Text key={trigger.nodeId} selectable>
               {workflowNodeTitle(graph, trigger.nodeId)} · {trigger.type}
-              {trigger.nextDueAt ? ` · next ${trigger.nextDueAt}` : ""}
+              {trigger.nextDueAt ? gt(" · next {nextDueAt}", { nextDueAt: trigger.nextDueAt }) : ""}
               {trigger.webhookUrl ? ` · ${trigger.webhookUrl}` : ""}
             </Text>
           ))}
           <Text accessibilityRole="header" className="font-t3-medium">
-            Runs
+            <T>Runs</T>
           </Text>
           {controller.runs?.runs.map((run) => (
             <Button
               key={run.run.id}
-              label={`Run ${run.run.number} · ${run.run.status} · ${run.run.startedAt}`}
+              label={gt("Run {number} · {status} · {startedAt}", {
+                number: run.run.number,
+                status: run.run.status,
+                startedAt: run.run.startedAt,
+              })}
               disabled={controller.busy}
               onPress={() => {
                 controller.inspectRun(run.run.id);
@@ -578,9 +623,13 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
             />
           ))}
           <View className="gap-2">
-            <Button label="Newest runs" disabled={controller.busy} onPress={controller.newest} />
             <Button
-              label="Older runs"
+              label={gt("Newest runs")}
+              disabled={controller.busy}
+              onPress={controller.newest}
+            />
+            <Button
+              label={gt("Older runs")}
               disabled={controller.busy || !controller.runs?.nextBefore}
               onPress={controller.older}
             />
@@ -588,7 +637,10 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
           {controller.activeRun && (
             <View className="gap-3">
               <Text>
-                Run {controller.activeRun.run.number} · {controller.activeRun.run.status}
+                <T>
+                  Run <Var>{controller.activeRun.run.number}</Var> ·{" "}
+                  <Var>{controller.activeRun.run.status}</Var>
+                </T>
               </Text>
               {controller.activeRun.run.error && (
                 <Text accessibilityRole="alert" className="text-danger">
@@ -597,7 +649,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
               )}
               {workflowRunCanStop(controller.activeRun.run.status) && (
                 <Button
-                  label="Stop run"
+                  label={gt("Stop run")}
                   disabled={controller.busy || !controller.canRun}
                   onPress={() => {
                     if (controller.activeRun)
@@ -622,7 +674,10 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
               ).map((step) => (
                 <View key={step.id} className="gap-2">
                   <Text>
-                    {workflowNodeTitle(graph, step.nodeId)} · {step.status} · attempt {step.attempt}
+                    <T>
+                      <Var>{workflowNodeTitle(graph, step.nodeId)}</Var> · <Var>{step.status}</Var>{" "}
+                      · attempt <Var>{step.attempt}</Var>
+                    </T>
                   </Text>
                   {step.output && <Text selectable>{step.output}</Text>}
                   {step.error && (
@@ -633,7 +688,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
                   {step.status === "approval" && (
                     <View className="gap-2">
                       <Button
-                        label="Approve step"
+                        label={gt("Approve step")}
                         disabled={controller.busy || !controller.canRun}
                         onPress={() =>
                           void controller.act({
@@ -644,7 +699,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
                         }
                       />
                       <Button
-                        label="Decline step"
+                        label={gt("Decline step")}
                         disabled={controller.busy || !controller.canRun}
                         onPress={() =>
                           void controller.act({
@@ -658,7 +713,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
                   )}
                   {workflowRunCanStop(step.status) && (
                     <Button
-                      label="Stop step"
+                      label={gt("Stop step")}
                       disabled={controller.busy || !controller.canRun}
                       onPress={() =>
                         void controller.act({ operation: "workflow.stopStep", stepId: step.id })
@@ -667,7 +722,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
                   )}
                   {["failed", "stopped"].includes(step.status) && (
                     <Button
-                      label="Retry step"
+                      label={gt("Retry step")}
                       disabled={controller.busy || !controller.canRun}
                       onPress={() => controller.start("workflow.retryStep", step.id)}
                     />
@@ -675,17 +730,25 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
                 </View>
               ))}
               {view === "list" && controller.activeRun.steps.length > shownSteps && (
-                <Button label="Show more steps" onPress={() => setShownSteps(shownSteps + 25)} />
+                <Button
+                  label={gt("Show more steps")}
+                  onPress={() => setShownSteps(shownSteps + 25)}
+                />
               )}
             </View>
           )}
           {Boolean(controller.runs?.soloSteps.length) && (
             <View className="gap-3">
-              <Text accessibilityRole="header">Individual steps</Text>
+              <Text accessibilityRole="header">
+                <T>Individual steps</T>
+              </Text>
               {controller.runs?.soloSteps.map((step) => (
                 <View key={step.id} className="gap-2">
                   <Text>
-                    {workflowNodeTitle(graph, step.nodeId)} · {step.status} · attempt {step.attempt}
+                    <T>
+                      <Var>{workflowNodeTitle(graph, step.nodeId)}</Var> · <Var>{step.status}</Var>{" "}
+                      · attempt <Var>{step.attempt}</Var>
+                    </T>
                   </Text>
                   {step.output && <Text selectable>{step.output}</Text>}
                   {step.error && (
@@ -696,7 +759,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
                   {step.status === "approval" && (
                     <View className="gap-2">
                       <Button
-                        label="Approve step"
+                        label={gt("Approve step")}
                         disabled={controller.busy || !controller.canRun}
                         onPress={() =>
                           void controller.act({
@@ -707,7 +770,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
                         }
                       />
                       <Button
-                        label="Decline step"
+                        label={gt("Decline step")}
                         disabled={controller.busy || !controller.canRun}
                         onPress={() =>
                           void controller.act({
@@ -721,7 +784,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
                   )}
                   {workflowRunCanStop(step.status) && (
                     <Button
-                      label="Stop step"
+                      label={gt("Stop step")}
                       disabled={controller.busy || !controller.canRun}
                       onPress={() =>
                         void controller.act({ operation: "workflow.stopStep", stepId: step.id })
@@ -730,7 +793,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
                   )}
                   {["failed", "stopped"].includes(step.status) && (
                     <Button
-                      label="Retry step"
+                      label={gt("Retry step")}
                       disabled={controller.busy || !controller.canRun}
                       onPress={() => controller.start("workflow.retryStep", step.id)}
                     />
@@ -740,9 +803,11 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
             </View>
           )}
           <View className="gap-2">
-            <Text>Rename workflow</Text>
+            <Text>
+              <T>Rename workflow</T>
+            </Text>
             <AppTextInput
-              accessibilityLabel="Rename workflow"
+              accessibilityLabel={gt("Rename workflow")}
               value={rename}
               editable={!disabled && !controller.draft}
               placeholder={detail.summary.title}
@@ -751,7 +816,7 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
               className="rounded-xl border border-border bg-grouped-card p-3 text-foreground"
             />
             <Button
-              label="Rename workflow"
+              label={gt("Rename workflow")}
               disabled={disabled || Boolean(controller.draft) || !rename.trim()}
               onPress={() =>
                 void controller.act({
@@ -763,24 +828,27 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
             />
           </View>
           <Text accessibilityRole="header" className="font-t3-medium">
-            Saved versions
+            <T>Saved versions</T>
           </Text>
           {controller.versions?.map((version) => (
             <View key={version.id} className="gap-2">
               <Text>
-                Revision {version.revision} · {version.kind} · {version.at}
+                <T>
+                  Revision <Var>{version.revision}</Var> · <Var>{version.kind}</Var> ·{" "}
+                  <Var>{version.at}</Var>
+                </T>
               </Text>
               <Button
-                label="Inspect version"
+                label={gt("Inspect version")}
                 disabled={controller.busy}
                 onPress={() => controller.inspectVersion(version.id)}
               />
               <Button
-                label="Restore version"
+                label={gt("Restore version")}
                 disabled={disabled || Boolean(controller.draft)}
                 onPress={() =>
                   confirm(
-                    `Restore revision ${version.revision}?`,
+                    gt("Restore revision {revision}?", { revision: version.revision }),
                     "The current workflow will be kept in version history.",
                     () =>
                       void controller.act({
@@ -796,8 +864,12 @@ function WorkflowPanel({ environmentId, hostId }: Props) {
           {versionGraph && (
             <View className="gap-2">
               <Text accessibilityRole="header">
-                Saved version · {versionGraph.nodes.length} nodes · {versionGraph.edges.length}{" "}
-                connections
+                <T>
+                  Saved version · <Var>{versionGraph.nodes.length}</Var> nodes ·{" "}
+                  <Var>{versionGraph.edges.length}</Var>
+                  <Var> </Var>
+                  connections
+                </T>
               </Text>
               {versionGraph.nodes.map((item) => (
                 <Text key={item.id} selectable>

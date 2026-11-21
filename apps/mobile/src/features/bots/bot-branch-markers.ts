@@ -1,7 +1,4 @@
-import {
-  OpenbotThreadBranchLink,
-  type OpenbotConversationMessage,
-} from "@t3tools/contracts";
+import { OpenbotThreadBranchLink, type OpenbotConversationMessage } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
 export type BotThreadBranch = {
@@ -93,8 +90,7 @@ export function botBranchPointIds(
       streamingAfter = true;
     }
   }
-  const ended =
-    candidate?.turnId === undefined ? !activeTurnId : candidate.turnId !== activeTurnId;
+  const ended = candidate?.turnId === undefined ? !activeTurnId : candidate.turnId !== activeTurnId;
   if (candidate && ended && !streamingAfter) ids.add(candidate.id);
   return ids;
 }

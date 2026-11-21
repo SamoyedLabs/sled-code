@@ -6,6 +6,7 @@ import { SourcePersonAvatar } from "./SourcePersonAvatar";
 import { personName } from "./directModel";
 import type { SidebarDragSource } from "./openbotSidebarDrag";
 import "./People.css";
+import { T, Var, useGT } from "gt-react";
 export type SidebarPeople = {
   members: readonly OpenbotPerson[];
   selfId: string | null;
@@ -42,12 +43,13 @@ export function SidebarPeopleSection({
   offsets: Readonly<Record<string, { x: number; y: number }>>;
   draggingId: string | null;
 }) {
+  const gt = useGT();
   const threads = new Map(people.threads.map((thread) => [thread.otherMemberId, thread]));
   return (
     <section
       className="sidebar-chat-group sidebar-section"
       data-section-id="people"
-      aria-label="People"
+      aria-label={gt("People")}
     >
       <header>
         <button
@@ -60,7 +62,9 @@ export function SidebarPeopleSection({
           onDragStart={(event) => onStartDrag(event, { kind: "section", id: "people" })}
           onDragEnd={onEndDrag}
         >
-          <span className="sidebar-section-name">People</span>
+          <span className="sidebar-section-name">
+            <T>People</T>
+          </span>
           <ChevronDownIcon
             className={`sidebar-section-chevron${closed ? " sidebar-section-chevron-collapsed" : ""}`}
           />
@@ -118,7 +122,13 @@ export function SidebarPeopleSection({
                     </span>
                     <span className="agent-row-preview">{preview}</span>
                   </span>
-                  {unread > 0 && <span className="sr-only">{unread} unread messages</span>}
+                  {unread > 0 && (
+                    <span className="sr-only">
+                      <T>
+                        <Var>{unread}</Var> unread messages
+                      </T>
+                    </span>
+                  )}
                 </button>
               </div>
             );

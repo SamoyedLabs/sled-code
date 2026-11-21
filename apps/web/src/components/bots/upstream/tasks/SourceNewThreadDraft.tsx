@@ -34,6 +34,7 @@ import {
   type NewThreadAttempt,
 } from "./newThreadDraft";
 import "../../../settings/bot-conversation.css";
+import { T, useGT } from "gt-react";
 const decodeCreated = Schema.decodeUnknownResult(
   Schema.Struct({
     id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
@@ -68,6 +69,7 @@ function NewThreadDraft({
   onCancel,
   onOutcomePendingChange,
 }: SourceNewThreadDraftProps) {
+  const gt = useGT();
   const scope = JSON.stringify([environmentId, hostId, agentId]);
   const [attempt, setAttempt] = useState<NewThreadAttempt | null>(() => {
     try {
@@ -165,7 +167,7 @@ function NewThreadDraft({
         setError(
           cause instanceof Error
             ? cause.message
-            : "The original sign-in could not be verified. No task was started.",
+            : gt("The original sign-in could not be verified. No task was started."),
         );
         setBusy(false);
       }
@@ -192,7 +194,7 @@ function NewThreadDraft({
         /* Browser storage access itself can be refused. */
       }
       if (!saved) {
-        setError("The start request could not be saved for recovery. No task was started.");
+        setError(gt("The start request could not be saved for recovery. No task was started."));
         lock.current = false;
         setBusy(false);
         return;
@@ -243,14 +245,18 @@ function NewThreadDraft({
       if (result._tag === "Failure") {
         if (alive.current)
           setError(
-            `${String(squashAtomCommandFailure(result))} Retry to check whether the thread started.`,
+            gt("{String} Retry to check whether the thread started.", {
+              String: String(squashAtomCommandFailure(result)),
+            }),
           );
         return;
       }
       const created = decodeCreated(result.value);
       if (!Result.isSuccess(created) || created.success.agentId !== agentId) {
         if (alive.current)
-          setError("The host did not confirm the new thread. Retry to check whether it started.");
+          setError(
+            gt("The host did not confirm the new thread. Retry to check whether it started."),
+          );
         return;
       }
       if (!alive.current || readPreparedConnection(environmentId) !== connection) return;
@@ -269,20 +275,25 @@ function NewThreadDraft({
     if (settled._tag === "Failure" && alive.current) {
       const cause = squashAtomCommandFailure(settled);
       setError(
-        `${cause instanceof Error ? cause.message : "The connection ended before the start was confirmed."} Retry checks the same request.`,
+        gt("{value} Retry checks the same request.", {
+          value:
+            cause instanceof Error
+              ? cause.message
+              : "The connection ended before the start was confirmed.",
+        }),
       );
     }
     lock.current = false;
     if (alive.current) setBusy(false);
   }
   return (
-    <section className="ob-chat" data-workspace aria-label="New thread" aria-busy={busy}>
+    <section className="ob-chat" data-workspace aria-label={gt("New thread")} aria-busy={busy}>
       <div className="ob-chat-utilities">
         {onCancel && (
           <button
             type="button"
             className="ob-chat-action-button"
-            aria-label="Close new thread"
+            aria-label={gt("Close new thread")}
             disabled={busy || attempt !== null}
             onClick={onCancel}
           >
@@ -291,7 +302,9 @@ function NewThreadDraft({
         )}
       </div>
       <div className="ob-chat-scroll">
-        <p className="ob-chat-history-status">Start a new thread with this agent.</p>
+        <p className="ob-chat-history-status">
+          <T>Start a new thread with this agent.</T>
+        </p>
       </div>
       {(error || uploads.error) && (
         <p role="alert" className="ob-chat-history-status">
@@ -300,7 +313,7 @@ function NewThreadDraft({
       )}
       {!permission && (
         <p role="status" className="ob-chat-history-status">
-          Chat permission is required to start a thread.
+          <T>Chat permission is required to start a thread.</T>
         </p>
       )}
       <div className="ob-chat-composer-wrap">
@@ -342,7 +355,7 @@ function NewThreadDraft({
           />
           {uploads.busy && (
             <p role="status" className="ob-chat-history-status">
-              Uploading files…
+              <T>Uploading files…</T>
             </p>
           )}
           <BotComposerInput>
@@ -354,7 +367,7 @@ function NewThreadDraft({
               onChange={publish}
               onSubmit={() => void submit()}
               disabled={!permission || busy || attempt !== null}
-              placeholder="Message…"
+              placeholder={gt("Message…")}
               attachments={selectedFiles.map((file) => ({ id: file.id, name: file.name }))}
               onFiles={
                 uploads.available
@@ -377,7 +390,7 @@ function NewThreadDraft({
                   disabled={!permission || busy || attempt !== null}
                 />
                 <BotComposerSend
-                  aria-label={attempt ? "Retry thread start" : "Start thread"}
+                  aria-label={attempt ? gt("Retry thread start") : gt("Start thread")}
                   busy={busy}
                   disabled={
                     !permission ||
@@ -394,7 +407,7 @@ function NewThreadDraft({
             <ComposerControl
               type="button"
               className="size-8 px-0"
-              aria-label="Attach files"
+              aria-label={gt("Attach files")}
               disabled={!permission || !uploads.available || !canSendFiles}
               onClick={() => fileInput.current?.click()}
             >

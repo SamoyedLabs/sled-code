@@ -8,7 +8,9 @@ import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../../components/ui/Button";
 import { AppText as Text } from "../../components/ui/AppText";
+import { T, Var, useGT } from "gt-react-native";
 export function OpenbotContinuity({ environmentId }: { environmentId: EnvironmentId }) {
+  const gt = useGT();
   const query = useEnvironmentQuery(openbot.continuity({ environmentId, input: {} }));
   const command = useAtomCommand(openbot.continuityCommand);
   const allowed = useAtomValue(openbot.continuityCommand.permissionAtom(environmentId));
@@ -27,41 +29,63 @@ export function OpenbotContinuity({ environmentId }: { environmentId: Environmen
   }
   return (
     <View className="gap-2">
-      <Text className="font-semibold">Bot background notifications</Text>
+      <Text className="font-semibold">
+        <T>Bot background notifications</T>
+      </Text>
       <Text>
-        Receive reminders, results and requests on your linked mobile account. Device notifications
-        must also be enabled.
+        <T>
+          Receive reminders, results and requests on your linked mobile account. Device
+          notifications must also be enabled.
+        </T>
       </Text>
       {query.data && (
         <>
           <Text>
-            {query.data.enabled ? "Enabled for this session" : "Disabled for this session"} ·{" "}
+            {query.data.enabled ? gt("Enabled for this session") : gt("Disabled for this session")}{" "}
+            ·{" "}
             {query.data.transport === "configured"
-              ? "Relay configured"
+              ? gt("Relay configured")
               : query.data.transport === "unsupported"
-                ? "This relay does not support bot notifications"
-                : "A notification relay and linked account are required"}
+                ? gt("This relay does not support bot notifications")
+                : gt("A notification relay and linked account are required")}
           </Text>
           <Text>
-            {query.data.pending} pending · {query.data.delivered} accepted by delivery transport ·{" "}
-            {query.data.revoked} stopped after access changed
+            <T>
+              <Var>{query.data.pending}</Var> pending · <Var>{query.data.delivered}</Var> accepted
+              by delivery transport ·<Var> </Var>
+              <Var>{query.data.revoked}</Var> stopped after access changed
+            </T>
           </Text>
           <Button
-            label={query.data.enabled ? "Disable notifications" : "Enable notifications"}
+            label={query.data.enabled ? gt("Disable notifications") : gt("Enable notifications")}
             disabled={busy || !allowed}
             onPress={() => void send({ action: "configure", enabled: !query.data?.enabled })}
           />
           <Button
-            label="Retry pending"
+            label={gt("Retry pending")}
             disabled={busy || !allowed}
             onPress={() => void send({ action: "retry" })}
           />
-          {query.data.lastError && <Text>Delivery: {query.data.lastError}</Text>}
+          {query.data.lastError && (
+            <Text>
+              <T>
+                Delivery: <Var>{query.data.lastError}</Var>
+              </T>
+            </Text>
+          )}
         </>
       )}
-      {query.isPending && <Text accessibilityRole="status">Loading notification status…</Text>}
+      {query.isPending && (
+        <Text accessibilityRole="status">
+          <T>Loading notification status…</T>
+        </Text>
+      )}
       {(error || query.error) && <Text accessibilityRole="alert">{error || query.error}</Text>}
-      <Button label="Refresh notifications" onPress={query.refresh} disabled={query.isPending} />
+      <Button
+        label={gt("Refresh notifications")}
+        onPress={query.refresh}
+        disabled={query.isPending}
+      />
     </View>
   );
 }

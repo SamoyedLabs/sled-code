@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import "./settings-adapter.css";
 import "./SettingsParts";
+import { m } from "../../../../i18n/messages";
+import { msg, useGT } from "gt-react";
 export type AppSettingsTab =
   | "general"
   | "agents"
@@ -35,72 +37,79 @@ export const appSettingsSections: readonly {
 }[] = [
   {
     id: "general",
-    title: "General",
-    description: "Control how OpenBot behaves on this computer.",
+    title: m(msg("General")),
+    description: m(msg("Control how OpenBot behaves on this computer.")),
     icon: Settings,
   },
   {
     id: "agents",
-    title: "Agents",
-    description:
-      "Choose what the agents on this computer can do when you do not set it for an agent.",
+    title: m(msg("Agents")),
+    description: m(
+      msg("Choose what the agents on this computer can do when you do not set it for an agent."),
+    ),
     icon: Bot,
   },
   {
     id: "profile",
-    title: "Profile",
-    description: "Manage how you appear in OpenBot.",
+    title: m(msg("Profile")),
+    description: m(msg("Manage how you appear in OpenBot.")),
     icon: UserRound,
   },
   {
     id: "notifications",
-    title: "Notifications",
-    description: "Choose how OpenBot alerts you.",
+    title: m(msg("Notifications")),
+    description: m(msg("Choose how OpenBot alerts you.")),
     icon: Bell,
   },
   {
     id: "voice",
-    title: "Voice",
-    description:
-      "Dictation in the message box. Local models run on this computer; ElevenLabs runs in the cloud.",
+    title: m(msg("Voice")),
+    description: m(
+      msg(
+        "Dictation in the message box. Local models run on this computer; ElevenLabs runs in the cloud.",
+      ),
+    ),
     icon: Mic,
   },
   {
     id: "dynamic-island",
-    title: "Dynamic Island",
-    description: "Choose when the island shows and how large it is.",
+    title: m(msg("Dynamic Island")),
+    description: m(msg("Choose when the island shows and how large it is.")),
     icon: PanelTop,
   },
   {
     id: "computer-use",
-    title: "Computer Use",
-    description:
-      "Let agents on this computer's OpenBot see and use its apps. Agents on another server use that server's computer.",
+    title: m(msg("Computer Use")),
+    description: m(
+      msg(
+        "Let agents on this computer's OpenBot see and use its apps. Agents on another server use that server's computer.",
+      ),
+    ),
     icon: MousePointer2,
   },
   {
     id: "billing",
-    title: "Billing",
-    description: "License, server plans, payment method and invoices.",
+    title: m(msg("Billing")),
+    description: m(msg("License, server plans, payment method and invoices.")),
     icon: CreditCard,
   },
   {
     id: "mobile-connect",
-    title: "Mobile Connect",
-    description: "Sign in securely on your phone.",
+    title: m(msg("Mobile Connect")),
+    description: m(msg("Sign in securely on your phone.")),
     icon: Smartphone,
   },
   {
     id: "updates",
-    title: "Updates",
-    description: "Keep OpenBot current on this computer.",
+    title: m(msg("Updates")),
+    description: m(msg("Keep OpenBot current on this computer.")),
     icon: CircleArrowDown,
   },
 ];
 export function SettingsPage({
   sections,
   initialSection,
-  label = "Settings",
+  label: rawLabel,
 }: {
   sections: readonly {
     id: string;
@@ -112,6 +121,8 @@ export function SettingsPage({
   initialSection?: string | undefined;
   label?: string;
 }) {
+  const gt = useGT();
+  const label = rawLabel ?? gt("Settings");
   const [selected, setSelected] = useState(initialSection ?? sections[0]?.id);
   const current = sections.find((section) => section.id === selected) ?? sections[0];
   const titleId = useId();

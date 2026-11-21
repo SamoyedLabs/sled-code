@@ -25,6 +25,7 @@ import {
   type MessageTextSelection,
   type SelectionRect,
 } from "./botSelectionModel";
+import { T, useGT } from "gt-react";
 
 export function BotSelectionActions(props: {
   root: RefObject<HTMLElement | null>;
@@ -109,6 +110,7 @@ function BotSelectionBar({
   onDetach: () => void;
   onSend: (messageId: string, body: string) => Promise<boolean>;
 }) {
+  const gt = useGT();
   const bar = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const sending = useRef(false);
@@ -251,7 +253,7 @@ function BotSelectionBar({
           ref={bar}
           className="ob-chat-selection-bar"
           role="toolbar"
-          aria-label="Selected text actions"
+          aria-label={gt("Selected text actions")}
           style={{ width: barWidth ?? undefined }}
         >
           <div
@@ -267,13 +269,13 @@ function BotSelectionBar({
             {mode === "sending" && (
               <span className="ob-chat-selection-status" role="status">
                 <span className="ob-chat-selection-spinner" aria-hidden="true" />
-                Sending…
+                <T>Sending…</T>
               </span>
             )}
             {mode === "error" && (
               <>
                 <span className="ob-chat-selection-error" role="alert">
-                  Couldn’t send
+                  <T>Couldn’t send</T>
                 </span>
                 <button
                   type="button"
@@ -282,12 +284,14 @@ function BotSelectionBar({
                   onClick={() => void submit(lastInstruction)}
                 >
                   <RetryIcon />
-                  <span className="ob-chat-selection-label">Retry</span>
+                  <span className="ob-chat-selection-label">
+                    <T>Retry</T>
+                  </span>
                 </button>
                 <button
                   type="button"
                   className="ob-chat-selection-icon-button"
-                  aria-label="Close selected text actions"
+                  aria-label={gt("Close selected text actions")}
                   onPointerDown={preserveSelection}
                   onClick={onDetach}
                 >
@@ -321,8 +325,8 @@ function BotSelectionBar({
                   >
                     <input
                       value={prompt}
-                      aria-label="Describe edits"
-                      placeholder="Describe edits"
+                      aria-label={gt("Describe edits")}
+                      placeholder={gt("Describe edits")}
                       maxLength={maximumInstructionLength}
                       onChange={(event) => updatePrompt(event.currentTarget.value)}
                     />
@@ -341,7 +345,7 @@ function BotSelectionBar({
                         <button
                           type="button"
                           className="ob-chat-selection-control"
-                          aria-label="Quote selected text"
+                          aria-label={gt("Quote selected text")}
                           aria-keyshortcuts={mac ? "Meta+Shift+Period" : "Control+Shift+Period"}
                           onPointerDown={preserveSelection}
                           onClick={onQuote}
@@ -349,34 +353,36 @@ function BotSelectionBar({
                       }
                     >
                       <TextQuoteIcon className="ob-chat-selection-icon" aria-hidden="true" />
-                      <span className="ob-chat-selection-label">Quote</span>
+                      <span className="ob-chat-selection-label">
+                        <T>Quote</T>
+                      </span>
                     </TooltipTrigger>
                     <TooltipPopup side="top">{mac ? "⌘⇧." : "Ctrl+Shift+."}</TooltipPopup>
                   </Tooltip>
                   <Preset
-                    label="Explain"
+                    label={gt("Explain")}
                     icon={<ExplainIcon />}
                     onSelect={() => void submit(selectionActionInstructions.Explain)}
                   />
                   <Preset
-                    label="Improve"
+                    label={gt("Improve")}
                     icon={<ImproveIcon />}
                     onSelect={() => void submit(selectionActionInstructions.Improve)}
                   />
                   {expanded && (
                     <div className="ob-chat-selection-more-presets">
                       <Preset
-                        label="Shorten"
+                        label={gt("Shorten")}
                         icon={<ShortenIcon />}
                         onSelect={() => void submit(selectionActionInstructions.Shorten)}
                       />
                       <Preset
-                        label="Tone"
+                        label={gt("Tone")}
                         icon={<ToneIcon />}
                         onSelect={() => void submit(selectionActionInstructions.Tone)}
                       />
                       <Preset
-                        label="Grammar"
+                        label={gt("Grammar")}
                         icon={<GrammarIcon />}
                         onSelect={() => void submit(selectionActionInstructions.Grammar)}
                       />
@@ -389,7 +395,7 @@ function BotSelectionBar({
                   <button
                     type="button"
                     className="ob-chat-selection-icon-button ob-chat-selection-expand"
-                    aria-label={expanded ? "Show fewer actions" : "Show more actions"}
+                    aria-label={expanded ? gt("Show fewer actions") : gt("Show more actions")}
                     aria-expanded={expanded}
                     onPointerDown={preserveSelection}
                     onClick={() => setExpanded((value) => !value)}
@@ -404,7 +410,7 @@ function BotSelectionBar({
                   <button
                     type="button"
                     className="ob-chat-selection-send"
-                    aria-label="Send edit instruction"
+                    aria-label={gt("Send edit instruction")}
                     tabIndex={hasPrompt ? undefined : -1}
                     onPointerDown={preserveSelection}
                     onClick={() => void submit(prompt)}

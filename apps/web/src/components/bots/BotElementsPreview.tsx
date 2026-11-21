@@ -59,6 +59,7 @@ import {
   type PreviewPage,
   type PreviewTool,
 } from "./BotElementsPreviewPanels";
+import { T, useGT } from "gt-react";
 
 const group = { id: "launch", name: "Launch copy" };
 
@@ -94,10 +95,11 @@ function PreviewIconButton({
 }
 
 function Avatars({ size = 30 }: { size?: number }) {
+  const gt = useGT();
   return (
     <span
       className="flex shrink-0 items-center -space-x-3"
-      aria-label="Luna Scout, Luna Writer and Luna"
+      aria-label={gt("Luna Scout, Luna Writer and Luna")}
     >
       {bots.map((bot) => (
         <span key={bot.id} className="relative flex rounded-full bg-sidebar p-0.5">
@@ -134,6 +136,7 @@ const exampleTrace = {
 };
 
 export function BotElementsPreview() {
+  const gt = useGT();
   const [selected, setSelected] = useState<string>(group.id);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [chats] = useState(() =>
@@ -196,10 +199,13 @@ export function BotElementsPreview() {
     setAttachment(false);
   };
   return (
-    <div className="flex h-full min-h-0 flex-1 bg-background" aria-label="AI Elements alternative">
+    <div
+      className="flex h-full min-h-0 flex-1 bg-background"
+      aria-label={gt("AI Elements alternative")}
+    >
       <aside
         className="flex w-72 shrink-0 flex-col border-r bg-sidebar max-md:w-60 max-sm:w-16"
-        aria-label="Preview chats"
+        aria-label={gt("Preview chats")}
       >
         <div className="relative shrink-0">
           <SidebarChromeHeader isElectron={false} />
@@ -210,8 +216,8 @@ export function BotElementsPreview() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search"
-              aria-label="Find preview conversation"
+              placeholder={gt("Search")}
+              aria-label={gt("Find preview conversation")}
               className="w-full min-w-0 bg-transparent text-sm outline-none"
             />
             <span className="text-2xs">⌘K</span>
@@ -219,7 +225,7 @@ export function BotElementsPreview() {
           <Menu>
             <MenuTrigger
               render={
-                <Button variant="ghost-muted" size="icon-sm" aria-label="Create in preview" />
+                <Button variant="ghost-muted" size="icon-sm" aria-label={gt("Create in preview")} />
               }
             >
               <SquarePenIcon />
@@ -227,17 +233,17 @@ export function BotElementsPreview() {
             <MenuPopup align="end">
               <MenuItem onClick={() => setPage("Groups")}>
                 <UsersIcon />
-                New group preview
+                <T>New group preview</T>
               </MenuItem>
               <MenuItem onClick={() => setPage("All tasks")}>
                 <ListTodoIcon />
-                New task preview
+                <T>New task preview</T>
               </MenuItem>
             </MenuPopup>
           </Menu>
         </div>
         <nav
-          aria-label="Preview workspace navigation"
+          aria-label={gt("Preview workspace navigation")}
           className="space-y-0.5 px-2 pb-4 max-sm:pt-3"
         >
           {(
@@ -265,26 +271,30 @@ export function BotElementsPreview() {
         </nav>
         <div className="min-h-0 flex-1 overflow-y-auto px-2">
           <div className="mb-1.5 flex items-center justify-between px-2 text-xs font-medium text-muted-foreground max-sm:hidden">
-            <span>Conversations</span>
+            <span>
+              <T>Conversations</T>
+            </span>
             <span className="text-2xs font-normal">4</span>
           </div>
-          <nav className="space-y-1" aria-label="Alternative conversations">
+          <nav className="space-y-1" aria-label={gt("Alternative conversations")}>
             {group.name.toLowerCase().includes(search.toLowerCase()) && (
               <button
                 type="button"
                 onClick={() => chooseChat(group.id)}
                 aria-current={isGroup && page === "Messages" ? "page" : undefined}
-                aria-label="Launch copy group"
+                aria-label={gt("Launch copy group")}
                 className="flex min-h-16 w-full items-center gap-3 rounded-lg p-2.5 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-[current=page]:bg-sidebar-row-selected aria-[current=page]:shadow-xs aria-[current=page]:ring-1 aria-[current=page]:ring-sidebar-border max-sm:justify-center max-sm:px-0"
               >
                 <Avatars size={20} />
                 <span className="min-w-0 flex-1 max-sm:hidden">
                   <span className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-medium">Launch copy</span>
+                    <span className="truncate text-sm font-medium">
+                      <T>Launch copy</T>
+                    </span>
                     <span className="shrink-0 text-2xs text-muted-foreground">10:43</span>
                   </span>
                   <span className="mt-1 block truncate text-xs text-muted-foreground">
-                    Writer: Want a more playful version?
+                    <T>Writer: Want a more playful version?</T>
                   </span>
                 </span>
               </button>
@@ -324,35 +334,39 @@ export function BotElementsPreview() {
                 <button
                   type="button"
                   className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent max-sm:justify-center"
-                  aria-label="Preview workspace menu"
+                  aria-label={gt("Preview workspace menu")}
                 />
               }
             >
               <MonitorIcon className="size-3.5" />
               <span className="min-w-0 flex-1 truncate text-left max-sm:hidden">
-                This Mac · Preview
+                <T>This Mac · Preview</T>
               </span>
               <ChevronDownIcon className="size-3 max-sm:hidden" />
             </MenuTrigger>
             <MenuPopup side="top" align="start">
               <MenuItem onClick={() => setPage("Settings")}>
                 <Settings2Icon />
-                Workspace settings preview
+                <T>Workspace settings preview</T>
               </MenuItem>
               <MenuItem onClick={() => setPage("Usage")}>
                 <ChartNoAxesColumnIcon />
-                Sample model usage
+                <T>Sample model usage</T>
               </MenuItem>
             </MenuPopup>
           </Menu>
           <div className="flex h-9 items-center gap-1 max-sm:justify-center">
-            <PreviewIconButton label="Preview settings" onClick={() => setPage("Settings")}>
+            <PreviewIconButton label={gt("Preview settings")} onClick={() => setPage("Settings")}>
               <Settings2Icon />
             </PreviewIconButton>
             <Menu>
               <MenuTrigger
                 render={
-                  <Button variant="ghost-muted" size="icon-sm" aria-label="More preview pages" />
+                  <Button
+                    variant="ghost-muted"
+                    size="icon-sm"
+                    aria-label={gt("More preview pages")}
+                  />
                 }
               >
                 <MoreHorizontalIcon />
@@ -381,7 +395,7 @@ export function BotElementsPreview() {
               className="ml-auto max-sm:hidden"
               onClick={() => setPage("Usage")}
             >
-              Usage
+              <T>Usage</T>
             </Button>
           </div>
         </footer>
@@ -389,7 +403,7 @@ export function BotElementsPreview() {
       {page === "Messages" ? (
         <section
           className="flex min-w-0 flex-1 flex-col"
-          aria-label={`${title} preview conversation`}
+          aria-label={gt("{title} preview conversation", { title })}
         >
           <header className="flex h-14 shrink-0 items-center gap-3 border-b px-6 max-sm:px-3">
             {isGroup ? (
@@ -400,19 +414,19 @@ export function BotElementsPreview() {
             <div className="min-w-0">
               <h1 className="truncate text-sm font-medium">{title}</h1>
               <p className="text-2xs text-muted-foreground">
-                {isGroup ? "3 bots · coordinated by Luna Scout" : bot.role}
+                {isGroup ? gt("3 bots · coordinated by Luna Scout") : bot.role}
               </p>
             </div>
             <div className="ml-auto flex items-center gap-1">
               <PreviewIconButton
-                label="Preview conversation tasks"
+                label={gt("Preview conversation tasks")}
                 aria-pressed={tool === "Tasks"}
                 onClick={() => setTool(tool === "Tasks" ? null : "Tasks")}
               >
                 <ListTodoIcon />
               </PreviewIconButton>
               <PreviewIconButton
-                label="Preview conversation files"
+                label={gt("Preview conversation files")}
                 aria-pressed={tool === "Files"}
                 onClick={() => setTool(tool === "Files" ? null : "Files")}
               >
@@ -424,7 +438,7 @@ export function BotElementsPreview() {
                     <Button
                       variant="ghost-muted"
                       size="icon-sm"
-                      aria-label="More preview conversation tools"
+                      aria-label={gt("More preview conversation tools")}
                     />
                   }
                 >
@@ -454,7 +468,7 @@ export function BotElementsPreview() {
               </Menu>
               <div className="mx-1 h-4 border-l" />
               <PreviewIconButton
-                label="Toggle preview details panel"
+                label={gt("Toggle preview details panel")}
                 aria-pressed={tool !== null}
                 onClick={() => setTool(tool ? null : "Details")}
               >
@@ -469,7 +483,7 @@ export function BotElementsPreview() {
               className="flex h-full items-center gap-2 border-b-2 border-foreground font-medium"
             >
               <MessageSquareIcon className="size-3.5" />
-              Main chat
+              <T>Main chat</T>
             </button>
             <button
               type="button"
@@ -477,20 +491,20 @@ export function BotElementsPreview() {
               className="flex h-full items-center gap-2 text-muted-foreground hover:text-foreground"
             >
               <ListTodoIcon className="size-3.5" />
-              Draft launch headline
+              <T>Draft launch headline</T>
             </button>
             <Button
               variant="ghost-muted"
               size="compact"
               className="ml-auto"
-              aria-label={streaming ? "Stop streaming demo" : "Replay streaming demo"}
+              aria-label={streaming ? gt("Stop streaming demo") : gt("Replay streaming demo")}
               onClick={() => {
                 if (streaming) stopDemo();
-                else void sendMessage({ text: "Make it a little more playful." });
+                else void sendMessage({ text: gt("Make it a little more playful.") });
               }}
             >
               {streaming ? <SquareIcon /> : <PlayIcon />}
-              {streaming ? "Stop demo" : "Try streaming"}
+              {streaming ? gt("Stop demo") : gt("Try streaming")}
             </Button>
             <Menu>
               <MenuTrigger
@@ -498,7 +512,7 @@ export function BotElementsPreview() {
                   <Button
                     variant="ghost-muted"
                     size="icon-xs"
-                    aria-label="Streaming demo options"
+                    aria-label={gt("Streaming demo options")}
                     disabled={streaming}
                   />
                 }
@@ -507,12 +521,14 @@ export function BotElementsPreview() {
               </MenuTrigger>
               <MenuPopup align="end">
                 <MenuItem
-                  onClick={() => void sendMessage({ text: "Make it a little more playful." })}
+                  onClick={() => void sendMessage({ text: gt("Make it a little more playful.") })}
                 >
-                  Successful tools and reply
+                  <T>Successful tools and reply</T>
                 </MenuItem>
-                <MenuItem onClick={() => void sendMessage({ text: "Show a failed tool demo." })}>
-                  Failed tool and recovery message
+                <MenuItem
+                  onClick={() => void sendMessage({ text: gt("Show a failed tool demo.") })}
+                >
+                  <T>Failed tool and recovery message</T>
                 </MenuItem>
               </MenuPopup>
             </Menu>
@@ -524,18 +540,20 @@ export function BotElementsPreview() {
                 initial="instant"
                 resize="instant"
                 className="min-h-0"
-                aria-label="Preview messages"
+                aria-label={gt("Preview messages")}
               >
                 <ConversationContent className="mx-auto w-full max-w-3xl gap-8 px-8 py-10 max-sm:px-4">
                   <div className="text-center text-2xs text-muted-foreground">
-                    Sample conversation · Today
+                    <T>Sample conversation · Today</T>
                   </div>
                   <Message from="user">
                     <MessageContent>
-                      <p>Can you help me turn this launch brief into a short headline?</p>
+                      <p>
+                        <T>Can you help me turn this launch brief into a short headline?</T>
+                      </p>
                     </MessageContent>
                     <span className="pr-1 text-right text-2xs text-muted-foreground">
-                      You · 10:42
+                      <T>You · 10:42</T>
                     </span>
                   </Message>
                   <div className="flex items-start gap-3">
@@ -548,14 +566,18 @@ export function BotElementsPreview() {
                     </span>
                     <Message from="assistant">
                       <div className="flex items-center gap-2 text-xs">
-                        <span className="font-medium">{isGroup ? "Luna Scout" : bot.name}</span>
+                        <span className="font-medium">{isGroup ? gt("Luna Scout") : bot.name}</span>
                         <span className="text-2xs text-muted-foreground">10:42</span>
                       </div>
                       <MessageContent>
                         <p className="leading-relaxed">
                           {isGroup
-                            ? "I’ll check the brief and pass the strongest angle to Writer. We’ll keep it short and avoid unsupported claims."
-                            : "Of course. Share the brief, the audience, and the one thing you want people to remember."}
+                            ? gt(
+                                "I’ll check the brief and pass the strongest angle to Writer. We’ll keep it short and avoid unsupported claims.",
+                              )
+                            : gt(
+                                "Of course. Share the brief, the audience, and the one thing you want people to remember.",
+                              )}
                         </p>
                       </MessageContent>
                     </Message>
@@ -578,25 +600,31 @@ export function BotElementsPreview() {
                       </span>
                       <Message from="assistant">
                         <div className="flex items-center gap-2 text-xs">
-                          <span className="font-medium">{isGroup ? "Luna Writer" : bot.name}</span>
+                          <span className="font-medium">
+                            {isGroup ? gt("Luna Writer") : bot.name}
+                          </span>
                           <span className="text-2xs text-muted-foreground">10:43</span>
                         </div>
                         <MessageContent>
                           <p className="mb-1 leading-relaxed">
-                            {isGroup ? "Here’s a starting point:" : "Here’s how I’d approach it:"}
+                            {isGroup
+                              ? gt("Here’s a starting point:")
+                              : gt("Here’s how I’d approach it:")}
                           </p>
                           <p className="text-base font-medium leading-relaxed">{response}</p>
                           <p className="mt-2 leading-relaxed text-muted-foreground">
                             {isGroup
-                              ? "Want it to feel more playful, more premium, or more direct?"
-                              : "We can shape it together from there."}
+                              ? gt("Want it to feel more playful, more premium, or more direct?")
+                              : gt("We can shape it together from there.")}
                           </p>
                         </MessageContent>
                         <MessageActions>
                           <Button
                             variant="ghost-muted"
                             size="icon-xs"
-                            aria-label={copied ? "Copied example reply" : "Copy example reply"}
+                            aria-label={
+                              copied ? gt("Copied example reply") : gt("Copy example reply")
+                            }
                             onClick={() => {
                               void navigator.clipboard
                                 .writeText(response)
@@ -655,7 +683,7 @@ export function BotElementsPreview() {
                                 <div className="flex items-center gap-2 text-xs">
                                   <span className="font-medium">{writer.name}</span>
                                   <span className="text-2xs text-muted-foreground">
-                                    {stopped ? "Demo stopped" : "Local demo"}
+                                    {stopped ? gt("Demo stopped") : gt("Local demo")}
                                   </span>
                                 </div>
                                 <MessageContent>
@@ -672,24 +700,24 @@ export function BotElementsPreview() {
                           {message.metadata?.sampleAttachment && (
                             <span className="mb-2 flex items-center gap-2 rounded-md border p-2 text-xs">
                               <FilesIcon className="size-3.5" />
-                              launch-brief.md · Sample
+                              <T>launch-brief.md · Sample</T>
                             </span>
                           )}
                           <p className="whitespace-pre-wrap break-words leading-relaxed">{text}</p>
                         </MessageContent>
                         <span className="text-right text-2xs text-muted-foreground">
-                          Preview only · not sent to a bot
+                          <T>Preview only · not sent to a bot</T>
                         </span>
                       </Message>
                     );
                   })}
                   {error && (
                     <p role="alert" className="text-xs text-destructive">
-                      The local demo stream stopped unexpectedly. Try again.
+                      <T>The local demo stream stopped unexpectedly. Try again.</T>
                     </p>
                   )}
                 </ConversationContent>
-                <ConversationScrollButton aria-label="Go to latest preview message" />
+                <ConversationScrollButton aria-label={gt("Go to latest preview message")} />
               </Conversation>
               <div className="mx-auto w-full max-w-3xl shrink-0 px-8 pb-5 pt-3 max-sm:px-4">
                 <form
@@ -702,11 +730,14 @@ export function BotElementsPreview() {
                   {attachment && (
                     <div className="mb-2 flex w-fit items-center gap-2 rounded-md border px-2 py-1 text-xs">
                       <FilesIcon className="size-3.5" />
-                      launch-brief.md<span className="text-2xs text-muted-foreground">Sample</span>
+                      launch-brief.md
+                      <span className="text-2xs text-muted-foreground">
+                        <T>Sample</T>
+                      </span>
                       <Button
                         variant="ghost-muted"
                         size="icon-tiny"
-                        aria-label="Remove sample attachment"
+                        aria-label={gt("Remove sample attachment")}
                         onClick={() => setAttachment(false)}
                       >
                         <XIcon />
@@ -714,7 +745,7 @@ export function BotElementsPreview() {
                     </div>
                   )}
                   <Textarea
-                    aria-label="Preview message"
+                    aria-label={gt("Preview message")}
                     value={draft}
                     onChange={(e) =>
                       setDrafts((current) => ({ ...current, [selected]: e.target.value }))
@@ -725,7 +756,9 @@ export function BotElementsPreview() {
                         submit();
                       }
                     }}
-                    placeholder={isGroup ? "Message the group…" : `Message ${bot.name}…`}
+                    placeholder={
+                      isGroup ? gt("Message the group…") : gt("Message {name}…", { name: bot.name })
+                    }
                     unstyled
                     size="compact"
                     className="max-h-40 min-h-14"
@@ -739,7 +772,7 @@ export function BotElementsPreview() {
                               type="button"
                               variant="ghost-muted"
                               size="icon-sm"
-                              aria-label="Preview attachments"
+                              aria-label={gt("Preview attachments")}
                             />
                           }
                         >
@@ -748,7 +781,7 @@ export function BotElementsPreview() {
                         <MenuPopup side="top" align="start">
                           <MenuItem onClick={() => setAttachment(true)}>
                             <FilesIcon />
-                            Attach sample launch brief
+                            <T>Attach sample launch brief</T>
                           </MenuItem>
                         </MenuPopup>
                       </Menu>
@@ -758,16 +791,16 @@ export function BotElementsPreview() {
                             <Button
                               variant="ghost-muted"
                               size="xs"
-                              aria-label="Preview recipient and model"
+                              aria-label={gt("Preview recipient and model")}
                             />
                           }
                         >
-                          {isGroup ? recipient : "Codex Luna"}
+                          {isGroup ? recipient : gt("Codex Luna")}
                           <ChevronDownIcon className="size-3" />
                         </MenuTrigger>
                         <MenuPopup side="top" align="start">
                           <MenuItem onClick={() => setRecipient("Auto · Luna Scout")}>
-                            Auto · Luna Scout
+                            <T>Auto · Luna Scout</T>
                           </MenuItem>
                           {bots.map((item) => (
                             <MenuItem key={item.id} onClick={() => setRecipient(item.name)}>
@@ -775,7 +808,9 @@ export function BotElementsPreview() {
                               {item.name}
                             </MenuItem>
                           ))}
-                          <MenuItem disabled>Model · Codex Luna</MenuItem>
+                          <MenuItem disabled>
+                            <T>Model · Codex Luna</T>
+                          </MenuItem>
                         </MenuPopup>
                       </Menu>
                     </div>
@@ -784,14 +819,14 @@ export function BotElementsPreview() {
                       variant="default"
                       size="icon-sm"
                       disabled={!draft.trim() || streaming}
-                      aria-label="Add preview message"
+                      aria-label={gt("Add preview message")}
                     >
                       <ArrowUpIcon />
                     </Button>
                   </div>
                 </form>
                 <p className="mt-2 text-center text-2xs text-muted-foreground">
-                  Local streaming demo · no bot runs
+                  <T>Local streaming demo · no bot runs</T>
                 </p>
               </div>
             </div>

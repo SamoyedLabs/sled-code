@@ -19,6 +19,7 @@ import {
   validDirectPage,
   type DirectDraft,
 } from "./directModel";
+import { useGT } from "gt-react";
 
 export function ReactBotDirectConversation({
   environmentId,
@@ -33,6 +34,7 @@ export function ReactBotDirectConversation({
   selfId: string;
   onChanged: () => void;
 }) {
+  const gt = useGT();
   const key = `openbot.direct-draft:${JSON.stringify([environmentId, hostId, selfId, member.id])}`;
   const [draft, setDraft] = useState(() => readDirectDraft(localStorage, key));
   const [window, setWindow] = useState<OpenbotDirectPage | null>(null);
@@ -100,7 +102,7 @@ export function ReactBotDirectConversation({
     if (lock.current || !canSend || member.disabled || !draft.text.trim()) return;
     const connection = readPreparedConnection(environmentId);
     if (!connection) {
-      setError("Reconnect before sending this message.");
+      setError(gt("Reconnect before sending this message."));
       return;
     }
     const attempt = draft.attempt ?? { id: randomUUID(), text: draft.text.trim() };
@@ -138,7 +140,7 @@ export function ReactBotDirectConversation({
     });
     if (settled._tag === "Failure" && current(connection)) {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "The message could not be confirmed.");
+      setError(cause instanceof Error ? cause.message : gt("The message could not be confirmed."));
     }
     lock.current = false;
     if (alive.current) setBusy(false);
@@ -178,7 +180,7 @@ export function ReactBotDirectConversation({
     });
     if (settled._tag === "Failure" && current(connection)) {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "Older messages could not be loaded.");
+      setError(cause instanceof Error ? cause.message : gt("Older messages could not be loaded."));
     }
     lock.current = false;
     if (alive.current) setBusy(false);
@@ -217,7 +219,7 @@ export function ReactBotDirectConversation({
     if (settled._tag === "Failure" && current(connection)) {
       const cause = squashAtomCommandFailure(settled);
       setError(
-        cause instanceof Error ? cause.message : "The original message could not be loaded.",
+        cause instanceof Error ? cause.message : gt("The original message could not be loaded."),
       );
     }
     lock.current = false;
@@ -247,7 +249,7 @@ export function ReactBotDirectConversation({
     });
     if (settled._tag === "Failure" && current(connection)) {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "Read status could not be saved.");
+      setError(cause instanceof Error ? cause.message : gt("Read status could not be saved."));
     }
     lock.current = false;
     if (alive.current) setBusy(false);
@@ -263,7 +265,7 @@ export function ReactBotDirectConversation({
         error ??
         query.error ??
         (query.data && !latest
-          ? "The host returned a different or unsupported conversation."
+          ? gt("The host returned a different or unsupported conversation.")
           : null)
       }
       hasOlder={(older.at(-1) ?? shown)?.pageInfo.hasOlder ?? false}

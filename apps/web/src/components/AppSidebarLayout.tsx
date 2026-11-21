@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { useGT } from "gt-react";
+import { useGT, T } from "gt-react";
 import * as Schema from "effect/Schema";
 import {
   Activity,
@@ -532,14 +532,16 @@ export function AppSidebarLayout({
                 {previewVisited && (
                   <section
                     className="absolute inset-0 flex min-h-0 flex-col bg-background"
-                    aria-label="Retained Bots preview"
+                    aria-label={gt("Retained Bots preview")}
                     style={{ display: previewActive ? undefined : "none" }}
                     inert={!previewActive}
                   >
                     <Activity mode={previewActive ? "visible" : "hidden"}>
                       <Suspense
                         fallback={
-                          <p className="p-6 text-sm text-muted-foreground">Opening preview…</p>
+                          <p className="p-6 text-sm text-muted-foreground">
+                            <T>Opening preview…</T>
+                          </p>
                         }
                       >
                         <BotElementsPreview />

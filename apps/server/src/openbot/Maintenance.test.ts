@@ -151,10 +151,13 @@ function harness() {
       launch: (input) =>
         Effect.gen(function* () {
           commands.push(input);
-          if (input.reuseExistingThread === true) return yield* new Launch.ThreadLaunchError({
-            operation: "update-thread", commandId: input.commandId, projectId,
-            cause: new Error("No orchestration projection exists for a new maintenance thread."),
-          });
+          if (input.reuseExistingThread === true)
+            return yield* new Launch.ThreadLaunchError({
+              operation: "update-thread",
+              commandId: input.commandId,
+              projectId,
+              cause: new Error("No orchestration projection exists for a new maintenance thread."),
+            });
           if (uncertain) {
             uncertain = false;
             return yield* new Launch.ThreadLaunchError({
@@ -306,14 +309,41 @@ it.live(
       expect(state.proposals[0]?.stagedAt).toBe("2026-11-04T01:00:00Z");
       expect(h.stages()).toBe(1);
       const sql = yield* SqlClient.SqlClient;
-      const interrupted = { ...state, proposals: state.proposals.map(p => ({ ...p, validationRunId: "interrupted-attempt", validation: {
-        runId: "interrupted-attempt", threadId: p.preparationThreadId ?? p.reviewThreadId!,
-        identity: { releaseCommit: release.releaseCommit, patchSetSha256: "d".repeat(64), artifactSha256: "e".repeat(64), profileSchemaVersion: "fixture", fixtureVersion: "fixture" },
-        state: "running", checks: [], createdAt: "2026-11-04T01:00:00Z", completedAt: null,
-      } })) };
+      const interrupted = {
+        ...state,
+        proposals: state.proposals.map((p) => ({
+          ...p,
+          validationRunId: "interrupted-attempt",
+          validation: {
+            runId: "interrupted-attempt",
+            threadId: p.preparationThreadId ?? p.reviewThreadId!,
+            identity: {
+              releaseCommit: release.releaseCommit,
+              patchSetSha256: "d".repeat(64),
+              artifactSha256: "e".repeat(64),
+              profileSchemaVersion: "fixture",
+              fixtureVersion: "fixture",
+            },
+            state: "running",
+            checks: [],
+            createdAt: "2026-11-04T01:00:00Z",
+            completedAt: null,
+          },
+        })),
+      };
       yield* sql`UPDATE openbot_maintenance SET state_json=${JSON.stringify(interrupted)} WHERE id=1`;
       const final = yield* open;
-      expect((yield* final.get).proposals[0]?.validation).toMatchObject({ state: "failed", checks: [{ kind: "source", outcome: "failed", detail: "Validation was interrupted by server restart. Start a fresh validation attempt." }] });
+      expect((yield* final.get).proposals[0]?.validation).toMatchObject({
+        state: "failed",
+        checks: [
+          {
+            kind: "source",
+            outcome: "failed",
+            detail:
+              "Validation was interrupted by server restart. Start a fresh validation attempt.",
+          },
+        ],
+      });
       expect((yield* final.get).proposals[0]?.decision?.note).toBe(
         "Stage for isolated checks only.",
       );

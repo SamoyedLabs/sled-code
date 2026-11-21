@@ -1,3 +1,5 @@
+import { m } from "../../i18n/messages";
+import { msg } from "gt-react-native";
 type ComputerInput =
   | { readonly kind: "mode"; readonly mode: "pointAndDrag" | "mouseRelative" }
   | { readonly kind: "text"; readonly text: string }
@@ -13,28 +15,10 @@ export function computerInputScript(sessionId: string, command: ComputerInput): 
   if (command.kind === "keys" && !/^[a-zA-Z0-9 ]{1,64}$/u.test(command.text))
     throw new Error("Unsupported computer keys");
   const data = JSON.stringify({ sessionId, command }).replace(/</g, "\\u003c");
-  return `(() => {
-    const {sessionId, command} = ${data};
-    let ok = false;
-    try {
-      const app = window.app;
-      const input = app?.getStream?.()?.getInput?.();
-      if (!input?.connected) throw new Error("Input not connected");
-      if (command.kind === "mode") app.setInputConfig({touchMode: command.mode});
-      else if (command.kind === "text") input.sendText(command.text);
-      else if (command.kind === "keys") {
-        for (const key of command.text) {
-          const code = key === " " ? "Space" : /[0-9]/.test(key) ? "Digit" + key : "Key" + key.toUpperCase();
-          const event = {code, key, shiftKey: /[A-Z]/.test(key), ctrlKey:false, altKey:false, metaKey:false};
-          input.onKeyDown(event); input.onKeyUp(event);
-        }
-      }
-      else {
-        const event = {code: command.key, key: command.key, shiftKey:false, ctrlKey:false, altKey:false, metaKey:false};
-        input.onKeyDown(event); input.onKeyUp(event);
-      }
-      ok = true;
-    } catch {}
-    window.ReactNativeWebView?.postMessage(JSON.stringify({source:"sled-computer-input", sessionId, kind:command.kind, ok}));
-  })(); true;`;
+  return m(
+    msg(
+      "(() => '{'\n    const '{'sessionId, command'}' = {data};\n    let ok = false;\n    try '{'\n      const app = window.app;\n      const input = app?.getStream?.()?.getInput?.();\n      if (!input?.connected) throw new Error(\"Input not connected\");\n      if (command.kind === \"mode\") app.setInputConfig('{'touchMode: command.mode'}');\n      else if (command.kind === \"text\") input.sendText(command.text);\n      else if (command.kind === \"keys\") '{'\n        for (const key of command.text) '{'\n          const code = key === \" \" ? \"Space\" : /[0-9]/.test(key) ? \"Digit\" + key : \"Key\" + key.toUpperCase();\n          const event = '{'code, key, shiftKey: /[A-Z]/.test(key), ctrlKey:false, altKey:false, metaKey:false'}';\n          input.onKeyDown(event); input.onKeyUp(event);\n        '}'\n      '}'\n      else '{'\n        const event = '{'code: command.key, key: command.key, shiftKey:false, ctrlKey:false, altKey:false, metaKey:false'}';\n        input.onKeyDown(event); input.onKeyUp(event);\n      '}'\n      ok = true;\n    '}' catch '{''}'\n    window.ReactNativeWebView?.postMessage(JSON.stringify('{'source:\"sled-computer-input\", sessionId, kind:command.kind, ok'}'));\n  '}')(); true;",
+      { data },
+    ),
+  );
 }

@@ -23,6 +23,7 @@ import {
   publishIncomingShares,
   useIncomingShare,
 } from "./IncomingShareProvider";
+import { T, useGT } from "gt-react-native";
 
 type Props = {
   environmentId: EnvironmentId;
@@ -35,6 +36,7 @@ export function BotIncomingShareEnvironment(props: Props) {
   return <ShareScope key={JSON.stringify(props)} {...props} />;
 }
 function ShareScope({ environmentId, hostId, agentId, threadId, taskId }: Props) {
+  const gt = useGT();
   const { pendingShare } = useIncomingShare();
   const context = useAtomQueryRunner(openbot.fileContext, { refresh: true, reportFailure: false });
   const list = useAtomQueryRunner(openbot.fileDrafts, { refresh: true, reportFailure: false });
@@ -175,7 +177,9 @@ function ShareScope({ environmentId, hostId, agentId, threadId, taskId }: Props)
       setPanel({ shareId, destination, ports });
     })()
       .catch((error) => {
-        setNotice(error instanceof Error ? error.message : "Shared content could not be opened.");
+        setNotice(
+          error instanceof Error ? error.message : gt("Shared content could not be opened."),
+        );
       })
       .finally(() => {
         setBusy(false);
@@ -185,10 +189,10 @@ function ShareScope({ environmentId, hostId, agentId, threadId, taskId }: Props)
   return (
     <View className="gap-3">
       <AppText>
-        Shared content is waiting. Choose this conversation to review it before sending.
+        <T>Shared content is waiting. Choose this conversation to review it before sending.</T>
       </AppText>
       <Button
-        label={busy ? "Checking destination…" : "Use this bot conversation"}
+        label={busy ? gt("Checking destination…") : gt("Use this bot conversation")}
         disabled={busy || !authenticated || !permission || !sendPermission}
         onPress={() => void choose()}
       />

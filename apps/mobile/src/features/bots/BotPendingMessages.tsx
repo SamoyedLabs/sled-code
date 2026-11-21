@@ -13,6 +13,7 @@ import {
 import { BotGlass, BotIconButton, useBotPalette } from "./upstream/BotChrome";
 import { BotMessageComposer } from "./upstream/BotMessageComposer";
 import { OpenBotText as Text } from "./upstream/OpenBotTypography";
+import { T, useGT } from "gt-react-native";
 
 type PendingScope = { environmentId: EnvironmentId; hostId: string; chat: OutboxChat };
 
@@ -33,6 +34,7 @@ export function BotPendingMessages({
   chat,
   allowEditing = true,
 }: PendingScope & { allowEditing?: boolean }) {
+  const gt = useGT();
   const scope = useBotOfflineScope(environmentId);
   const { outbox, snapshot } = useBotOutbox(scope);
   const palette = useBotPalette();
@@ -71,11 +73,11 @@ export function BotPendingMessages({
             <View key={entry.id} style={{ gap: 7 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
                 <Text style={{ color: palette.muted, fontSize: 12, flex: 1 }}>
-                  Editing queued message
+                  <T>Editing queued message</T>
                 </Text>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Cancel queued message edit"
+                  accessibilityLabel={gt("Cancel queued message edit")}
                   disabled={saving || picking}
                   onPress={() => {
                     outbox.endEdit(entry.id);
@@ -83,14 +85,16 @@ export function BotPendingMessages({
                     Keyboard.dismiss();
                   }}
                 >
-                  <Text style={{ color: palette.text }}>Cancel</Text>
+                  <Text style={{ color: palette.text }}>
+                    <T>Cancel</T>
+                  </Text>
                 </Pressable>
               </View>
               {files.map((file) => (
                 <Pressable
                   key={file.id}
                   accessibilityRole="button"
-                  accessibilityLabel={`Remove queued attachment ${file.name}`}
+                  accessibilityLabel={gt("Remove queued attachment {name}", { name: file.name })}
                   disabled={saving || picking}
                   onPress={() => {
                     setKeep((current) => new Set([...current].filter((id) => id !== file.id)));
@@ -110,16 +114,16 @@ export function BotPendingMessages({
               ))}
               {error && (
                 <Text accessibilityRole="alert" style={{ color: palette.text }}>
-                  Could not save your changes.
+                  <T>Could not save your changes.</T>
                 </Text>
               )}
               <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8 }}>
                 {canAttach && (
                   <Menu
                     actions={[
-                      { id: "files", title: "Files" },
-                      { id: "photos", title: "Photos" },
-                      { id: "camera", title: "Camera" },
+                      { id: "files", title: gt("Files") },
+                      { id: "photos", title: gt("Photos") },
+                      { id: "camera", title: gt("Camera") },
                     ]}
                     onPressAction={async ({ nativeEvent }) => {
                       const source = nativeEvent.event;
@@ -137,7 +141,7 @@ export function BotPendingMessages({
                   >
                     <BotGlass>
                       <BotIconButton
-                        label="Add to queued message"
+                        label={gt("Add to queued message")}
                         icon="plus"
                         disabled={saving || picking || files.length >= 10}
                       />
@@ -146,8 +150,8 @@ export function BotPendingMessages({
                 )}
                 <BotMessageComposer
                   action="send"
-                  label="Edit queued message"
-                  sendLabel="Save changes"
+                  label={gt("Edit queued message")}
+                  sendLabel={gt("Save changes")}
                   text={text}
                   onChangeText={setText}
                   editable={!saving}
@@ -193,12 +197,16 @@ export function BotPendingMessages({
                 accessibilityLiveRegion="polite"
                 style={{ color: palette.muted, fontSize: 12, flex: 1 }}
               >
-                {sending ? "Sending…" : failed ? "Delivery unconfirmed" : "Waiting to send"}
+                {sending
+                  ? gt("Sending…")
+                  : failed
+                    ? gt("Delivery unconfirmed")
+                    : gt("Waiting to send")}
               </Text>
               {canEdit && (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Edit queued message"
+                  accessibilityLabel={gt("Edit queued message")}
                   onPress={() => {
                     if (!outbox.beginEdit(entry.id)) return;
                     setText(entry.text);
@@ -208,21 +216,27 @@ export function BotPendingMessages({
                     setEditingId(entry.id);
                   }}
                 >
-                  <Text style={{ color: palette.text }}>Edit</Text>
+                  <Text style={{ color: palette.text }}>
+                    <T>Edit</T>
+                  </Text>
                 </Pressable>
               )}
               {failed && (
                 <Pressable accessibilityRole="button" onPress={() => outbox.retry()}>
-                  <Text style={{ color: palette.text }}>Retry</Text>
+                  <Text style={{ color: palette.text }}>
+                    <T>Retry</T>
+                  </Text>
                 </Pressable>
               )}
               {!sending && snapshot.editing !== entry.id && (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Remove queued message"
+                  accessibilityLabel={gt("Remove queued message")}
                   onPress={() => void outbox.cancel(entry.id)}
                 >
-                  <Text style={{ color: palette.text }}>Remove</Text>
+                  <Text style={{ color: palette.text }}>
+                    <T>Remove</T>
+                  </Text>
                 </Pressable>
               )}
             </View>

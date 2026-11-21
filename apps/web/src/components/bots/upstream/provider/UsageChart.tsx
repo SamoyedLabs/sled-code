@@ -22,6 +22,7 @@ import {
   usageNumber,
   type UsageMetric,
 } from "./usage-format";
+import { T } from "gt-react";
 /** Same Recharts composition as upstream UsageChart, retaining unknown cells as gaps. */
 export function UsageChart({ result, metric }: { result: UsageReport; metric: UsageMetric }) {
   const { t, format } = currentText();
@@ -105,7 +106,9 @@ export function UsageChart({ result, metric }: { result: UsageReport; metric: Us
                   {named && rows.length > 1 && (
                     <div className="ui-chart-tooltip-row ui-chart-tooltip-total">
                       <span className="ui-chart-tooltip-mark" />
-                      <span>Total</span>
+                      <span>
+                        <T>Total</T>
+                      </span>
                       <span className="ui-chart-tooltip-value">
                         {formatValue(rows.reduce((sum, row) => sum + row.value, 0))}
                       </span>

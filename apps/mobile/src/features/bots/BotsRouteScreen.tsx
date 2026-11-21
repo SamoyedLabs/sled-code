@@ -2,7 +2,11 @@ import { useBotReducedMotion } from "./botFeedback";
 import { OpenBotTypography } from "./upstream/OpenBotTypography";
 import { BotVaultEntry } from "../settings/BotVault";
 import { BotServerStorage } from "../settings/BotServerStorage";
-import { BotHostAgentDefaults, BotBackgroundProcesses, BotHostLearning } from "../settings/BotHostAgentDefaults";
+import {
+  BotHostAgentDefaults,
+  BotBackgroundProcesses,
+  BotHostLearning,
+} from "../settings/BotHostAgentDefaults";
 import { BotHostTimezone } from "../settings/BotHostTimezone";
 import { BotInstanceTransfer } from "../settings/BotInstanceTransfer";
 import { BotImportEnvironment } from "../settings/BotImportEnvironment";
@@ -81,12 +85,26 @@ import {
   useSettingsEnvironmentFilter,
   type SettingsTarget,
 } from "../settings/settings-environment-filter";
+import { m } from "../../i18n/messages";
+import { T, Var, msg, useGT } from "gt-react-native";
 
 const botServerSettings = {
-  general: { label: "General", icon: "gearshape", description: "Hosting and connections" },
-  ai: { label: "AI", icon: "robot", description: "Providers and Sled tools" },
-  data: { label: "Data", icon: "internaldrive", description: "Import and transfer agents" },
-  maintenance: { label: "Maintenance", icon: "hammer", description: "Engine releases and updates" },
+  general: {
+    label: m(msg("General")),
+    icon: "gearshape",
+    description: m(msg("Hosting and connections")),
+  },
+  ai: { label: "AI", icon: "robot", description: m(msg("Providers and Sled tools")) },
+  data: {
+    label: m(msg("Data")),
+    icon: "internaldrive",
+    description: m(msg("Import and transfer agents")),
+  },
+  maintenance: {
+    label: m(msg("Maintenance")),
+    icon: "hammer",
+    description: m(msg("Engine releases and updates")),
+  },
 } as const;
 
 type BotSettingsCategory = keyof typeof botServerSettings;
@@ -253,7 +271,12 @@ export function BotChatWorkspace({ selection }: { selection: BotSelection }) {
 export function BotWorkspaceRouteScreen({
   route,
 }: StaticScreenProps<
-  | { openRoster?: boolean; openingVelocity?: number; quickAction?: "search"; showHiddenChats?: boolean }
+  | {
+      openRoster?: boolean;
+      openingVelocity?: number;
+      quickAction?: "search";
+      showHiddenChats?: boolean;
+    }
   | undefined
 >) {
   if (Platform.OS !== "ios") return <BotsRouteScreen workspace />;
@@ -280,6 +303,7 @@ function BotsRouteScreen({
   environmentId?: EnvironmentId | undefined;
   category?: BotSettingsCategory | undefined;
 }) {
+  const gt = useGT();
   const navigation = useNavigation();
   const environmentMenu = useSettingsEnvironmentMenu();
   const { selectedTargets, availableTargets } = useSettingsEnvironmentFilter();
@@ -294,67 +318,67 @@ function BotsRouteScreen({
   const scopedHome = environmentId !== undefined && categoryLabel === undefined;
   return (
     <SettingsScreen
-      title={categoryLabel ?? (environmentId ? "Server settings" : "Bots")}
+      title={categoryLabel ?? (environmentId ? gt("Server settings") : gt("Bots"))}
       menus={environmentId ? undefined : [environmentMenu]}
     >
-        <ScreenScrollView
-          keyboardShouldPersistTaps="handled"
-          contentInsetAdjustmentBehavior="automatic"
-          contentContainerClassName="gap-5 px-5 py-4"
-        >
-          {environmentId === undefined && (
-            <>
-              <Text className="text-foreground-muted">
-                Persistent teammates for ongoing responsibilities, tasks, and coding work.
-              </Text>
-              <Button
-                label={workspace ? "Bot hosting and providers" : "Open bot workspace"}
-                tone="secondary"
-                onPress={() => navigation.navigate(workspace ? "SettingsBots" : "Bots")}
-              />
-            </>
-          )}
-          {scopedHome && targets.length > 0 && (
-            <SettingsSection title={targets[0]?.label}>
-              {(Object.keys(botServerSettings) as BotSettingsCategory[]).map((key) => {
-                const item = botServerSettings[key];
-                return (
-                  <SettingsRow
-                    key={key}
-                    icon={item.icon}
-                    label={item.label}
-                    value={item.description}
-                    valuePosition="below"
-                    onPress={() =>
-                      navigation.dispatch(
-                        StackActions.push("SettingsBots", { environmentId, category: key }),
-                      )
-                    }
-                  />
-                );
-              })}
-            </SettingsSection>
-          )}
-          {!scopedHome &&
-            targets.map((environment) => (
-              <BotEnvironment
-                key={environment.environmentId}
-                environment={environment}
-                workspace={workspace}
-                category={category}
-              />
-            ))}
-          {targets.length === 0 && (
-            <Text>
-              {environmentId
-                ? "Reconnect this computer to manage its bots."
-                : availableTargets.length === 0
-                  ? "Connect an environment to manage its bots."
-                  : "No environments match these filters."}
+      <ScreenScrollView
+        keyboardShouldPersistTaps="handled"
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerClassName="gap-5 px-5 py-4"
+      >
+        {environmentId === undefined && (
+          <>
+            <Text className="text-foreground-muted">
+              <T>Persistent teammates for ongoing responsibilities, tasks, and coding work.</T>
             </Text>
-          )}
-        </ScreenScrollView>
-      </SettingsScreen>
+            <Button
+              label={workspace ? gt("Bot hosting and providers") : gt("Open bot workspace")}
+              tone="secondary"
+              onPress={() => navigation.navigate(workspace ? "SettingsBots" : "Bots")}
+            />
+          </>
+        )}
+        {scopedHome && targets.length > 0 && (
+          <SettingsSection title={targets[0]?.label}>
+            {(Object.keys(botServerSettings) as BotSettingsCategory[]).map((key) => {
+              const item = botServerSettings[key];
+              return (
+                <SettingsRow
+                  key={key}
+                  icon={item.icon}
+                  label={item.label}
+                  value={item.description}
+                  valuePosition="below"
+                  onPress={() =>
+                    navigation.dispatch(
+                      StackActions.push("SettingsBots", { environmentId, category: key }),
+                    )
+                  }
+                />
+              );
+            })}
+          </SettingsSection>
+        )}
+        {!scopedHome &&
+          targets.map((environment) => (
+            <BotEnvironment
+              key={environment.environmentId}
+              environment={environment}
+              workspace={workspace}
+              category={category}
+            />
+          ))}
+        {targets.length === 0 && (
+          <Text>
+            {environmentId
+              ? gt("Reconnect this computer to manage its bots.")
+              : availableTargets.length === 0
+                ? gt("Connect an environment to manage its bots.")
+                : gt("No environments match these filters.")}
+          </Text>
+        )}
+      </ScreenScrollView>
+    </SettingsScreen>
   );
 }
 
@@ -367,6 +391,7 @@ function BotEnvironment({
   workspace?: boolean;
   category?: BotSettingsCategory | undefined;
 }) {
+  const gt = useGT();
   const [view, setView] = useState("bots");
   const environmentId = environment.environmentId;
   const navigation = useNavigation();
@@ -380,7 +405,11 @@ function BotEnvironment({
       hostId: host.data?.hostId ?? "unavailable",
       request: {
         operation: "agent.create",
-        input: { name: "permission check", description: "", initialMessage: "permission check" },
+        input: {
+          name: "permission check",
+          description: "",
+          initialMessage: gt("permission check"),
+        },
       },
     }),
   );
@@ -411,23 +440,27 @@ function BotEnvironment({
           <>
             {!workspace && (
               <Text className="text-foreground-muted">
-                This iPhone controls bot hosting on {environment.label}. Bots run on that computer,
-                not on your iPhone. Hosting is optional for each computer and is separate from
-                persistent remote-desktop streaming.
+                <T>
+                  This iPhone controls bot hosting on <Var>{environment.label}</Var>. Bots run on
+                  that computer, not on your iPhone. Hosting is optional for each computer and is
+                  separate from persistent remote-desktop streaming.
+                </T>
               </Text>
             )}
             <Text accessibilityLiveRegion="polite">
               {host.isPending
-                ? "Checking bot hosting…"
+                ? gt("Checking bot hosting…")
                 : state === "ready"
-                  ? "Bot hosting is running"
+                  ? gt("Bot hosting is running")
                   : state === "disabled"
-                    ? "Bot hosting is not configured on this computer"
+                    ? gt("Bot hosting is not configured on this computer")
                     : state === "starting"
-                      ? "Enabling bot hosting…"
+                      ? gt("Enabling bot hosting…")
                       : state === "failed"
-                        ? `Bot hosting failed: ${host.data?.reason ?? "unknown"}`
-                        : "Bot hosting is off"}
+                        ? gt("Bot hosting failed: {value}", {
+                            value: host.data?.reason ?? "unknown",
+                          })
+                        : gt("Bot hosting is off")}
             </Text>
             {(error || host.error || agents.error) && (
               <Text accessibilityRole="alert" className="text-danger">
@@ -436,7 +469,7 @@ function BotEnvironment({
             )}
             <View className="flex-row flex-wrap gap-2">
               <Button
-                label="Refresh"
+                label={gt("Refresh")}
                 size="compact"
                 disabled={engineBusy !== null}
                 onPress={() => {
@@ -448,10 +481,10 @@ function BotEnvironment({
                 <Button
                   label={
                     engineBusy === "start"
-                      ? "Enabling…"
+                      ? gt("Enabling…")
                       : host.data?.desiredRunning && state !== "ready"
-                        ? "Retry bot hosting"
-                        : "Enable bot hosting"
+                        ? gt("Retry bot hosting")
+                        : gt("Enable bot hosting")
                   }
                   size="compact"
                   disabled={
@@ -466,7 +499,7 @@ function BotEnvironment({
               )}
               {!workspace && state && (state !== "disabled" || host.data?.desiredRunning) && (
                 <Button
-                  label={engineBusy === "stop" ? "Disabling…" : "Disable bot hosting"}
+                  label={engineBusy === "stop" ? gt("Disabling…") : gt("Disable bot hosting")}
                   size="compact"
                   disabled={!canManage || engineBusy === "stop"}
                   onPress={() => void act("stop")}
@@ -480,14 +513,16 @@ function BotEnvironment({
             )}
             {!canManage && state !== "disabled" && (
               <Text textRole="footnote" className="text-foreground-muted">
-                Settings permission is required to enable or disable bot hosting on{" "}
-                {environment.label}.
+                <T>
+                  Settings permission is required to enable or disable bot hosting on<Var> </Var>
+                  <Var>{environment.label}</Var>.
+                </T>
               </Text>
             )}
             {!workspace && (
               <>
                 <Button
-                  label="Connect to another computer"
+                  label={gt("Connect to another computer")}
                   tone="secondary"
                   onPress={() => navigation.navigate("Connections")}
                 />
@@ -496,7 +531,11 @@ function BotEnvironment({
           </>
         )}
         {!workspace && showHosting && state === "ready" && host.data?.hostId && (
-          <BotHostTimezone key={host.data.hostId} environmentId={environmentId} hostId={host.data.hostId} />
+          <BotHostTimezone
+            key={host.data.hostId}
+            environmentId={environmentId}
+            hostId={host.data.hostId}
+          />
         )}
         {!workspace && (category === undefined || category === "maintenance") && (
           <>
@@ -531,8 +570,8 @@ function BotEnvironment({
           <Text accessibilityRole={host.error ? "alert" : "status"}>
             {host.error ??
               (host.isPending
-                ? "Checking bot hosting…"
-                : "Enable bot hosting in General to continue.")}
+                ? gt("Checking bot hosting…")
+                : gt("Enable bot hosting in General to continue."))}
           </Text>
         )}
         {workspace && (
@@ -544,12 +583,12 @@ function BotEnvironment({
                 tone={view === value ? "primary" : "secondary"}
                 label={
                   value === "bots"
-                    ? "Bots"
+                    ? gt("Bots")
                     : value === "approvals"
-                      ? "Needs attention"
+                      ? gt("Needs attention")
                       : value === "channels"
-                        ? "Channels"
-                        : "Workflows"
+                        ? gt("Channels")
+                        : gt("Workflows")
                 }
                 onPress={() => setView(value)}
               />
@@ -602,7 +641,7 @@ function BotEnvironment({
               <BotHostAgentDefaults environmentId={environmentId} hostId={host.data.hostId} />
               <BotHostLearning environmentId={environmentId} hostId={host.data.hostId} />
               <Button
-                label="Provider setup"
+                label={gt("Provider setup")}
                 tone="secondary"
                 onPress={() => {
                   if (host.data?.hostId)
@@ -617,7 +656,7 @@ function BotEnvironment({
         {workspace && view === "bots" && state === "ready" && (
           <>
             <Button
-              label="Create bot"
+              label={gt("Create bot")}
               icon="plus"
               size="compact"
               disabled={!canCreate || !host.data?.hostId}
@@ -629,10 +668,14 @@ function BotEnvironment({
                   });
               }}
             />
-            {agents.isPending && !agents.data && <Text>Loading bots…</Text>}
+            {agents.isPending && !agents.data && (
+              <Text>
+                <T>Loading bots…</T>
+              </Text>
+            )}
             {agents.data?.length === 0 && (
               <Text className="text-foreground-muted">
-                No bots yet. Create one and give it a responsibility.
+                <T>No bots yet. Create one and give it a responsibility.</T>
               </Text>
             )}
             {agents.data?.map((bot) => (
@@ -660,6 +703,7 @@ function BotEnvironment({
 export function SettingsBotNewRouteScreen({
   route,
 }: StaticScreenProps<{ environmentId: EnvironmentId; hostId: string }>) {
+  const gt = useGT();
   const environmentId = route.params.environmentId;
   const expectedHostId = route.params.hostId;
   const host = useEnvironmentQuery(openbot.status({ environmentId, input: {} }));
@@ -684,7 +728,11 @@ export function SettingsBotNewRouteScreen({
       hostId: expectedHostId,
       request: {
         operation: "agent.create",
-        input: { name: "permission check", description: "", initialMessage: "permission check" },
+        input: {
+          name: "permission check",
+          description: "",
+          initialMessage: gt("permission check"),
+        },
       },
     }),
   );
@@ -712,23 +760,27 @@ export function SettingsBotNewRouteScreen({
     setBusy(false);
   };
   return (
-    <SettingsScreen title="Create bot">
+    <SettingsScreen title={gt("Create bot")}>
       <ScreenScrollView
         keyboardShouldPersistTaps="handled"
         contentInsetAdjustmentBehavior="automatic"
         contentContainerClassName="gap-4 px-5 py-4"
       >
-        <Text>Name</Text>
+        <Text>
+          <T>Name</T>
+        </Text>
         <AppTextInput
-          accessibilityLabel="Bot name"
+          accessibilityLabel={gt("Bot name")}
           defaultValue=""
           onChangeText={setName}
           maxLength={80}
           className="min-h-12 rounded-xl bg-grouped-card p-3"
         />
-        <Text>Responsibility and instructions</Text>
+        <Text>
+          <T>Responsibility and instructions</T>
+        </Text>
         <AppTextInput
-          accessibilityLabel="Responsibility and instructions"
+          accessibilityLabel={gt("Responsibility and instructions")}
           defaultValue=""
           onChangeText={setInstructions}
           maxLength={2000}
@@ -744,18 +796,20 @@ export function SettingsBotNewRouteScreen({
           disabled={busy || !canAdmin || models === null || providers === null}
         />
         <Text className="text-foreground-muted">
-          Creating a bot sends its first message using the selected model and the provider's own
-          sign-in. Other accounts can be assigned after creation.
+          <T>
+            Creating a bot sends its first message using the selected model and the provider's own
+            sign-in. Other accounts can be assigned after creation.
+          </T>
         </Text>
         <Button
-          label="Provider setup"
+          label={gt("Provider setup")}
           tone="secondary"
           onPress={() =>
             navigation.navigate("SettingsBotProviders", { environmentId, hostId: expectedHostId })
           }
         />
         <Button
-          label="Refresh providers"
+          label={gt("Refresh providers")}
           tone="text"
           onPress={() => {
             modelsQuery.refresh();
@@ -766,7 +820,7 @@ export function SettingsBotNewRouteScreen({
           <Text accessibilityRole="alert" className="text-danger">
             {modelsQuery.error ??
               statusQuery.error ??
-              "The bot engine changed. Reopen this form before creating a bot."}
+              gt("The bot engine changed. Reopen this form before creating a bot.")}
           </Text>
         )}
         {error && (
@@ -775,7 +829,7 @@ export function SettingsBotNewRouteScreen({
           </Text>
         )}
         <Button
-          label="Create bot"
+          label={gt("Create bot")}
           loading={busy}
           disabled={
             !canAdmin ||
@@ -823,6 +877,7 @@ export function BotDetail({
   initialRoutineId?: string;
   initialRoutineRunId?: string;
 }) {
+  const gt = useGT();
   const pendingMessage = useRef<{ text: string; id: string } | null>(null);
   const messageIdFor = (value: string) => {
     if (pendingMessage.current?.text !== value)
@@ -877,9 +932,9 @@ export function BotDetail({
   };
   const deleteBot = () =>
     Dialog.confirm({
-      title: "Delete bot?",
-      message: "This deletes the bot and its conversations.",
-      confirmText: "Delete bot",
+      title: gt("Delete bot?"),
+      message: gt("This deletes the bot and its conversations."),
+      confirmText: gt("Delete bot"),
       destructive: true,
       onConfirm: () => {
         void (async () => {
@@ -907,10 +962,10 @@ export function BotDetail({
       <SettingsScreen title={name}>
         <View className="gap-3 p-5">
           <Text accessibilityRole="alert">
-            Reconnect to the original bot engine or select the bot again before continuing.
+            <T>Reconnect to the original bot engine or select the bot again before continuing.</T>
           </Text>
-          <Button label="Refresh engine" onPress={host.refresh} />
-          <Button label="Back to bots" onPress={() => navigation.goBack()} />
+          <Button label={gt("Refresh engine")} onPress={host.refresh} />
+          <Button label={gt("Back to bots")} onPress={() => navigation.goBack()} />
         </View>
       </SettingsScreen>
     );
@@ -929,12 +984,12 @@ export function BotDetail({
               key={value}
               label={
                 value === "conversation"
-                  ? "Chat"
+                  ? gt("Chat")
                   : value === "task"
-                    ? "Tasks"
+                    ? gt("Tasks")
                     : value === "memory"
-                      ? "Memory"
-                      : "Routines"
+                      ? gt("Memory")
+                      : gt("Routines")
               }
               tone={tab === value ? "primary" : "secondary"}
               size="compact"
@@ -949,16 +1004,20 @@ export function BotDetail({
             />
           ))}
         </View>
-        <Button label="Refresh" size="compact" onPress={query.refresh} />
+        <Button label={gt("Refresh")} size="compact" onPress={query.refresh} />
         {(error || query.error) && (
           <Text accessibilityRole="alert" className="text-danger">
             {error ?? query.error}
           </Text>
         )}
-        {query.isPending && !query.data && <Text>Loading…</Text>}
+        {query.isPending && !query.data && (
+          <Text>
+            <T>Loading…</T>
+          </Text>
+        )}
         {selectedTask && (
           <Button
-            label="Back to tasks"
+            label={gt("Back to tasks")}
             size="compact"
             tone="text"
             onPress={() => {
@@ -969,15 +1028,19 @@ export function BotDetail({
           />
         )}
         {tasks?.length === 0 && (
-          <Text className="text-foreground-muted">No tasks yet. Start one below.</Text>
+          <Text className="text-foreground-muted">
+            <T>No tasks yet. Start one below.</T>
+          </Text>
         )}
         {memories?.length === 0 && (
           <Text className="text-foreground-muted">
-            No saved memories. Add something this bot should remember.
+            <T>No saved memories. Add something this bot should remember.</T>
           </Text>
         )}
         {routines?.length === 0 && (
-          <Text className="text-foreground-muted">No routines yet. Create one below.</Text>
+          <Text className="text-foreground-muted">
+            <T>No routines yet. Create one below.</T>
+          </Text>
         )}
         {(tab === "conversation" || (tab === "task" && selectedTask !== null)) && (
           <BotConversationPanel
@@ -991,7 +1054,7 @@ export function BotDetail({
           <View key={task.id} className="gap-2 rounded-xl bg-grouped-card p-3">
             <Text>{task.title}</Text>
             <Button
-              label="Open task"
+              label={gt("Open task")}
               size="compact"
               onPress={() => {
                 setSelectedTask(task.id);
@@ -1005,7 +1068,7 @@ export function BotDetail({
             </Text>
             <View className="flex-row flex-wrap gap-2">
               <Button
-                label={task.state === "closed" ? "Reopen" : "Close task"}
+                label={task.state === "closed" ? gt("Reopen") : gt("Close task")}
                 size="compact"
                 disabled={busy || !canWrite}
                 onPress={() =>
@@ -1018,7 +1081,7 @@ export function BotDetail({
               />
               {task.state === "running" && (
                 <Button
-                  label="Stop"
+                  label={gt("Stop")}
                   size="compact"
                   disabled={busy || !canWrite}
                   onPress={() => void send({ operation: "task.stop", agentId, taskId: task.id })}
@@ -1031,7 +1094,7 @@ export function BotDetail({
           <View key={memory.id} className="gap-2 rounded-xl bg-grouped-card p-3">
             <Text selectable>{memory.text}</Text>
             <Button
-              label="Edit memory"
+              label={gt("Edit memory")}
               size="compact"
               tone="text"
               disabled={busy || !canAdmin}
@@ -1042,7 +1105,7 @@ export function BotDetail({
               }}
             />
             <Button
-              label="Delete memory"
+              label={gt("Delete memory")}
               size="compact"
               tone="text"
               disabled={busy || !canAdmin}
@@ -1064,12 +1127,12 @@ export function BotDetail({
         {routines?.map((routine) => (
           <View key={routine.id} className="gap-2 rounded-xl bg-grouped-card p-3">
             <Text>
-              {routine.name} · {routine.active ? "Active" : "Paused"}
+              {routine.name} · {routine.active ? gt("Active") : gt("Paused")}
             </Text>
             <Text className="text-foreground-muted">{routine.instruction}</Text>
             <View className="flex-row flex-wrap gap-2">
               <Button
-                label={routine.active ? "Pause" : "Resume"}
+                label={routine.active ? gt("Pause") : gt("Resume")}
                 size="compact"
                 disabled={busy || !canAdmin || !canWrite}
                 onPress={() =>
@@ -1085,7 +1148,7 @@ export function BotDetail({
                 }
               />
               <Button
-                label="Run now"
+                label={gt("Run now")}
                 size="compact"
                 disabled={busy || !canWrite}
                 onPress={() =>
@@ -1097,15 +1160,17 @@ export function BotDetail({
         ))}
         {query.data !== null && query.data !== undefined && !tasks && !memories && !routines && (
           <Text accessibilityRole="alert">
-            This host returned an unsupported format. Update the integration before editing this
-            view.
+            <T>
+              This host returned an unsupported format. Update the integration before editing this
+              view.
+            </T>
           </Text>
         )}
         <Button
           label={
             configurationOpen
-              ? "Hide bot configuration"
-              : "Model, instructions and coding destinations"
+              ? gt("Hide bot configuration")
+              : gt("Model, instructions and coding destinations")
           }
           tone="text"
           onPress={() => setConfigurationOpen(!configurationOpen)}
@@ -1168,9 +1233,9 @@ export function BotDetail({
             agentId={agentId}
           />
         )}
-        <SettingsSection title="Coding work">
+        <SettingsSection title={gt("Coding work")}>
           <View className="gap-3 p-3">
-            <Button label="Refresh coding work" size="compact" onPress={coding.refresh} />
+            <Button label={gt("Refresh coding work")} size="compact" onPress={coding.refresh} />
             {coding.error && (
               <Text accessibilityRole="alert" className="text-danger">
                 {coding.error}
@@ -1178,13 +1243,13 @@ export function BotDetail({
             )}
             {coding.data?.length === 0 && (
               <Text className="text-foreground-muted">
-                Coding assignments delegated by this bot will appear here.
+                <T>Coding assignments delegated by this bot will appear here.</T>
               </Text>
             )}
             {coding.data?.map((task) => (
               <View key={`${task.origin.taskId}:${task.operationId}`} className="gap-2">
                 <Button
-                  label={`Open coding thread · ${task.state}`}
+                  label={gt("Open coding thread · {state}", { state: task.state })}
                   size="compact"
                   onPress={() =>
                     navigation.dispatch(
@@ -1195,7 +1260,7 @@ export function BotDetail({
                 {task.result && <Text selectable>{task.result}</Text>}
                 {task.delivery?.state === "pending" && (
                   <Text textRole="footnote" className="text-foreground-muted">
-                    Result delivery to the bot is pending.
+                    <T>Result delivery to the bot is pending.</T>
                   </Text>
                 )}
                 {task.delivery?.state === "reconciliation-required" && (
@@ -1204,16 +1269,20 @@ export function BotDetail({
                     textRole="footnote"
                     className="text-foreground-muted"
                   >
-                    The bot’s receipt needs review before this result can be sent again.
+                    <T>The bot’s receipt needs review before this result can be sent again.</T>
                   </Text>
                 )}
-                {task.pendingRequestIds.length > 0 && <Text>This thread needs your input.</Text>}
+                {task.pendingRequestIds.length > 0 && (
+                  <Text>
+                    <T>This thread needs your input.</T>
+                  </Text>
+                )}
               </View>
             ))}
           </View>
         </SettingsSection>
         <Button
-          label="Delete bot"
+          label={gt("Delete bot")}
           size="compact"
           tone="danger"
           disabled={busy || !canAdmin}
@@ -1229,11 +1298,13 @@ export function BotDetail({
         )}
         {tab !== "routine" && (tasks !== null || memories !== null) && (
           <View className="gap-2">
-            <Text>{tab === "task" ? "New task" : editingMemory ? "Edit memory" : "Remember"}</Text>
+            <Text>
+              {tab === "task" ? gt("New task") : editingMemory ? gt("Edit memory") : gt("Remember")}
+            </Text>
             <AppTextInput
               key={`${tab}:${inputRevision}`}
               accessibilityLabel={
-                tab === "task" ? "New task" : editingMemory ? "Edit memory" : "Remember"
+                tab === "task" ? gt("New task") : editingMemory ? gt("Edit memory") : gt("Remember")
               }
               defaultValue={text}
               onChangeText={setText}
@@ -1243,7 +1314,13 @@ export function BotDetail({
               className="min-h-24 rounded-xl bg-grouped-card p-3"
             />
             <Button
-              label={tab === "task" ? "Start task" : editingMemory ? "Save memory" : "Add memory"}
+              label={
+                tab === "task"
+                  ? gt("Start task")
+                  : editingMemory
+                    ? gt("Save memory")
+                    : gt("Add memory")
+              }
               loading={busy}
               disabled={!text.trim() || (tab === "memory" ? !canAdmin : !canWrite)}
               onPress={() => {
@@ -1284,6 +1361,7 @@ function DailyRoutineForm({
   hostId: string;
   onCreated: () => void;
 }) {
+  const gt = useGT();
   const canAdmin = useAtomValue(openbot.admin.permissionAtom(environmentId));
   const canOperate = useAtomValue(openbot.writeToHost.permissionAtom(environmentId));
   const admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
@@ -1326,21 +1404,25 @@ function DailyRoutineForm({
     setBusy(false);
   };
   return (
-    <SettingsSection title="Create daily routine">
+    <SettingsSection title={gt("Create daily routine")}>
       <View className="gap-3 p-3">
-        <Text>Name</Text>
+        <Text>
+          <T>Name</T>
+        </Text>
         <AppTextInput
           key={`name:${revision}`}
-          accessibilityLabel="Routine name"
+          accessibilityLabel={gt("Routine name")}
           defaultValue=""
           onChangeText={setName}
           maxLength={80}
           className="min-h-12 rounded-xl bg-sheet p-3"
         />
-        <Text>Instructions</Text>
+        <Text>
+          <T>Instructions</T>
+        </Text>
         <AppTextInput
           key={`instruction:${revision}`}
-          accessibilityLabel="Routine instructions"
+          accessibilityLabel={gt("Routine instructions")}
           defaultValue=""
           onChangeText={setInstruction}
           multiline
@@ -1348,9 +1430,11 @@ function DailyRoutineForm({
           maxLength={100000}
           className="min-h-24 rounded-xl bg-sheet p-3"
         />
-        <Text>Time (24-hour HH:MM)</Text>
+        <Text>
+          <T>Time (24-hour HH:MM)</T>
+        </Text>
         <AppTextInput
-          accessibilityLabel="Routine time, 24-hour hours and minutes"
+          accessibilityLabel={gt("Routine time, 24-hour hours and minutes")}
           defaultValue="09:00"
           onChangeText={setTime}
           maxLength={5}
@@ -1359,12 +1443,14 @@ function DailyRoutineForm({
         />
         {!validTime && (
           <Text accessibilityRole="alert" className="text-danger">
-            Enter a time such as 09:00 or 17:30.
+            <T>Enter a time such as 09:00 or 17:30.</T>
           </Text>
         )}
-        <Text>Time zone</Text>
+        <Text>
+          <T>Time zone</T>
+        </Text>
         <AppTextInput
-          accessibilityLabel="Routine time zone"
+          accessibilityLabel={gt("Routine time zone")}
           defaultValue={timezone}
           onChangeText={setTimezone}
           maxLength={512}
@@ -1378,7 +1464,7 @@ function DailyRoutineForm({
           </Text>
         )}
         <Button
-          label="Create routine"
+          label={gt("Create routine")}
           loading={busy}
           disabled={
             !canAdmin ||
@@ -1398,8 +1484,9 @@ function DailyRoutineForm({
 export function SettingsBotProvidersRouteScreen({
   route,
 }: StaticScreenProps<{ environmentId: EnvironmentId; hostId: string }>) {
+  const gt = useGT();
   return (
-    <SettingsScreen title="Bot providers">
+    <SettingsScreen title={gt("Bot providers")}>
       <ScreenScrollView
         keyboardShouldPersistTaps="handled"
         contentInsetAdjustmentBehavior="automatic"

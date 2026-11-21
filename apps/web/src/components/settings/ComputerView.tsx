@@ -1,6 +1,8 @@
 /* oxlint-disable react/iframe-missing-sandbox -- Moonlight needs script execution and its origin for HTTP and signaling. */
 import { useEffect, useRef, useState } from "react";
+import { T, Var, useGT } from "gt-react";
 export function ComputerView({ id, url }: { id: string; url: string }) {
+  const gt = useGT();
   const frame = useRef<HTMLIFrameElement>(null);
   const [state, setState] = useState("connecting");
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Subscribe to the Moonlight frame's first-pixel and failure reports.
@@ -22,10 +24,14 @@ export function ComputerView({ id, url }: { id: string; url: string }) {
   }, [id, url]);
   return (
     <div className="space-y-2">
-      <p role="status">Computer viewer: {state}</p>
+      <p role="status">
+        <T>
+          Computer viewer: <Var>{state}</Var>
+        </T>
+      </p>
       <iframe
         ref={frame}
-        title="Host computer viewer"
+        title={gt("Host computer viewer")}
         src={url}
         className="h-[60vh] w-full"
         sandbox="allow-scripts allow-forms allow-same-origin allow-pointer-lock"

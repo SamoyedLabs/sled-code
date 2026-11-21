@@ -6,12 +6,14 @@ import * as Dialog from "../../components/ui/Dialog";
 import { openbot } from "../../state/openbot";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useBotFileUpload, type BotFilePicker } from "../settings/useBotFileUpload";
+import { useGT } from "gt-react-native";
 
 export function useBotGroupAttachments(
   environmentId: EnvironmentId,
   hostId: string,
   channelId: string,
 ) {
+  const gt = useGT();
   const upload = useBotFileUpload(environmentId, hostId);
   const canSend = useAtomValue(openbot.fileSendDraft.permissionAtom(environmentId));
   const sendFile = useAtomCommand(openbot.fileSendDraft, { reportFailure: false });
@@ -27,8 +29,8 @@ export function useBotGroupAttachments(
       file = await upload.pick(recipient, source);
     } catch {
       Dialog.alert(
-        "Could not attach the file",
-        "Try a supported file and check the host connection.",
+        gt("Could not attach the file"),
+        gt("Try a supported file and check the host connection."),
       );
       return;
     }
@@ -67,7 +69,10 @@ export function useBotGroupAttachments(
         setAttempt(null);
         return true;
       }
-      Dialog.alert("Attachment delivery unconfirmed", "Tap Send to retry the same message.");
+      Dialog.alert(
+        gt("Attachment delivery unconfirmed"),
+        gt("Tap Send to retry the same message."),
+      );
       return false;
     })().finally(() => {
       lock.current = false;

@@ -85,6 +85,7 @@ import {
   type BotWorkspaceView,
   type BotWorkspaceSection,
 } from "./BotWorkspaceChrome";
+import { T, useGT } from "gt-react";
 
 const decodeConversationPage = Schema.decodeUnknownSync(OpenbotConversationPage);
 
@@ -98,6 +99,7 @@ function useRetainedBotNavigation() {
 
 /** React composition of the upstream sidebar + conversation + tools layout. */
 export function ReactBotWorkspace({ active }: { active: boolean }) {
+  const gt = useGT();
   const { environments } = useSettingsScope();
   const navigate = useNavigate();
   const requestedMachine = useRetainedBotNavigation().machine;
@@ -110,7 +112,9 @@ export function ReactBotWorkspace({ active }: { active: boolean }) {
     <div className="flex min-h-0 flex-1 flex-col">
       {environments.length > 1 && (
         <div className="flex flex-wrap items-center gap-3 border-b border-border/60 px-4 py-2">
-          <span className="text-xs text-muted-foreground">Computer</span>
+          <span className="text-xs text-muted-foreground">
+            <T>Computer</T>
+          </span>
           <div className="w-60 max-w-full">
             <Select
               value={environment?.environmentId ?? ""}
@@ -125,7 +129,7 @@ export function ReactBotWorkspace({ active }: { active: boolean }) {
                 });
               }}
             >
-              <SelectTrigger aria-label="Bots computer">
+              <SelectTrigger aria-label={gt("Bots computer")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectPopup>
@@ -152,14 +156,16 @@ export function ReactBotWorkspace({ active }: { active: boolean }) {
             <EmptyMedia>
               <BotIcon aria-hidden className="size-7" />
             </EmptyMedia>
-            <EmptyTitle>Connect to your bots</EmptyTitle>
+            <EmptyTitle>
+              <T>Connect to your bots</T>
+            </EmptyTitle>
             <EmptyDescription>
-              Choose a Sled computer to open its bots and conversations.
+              <T>Choose a Sled computer to open its bots and conversations.</T>
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <Button variant="outline" render={<Link to="/settings/connections" />}>
-              Open connections
+              <T>Open connections</T>
             </Button>
           </EmptyContent>
         </Empty>
@@ -177,6 +183,7 @@ function EnvironmentWorkspace({
   label: string;
   active: boolean;
 }) {
+  const gt = useGT();
   const host = useEnvironmentQuery(openbot.status({ environmentId, input: {} }));
   const agents = useEnvironmentQuery(
     host.data?.state === "ready" ? openbot.agents({ environmentId, input: {} }) : null,
@@ -415,7 +422,7 @@ function EnvironmentWorkspace({
     });
     if (settled._tag === "Failure" && getNavigationScope() === captured) {
       const cause = squashAtomCommandFailure(settled);
-      setThreadError(cause instanceof Error ? cause.message : "Conversation lookup failed.");
+      setThreadError(cause instanceof Error ? cause.message : gt("Conversation lookup failed."));
     }
   };
   const moveHistory = (step: -1 | 1) => {
@@ -569,7 +576,9 @@ function EnvironmentWorkspace({
           renameLock.current = false;
           if (result._tag === "Failure" || result.value._tag === "Failure") {
             setThreadError(
-              "Thread rename was refused or its outcome is unknown. Refresh the thread list before trying again.",
+              gt(
+                "Thread rename was refused or its outcome is unknown. Refresh the thread list before trying again.",
+              ),
             );
             return false;
           }
@@ -620,7 +629,7 @@ function EnvironmentWorkspace({
               }}
             >
               <RefreshCwIcon aria-hidden className="size-3.5" />
-              Try again
+              <T>Try again</T>
             </Button>
           </div>
         )}
@@ -634,22 +643,26 @@ function EnvironmentWorkspace({
                   <EmptyMedia>
                     <ServerOffIcon aria-hidden className="size-7" />
                   </EmptyMedia>
-                  <EmptyTitle>Bots are offline</EmptyTitle>
+                  <EmptyTitle>
+                    <T>Bots are offline</T>
+                  </EmptyTitle>
                   <EmptyDescription>
                     {host.error ??
                       host.data?.reason ??
-                      "Connect to the computer that hosts your bots, or enable hosting on this computer."}
+                      gt(
+                        "Connect to the computer that hosts your bots, or enable hosting on this computer.",
+                      )}
                   </EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
                   <Button variant="outline" onClick={host.refresh}>
-                    Try again
+                    <T>Try again</T>
                   </Button>
                   <Button
                     variant="ghost-muted"
                     render={<Link to="/settings/bots" search={{ machine: environmentId }} />}
                   >
-                    Hosting settings
+                    <T>Hosting settings</T>
                   </Button>
                 </EmptyContent>
               </Empty>
@@ -666,7 +679,7 @@ function EnvironmentWorkspace({
               />
             ) : (
               <p role="status" className="p-4">
-                {people.error ?? "This person is no longer available on this host."}
+                {people.error ?? gt("This person is no longer available on this host.")}
               </p>
             )
           ) : section === "groups" ? (
@@ -884,14 +897,16 @@ function EnvironmentWorkspace({
                 <EmptyMedia>
                   <BotIcon aria-hidden className="size-7" />
                 </EmptyMedia>
-                <EmptyTitle>Your bots, together</EmptyTitle>
+                <EmptyTitle>
+                  <T>Your bots, together</T>
+                </EmptyTitle>
                 <EmptyDescription>
-                  Choose a bot to open its conversation, or create one to get started.
+                  <T>Choose a bot to open its conversation, or create one to get started.</T>
                 </EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
                 <Button variant="outline" onClick={() => setSection("manage")}>
-                  Create bot
+                  <T>Create bot</T>
                 </Button>
               </EmptyContent>
             </Empty>
@@ -1040,31 +1055,31 @@ function EnvironmentWorkspace({
           actions={[
             {
               id: "new-agent",
-              label: "New agent",
+              label: gt("New agent"),
               group: "actions",
               run: () => setSection("manage"),
             },
             {
               id: "marketplace",
-              label: "Marketplace",
+              label: gt("Marketplace"),
               group: "actions",
               run: () => setSection("marketplace"),
             },
             {
               id: "schedule",
-              label: "Schedule",
+              label: gt("Schedule"),
               group: "actions",
               run: () => setSection("schedule"),
             },
             {
               id: "app-settings",
-              label: "App settings",
+              label: gt("App settings"),
               group: "settings",
               run: () => setSection("settings"),
             },
             {
               id: "host-settings",
-              label: "Server settings",
+              label: gt("Server settings"),
               group: "settings",
               run: () => setSection("host-settings"),
             },
@@ -1087,13 +1102,16 @@ function EnvironmentWorkspace({
 }
 
 function BotWorkspaceLoading() {
+  const gt = useGT();
   return (
     <div
       role="status"
-      aria-label="Loading bot workspace"
+      aria-label={gt("Loading bot workspace")}
       className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-6"
     >
-      <span className="sr-only">Loading bot workspace…</span>
+      <span className="sr-only">
+        <T>Loading bot workspace…</T>
+      </span>
       <Skeleton className="h-5 w-40" />
       <div className="flex items-start gap-3">
         <Skeleton className="size-8 shrink-0" shape="pill" />

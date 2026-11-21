@@ -66,8 +66,8 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     const gate = yield* Semaphore.make(1);
-    const scope=yield* Effect.scope;
-    const validations=new Map<string,Fiber.Fiber<void>>();
+    const scope = yield* Effect.scope;
+    const validations = new Map<string, Fiber.Fiber<void>>();
     const changes = yield* PubSub.sliding<OpenbotChange>(1);
     const upstream = yield* Upstream.UpstreamRuntime;
     const launch = yield* Launch.ThreadLaunchService;
@@ -208,31 +208,100 @@ export const layer = Layer.effect(
       if (policy.authority !== "check") current = yield* review(current, proposal);
       return current;
     }, Effect.mapError(mapped));
-    const startValidation=Effect.fn("Maintenance.startValidation")(function*(proposal:OpenbotMaintenanceProposal){
-      const input=proposal.validationInput;
-      if(!input||validations.has(input.runId)||proposal.validation?.state!=="running")return;
-      const work=Effect.gen(function*(){
-        const result=yield* runner.run(input).pipe(Effect.result);
-        yield* gate.withPermit(Effect.gen(function*(){
-          const current=yield* get;
-          const active=current.proposals.find((item)=>item.id===proposal.id);
-          if(!active||active.validationRunId!==input.runId||active.validation?.state!=="running")return;
-          const validation:OpenbotCompatibilityEvidence=result._tag==="Success"?result.success:{...active.validation,state:"failed",completedAt:yield* now,checks:[{kind:"source",outcome:"failed",detail:mapped(result.failure).message}]};
-          yield* replace(current,{...active,validation,compatibility:"requires-validation"});
-        }));
-      }).pipe(Effect.catchCause(()=>Effect.logWarning("Openbot compatibility validation needs recovery")),Effect.ensuring(Effect.sync(()=>{validations.delete(input.runId);})),Effect.asVoid);
-      const fiber=yield* work.pipe(Effect.forkIn(scope));
-      validations.set(input.runId,fiber);
+    const startValidation = Effect.fn("Maintenance.startValidation")(function* (
+      proposal: OpenbotMaintenanceProposal,
+    ) {
+      const input = proposal.validationInput;
+      if (!input || validations.has(input.runId) || proposal.validation?.state !== "running")
+        return;
+      const work = Effect.gen(function* () {
+        const result = yield* runner.run(input).pipe(Effect.result);
+        yield* gate.withPermit(
+          Effect.gen(function* () {
+            const current = yield* get;
+            const active = current.proposals.find((item) => item.id === proposal.id);
+            if (
+              !active ||
+              active.validationRunId !== input.runId ||
+              active.validation?.state !== "running"
+            )
+              return;
+            const validation: OpenbotCompatibilityEvidence =
+              result._tag === "Success"
+                ? result.success
+                : {
+                    ...active.validation,
+                    state: "failed",
+                    completedAt: yield* now,
+                    checks: [
+                      { kind: "source", outcome: "failed", detail: mapped(result.failure).message },
+                    ],
+                  };
+            yield* replace(current, {
+              ...active,
+              validation,
+              compatibility: "requires-validation",
+            });
+          }),
+        );
+      }).pipe(
+        Effect.catchCause(() =>
+          Effect.logWarning("Openbot compatibility validation needs recovery"),
+        ),
+        Effect.ensuring(
+          Effect.sync(() => {
+            validations.delete(input.runId);
+          }),
+        ),
+        Effect.asVoid,
+      );
+      const fiber = yield* work.pipe(Effect.forkIn(scope));
+      validations.set(input.runId, fiber);
     });
-    const beginValidation=Effect.fn("Maintenance.beginValidation")(function*(state:OpenbotMaintenanceState,proposal:OpenbotMaintenanceProposal,input:OpenbotCompatibilityRunInput){
-      if(proposal.validation?.state==="running")return state;
-      const validation:OpenbotCompatibilityEvidence={runId:input.runId,threadId:input.threadId,identity:input.identity,state:"running",checks:[],createdAt:yield* now,completedAt:null};
-      const pending={...proposal,validationRunId:input.runId,validationInput:input,validation,compatibility:"requires-validation" as const};
-      const saved=yield* replace(state,pending);
+    const beginValidation = Effect.fn("Maintenance.beginValidation")(function* (
+      state: OpenbotMaintenanceState,
+      proposal: OpenbotMaintenanceProposal,
+      input: OpenbotCompatibilityRunInput,
+    ) {
+      if (proposal.validation?.state === "running") return state;
+      const validation: OpenbotCompatibilityEvidence = {
+        runId: input.runId,
+        threadId: input.threadId,
+        identity: input.identity,
+        state: "running",
+        checks: [],
+        createdAt: yield* now,
+        completedAt: null,
+      };
+      const pending = {
+        ...proposal,
+        validationRunId: input.runId,
+        validationInput: input,
+        validation,
+        compatibility: "requires-validation" as const,
+      };
+      const saved = yield* replace(state, pending);
       yield* startValidation(pending);
       return saved;
     });
-    const cancelled=(proposal:OpenbotMaintenanceProposal):OpenbotMaintenanceProposal=>proposal.validation?.state==="running"?{...proposal,validation:{...proposal.validation,state:"failed",checks:[...proposal.validation.checks,{kind:"source",outcome:"failed",detail:"Validation was cancelled by the operator."}]}}:proposal;
+    const cancelled = (proposal: OpenbotMaintenanceProposal): OpenbotMaintenanceProposal =>
+      proposal.validation?.state === "running"
+        ? {
+            ...proposal,
+            validation: {
+              ...proposal.validation,
+              state: "failed",
+              checks: [
+                ...proposal.validation.checks,
+                {
+                  kind: "source",
+                  outcome: "failed",
+                  detail: "Validation was cancelled by the operator.",
+                },
+              ],
+            },
+          }
+        : proposal;
     const execute = Effect.fn("Maintenance.execute")(
       function* (raw: OpenbotMaintenanceCommand) {
         const input = yield* decodeCommand(raw);
@@ -242,13 +311,18 @@ export const layer = Layer.effect(
             return yield* fail("Maintenance changed. Refresh before saving policy.");
           if (input.policy?.enabled && input.policy.authority !== "check")
             yield* validateDestination(input.policy);
-          if(!input.policy?.enabled||input.policy.authority!=="stage"){
-            yield* Effect.forEach(validations.values(),(fiber)=>Fiber.interrupt(fiber),{discard:true});
+          if (!input.policy?.enabled || input.policy.authority !== "stage") {
+            yield* Effect.forEach(validations.values(), (fiber) => Fiber.interrupt(fiber), {
+              discard: true,
+            });
             validations.clear();
           }
           return yield* save({
             ...state,
-            proposals:!input.policy?.enabled||input.policy.authority!=="stage"?state.proposals.map(cancelled):state.proposals,
+            proposals:
+              !input.policy?.enabled || input.policy.authority !== "stage"
+                ? state.proposals.map(cancelled)
+                : state.proposals,
             policy: input.policy,
             nextCheckAt: input.policy?.enabled ? yield* now : null,
             lastError: null,
@@ -275,7 +349,7 @@ export const layer = Layer.effect(
           yield* launch.launch({
             commandId: CommandId.make(`openbot-maintenance-prepare-${proposal.id}`),
             threadId: preparationThreadId,
-                projectId: policy.projectId,
+            projectId: policy.projectId,
             title: `Prepare Openbot ${proposal.release.version}`,
             modelSelection: policy.modelSelection,
             runtimeMode: "approval-required",
@@ -307,7 +381,7 @@ export const layer = Layer.effect(
           );
           if (input.identity.releaseCommit !== proposal.release.releaseCommit)
             return yield* fail("The preparation manifest names a different release.");
-          return yield* beginValidation(state,proposal,input);
+          return yield* beginValidation(state, proposal, input);
         }
         if (input.action === "validate") {
           if (
@@ -320,11 +394,14 @@ export const layer = Layer.effect(
             return yield* fail(
               "Validation must name this accepted proposal's actual preparation thread and release.",
             );
-          return yield* beginValidation(state,proposal,input.input);
+          return yield* beginValidation(state, proposal, input.input);
         }
-        if(input.action === "cancel-validation"){
-          if(proposal.validationRunId){const fiber=validations.get(proposal.validationRunId);if(fiber)yield* Fiber.interrupt(fiber);}
-          return yield* replace(state,cancelled(proposal));
+        if (input.action === "cancel-validation") {
+          if (proposal.validationRunId) {
+            const fiber = validations.get(proposal.validationRunId);
+            if (fiber) yield* Fiber.interrupt(fiber);
+          }
+          return yield* replace(state, cancelled(proposal));
         }
         if (input.action === "promote") {
           if (
@@ -404,7 +481,8 @@ export const layer = Layer.effect(
     const runDue = gate.withPermits(1)(
       Effect.gen(function* () {
         const state = yield* get;
-        if(state.policy?.enabled&&state.policy.authority==="stage")for(const proposal of state.proposals)yield* startValidation(proposal);
+        if (state.policy?.enabled && state.policy.authority === "stage")
+          for (const proposal of state.proposals) yield* startValidation(proposal);
         if (!state.policy?.enabled || !state.nextCheckAt || state.nextCheckAt > (yield* now))
           return;
         yield* check(state);
@@ -418,14 +496,33 @@ export const layer = Layer.effect(
       ),
     );
     const persisted = yield* get;
-    if (persisted.proposals.some(proposal => proposal.validation?.state === "running")) {
+    if (persisted.proposals.some((proposal) => proposal.validation?.state === "running")) {
       const completedAt = yield* now;
-      yield* save({ ...persisted, proposals: persisted.proposals.map(proposal =>
-        proposal.validation?.state === "running" ? { ...proposal, compatibility: "requires-validation", validation: {
-          ...proposal.validation, state: "failed", completedAt,
-          checks: [...proposal.validation.checks, { kind: "source", outcome: "failed", detail: "Validation was interrupted by server restart. Start a fresh validation attempt." }],
-        } } : proposal,
-      ) });
+      yield* save({
+        ...persisted,
+        proposals: persisted.proposals.map((proposal) =>
+          proposal.validation?.state === "running"
+            ? {
+                ...proposal,
+                compatibility: "requires-validation",
+                validation: {
+                  ...proposal.validation,
+                  state: "failed",
+                  completedAt,
+                  checks: [
+                    ...proposal.validation.checks,
+                    {
+                      kind: "source",
+                      outcome: "failed",
+                      detail:
+                        "Validation was interrupted by server restart. Start a fresh validation attempt.",
+                    },
+                  ],
+                },
+              }
+            : proposal,
+        ),
+      });
     }
     yield* scheduler.register("openbot-upstream-maintenance", runDue);
     return Maintenance.of({ changes: Stream.fromPubSub(changes), get, execute });

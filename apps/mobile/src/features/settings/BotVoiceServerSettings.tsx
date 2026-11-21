@@ -17,6 +17,7 @@ import {
   type VoiceServerRoutes,
 } from "../bots/upstream/voice/botVoiceServerWire";
 import { SettingsSection } from "./components/SettingsSection";
+import { T, useGT } from "gt-react-native";
 
 const emptyRoutes: VoiceServerRoutes = {
   dictation: false,
@@ -27,6 +28,7 @@ const emptyRoutes: VoiceServerRoutes = {
 };
 
 export function BotVoiceServerSettings({ disabled }: { disabled: boolean }) {
+  const gt = useGT();
   const saved = useBotVoiceServer();
   const listening = useBotRecognition();
   const [editing, setEditing] = useState(false);
@@ -35,7 +37,7 @@ export function BotVoiceServerSettings({ disabled }: { disabled: boolean }) {
   const host = saved ? new URL(saved.address).host : null;
   return (
     <SettingsSection
-      title="Voice server"
+      title={gt("Voice server")}
       footer="Connect an OpenAI-compatible server for dictation and spoken replies."
     >
       {editing ? (
@@ -52,7 +54,7 @@ export function BotVoiceServerSettings({ disabled }: { disabled: boolean }) {
         <>
           <ListActionRow
             icon="server.rack"
-            label={saved ? "Edit voice server" : "Add voice server"}
+            label={saved ? gt("Edit voice server") : gt("Add voice server")}
             detail={host ?? undefined}
             disabled={disabled || removing}
             onPress={() => setEditing(true)}
@@ -60,14 +62,14 @@ export function BotVoiceServerSettings({ disabled }: { disabled: boolean }) {
           {saved && (
             <ListActionRow
               icon="trash"
-              label="Remove voice server"
+              label={gt("Remove voice server")}
               loading={removing}
               disabled={disabled || removing}
               onPress={() =>
                 Dialog.confirm({
-                  title: "Remove the voice server?",
-                  message: "Your device’s voice settings will be used again.",
-                  confirmText: "Remove",
+                  title: gt("Remove the voice server?"),
+                  message: gt("Your device’s voice settings will be used again."),
+                  confirmText: gt("Remove"),
                   destructive: true,
                   onConfirm: () => {
                     setRemoving(true);
@@ -85,7 +87,7 @@ export function BotVoiceServerSettings({ disabled }: { disabled: boolean }) {
           )}
           {removalError && (
             <Text accessibilityRole="alert" className="p-3">
-              Could not remove the voice server.
+              <T>Could not remove the voice server.</T>
             </Text>
           )}
         </>
@@ -105,6 +107,7 @@ function VoiceServerEditor({
   onClose: () => void;
   onSaved: (routes: VoiceServerRoutes) => void;
 }) {
+  const gt = useGT();
   const keyInput = useRef<TextInputInstance>(null);
   const [address, setAddress] = useState(saved?.address ?? "");
   const [key, setKey] = useState("");
@@ -119,14 +122,14 @@ function VoiceServerEditor({
     await (async () => {
       const available = await probeBotVoiceServer(address, key);
       if (!available.transcription.length && !available.speech.length) {
-        setError("The server returned no dictation or speech models.");
+        setError(gt("The server returned no dictation or speech models."));
         return;
       }
       setModels(available);
       setRoutes((current) => fitVoiceServerRoutes(current, available));
     })()
       .catch((error) => {
-        setError(error instanceof Error ? error.message : "Could not reach the voice server.");
+        setError(error instanceof Error ? error.message : gt("Could not reach the voice server."));
       })
       .finally(() => {
         setWorking(null);
@@ -139,7 +142,7 @@ function VoiceServerEditor({
       await saveBotVoiceServer(address, key, routes);
       onSaved(routes);
     } catch {
-      setError("Could not save the voice server.");
+      setError(gt("Could not save the voice server."));
     }
     setWorking(null);
   }
@@ -150,10 +153,10 @@ function VoiceServerEditor({
   return (
     <View className="gap-2 p-3">
       <Text textRole="footnote" className="text-foreground-muted">
-        Server address
+        <T>Server address</T>
       </Text>
       <AppTextInput
-        accessibilityLabel="Voice server address"
+        accessibilityLabel={gt("Voice server address")}
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="url"
@@ -169,11 +172,11 @@ function VoiceServerEditor({
         }}
       />
       <Text textRole="footnote" className="text-foreground-muted">
-        API key
+        <T>API key</T>
       </Text>
       <AppTextInput
         ref={keyInput}
-        accessibilityLabel="Voice server API key"
+        accessibilityLabel={gt("Voice server API key")}
         returnKeyType="done"
         autoCapitalize="none"
         autoCorrect={false}
@@ -181,7 +184,7 @@ function VoiceServerEditor({
         textContentType="none"
         autoComplete="off"
         importantForAutofill="no"
-        placeholder={saved?.hasKey ? "Saved key" : "Optional"}
+        placeholder={saved?.hasKey ? gt("Saved key") : gt("Optional")}
         value={key}
         editable={!locked}
         onChangeText={(value) => {
@@ -191,7 +194,7 @@ function VoiceServerEditor({
       />
       <ListActionRow
         icon="arrow.clockwise"
-        label="Test connection"
+        label={gt("Test connection")}
         disabled={locked || !address.trim()}
         loading={working === "test"}
         onPress={() => void probe()}
@@ -201,15 +204,15 @@ function VoiceServerEditor({
           {models.transcription.length > 0 && (
             <>
               <ListActionRow
-                label="Use for dictation"
-                detail={routes.dictation ? "On" : "Off"}
+                label={gt("Use for dictation")}
+                detail={routes.dictation ? gt("On") : gt("Off")}
                 disabled={locked}
                 onPress={() =>
                   setRoutes((current) => ({ ...current, dictation: !current.dictation }))
                 }
               />
               <VoiceChoice
-                label="Transcription model"
+                label={gt("Transcription model")}
                 selected={routes.transcriptionModel}
                 choices={models.transcription}
                 disabled={locked || !routes.dictation}
@@ -222,20 +225,20 @@ function VoiceServerEditor({
           {models.speech.length > 0 && (
             <>
               <ListActionRow
-                label="Use for spoken replies"
-                detail={routes.speech ? "On" : "Off"}
+                label={gt("Use for spoken replies")}
+                detail={routes.speech ? gt("On") : gt("Off")}
                 disabled={locked}
                 onPress={() => setRoutes((current) => ({ ...current, speech: !current.speech }))}
               />
               <VoiceChoice
-                label="Speech model"
+                label={gt("Speech model")}
                 selected={routes.speechModel}
                 choices={models.speech}
                 disabled={locked || !routes.speech}
                 select={(speechModel) => setRoutes((current) => ({ ...current, speechModel }))}
               />
               <VoiceChoice
-                label="Voice"
+                label={gt("Voice")}
                 selected={routes.voice}
                 choices={models.voices}
                 disabled={locked || !routes.speech}
@@ -245,7 +248,7 @@ function VoiceServerEditor({
           )}
           <ListActionRow
             icon="checkmark"
-            label="Save voice server"
+            label={gt("Save voice server")}
             disabled={locked}
             loading={working === "save"}
             onPress={() => void save()}
@@ -253,7 +256,7 @@ function VoiceServerEditor({
         </>
       )}
       {error && <Text accessibilityRole="alert">{error}</Text>}
-      <ListActionRow label="Cancel" disabled={locked} onPress={onClose} />
+      <ListActionRow label={gt("Cancel")} disabled={locked} onPress={onClose} />
     </View>
   );
 }

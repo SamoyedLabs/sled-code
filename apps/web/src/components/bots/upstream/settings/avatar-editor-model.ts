@@ -6,6 +6,8 @@ import {
   type ShapeId,
 } from "../../avatar/vendor/bloub-engine";
 import type { ColorId } from "../../avatar/vendor/types/skins";
+import { m } from "../../../../i18n/messages";
+import { msg } from "gt-react";
 export type AvatarHue = 0 | 30 | 55 | 100 | 150 | 185 | 215 | 245 | 280 | 320;
 
 export type SupportedAvatarSilhouetteId = Exclude<ShapeId, "goutte">;
@@ -52,16 +54,16 @@ export const AVATAR_HUE_OPTIONS: ReadonlyArray<{
   hue: AvatarHue;
   label: string;
 }> = [
-  { hue: 0, label: "Red" },
-  { hue: 30, label: "Orange" },
-  { hue: 55, label: "Yellow" },
-  { hue: 100, label: "Lime" },
-  { hue: 150, label: "Green" },
-  { hue: 185, label: "Cyan" },
-  { hue: 215, label: "Blue" },
-  { hue: 245, label: "Indigo" },
-  { hue: 280, label: "Violet" },
-  { hue: 320, label: "Magenta" },
+  { hue: 0, label: m(msg("Red")) },
+  { hue: 30, label: m(msg("Orange")) },
+  { hue: 55, label: m(msg("Yellow")) },
+  { hue: 100, label: m(msg("Lime")) },
+  { hue: 150, label: m(msg("Green")) },
+  { hue: 185, label: m(msg("Cyan")) },
+  { hue: 215, label: m(msg("Blue")) },
+  { hue: 245, label: m(msg("Indigo")) },
+  { hue: 280, label: m(msg("Violet")) },
+  { hue: 320, label: m(msg("Magenta")) },
 ];
 
 // Hues 100 and 280 stay valid for stored agents, but draw the same color as 150 and 245.

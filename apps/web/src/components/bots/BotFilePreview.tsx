@@ -18,6 +18,7 @@ import { BotFileSelectionContext } from "../settings/BotFileSelectionContext";
 import { BotSelectionActions } from "../settings/BotSelectionActions";
 import { botFileQuoteId, type BotFileQuoteTarget } from "../settings/botSelectionModel";
 import "./upstream/files/FileSelectionPreview.css";
+import { useGT } from "gt-react";
 
 export type BotQuotedFilePreview = {
   file: import("@t3tools/contracts").OpenbotMaterializedFile;
@@ -29,6 +30,7 @@ type Props = ComponentProps<typeof AttachmentFilePreview> & {
   revealText?: string | undefined;
 };
 export function BotFilePreview({ quoteTarget, revealText, ...props }: Props) {
+  const gt = useGT();
   const actions = useContext(BotFileSelectionContext);
   const root = useRef<HTMLDivElement>(null);
   const id = botFileQuoteId({ ...quoteTarget, lines: undefined });
@@ -62,7 +64,7 @@ export function BotFilePreview({ quoteTarget, revealText, ...props }: Props) {
             )}
             {actions.wrap && (
               <HeaderAction
-                label="Wrap lines"
+                label={gt("Wrap lines")}
                 pressed={actions.wrap.pressed}
                 onClick={actions.wrap.toggle}
               >
@@ -71,7 +73,7 @@ export function BotFilePreview({ quoteTarget, revealText, ...props }: Props) {
             )}
             {actions.copy && (
               <HeaderAction
-                label={actions.copy.copied ? "Copied" : "Copy contents"}
+                label={actions.copy.copied ? gt("Copied") : gt("Copy contents")}
                 onClick={actions.copy.run}
               >
                 {actions.copy.copied ? <CheckIcon /> : <CopyIcon />}
@@ -79,7 +81,7 @@ export function BotFilePreview({ quoteTarget, revealText, ...props }: Props) {
             )}
             {actions.download && (
               <HeaderAction
-                label={actions.download.saving ? "Preparing file…" : "Download file"}
+                label={actions.download.saving ? gt("Preparing file…") : gt("Download file")}
                 disabled={actions.download.saving}
                 onClick={actions.download.run}
               >
@@ -87,7 +89,7 @@ export function BotFilePreview({ quoteTarget, revealText, ...props }: Props) {
               </HeaderAction>
             )}
             {props.onClose && (
-              <HeaderAction label="Close file" onClick={props.onClose}>
+              <HeaderAction label={gt("Close file")} onClick={props.onClose}>
                 <XIcon />
               </HeaderAction>
             )}

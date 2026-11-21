@@ -23,15 +23,18 @@ import { Button } from "../../components/ui/Button";
 import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
 import { View } from "react-native";
 import { Picker } from "./BotConnectionControls";
+import { m } from "../../i18n/messages";
+import { T, Var, msg, useGT } from "gt-react-native";
 
 type Props = { environmentId: EnvironmentId; hostId: string; agentId: string };
 const modes: readonly { id: RuntimeMode; label: string }[] = [
-  { id: "approval-required", label: "Ask before actions" },
-  { id: "auto-accept-edits", label: "Allow edits" },
-  { id: "auto", label: "Automatic" },
-  { id: "full-access", label: "Full access" },
+  { id: "approval-required", label: m(msg("Ask before actions")) },
+  { id: "auto-accept-edits", label: m(msg("Allow edits")) },
+  { id: "auto", label: m(msg("Automatic")) },
+  { id: "full-access", label: m(msg("Full access")) },
 ];
 export function BotCodingPolicy(props: Props) {
+  const gt = useGT();
   const query = useEnvironmentQuery(
     openbot.codingPolicy({
       environmentId: props.environmentId,
@@ -41,14 +44,26 @@ export function BotCodingPolicy(props: Props) {
   const state = botCodingPolicyView(query.data);
   return (
     <View className="gap-3">
-      <Text className="font-t3-medium">Coding delegation</Text>
-      <Text className="text-foreground-muted">
-        Send coding assignments to Sled. Browsing, reminders and other general tasks stay with this
-        bot. Enabling installs managed guidance in the bot's instructions; disabling removes that
-        guidance.
+      <Text className="font-t3-medium">
+        <T>Coding delegation</T>
       </Text>
-      <Button label="Refresh coding policy" disabled={query.isPending} onPress={query.refresh} />
-      {query.isPending && <Text accessibilityLiveRegion="polite">Checking coding policy…</Text>}
+      <Text className="text-foreground-muted">
+        <T>
+          Send coding assignments to Sled. Browsing, reminders and other general tasks stay with
+          this bot. Enabling installs managed guidance in the bot's instructions; disabling removes
+          that guidance.
+        </T>
+      </Text>
+      <Button
+        label={gt("Refresh coding policy")}
+        disabled={query.isPending}
+        onPress={query.refresh}
+      />
+      {query.isPending && (
+        <Text accessibilityLiveRegion="polite">
+          <T>Checking coding policy…</T>
+        </Text>
+      )}
       {query.error && (
         <Text accessibilityRole="alert" className="text-danger">
           {query.error}
@@ -73,6 +88,7 @@ function PolicyForm({
   state,
   refresh,
 }: Props & { state: OpenbotCodingPolicyState; refresh: () => void }) {
+  const gt = useGT();
   const [choice, setChoice] = useState(() =>
     botCodingPolicyChoice(environmentId, state.pending?.defaults ?? state.defaults),
   );
@@ -147,7 +163,11 @@ function PolicyForm({
   );
   return (
     <View className="gap-3">
-      <Text accessibilityLiveRegion="polite">Policy: {state.status}</Text>
+      <Text accessibilityLiveRegion="polite">
+        <T>
+          Policy: <Var>{state.status}</Var>
+        </T>
+      </Text>
       {select(
         "Destination machine",
         choice.destinationId,
@@ -184,10 +204,10 @@ function PolicyForm({
         "Mode",
         choice.interactionMode,
         [
-          { id: "default", label: "Work" },
+          { id: "default", label: gt("Work") },
           ...(destination?.environmentId === environmentId &&
           provider?.showInteractionModeToggle === true
-            ? [{ id: "plan", label: "Plan" }]
+            ? [{ id: "plan", label: gt("Plan") }]
             : []),
         ],
         (value) => {
@@ -199,8 +219,8 @@ function PolicyForm({
         "Workspace",
         choice.workspaceMode,
         [
-          { id: "worktree", label: "New worktree" },
-          { id: "root", label: "Project checkout" },
+          { id: "worktree", label: gt("New worktree") },
+          { id: "root", label: gt("Project checkout") },
         ],
         (value) => {
           if (value === "worktree" || value === "root")
@@ -209,9 +229,11 @@ function PolicyForm({
       )}
       {choice.workspaceMode === "worktree" && (
         <View className="gap-2">
-          <Text>Base branch or revision</Text>
+          <Text>
+            <T>Base branch or revision</T>
+          </Text>
           <AppTextInput
-            accessibilityLabel="Base branch or revision"
+            accessibilityLabel={gt("Base branch or revision")}
             value={choice.baseRef}
             editable={!locked}
             onChangeText={(value) => setChoice({ ...choice, baseRef: value })}
@@ -221,30 +243,36 @@ function PolicyForm({
         </View>
       )}
       <Text textRole="footnote" className="text-foreground-muted">
-        The bot needs an existing full-access Sled connection. This policy does not expand grants.
-        Destination and launch permissions are checked again when work starts.
+        <T>
+          The bot needs an existing full-access Sled connection. This policy does not expand grants.
+          Destination and launch permissions are checked again when work starts.
+        </T>
       </Text>
       {state.status === "conflict" && (
         <Text accessibilityRole="alert" className="text-danger">
-          The managed guidance was edited or moved ambiguously. Review the bot's instructions and
-          restore the managed block before changing this policy. Other instructions have been
-          preserved.
+          <T>
+            The managed guidance was edited or moved ambiguously. Review the bot's instructions and
+            restore the managed block before changing this policy. Other instructions have been
+            preserved.
+          </T>
         </Text>
       )}
       {state.pending && (
         <Text>
-          A previous {state.pending.action} is unsettled. Retry that action to reconcile it before
-          changing its intent.
+          <T>
+            A previous <Var>{state.pending.action}</Var> is unsettled. Retry that action to
+            reconcile it before changing its intent.
+          </T>
         </Text>
       )}
       <View className="flex-row flex-wrap gap-2">
         <Button
           label={
             state.pending?.action === "enable"
-              ? "Retry enabling"
+              ? gt("Retry enabling")
               : state.status === "enabled"
-                ? "Update coding policy"
-                : "Enable coding delegation"
+                ? gt("Update coding policy")
+                : gt("Enable coding delegation")
           }
           disabled={
             !allowed ||
@@ -258,7 +286,9 @@ function PolicyForm({
         {state.status !== "disabled" && (
           <Button
             label={
-              state.pending?.action === "disable" ? "Retry disabling" : "Disable coding delegation"
+              state.pending?.action === "disable"
+                ? gt("Retry disabling")
+                : gt("Disable coding delegation")
             }
             disabled={
               !disableAllowed ||
@@ -272,7 +302,9 @@ function PolicyForm({
       </View>
       {state.managedBlock && (
         <View className="gap-2">
-          <Text className="font-t3-medium">Managed guidance for review</Text>
+          <Text className="font-t3-medium">
+            <T>Managed guidance for review</T>
+          </Text>
           <Text selectable textRole="footnote">
             {state.managedBlock}
           </Text>

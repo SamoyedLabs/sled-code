@@ -23,6 +23,7 @@ import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { useGT } from "gt-react";
 
 export function useBotConversationPanel(
   environmentId: EnvironmentId,
@@ -32,6 +33,7 @@ export function useBotConversationPanel(
   newId: () => string,
   focusMessageId?: string,
 ) {
+  const gt = useGT();
   const [pages, setPages] = useState<readonly OpenbotConversationPage[]>([]);
   const [anchored, setAnchored] = useState<{
     page: OpenbotConversationPage;
@@ -137,7 +139,9 @@ export function useBotConversationPanel(
     setBusy(false);
     if (settled._tag === "Failure" || settled.value._tag === "Failure") {
       setError(
-        "The host refused the change or the connection was lost. Retry or release an uncertain edit before starting another.",
+        gt(
+          "The host refused the change or the connection was lost. Retry or release an uncertain edit before starting another.",
+        ),
       );
       return null;
     }
@@ -158,7 +162,7 @@ export function useBotConversationPanel(
       : { operation: "conversation.markRead", agentId, throughMessageId };
     const result = await settlePromise(() => write({ environmentId, input: { hostId, request } }));
     if (result._tag === "Failure" || result.value._tag === "Failure") {
-      setError("Could not update the read status. Use Mark read to retry.");
+      setError(gt("Could not update the read status. Use Mark read to retry."));
       return false;
     }
     history.refresh();
@@ -183,7 +187,9 @@ export function useBotConversationPanel(
         : null;
     if (!delivery) {
       setError(
-        "The edit could not be confirmed. Retry its begin or release it before editing another message.",
+        gt(
+          "The edit could not be confirmed. Retry its begin or release it before editing another message.",
+        ),
       );
       return null;
     }
@@ -221,7 +227,7 @@ export function useBotConversationPanel(
         return;
       }
       if (!draft || !selectableDraft(scope, target, draft)) {
-        setError("Refresh Files to reconcile this draft before sending.");
+        setError(gt("Refresh Files to reconcile this draft before sending."));
         return;
       }
       const ids = draft.batchAttachmentIds ?? selectedDraftIds;
@@ -233,7 +239,7 @@ export function useBotConversationPanel(
             ),
         )
       ) {
-        setError("Refresh Files before selecting this batch.");
+        setError(gt("Refresh Files before selecting this batch."));
         return;
       }
       const attempt = fileAttempt ?? {
@@ -274,7 +280,9 @@ export function useBotConversationPanel(
         setText("");
       } else
         setError(
-          "File acceptance is uncertain. Retry this same selection and original text, or reconcile in Files. Selection is not delivery.",
+          gt(
+            "File acceptance is uncertain. Retry this same selection and original text, or reconcile in Files. Selection is not delivery.",
+          ),
         );
       return;
     }
@@ -402,7 +410,7 @@ export function useBotConversationPanel(
       }),
     );
     if (settled._tag === "Failure" || settled.value._tag === "Failure") {
-      setError("Could not load older messages from the selected host.");
+      setError(gt("Could not load older messages from the selected host."));
     } else {
       const value = botConversationPage(settled.value.value);
       if (value && latest && value.agentId === agentId && value.threadId === latest.threadId) {
@@ -486,10 +494,10 @@ export function useBotConversationPanel(
       history.error ??
       queueQuery.error ??
       (taskId && snapshot && queueQuery.data !== null && taskQueueChoices === null
-        ? "The task queue could not be matched to this conversation."
+        ? gt("The task queue could not be matched to this conversation.")
         : null) ??
       (history.data !== null && !snapshot
-        ? "The host returned an unsupported conversation format."
+        ? gt("The host returned an unsupported conversation format.")
         : null),
     readState: snapshot?.agentId === agentId ? snapshot.readState : undefined,
     references: Object.fromEntries(

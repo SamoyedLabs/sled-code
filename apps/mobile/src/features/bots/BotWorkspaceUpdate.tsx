@@ -12,6 +12,7 @@ import {
   EYES_WIDTH,
 } from "./upstream/openbot-mobile/shared/components/bloub-stage/bloub-eyes";
 import { OpenBotText as Text } from "./upstream/OpenBotTypography";
+import { T, useGT } from "gt-react-native";
 
 const DISMISSED_UPDATE_KEY = "bots.dismissedAppUpdate.v1";
 const EYES_SCALE = 0.55;
@@ -30,6 +31,7 @@ export function BotWorkspaceUpdate() {
 }
 
 function DownloadedUpdate({ updateId }: { updateId: string }) {
+  const gt = useGT();
   const [dismissed, setDismissed] = useState(() => {
     try {
       return Storage.getItemSync(DISMISSED_UPDATE_KEY) === updateId;
@@ -51,7 +53,7 @@ function DownloadedUpdate({ updateId }: { updateId: string }) {
     try {
       await runAppUpdateCheck({ applyMode: "immediate", onFailure: setError });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not install the update.");
+      setError(cause instanceof Error ? cause.message : gt("Could not install the update."));
     }
     setInstalling(false);
   }
@@ -105,10 +107,10 @@ function DownloadedUpdate({ updateId }: { updateId: string }) {
         accessibilityRole="header"
         style={{ color: EYE, textAlign: "center", fontSize: 20, fontWeight: "700" }}
       >
-        Sled update ready
+        <T>Sled update ready</T>
       </Text>
       <Text style={{ color: "#50445d", textAlign: "center", fontSize: 14 }}>
-        Restart to apply the downloaded update.
+        <T>Restart to apply the downloaded update.</T>
       </Text>
       {error && (
         <Text accessibilityRole="alert" style={{ color: EYE, textAlign: "center" }}>
@@ -125,12 +127,12 @@ function DownloadedUpdate({ updateId }: { updateId: string }) {
         }}
       >
         <UpdateButton
-          label={installing ? "Updating…" : "Update"}
+          label={installing ? gt("Updating…") : gt("Update")}
           onPress={() => void install()}
           primary
           disabled={installing}
         />
-        <UpdateButton label="Later" onPress={later} disabled={installing} />
+        <UpdateButton label={gt("Later")} onPress={later} disabled={installing} />
       </View>
     </View>
   );

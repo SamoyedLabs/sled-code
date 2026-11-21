@@ -16,6 +16,7 @@ import {
   searchConversationFiles,
 } from "./rpc/index.ts";
 import { createEnvironmentQueryAtomFamily, createEnvironmentRpcCommand } from "../state/runtime.ts";
+import { mFallback, msg } from "gt-i18n";
 
 export function createOpenbotFileAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, E>,
@@ -40,11 +41,28 @@ export function createOpenbotFileAtoms<R, E>(
       ),
     );
   return {
-    newTaskStart: createEnvironmentRpcCommand(runtime, {label: "Start a new bot thread", tag: WS_METHODS.openbotNewTaskStart}),
-    instanceTransfer: createEnvironmentRpcCommand(runtime, {label: "Transfer server agents and settings", tag: WS_METHODS.openbotInstanceTransfer}),
-    queueAttachmentContext:createEnvironmentRpcCommand(runtime,{label:"Read acquired queue revision",tag:WS_METHODS.openbotQueueAttachmentContext}),
-    queueAttachmentSave:createEnvironmentRpcCommand(runtime,{label:"Save queued message attachments",tag:WS_METHODS.openbotQueueAttachmentSave,onSuccess:refreshDrafts}),
-    queueAttachmentResult:createEnvironmentRpcCommand(runtime,{label:"Recover queued message edit",tag:WS_METHODS.openbotQueueAttachmentResult,onSuccess:refreshDrafts}),
+    newTaskStart: createEnvironmentRpcCommand(runtime, {
+      label: mFallback(msg("Start a new bot thread")),
+      tag: WS_METHODS.openbotNewTaskStart,
+    }),
+    instanceTransfer: createEnvironmentRpcCommand(runtime, {
+      label: mFallback(msg("Transfer server agents and settings")),
+      tag: WS_METHODS.openbotInstanceTransfer,
+    }),
+    queueAttachmentContext: createEnvironmentRpcCommand(runtime, {
+      label: mFallback(msg("Read acquired queue revision")),
+      tag: WS_METHODS.openbotQueueAttachmentContext,
+    }),
+    queueAttachmentSave: createEnvironmentRpcCommand(runtime, {
+      label: mFallback(msg("Save queued message attachments")),
+      tag: WS_METHODS.openbotQueueAttachmentSave,
+      onSuccess: refreshDrafts,
+    }),
+    queueAttachmentResult: createEnvironmentRpcCommand(runtime, {
+      label: mFallback(msg("Recover queued message edit")),
+      tag: WS_METHODS.openbotQueueAttachmentResult,
+      onSuccess: refreshDrafts,
+    }),
     fileWorkspace: createEnvironmentQueryAtomFamily(runtime, {
       label: "openbot:workspace-files",
       execute: (input: OpenbotWorkspaceListInput) => listWorkspaceFiles(input),
@@ -70,42 +88,42 @@ export function createOpenbotFileAtoms<R, E>(
       refreshTrigger,
     }),
     importExecute: createEnvironmentRpcCommand(runtime, {
-      label: "Import bot archive",
+      label: mFallback(msg("Import bot archive")),
       tag: WS_METHODS.openbotImportExecute,
     }),
     archiveUpload: createEnvironmentRpcCommand(runtime, {
-      label: "Upload bot archive",
+      label: mFallback(msg("Upload bot archive")),
       tag: WS_METHODS.openbotArchiveUpload,
     }),
     fileDrafts,
     fileMaterialize: createEnvironmentRpcCommand(runtime, {
-      label: "Download bot file",
+      label: mFallback(msg("Download bot file")),
       tag: WS_METHODS.openbotFilesMaterialize,
     }),
     fileOriginalUpload: createEnvironmentRpcCommand(runtime, {
-      label: "Stage bot attachment",
+      label: mFallback(msg("Stage bot attachment")),
       tag: WS_METHODS.openbotFilesOriginalUpload,
     }),
     fileRecoverUpload: createEnvironmentRpcCommand(runtime, {
-      label: "Recover bot attachment",
+      label: mFallback(msg("Recover bot attachment")),
       tag: WS_METHODS.openbotFilesRecoverUpload,
     }),
     fileCancelUpload: createEnvironmentRpcCommand(runtime, {
-      label: "Cancel bot attachment",
+      label: mFallback(msg("Cancel bot attachment")),
       tag: WS_METHODS.openbotFilesCancelUpload,
     }),
     fileUploadDraft: createEnvironmentRpcCommand(runtime, {
-      label: "Upload bot file",
+      label: mFallback(msg("Upload bot file")),
       tag: WS_METHODS.openbotFilesUploadDraft,
       onSuccess: refreshDrafts,
     }),
     fileSendDraft: createEnvironmentRpcCommand(runtime, {
-      label: "Send bot file",
+      label: mFallback(msg("Send bot file")),
       tag: WS_METHODS.openbotFilesSendDraft,
       onSuccess: refreshDrafts,
     }),
     fileDiscardDraft: createEnvironmentRpcCommand(runtime, {
-      label: "Discard bot file draft",
+      label: mFallback(msg("Discard bot file draft")),
       tag: WS_METHODS.openbotFilesDiscardDraft,
       onSuccess: refreshDrafts,
     }),

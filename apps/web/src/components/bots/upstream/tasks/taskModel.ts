@@ -1,5 +1,7 @@
 import * as Schema from "effect/Schema";
 import * as Result from "effect/Result";
+import { m } from "../../../../i18n/messages";
+import { msg } from "gt-react";
 
 const Task = Schema.Struct({
   id: Schema.String,
@@ -20,16 +22,16 @@ export function taskSnapshot(value: unknown) {
   return Result.isSuccess(result) ? result.success.tasks : null;
 }
 export function taskStatus(task: Task) {
-  if (task.state === "running") return task.progress || "Working";
-  if (task.state === "queued") return "Waiting";
-  if (task.state === "closed") return "Archived";
+  if (task.state === "running") return task.progress || m(msg("Working"));
+  if (task.state === "queued") return m(msg("Waiting"));
+  if (task.state === "closed") return m(msg("Archived"));
   return task.outcome === "completed"
-    ? "Answered"
+    ? m(msg("Answered"))
     : task.outcome === "failed"
-      ? "Failed"
+      ? m(msg("Failed"))
       : task.outcome === "interrupted"
-        ? "Stopped"
-        : "Waiting";
+        ? m(msg("Stopped"))
+        : m(msg("Waiting"));
 }
 export function taskSections(
   tasks: readonly Task[],
@@ -45,7 +47,7 @@ export function taskSections(
   return [
     {
       id: "needsYou",
-      title: "Needs you",
+      title: m(msg("Needs you")),
       tasks: open.filter(
         (task) =>
           (task.state === "idle" && task.outcome !== null) ||
@@ -54,19 +56,19 @@ export function taskSections(
     },
     {
       id: "working",
-      title: "Working",
+      title: m(msg("Working")),
       tasks: open.filter((task) => task.state === "running" && !waitsForYou?.(task)),
     },
     {
       id: "waiting",
-      title: "Waiting",
+      title: m(msg("Waiting")),
       tasks: open.filter(
         (task) => task.state === "queued" || (task.state === "idle" && task.outcome === null),
       ),
     },
     {
       id: "closed",
-      title: "Archived",
+      title: m(msg("Archived")),
       tasks: showAllClosed ? closed : closed.slice(0, 2),
       count: closed.length,
     },

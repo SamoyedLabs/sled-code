@@ -10,7 +10,8 @@ const COMPOSER_REST_HEIGHT_LOSS = 8;
 /** The height of the composer at rest, with one line of text at the user's text size. */
 export function restingComposerHeight(fontScale: number): number {
   return (
-    Math.max(COMPOSER_TOOLBAR_HEIGHT, 22 * fontScale + COMPOSER_FIELD_VERTICAL_PADDING) - COMPOSER_REST_HEIGHT_LOSS
+    Math.max(COMPOSER_TOOLBAR_HEIGHT, 22 * fontScale + COMPOSER_FIELD_VERTICAL_PADDING) -
+    COMPOSER_REST_HEIGHT_LOSS
   );
 }
 

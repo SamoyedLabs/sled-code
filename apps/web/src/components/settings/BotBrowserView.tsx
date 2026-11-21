@@ -10,6 +10,8 @@ import {
 } from "@t3tools/contracts";
 import { BrowserKeyboard } from "@t3tools/client-runtime/openbot/presentation";
 import { Button } from "../ui/button";
+import { m } from "../../i18n/messages";
+import { T, msg, useGT } from "gt-react";
 
 // connect must create an authenticated Sled viewer grant and socket for this host/tab.
 // No upstream endpoint or credential is accepted by this component.
@@ -25,19 +27,23 @@ export function BotBrowserView({
   interactive: boolean;
   source?: boolean;
 }) {
+  const gt = useGT();
   const [attempt, setAttempt] = useState(0);
   const [viewport, setViewport] = useState<{ width: number; height: number } | undefined>();
   return (
-    <section aria-label="Live bot browser" className={source ? "browser-live-view" : undefined}>
+    <section
+      aria-label={gt("Live bot browser")}
+      className={source ? "browser-live-view" : undefined}
+    >
       {!source && (
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => setAttempt((value) => value + 1)}>
-            Reconnect
+            <T>Reconnect</T>
           </Button>
           <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-            Page size
+            <T>Page size</T>
             <select
-              aria-label="Browser viewport"
+              aria-label={gt("Browser viewport")}
               className="rounded-md border bg-background px-2 py-1.5"
               value={viewport?.width ?? "host"}
               onChange={(event) => {
@@ -51,7 +57,9 @@ export function BotBrowserView({
                 );
               }}
             >
-              <option value="host">Match host</option>
+              <option value="host">
+                <T>Match host</T>
+              </option>
               <option value="1280">1280 × 800</option>
               <option value="800">800 × 600</option>
             </select>
@@ -85,6 +93,7 @@ function BrowserStream({
   source: boolean;
   onReconnect: () => void;
 }) {
+  const gt = useGT();
   const [status, setStatus] = useState("Connecting browser view…");
   const [features, setFeatures] = useState<OpenbotBrowserViewFeatures | null>(null);
   const [cursor, setCursor] = useState<BrowserViewCursor>("default");
@@ -185,7 +194,7 @@ function BrowserStream({
         socket.current = next;
         setFeatures(next.browserFeatures ?? null);
         next.binaryType = "arraybuffer";
-        const opened = () => setStatus("Browser view connected");
+        const opened = () => setStatus(m(msg("Browser view connected")));
         next.addEventListener("open", opened);
         if (next.readyState === WebSocket.OPEN) opened();
         next.addEventListener("message", (event) => {
@@ -223,14 +232,14 @@ function BrowserStream({
         next.addEventListener("close", () => {
           copy.current?.reject(new Error("The browser view closed before copying."));
           copy.current = null;
-          if (!disposed) setStatus("Browser view closed. Reconnect to continue.");
+          if (!disposed) setStatus(m(msg("Browser view closed. Reconnect to continue.")));
         });
         next.addEventListener("error", () => {
-          if (!disposed) setStatus("Browser view unavailable. Check the host connection.");
+          if (!disposed) setStatus(m(msg("Browser view unavailable. Check the host connection.")));
         });
       })
       .catch(() => {
-        if (!disposed) setStatus("Browser view unavailable. Check the host connection.");
+        if (!disposed) setStatus(m(msg("Browser view unavailable. Check the host connection.")));
       });
     return () => {
       disposed = true;
@@ -293,9 +302,11 @@ function BrowserStream({
       send({ type: "copy" });
       await write;
       if (cut && control.current && peer === socket.current) send({ type: "cut", text: selected });
-      setStatus(cut ? "Selection cut to your clipboard" : "Selection copied to your clipboard");
+      setStatus(
+        cut ? gt("Selection cut to your clipboard") : gt("Selection copied to your clipboard"),
+      );
     } catch {
-      setStatus("Clipboard access failed. Check browser permissions and reconnect if needed.");
+      setStatus(gt("Clipboard access failed. Check browser permissions and reconnect if needed."));
     }
     setCopying(false);
   }
@@ -305,11 +316,11 @@ function BrowserStream({
       const text = await navigator.clipboard.readText();
       if (control.current && peer === socket.current) send({ type: "paste", text });
     } catch {
-      setStatus("Allow clipboard access to paste into the page.");
+      setStatus(gt("Allow clipboard access to paste into the page."));
     }
   }
   return (
-    <section aria-label="Browser page" className={source ? "browser-live-view" : "space-y-2"}>
+    <section aria-label={gt("Browser page")} className={source ? "browser-live-view" : "space-y-2"}>
       <p
         role="status"
         className={source ? "browser-live-status" : undefined}
@@ -321,7 +332,7 @@ function BrowserStream({
             className="ui-button ui-button-variant-ghost ui-button-size-sm"
             onClick={onReconnect}
           >
-            Reconnect
+            <T>Reconnect</T>
           </button>
         )}
       </p>
@@ -329,8 +340,10 @@ function BrowserStream({
       {!source && (
         <>
           <p className="text-sm">
-            Take control of the tab, then click the page to type, drag, or scroll. Tab moves focus
-            out of the viewer.
+            <T>
+              Take control of the tab, then click the page to type, drag, or scroll. Tab moves focus
+              out of the viewer.
+            </T>
           </p>
           <Button
             variant="outline"
@@ -348,17 +361,17 @@ function BrowserStream({
               send({ type: "key", action: "up", key: "Tab", code: "Tab", text: "", modifiers: 0 });
             }}
           >
-            Tab in page
+            <T>Tab in page</T>
           </Button>
           {features?.clipboard && (
-            <div className="flex flex-wrap gap-2" aria-label="Page clipboard">
+            <div className="flex flex-wrap gap-2" aria-label={gt("Page clipboard")}>
               <Button
                 variant="outline"
                 size="sm"
                 disabled={!interactive || copying}
                 onClick={() => void copySelection()}
               >
-                Copy selection
+                <T>Copy selection</T>
               </Button>
               <Button
                 variant="outline"
@@ -366,7 +379,7 @@ function BrowserStream({
                 disabled={!interactive || copying}
                 onClick={() => void copySelection(true)}
               >
-                Cut selection
+                <T>Cut selection</T>
               </Button>
               <Button
                 variant="outline"
@@ -374,7 +387,7 @@ function BrowserStream({
                 disabled={!interactive}
                 onClick={() => void paste()}
               >
-                Paste clipboard
+                <T>Paste clipboard</T>
               </Button>
             </div>
           )}
@@ -383,7 +396,7 @@ function BrowserStream({
       {menu && interactive && (
         <div
           role="group"
-          aria-label="Page context menu"
+          aria-label={gt("Page context menu")}
           className={source ? "ui-action-menu browser-source-context-menu" : "flex flex-wrap gap-2"}
         >
           {menu.items.map((item) => (
@@ -416,7 +429,7 @@ function BrowserStream({
                   if (text)
                     void navigator.clipboard
                       .writeText(text)
-                      .catch(() => setStatus("Clipboard access failed."));
+                      .catch(() => setStatus(gt("Clipboard access failed.")));
                 }
                 setMenu(null);
               }}
@@ -425,13 +438,13 @@ function BrowserStream({
             </Button>
           ))}
           <Button variant="outline" size="sm" onClick={() => setMenu(null)}>
-            Close page menu
+            <T>Close page menu</T>
           </Button>
         </div>
       )}
       <img
         ref={image}
-        alt="Live browser page; focus to type and click to interact"
+        alt={gt("Live browser page; focus to type and click to interact")}
         tabIndex={0}
         className={source ? "browser-live-image" : "max-w-full focus:outline -outline-offset-2"}
         draggable={false}

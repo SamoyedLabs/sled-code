@@ -1,4 +1,4 @@
-import {BotQueueAttachmentsEnvironment} from "./BotQueueAttachmentsEnvironment";
+import { BotQueueAttachmentsEnvironment } from "./BotQueueAttachmentsEnvironment";
 import { useEffect, useRef, useState } from "react";
 import {
   BotQueueEditSession,
@@ -8,6 +8,7 @@ import { randomUUID } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import type { useBotConversationPanel } from "./useBotConversationPanel";
+import { T, Var, useGT } from "gt-react";
 export function BotConversationQueue({
   controller: c,
   agentId,
@@ -15,7 +16,8 @@ export function BotConversationQueue({
   controller: ReturnType<typeof useBotConversationPanel>;
   agentId: string;
 }) {
-  const [attachmentsActive,setAttachmentsActive]=useState(false);
+  const gt = useGT();
+  const [attachmentsActive, setAttachmentsActive] = useState(false);
   const [edit, setEdit] = useState<BotQueueEdit | null>(null);
   const session = useRef(new BotQueueEditSession());
   const releaseOnLeave = useRef<(() => void) | null>(null);
@@ -31,17 +33,34 @@ export function BotConversationQueue({
     const acquired = await c.beginEdit(pending.deliveryId, pending.editId);
     if (acquired) setEdit(session.current.confirm(pending.editId, acquired));
   };
-  if(c.taskId)return <BotQueueAttachmentsEnvironment controller={c} legacyEditing={false} onActiveChange={setAttachmentsActive}/>;
+  if (c.taskId)
+    return (
+      <BotQueueAttachmentsEnvironment
+        controller={c}
+        legacyEditing={false}
+        onActiveChange={setAttachmentsActive}
+      />
+    );
   const disabled = c.busy || !c.permission || attachmentsActive;
   const queued =
     c.queue?.deliveries
       .filter((d) => d.status === "queued")
       .sort((a, b) => (a.position ?? 0) - (b.position ?? 0)) ?? [];
   return (
-    <section aria-label="Bot queue" className="space-y-3">
-      <h3>Queue</h3>
-      <BotQueueAttachmentsEnvironment controller={c} legacyEditing={edit!==null} onActiveChange={setAttachmentsActive}/>
-      {c.queue?.hold && <p>Queue held by channel work.</p>}
+    <section aria-label={gt("Bot queue")} className="space-y-3">
+      <h3>
+        <T>Queue</T>
+      </h3>
+      <BotQueueAttachmentsEnvironment
+        controller={c}
+        legacyEditing={edit !== null}
+        onActiveChange={setAttachmentsActive}
+      />
+      {c.queue?.hold && (
+        <p>
+          <T>Queue held by channel work.</T>
+        </p>
+      )}
       {(c.queue?.deliveries ?? [])
         .filter((d) => d.status !== "completed" && d.status !== "cancelled")
         .slice(0, 100)
@@ -54,7 +73,7 @@ export function BotConversationQueue({
             {d.status === "queued" && (
               <div className="flex flex-wrap gap-2">
                 <Button disabled={disabled || edit !== null} onClick={() => void begin(d.id)}>
-                  Edit
+                  <T>Edit</T>
                 </Button>
                 <Button
                   disabled={disabled}
@@ -62,7 +81,7 @@ export function BotConversationQueue({
                     void c.act({ operation: "queue.cancel", agentId, deliveryId: d.id })
                   }
                 >
-                  Cancel delivery
+                  <T>Cancel delivery</T>
                 </Button>
                 <Button
                   disabled={disabled || !c.snapshot?.activeTurnId}
@@ -76,7 +95,7 @@ export function BotConversationQueue({
                       });
                   }}
                 >
-                  Steer running turn
+                  <T>Steer running turn</T>
                 </Button>
                 <Button
                   disabled={disabled || queued.length > 100 || queued[0]?.id === d.id}
@@ -88,7 +107,7 @@ export function BotConversationQueue({
                     })
                   }
                 >
-                  Move first
+                  <T>Move first</T>
                 </Button>
               </div>
             )}
@@ -99,7 +118,7 @@ export function BotConversationQueue({
                   void c.act({ operation: "queue.acknowledgeFailure", agentId, turnId: d.turnId! })
                 }
               >
-                Acknowledge failure
+                <T>Acknowledge failure</T>
               </Button>
             )}
           </div>
@@ -109,11 +128,13 @@ export function BotConversationQueue({
           {edit.state === "pending" ? (
             <>
               <p role="status">
-                This edit has not been confirmed. Retry or release it before editing another
-                message.
+                <T>
+                  This edit has not been confirmed. Retry or release it before editing another
+                  message.
+                </T>
               </p>
               <Button disabled={disabled} onClick={() => void begin(edit.deliveryId)}>
-                Retry edit
+                <T>Retry edit</T>
               </Button>
             </>
           ) : (
@@ -131,11 +152,13 @@ export function BotConversationQueue({
                     )
                   }
                 >
-                  Remove retained file {id}
+                  <T>
+                    Remove retained file <Var>{id}</Var>
+                  </T>
                 </Button>
               ))}
               <Textarea
-                aria-label="Edit queued message"
+                aria-label={gt("Edit queued message")}
                 value={edit.text}
                 maxLength={100000}
                 disabled={disabled}
@@ -161,7 +184,7 @@ export function BotConversationQueue({
                   }
                 }}
               >
-                Save queue edit
+                <T>Save queue edit</T>
               </Button>
             </>
           )}
@@ -182,10 +205,12 @@ export function BotConversationQueue({
               }
             }}
           >
-            Release edit
+            <T>Release edit</T>
           </Button>
           <p>
-            Release this edit before leaving; a connection failure can prevent automatic release.
+            <T>
+              Release this edit before leaving; a connection failure can prevent automatic release.
+            </T>
           </p>
         </div>
       )}

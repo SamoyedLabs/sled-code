@@ -84,7 +84,13 @@ export const AGENT_NOTIFICATION_LEVELS_CODECS: ReadonlyMap<string, OptionalRoute
   [AGENT_NOTIFICATION_LEVELS_ROUTES.read, adminRoute(empty, snapshot)],
   [
     AGENT_NOTIFICATION_LEVELS_ROUTES.set,
-    adminRoute(exact(["agentId", "level"], fields({ agentId: identifier, level: nullable(level) })), snapshot),
+    adminRoute(
+      exact(["agentId", "level"], fields({ agentId: identifier, level: nullable(level) })),
+      snapshot,
+    ),
   ],
-  [AGENT_NOTIFICATION_LEVELS_ROUTES.server, adminRoute(exact(["level"], fields({ level: nullable(level) })), snapshot)],
+  [
+    AGENT_NOTIFICATION_LEVELS_ROUTES.server,
+    adminRoute(exact(["level"], fields({ level: nullable(level) })), snapshot),
+  ],
 ]);

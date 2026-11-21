@@ -8,6 +8,7 @@ import { BotChatMarkdown } from "../../BotChatMarkdown";
 import { BotDeferredMessageDetail } from "../../../settings/BotDeferredMessageDetail";
 import { useRoutineAssistant } from "./useRoutineAssistant";
 import type { DiagramPoint } from "./diagram-model";
+import { T, Var, useGT } from "gt-react";
 export function DiagramChatPanel({
   environmentId,
   hostId,
@@ -17,6 +18,7 @@ export function DiagramChatPanel({
   hostId: string;
   agent: typeof OpenbotAgent.Type;
 }) {
+  const gt = useGT();
   const c = useRoutineAssistant(environmentId, hostId, agent.id);
   const [open, setOpen] = useState(false),
     [draft, setDraft] = useState(""),
@@ -83,7 +85,7 @@ export function DiagramChatPanel({
       <SourceButton
         ref={launcher}
         className="diagram-chat-launcher"
-        aria-label="Ask agent to change this flow"
+        aria-label={gt("Ask agent to change this flow")}
         aria-expanded={open}
         aria-hidden={open || undefined}
         tabIndex={open ? -1 : 0}
@@ -100,9 +102,9 @@ export function DiagramChatPanel({
         }}
       >
         <SourceAgentAvatar agent={agent} size={24} />
-        Ask agent
+        <T>Ask agent</T>
       </SourceButton>
-      <section className="diagram-chat" aria-label="Canvas assistant" inert={!open}>
+      <section className="diagram-chat" aria-label={gt("Canvas assistant")} inert={!open}>
         <header
           className="diagram-chat-header"
           onPointerDown={(e) => {
@@ -116,7 +118,7 @@ export function DiagramChatPanel({
           <h2 className="diagram-chat-title">{agent.name}</h2>
           <SourceButton
             variant="ghost"
-            aria-label="Collapse canvas assistant"
+            aria-label={gt("Collapse canvas assistant")}
             onClick={() => setOpen(false)}
           >
             <Minimize2 />
@@ -159,12 +161,16 @@ export function DiagramChatPanel({
             ))
           ) : (
             <p className="diagram-chat-empty">
-              Ask {agent.name} to create a routine or connect the agents in this flow.
+              <T>
+                Ask <Var>{agent.name}</Var> to create a routine or connect the agents in this flow.
+              </T>
             </p>
           )}
           {c.working && (
             <p className="diagram-chat-working" role="status">
-              {agent.name} is working…
+              <T>
+                <Var>{agent.name}</Var> is working…
+              </T>
             </p>
           )}
           {c.error && <p role="alert">{c.error}</p>}
@@ -180,8 +186,8 @@ export function DiagramChatPanel({
           <div className="composer-input-label">
             <textarea
               ref={input}
-              aria-label="Message canvas assistant"
-              placeholder="Describe a change…"
+              aria-label={gt("Message canvas assistant")}
+              placeholder={gt("Describe a change…")}
               value={draft}
               maxLength={100000}
               onChange={(e) => setDraft(e.target.value)}
@@ -196,7 +202,7 @@ export function DiagramChatPanel({
           <div className="composer-primary-actions">
             <SourceButton
               type="submit"
-              aria-label="Send canvas request"
+              aria-label={gt("Send canvas request")}
               disabled={!draft.trim() || c.working || !c.canSend}
             >
               <ArrowUp />

@@ -8,6 +8,7 @@ import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../../components/ui/Button";
 import { AppText as Text } from "../../components/ui/AppText";
+import { T, useGT } from "gt-react-native";
 
 type Action = "supported" | "latest" | "download" | "install" | "activate" | "rollback";
 const actionStatus: Record<Action, string> = {
@@ -20,13 +21,14 @@ const actionStatus: Record<Action, string> = {
 };
 
 export function BotRuntimeControls({ environmentId }: { environmentId: EnvironmentId }) {
+  const gt = useGT();
   const allowed = useAtomValue(openbot.installRuntime.permissionAtom(environmentId));
   const [expanded, setExpanded] = useState(false);
   if (!allowed) return null;
   return (
     <View className="gap-3">
       <Button
-        label={expanded ? "Hide engine releases" : "Manage engine releases"}
+        label={expanded ? gt("Hide engine releases") : gt("Manage engine releases")}
         tone="secondary"
         onPress={() => setExpanded(!expanded)}
       />
@@ -36,6 +38,7 @@ export function BotRuntimeControls({ environmentId }: { environmentId: Environme
 }
 
 function RuntimePanel({ environmentId }: { environmentId: EnvironmentId }) {
+  const gt = useGT();
   const query = useEnvironmentQuery(openbot.upstream({ environmentId, input: {} }));
   const check = useAtomCommand(openbot.checkRuntime, { reportFailure: false });
   const stage = useAtomCommand(openbot.stageRuntime, { reportFailure: false });
@@ -75,7 +78,7 @@ function RuntimePanel({ environmentId }: { environmentId: EnvironmentId }) {
                   : await activate({ environmentId, input });
     });
     if (settled._tag === "Failure") {
-      setError("Could not finish the engine update. Refresh and try again.");
+      setError(gt("Could not finish the engine update. Refresh and try again."));
     } else if (settled.value?._tag === "Failure") {
       setError(String(squashAtomCommandFailure(settled.value)));
     }
@@ -86,30 +89,32 @@ function RuntimePanel({ environmentId }: { environmentId: EnvironmentId }) {
   return (
     <View className="gap-3">
       <Text className="text-foreground-muted">
-        Download and install a release on the selected remote computer. Activation restarts its
-        bot engine; running work may be interrupted.
+        <T>
+          Download and install a release on the selected remote computer. Activation restarts its
+          bot engine; running work may be interrupted.
+        </T>
       </Text>
       <Text accessibilityLiveRegion="polite">
         {busy
           ? actionStatus[busy]
           : query.isPending
-            ? "Loading engine releases…"
+            ? gt("Loading engine releases…")
             : status?.installation?.active
-              ? `Active: ${status.installation.active.version}`
-              : "No managed release is active."}
+              ? gt("Active: {version}", { version: status.installation.active.version })
+              : gt("No managed release is active.")}
       </Text>
       <View className="flex-row flex-wrap gap-2">
         <Button
-          label="Check supported release"
+          label={gt("Check supported release")}
           disabled={busy !== null || !status || !canCheck}
           onPress={() => void act("supported")}
         />
         <Button
-          label="Check latest release"
+          label={gt("Check latest release")}
           disabled={busy !== null || !status || !canCheck}
           onPress={() => void act("latest")}
         />
-        <Button label="Refresh releases" disabled={busy !== null} onPress={query.refresh} />
+        <Button label={gt("Refresh releases")} disabled={busy !== null} onPress={query.refresh} />
       </View>
       {release && asset && (
         <View className="gap-2">
@@ -118,18 +123,18 @@ function RuntimePanel({ environmentId }: { environmentId: EnvironmentId }) {
           </Text>
           {release.compatibility === "requires-validation" && (
             <Text className="text-foreground-muted">
-              This release needs compatibility validation before activation.
+              <T>This release needs compatibility validation before activation.</T>
             </Text>
           )}
           <Button
-            label="Download release"
+            label={gt("Download release")}
             disabled={busy !== null || !canCheck}
             onPress={() =>
               void act("download", { version: release.version, platform: asset.platform })
             }
           />
           <Button
-            label="Install downloaded release"
+            label={gt("Install downloaded release")}
             disabled={
               busy !== null ||
               platform === "win32-x64" ||
@@ -145,17 +150,19 @@ function RuntimePanel({ environmentId }: { environmentId: EnvironmentId }) {
       )}
       {(!platform || platform === "win32-x64") && status && (
         <Text className="text-foreground-muted">
-          Automatic installation is not available for this host yet.
+          <T>Automatic installation is not available for this host yet.</T>
         </Text>
       )}
       {installed.map((entry) => (
         <View key={`${entry.version}:${entry.platform}:${entry.sha256}`} className="gap-2">
           <Text>
             {entry.version}
-            {status?.installation?.active?.sha256 === entry.sha256 ? " · active" : " · installed"}
+            {status?.installation?.active?.sha256 === entry.sha256
+              ? gt(" · active")
+              : gt(" · installed")}
           </Text>
           <Button
-            label={`Activate ${entry.version}`}
+            label={gt("Activate {version}", { version: entry.version })}
             disabled={
               busy !== null ||
               !canActivate ||
@@ -171,13 +178,15 @@ function RuntimePanel({ environmentId }: { environmentId: EnvironmentId }) {
       ))}
       {installed.length > 0 && (
         <Text className="text-foreground-muted">
-          Only validated releases for this host can be activated. A configured executable override
-          takes precedence.
+          <T>
+            Only validated releases for this host can be activated. A configured executable override
+            takes precedence.
+          </T>
         </Text>
       )}
       {status?.installation?.previous && (
         <Button
-          label={`Roll back to ${status.installation.previous.version}`}
+          label={gt("Roll back to {version}", { version: status.installation.previous.version })}
           disabled={busy !== null || !canRollback || !status.activationAllowed}
           onPress={() => void act("rollback")}
         />

@@ -50,6 +50,7 @@ export function WorkspaceSidebarHeader() {
 import { useNavigateToMainApp } from "./sidebar/mainAppLocation";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { validateBotWorkspaceSearch, type BotWorkspacePage } from "./bots/workspaceNavigation";
+import { T, useGT } from "gt-react";
 
 export function WorkspaceViewSwitcher({
   bots,
@@ -60,18 +61,19 @@ export function WorkspaceViewSwitcher({
   onBots: () => void;
   onThreads: () => void;
 }) {
+  const gt = useGT();
   return (
     <nav
-      aria-label="Workspace views"
+      aria-label={gt("Workspace views")}
       className="workspace-view-switcher"
       data-mode={bots ? "bots" : "threads"}
     >
       <span className="workspace-view-indicator" aria-hidden="true" />
       <button type="button" aria-current={!bots ? "page" : undefined} onClick={onThreads}>
-        Threads
+        <T>Threads</T>
       </button>
       <button type="button" aria-current={bots ? "page" : undefined} onClick={onBots}>
-        Bots
+        <T>Bots</T>
       </button>
     </nav>
   );
@@ -94,6 +96,7 @@ function WorkspaceModeTabs() {
   );
 }
 export function WorkspaceModeRail() {
+  const gt = useGT();
   const navigate = useNavigate();
   const openCode = useNavigateToMainApp();
   const location = useLocation();
@@ -115,7 +118,7 @@ export function WorkspaceModeRail() {
   return (
     <TooltipProvider>
       <nav
-        aria-label="Workspace navigation"
+        aria-label={gt("Workspace navigation")}
         className="relative z-20 flex shrink-0 flex-col items-center gap-2 pb-3"
         style={{
           width: "var(--workspace-mode-rail-width)",
@@ -165,7 +168,7 @@ export function WorkspaceModeRail() {
               render={
                 <button
                   type="button"
-                  aria-label="Pull requests"
+                  aria-label={gt("Pull requests")}
                   aria-current={location.pathname === "/pull-requests" ? "page" : undefined}
                   className={item}
                   onClick={() =>
@@ -179,7 +182,9 @@ export function WorkspaceModeRail() {
             >
               <PullRequestGlyph.pullRequest className="size-5" aria-hidden="true" />
             </TooltipTrigger>
-            <TooltipPopup side="right">Pull requests</TooltipPopup>
+            <TooltipPopup side="right">
+              <T>Pull requests</T>
+            </TooltipPopup>
           </Tooltip>
         )}
         {issuesSupported && (
@@ -188,7 +193,7 @@ export function WorkspaceModeRail() {
               render={
                 <button
                   type="button"
-                  aria-label="Issues"
+                  aria-label={gt("Issues")}
                   aria-current={location.pathname === "/issues" ? "page" : undefined}
                   className={item}
                   onClick={() =>
@@ -202,7 +207,9 @@ export function WorkspaceModeRail() {
             >
               <IssueGlyph.issue className="size-5" aria-hidden="true" />
             </TooltipTrigger>
-            <TooltipPopup side="right">Issues</TooltipPopup>
+            <TooltipPopup side="right">
+              <T>Issues</T>
+            </TooltipPopup>
           </Tooltip>
         )}
         {(
@@ -231,7 +238,7 @@ export function WorkspaceModeRail() {
           </Tooltip>
         ))}
         <div className="mt-auto" />
-        <ul className="m-0 flex list-none flex-col items-center p-0" aria-label="Updates">
+        <ul className="m-0 flex list-none flex-col items-center p-0" aria-label={gt("Updates")}>
           <SidebarUpdatePill rail />
         </ul>
         <WorkspaceRailUsage />
@@ -240,7 +247,7 @@ export function WorkspaceModeRail() {
             render={
               <Link
                 to="/settings/general"
-                aria-label="Settings"
+                aria-label={gt("Settings")}
                 aria-current={location.pathname.startsWith("/settings") ? "page" : undefined}
                 className={item}
               />
@@ -248,7 +255,9 @@ export function WorkspaceModeRail() {
           >
             <SettingsIcon className="size-5" aria-hidden="true" />
           </TooltipTrigger>
-          <TooltipPopup side="right">Settings</TooltipPopup>
+          <TooltipPopup side="right">
+            <T>Settings</T>
+          </TooltipPopup>
         </Tooltip>
       </nav>
     </TooltipProvider>

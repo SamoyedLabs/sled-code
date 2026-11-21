@@ -15,6 +15,7 @@ import { openbot } from "../../state/openbot";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { readPreparedConnection, usePreparedConnection } from "../../state/session";
 import { VaultPanel } from "../bots/upstream/vault/VaultPanel";
+import { T, useGT } from "gt-react";
 const decodeImport = Schema.decodeUnknownSync(OpenbotVaultImportResult);
 export function BotVault(props: { environmentId: EnvironmentId; hostId: string }) {
   const connection = Option.getOrNull(usePreparedConnection(props.environmentId));
@@ -23,6 +24,7 @@ export function BotVault(props: { environmentId: EnvironmentId; hostId: string }
   return <VaultHost key={`${props.environmentId}:${props.hostId}:${session.epoch}`} {...props} />;
 }
 function VaultHost({ environmentId, hostId }: { environmentId: EnvironmentId; hostId: string }) {
+  const gt = useGT();
   const compatibility = useEnvironmentQuery(
     openbot.readFromHost({
       environmentId,
@@ -63,7 +65,10 @@ function VaultHost({ environmentId, hostId }: { environmentId: EnvironmentId; ho
     try {
       return { ok: true, value: await execute(request) };
     } catch (cause) {
-      return { ok: false, error: cause instanceof Error ? cause.message : "Vault request failed." };
+      return {
+        ok: false,
+        error: cause instanceof Error ? cause.message : gt("Vault request failed."),
+      };
     }
   });
   const canList = useAtomValue(
@@ -132,9 +137,24 @@ function VaultHost({ environmentId, hostId }: { environmentId: EnvironmentId; ho
     await c.run({ operation: "vault.list", version });
     return result;
   };
-  if (!compatibility.data) return <p role="status">Loading vault…</p>;
-  if (!supported) return <p role="status">This host does not support a vault.</p>;
-  if (!canList) return <p role="status">You don’t have permission to view this host’s vault.</p>;
+  if (!compatibility.data)
+    return (
+      <p role="status">
+        <T>Loading vault…</T>
+      </p>
+    );
+  if (!supported)
+    return (
+      <p role="status">
+        <T>This host does not support a vault.</T>
+      </p>
+    );
+  if (!canList)
+    return (
+      <p role="status">
+        <T>You don’t have permission to view this host’s vault.</T>
+      </p>
+    );
   return (
     <>
       <input
@@ -148,7 +168,7 @@ function VaultHost({ environmentId, hostId }: { environmentId: EnvironmentId; ho
         type="file"
         accept=".csv,text/csv"
         hidden
-        aria-label="Choose password export CSV"
+        aria-label={gt("Choose password export CSV")}
         onChange={(event) => {
           const file = event.target.files?.[0] ?? null;
           event.target.value = "";
@@ -156,7 +176,7 @@ function VaultHost({ environmentId, hostId }: { environmentId: EnvironmentId; ho
         }}
       />
       {!c.state ? (
-        <p role={c.error ? "alert" : "status"}>{c.error ?? "Loading vault…"}</p>
+        <p role={c.error ? "alert" : "status"}>{c.error ?? gt("Loading vault…")}</p>
       ) : (
         <VaultPanel
           state={c.state}

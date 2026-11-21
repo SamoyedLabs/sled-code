@@ -31,6 +31,7 @@ import { BotLibraryGallery, LibraryPicture } from "./BotLibraryGallery";
 import { BotGlass, useBotPalette } from "./upstream/BotChrome";
 import { bentoBlocks } from "./upstream/openbot-mobile/features/servers/model/library-bento";
 import { OpenBotText as Text } from "./upstream/OpenBotTypography";
+import { T, useGT } from "gt-react-native";
 
 type Scope = { environmentId: EnvironmentId; hostId: string };
 type Place = { kind: "all" | "removed" } | { kind: "agent" | "folder"; id: string };
@@ -60,7 +61,9 @@ const fileIcons: Record<Exclude<FileFilter, "All files">, AppSymbolName> = {
   Other: "doc",
 };
 
-function fileType(file: OpenbotLibraryFile): Exclude<FileFilter, "All files"> {
+type FileCategory = "Images" | "Documents" | "Code" | "Spreadsheets" | "Media" | "Other";
+
+function fileType(file: OpenbotLibraryFile): FileCategory {
   if (file.kind === "image") return "Images";
   const extension = file.name.split(".").at(-1)?.toLowerCase();
   if (extension && /^(csv|xls[xm]?|ods|tsv)$/u.test(extension)) return "Spreadsheets";
@@ -101,6 +104,7 @@ export function BotLibraryRoute({ route }: StaticScreenProps<Scope>) {
 }
 
 function BotLibrary({ environmentId, hostId }: Scope) {
+  const gt = useGT();
   const p = useBotPalette();
   const insets = useSafeAreaInsets();
   const [place, setPlace] = useState<Place>(all);
@@ -250,7 +254,7 @@ function BotLibrary({ environmentId, hostId }: Scope) {
         setPlace({ kind: "agent", id: selected.agentId });
     })()
       .catch(() => {
-        Dialog.alert("Could not change folders", "Refresh the Library and try again.");
+        Dialog.alert(gt("Could not change folders"), gt("Refresh the Library and try again."));
       })
       .finally(() => {
         structure.refresh();
@@ -260,10 +264,10 @@ function BotLibrary({ environmentId, hostId }: Scope) {
   };
   const promptName = (agentId: string, existing?: Folder, parentId?: string, fileId?: string) => {
     Dialog.prompt({
-      title: existing ? "Rename folder" : "New folder",
-      placeholder: "Folder name",
+      title: existing ? gt("Rename folder") : gt("New folder"),
+      placeholder: gt("Folder name"),
       initialValue: existing?.name ?? "",
-      confirmText: existing ? "Rename" : "Create",
+      confirmText: existing ? gt("Rename") : gt("Create"),
       onConfirm: (value) => {
         const name = value.trim();
         if (!name || name.length > 80) return;
@@ -288,17 +292,17 @@ function BotLibrary({ environmentId, hostId }: Scope) {
       (row) => row.agentId === folder.agentId && !descendants.has(row.id),
     );
     return [
-      { id: "rename", title: "Rename" },
-      { id: "new", title: "New folder" },
+      { id: "rename", title: gt("Rename") },
+      { id: "new", title: gt("New folder") },
       {
         id: "move",
-        title: "Move folder",
+        title: gt("Move folder"),
         subactions: [
-          { id: "root", title: "Top level" },
+          { id: "root", title: gt("Top level") },
           ...eligible.map((row) => ({ id: `move:${row.id}`, title: pathLabel(row.id) })),
         ],
       },
-      { id: "delete", title: "Remove folder", attributes: { destructive: true } },
+      { id: "delete", title: gt("Remove folder"), attributes: { destructive: true } },
     ];
   };
   const onFolderAction = (folder: Folder, event: string) => {
@@ -313,9 +317,9 @@ function BotLibrary({ environmentId, hostId }: Scope) {
       });
     if (event === "delete")
       Dialog.confirm({
-        title: "Remove folder?",
-        message: "The files will stay in the Library.",
-        confirmText: "Remove folder",
+        title: gt("Remove folder?"),
+        message: gt("The files will stay in the Library."),
+        confirmText: gt("Remove folder"),
         destructive: true,
         onConfirm: () => {
           const removed = folderDescendants(folders, folder.id);
@@ -338,11 +342,11 @@ function BotLibrary({ environmentId, hostId }: Scope) {
       )
     : [];
   const placeActions: MenuActions = [
-    { id: "all", title: "All files" },
+    { id: "all", title: gt("All files") },
     ...agents.map((agent) => ({ id: `agent:${agent.id}`, title: agent.name })),
     ...folders.map((row) => ({ id: `folder:${row.id}`, title: pathLabel(row.id) })),
     ...(files.some((file) => file.agentId !== null && !agentNames.has(file.agentId))
-      ? [{ id: "removed", title: "Removed bots" }]
+      ? [{ id: "removed", title: gt("Removed bots") }]
       : []),
   ];
   async function shareFile(file: OpenbotLibraryFile) {
@@ -353,14 +357,15 @@ function BotLibrary({ environmentId, hostId }: Scope) {
     try {
       await preview.shareLibrary(file.id, conversationId, controller.signal);
     } catch {
-      if (!controller.signal.aborted) Dialog.alert("Could not share the file", "Try again.");
+      if (!controller.signal.aborted)
+        Dialog.alert(gt("Could not share the file"), gt("Try again."));
     }
     if (shareAbort.current === controller) shareAbort.current = null;
   }
   function confirmDeleteFile(file: OpenbotLibraryFile) {
     if (!canDelete || !file.deletable) return;
     Dialog.confirm({
-      title: "Delete file?",
+      title: gt("Delete file?"),
       message: file.name,
       confirmText: "Delete",
       destructive: true,
@@ -386,8 +391,8 @@ function BotLibrary({ environmentId, hostId }: Scope) {
           })
           .catch(() => {
             Dialog.alert(
-              "Could not delete the file",
-              "Check this computer’s permissions and try again.",
+              gt("Could not delete the file"),
+              gt("Check this computer’s permissions and try again."),
             );
           })
           .finally(() => {
@@ -410,7 +415,7 @@ function BotLibrary({ environmentId, hostId }: Scope) {
   };
 
   return (
-    <SettingsScreen title={label === "All files" ? "Library" : label}>
+    <SettingsScreen title={label === "All files" ? gt("Library") : label}>
       <View
         style={{ flex: 1, backgroundColor: p.canvas }}
         onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
@@ -453,7 +458,7 @@ function BotLibrary({ environmentId, hostId }: Scope) {
               {activeAgent && (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                   <Text style={{ flex: 1, color: p.muted }}>
-                    {agentNames.get(activeAgent) ?? "Bot"}
+                    {agentNames.get(activeAgent) ?? gt("Bot")}
                     {selected ? ` · ${pathLabel(selected.id)}` : ""}
                   </Text>
                   {canOrganize && (
@@ -461,7 +466,9 @@ function BotLibrary({ environmentId, hostId }: Scope) {
                       accessibilityRole="button"
                       onPress={() => promptName(activeAgent, undefined, selected?.id)}
                     >
-                      <Text style={{ color: p.text }}>New folder</Text>
+                      <Text style={{ color: p.text }}>
+                        <T>New folder</T>
+                      </Text>
                     </Pressable>
                   )}
                 </View>
@@ -496,7 +503,7 @@ function BotLibrary({ environmentId, hostId }: Scope) {
                     >
                       <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel={`Actions for ${row.name}`}
+                        accessibilityLabel={gt("Actions for {name}", { name: row.name })}
                         style={{ padding: 12 }}
                       >
                         <SymbolView name="ellipsis" size={18} tintColor={p.muted} />
@@ -529,7 +536,9 @@ function BotLibrary({ environmentId, hostId }: Scope) {
               </ScrollView>
               {undo && canOrganize && (
                 <Pressable accessibilityRole="button" onPress={() => void mutate(undo)}>
-                  <Text style={{ color: p.text }}>Undo folder removal</Text>
+                  <Text style={{ color: p.text }}>
+                    <T>Undo folder removal</T>
+                  </Text>
                 </Pressable>
               )}
             </View>
@@ -537,12 +546,12 @@ function BotLibrary({ environmentId, hostId }: Scope) {
           ListEmptyComponent={
             <Text style={{ paddingTop: 36, textAlign: "center", color: p.muted }}>
               {compatibility.isPending || inventory.isPending
-                ? "Loading Library…"
+                ? gt("Loading Library…")
                 : inventory.error
-                  ? "The Library could not load."
+                  ? gt("The Library could not load.")
                   : filesSupported
-                    ? "No files here yet."
-                    : "Library is unavailable on this computer."}
+                    ? gt("No files here yet.")
+                    : gt("Library is unavailable on this computer.")}
             </Text>
           }
           renderItem={({ item }) => (
@@ -554,11 +563,11 @@ function BotLibrary({ environmentId, hostId }: Scope) {
                 const destinations = folders.filter((row) => row.agentId === agentId);
                 const agent = agents.find((row) => row.id === agentId);
                 const actionItems: MenuActions = [
-                  ...(agent && file.messageId ? [{ id: "show", title: "Show in chat" }] : []),
+                  ...(agent && file.messageId ? [{ id: "show", title: gt("Show in chat") }] : []),
                   ...(preview.canOpen
                     ? [
-                        { id: "open", title: "Open file" },
-                        { id: "share", title: "Share" },
+                        { id: "open", title: gt("Open file") },
+                        { id: "share", title: gt("Share") },
                       ]
                     : []),
                   ...(canDelete && file.deletable
@@ -572,9 +581,9 @@ function BotLibrary({ environmentId, hostId }: Scope) {
                     : []),
                   ...(canOrganize && agentId && agentNames.has(agentId)
                     ? [
-                        { id: "new", title: "Move to new folder" },
+                        { id: "new", title: gt("Move to new folder") },
                         ...(placementOf(file.id)
-                          ? [{ id: "remove", title: "Remove from folder" }]
+                          ? [{ id: "remove", title: gt("Remove from folder") }]
                           : []),
                         ...destinations.map((row) => ({
                           id: `place:${row.id}`,
@@ -690,7 +699,7 @@ function BotLibrary({ environmentId, hostId }: Scope) {
             <BotGlass style={{ borderRadius: 24 }}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Library location"
+                accessibilityLabel={gt("Library location")}
                 style={{
                   minHeight: 44,
                   flexDirection: "row",

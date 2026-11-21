@@ -18,6 +18,7 @@ import {
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import type { BotTraceSpan } from "./bot-tool-activity";
+import { T, Var, useGT } from "gt-react";
 
 const icons = { thinking: Brain, agent: Bot, text: MessageCircle, command: Code };
 const kinds = { model: Brain, tool: Puzzle, waiting: Clock3, handoff: ArrowLeftRight };
@@ -46,6 +47,7 @@ export function BotTraceWaterfall({
   toolIds: ReadonlySet<string>;
   onSelectTool: (id: string) => void;
 }) {
+  const gt = useGT();
   const [query, setQuery] = useState("");
   const [onlyFailed, setOnlyFailed] = useState(false);
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
@@ -175,7 +177,7 @@ export function BotTraceWaterfall({
   return (
     <section
       ref={root}
-      aria-label="Turn trace"
+      aria-label={gt("Turn trace")}
       className="min-w-0 space-y-4"
       onKeyDown={(event) => {
         if (
@@ -192,13 +194,15 @@ export function BotTraceWaterfall({
       }}
     >
       <div className="flex items-center gap-3 pr-8">
-        <h2 className="flex-1 text-base font-semibold">Trace</h2>
+        <h2 className="flex-1 text-base font-semibold">
+          <T>Trace</T>
+        </h2>
         <Search className="size-4 text-muted-foreground" />
         <Input
           ref={search}
           type="search"
-          aria-label="Search trace"
-          placeholder="Search trace…"
+          aria-label={gt("Search trace")}
+          placeholder={gt("Search trace…")}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           className="max-w-60"
@@ -226,16 +230,16 @@ export function BotTraceWaterfall({
           aria-pressed={onlyFailed}
           onClick={() => setOnlyFailed(!onlyFailed)}
         >
-          Errors
+          <T>Errors</T>
         </Button>
         <span className="text-xs text-muted-foreground">
-          Select a tool to inspect its progress line.
+          <T>Select a tool to inspect its progress line.</T>
         </span>
       </div>
       <div
         className="max-h-80 overflow-auto"
         role="treegrid"
-        aria-label="Trace steps"
+        aria-label={gt("Trace steps")}
         aria-colcount={2}
       >
         <div className="min-w-[520px]">
@@ -243,7 +247,9 @@ export function BotTraceWaterfall({
             role="row"
             className="sticky top-0 z-10 grid grid-cols-[minmax(180px,1fr)_minmax(220px,2fr)] gap-3 border-b bg-popover py-2 text-xs text-muted-foreground"
           >
-            <span role="columnheader">Steps</span>
+            <span role="columnheader">
+              <T>Steps</T>
+            </span>
             <div role="columnheader" className="flex justify-between">
               {[0, 0.25, 0.5, 0.75, 1].map((n) => (
                 <span key={n}>{duration(fullDuration * n)}</span>
@@ -296,7 +302,7 @@ export function BotTraceWaterfall({
                     type="button"
                     data-trace-row={span.id}
                     tabIndex={(focused ?? displayed[0]?.span.id) === span.id ? 0 : -1}
-                    aria-label={`Show step: ${span.name}`}
+                    aria-label={gt("Show step: {name}", { name: span.name })}
                     className="flex min-w-0 items-center gap-2 text-left hover:underline"
                     onFocus={() => setFocused(span.id)}
                     onClick={() =>
@@ -330,7 +336,11 @@ export function BotTraceWaterfall({
                   >
                     <Icon className="size-3.5 shrink-0 text-muted-foreground" />
                     <span className="truncate">{span.name}</span>
-                    {span.failed && <span className="text-destructive">Failed</span>}
+                    {span.failed && (
+                      <span className="text-destructive">
+                        <T>Failed</T>
+                      </span>
+                    )}
                   </button>
                 </div>
                 <div
@@ -358,14 +368,16 @@ export function BotTraceWaterfall({
           })}
           {!rows.length && (
             <p role="status" className="p-6 text-center text-xs text-muted-foreground">
-              No matching steps.
+              <T>No matching steps.</T>
             </p>
           )}
         </div>
       </div>
       {rows.length > rowLimit && (
         <Button size="xs" variant="ghost-muted" onClick={() => setRowLimit((limit) => limit + 200)}>
-          Show next {Math.min(200, rows.length - rowLimit)} steps
+          <T>
+            Show next <Var>{Math.min(200, rows.length - rowLimit)}</Var> steps
+          </T>
         </Button>
       )}
       {active && (
@@ -374,10 +386,10 @@ export function BotTraceWaterfall({
           <p className="mt-1 text-muted-foreground">
             {active.kind} ·{" "}
             {active.failed
-              ? "Provider reported failure or refusal"
+              ? gt("Provider reported failure or refusal")
               : active.end === null
-                ? "Not completed at this point"
-                : "Completed span"}
+                ? gt("Not completed at this point")
+                : gt("Completed span")}
           </p>
           {active.detail && (
             <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words">
@@ -391,7 +403,11 @@ export function BotTraceWaterfall({
           size="icon-xs"
           variant="outline"
           aria-label={
-            replaying ? "Pause replay" : replay === null ? "Replay trace" : "Resume replay"
+            replaying
+              ? gt("Pause replay")
+              : replay === null
+                ? gt("Replay trace")
+                : gt("Resume replay")
           }
           disabled={fullDuration === 0}
           onClick={() => {
@@ -404,7 +420,7 @@ export function BotTraceWaterfall({
         <Button
           size="icon-xs"
           variant="ghost-muted"
-          aria-label="Restart replay"
+          aria-label={gt("Restart replay")}
           disabled={fullDuration === 0}
           onClick={restart}
         >
@@ -414,7 +430,7 @@ export function BotTraceWaterfall({
           <Button
             size="icon-xs"
             variant="ghost-muted"
-            aria-label="Stop replay"
+            aria-label={gt("Stop replay")}
             onClick={() => {
               setPlaying(false);
               setReplay(null);
@@ -424,9 +440,9 @@ export function BotTraceWaterfall({
           </Button>
         )}
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          Speed
+          <T>Speed</T>
           <select
-            aria-label="Replay speed"
+            aria-label={gt("Replay speed")}
             value={speed}
             onChange={(event) => setSpeed(Number(event.target.value))}
             className="rounded-md border bg-popover px-2 py-1"
@@ -439,7 +455,7 @@ export function BotTraceWaterfall({
           </select>
         </label>
         <ul
-          aria-label="Span kinds"
+          aria-label={gt("Span kinds")}
           className="ml-auto flex flex-wrap gap-3 text-xs text-muted-foreground"
         >
           {Object.entries(kinds).map(([kind, Icon]) => (

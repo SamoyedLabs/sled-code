@@ -21,7 +21,10 @@ export const CONTEXT_COMPACT_ROUTES = {
 
 export const CONTEXT_COMPACT_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   [CONTEXT_COMPACT_ROUTES.compact, adminRoute(fields({ agentId: identifier }), empty)],
-  [CONTEXT_COMPACT_ROUTES.compactTask, adminRoute(fields({ agentId: identifier, taskId: identifier }), empty)],
+  [
+    CONTEXT_COMPACT_ROUTES.compactTask,
+    adminRoute(fields({ agentId: identifier, taskId: identifier }), empty),
+  ],
 ]);
 
 /** The host cannot compact the context now. Its text is a sentence for the member. */

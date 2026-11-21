@@ -15,6 +15,7 @@ import {
   diagramRoutineColor,
 } from "./diagram-graph";
 import type { Diagram, DiagramNode, DiagramStepRun } from "./diagram-model";
+import { T, useGT } from "gt-react";
 type Canvas = typeof OpenbotRoutineFlowCanvas.Type;
 const time = (v: string) =>
   new Date(v).toLocaleString(undefined, {
@@ -52,6 +53,7 @@ export function DiagramInspector({
   onEditRoutine: (agentId: string, id: string) => void;
   onRefresh: () => void;
 }) {
+  const gt = useGT();
   const node = diagram.nodes.find((n) => n.id === selected),
     run = diagramRunOf(diagram, focus),
     step = run?.steps.find((s) => s.nodeId === node?.id);
@@ -71,20 +73,20 @@ export function DiagramInspector({
     .filter((n) => n.kind === "agent" && (!focus || steps.has(n.id)))
     .sort((a, b) => (steps.get(a.id) ?? Infinity) - (steps.get(b.id) ?? Infinity));
   return (
-    <aside className="diagram-inspector" aria-label="Routine details">
+    <aside className="diagram-inspector" aria-label={gt("Routine details")}>
       <header className="diagram-inspector-header">
         {node && (
           <SourceButton
             className="header-panel-toggle"
             variant="ghost"
-            aria-label="Back to run details"
+            aria-label={gt("Back to run details")}
             onClick={() => onSelect(null)}
           >
             <ChevronLeft />
           </SourceButton>
         )}
         {profile && <SourceAgentAvatar agent={profile} size={24} />}
-        <h2 className="diagram-inspector-title">{node ? name(node) : "Run details"}</h2>
+        <h2 className="diagram-inspector-title">{node ? name(node) : gt("Run details")}</h2>
         {node && steps.has(node.id) && (
           <span className="diagram-inspector-step-number">{steps.get(node.id)}</span>
         )}
@@ -98,10 +100,12 @@ export function DiagramInspector({
                   <span data-status={run.status}>{run.status}</span>
                   <span>{time(run.startedAt)}</span>
                   <span className="diagram-inspector-muted">
-                    {run.kind === "manual" ? "Started manually" : "Scheduled run"}
+                    {run.kind === "manual" ? gt("Started manually") : gt("Scheduled run")}
                   </span>
                 </div>
-                <h3 className="diagram-inspector-section-title">Steps</h3>
+                <h3 className="diagram-inspector-section-title">
+                  <T>Steps</T>
+                </h3>
                 <ol className="diagram-inspector-steps">
                   {ordered.map((n) => (
                     <li key={n.id}>
@@ -122,30 +126,40 @@ export function DiagramInspector({
               </>
             ) : (
               <p className="diagram-inspector-empty">
-                No run yet. Choose a routine and run it to see each agent’s input and answer.
+                <T>No run yet. Choose a routine and run it to see each agent’s input and answer.</T>
               </p>
             )}
           </>
         ) : node.kind === "routine" && routine ? (
           <>
             <section className="diagram-inspector-section">
-              <h3 className="diagram-inspector-section-title">Instruction</h3>
+              <h3 className="diagram-inspector-section-title">
+                <T>Instruction</T>
+              </h3>
               <p>{node.instruction}</p>
             </section>
             {node.schedule ? (
               <>
                 <section className="diagram-inspector-section">
-                  <h3 className="diagram-inspector-section-title">Next 7 days</h3>
+                  <h3 className="diagram-inspector-section-title">
+                    <T>Next 7 days</T>
+                  </h3>
                   <RoutineWeek upcomingRuns={node.upcomingRuns} size="panel" />
                 </section>
                 <section className="diagram-inspector-section">
-                  <h3 className="diagram-inspector-section-title">Upcoming runs</h3>
+                  <h3 className="diagram-inspector-section-title">
+                    <T>Upcoming runs</T>
+                  </h3>
                   <ul className="diagram-inspector-times">
                     {node.upcomingRuns.slice(0, 6).map((at) => (
                       <li key={at}>{time(at)}</li>
                     ))}
                   </ul>
-                  {!node.active && <p className="diagram-inspector-muted">Paused</p>}
+                  {!node.active && (
+                    <p className="diagram-inspector-muted">
+                      <T>Paused</T>
+                    </p>
+                  )}
                 </section>
               </>
             ) : (
@@ -158,7 +172,9 @@ export function DiagramInspector({
               />
             )}
             <section className="diagram-inspector-section">
-              <h3 className="diagram-inspector-section-title">Starts these agents</h3>
+              <h3 className="diagram-inspector-section-title">
+                <T>Starts these agents</T>
+              </h3>
               {diagram.edges
                 .filter((e) => e.from === node.id)
                 .map((e) => {
@@ -177,7 +193,9 @@ export function DiagramInspector({
                 })}
             </section>
             <section className="diagram-inspector-section">
-              <h3 className="diagram-inspector-section-title">Recent runs</h3>
+              <h3 className="diagram-inspector-section-title">
+                <T>Recent runs</T>
+              </h3>
               {routine.recentRuns.length ? (
                 <ul className="diagram-inspector-history">
                   {routine.recentRuns.map((r) => (
@@ -189,19 +207,23 @@ export function DiagramInspector({
                   ))}
                 </ul>
               ) : (
-                <p className="diagram-inspector-muted">No runs yet.</p>
+                <p className="diagram-inspector-muted">
+                  <T>No runs yet.</T>
+                </p>
               )}
             </section>
             <SourceButton
               onClick={() => onEditRoutine(routine.routine.agentId, routine.routine.id)}
             >
-              Edit routine
+              <T>Edit routine</T>
             </SourceButton>
           </>
         ) : (
           <>
             <section className="diagram-inspector-section">
-              <h3 className="diagram-inspector-section-title">Task</h3>
+              <h3 className="diagram-inspector-section-title">
+                <T>Task</T>
+              </h3>
               {focus && node.kind === "agent" && node.tasks && focus in node.tasks ? (
                 <TaskEditor
                   key={`${node.id}:${focus}`}
@@ -211,12 +233,14 @@ export function DiagramInspector({
                 />
               ) : (
                 <p>
-                  {diagramAgentTask(node, focus) || "This agent is not connected to a routine."}
+                  {diagramAgentTask(node, focus) || gt("This agent is not connected to a routine.")}
                 </p>
               )}
             </section>
             <section className="diagram-inspector-section">
-              <h3 className="diagram-inspector-section-title">Started by</h3>
+              <h3 className="diagram-inspector-section-title">
+                <T>Started by</T>
+              </h3>
               <ul className="diagram-inspector-steps">
                 {diagramRoutinesReaching(diagram.nodes, diagram.edges, node.id).map((r) => (
                   <li key={r.id}>
@@ -239,18 +263,22 @@ export function DiagramInspector({
             </section>
             <section className="diagram-inspector-section">
               <h3 className="diagram-inspector-section-heading">
-                <span>Input</span>
+                <span>
+                  <T>Input</T>
+                </span>
                 {step?.input && <CopyText text={step.input} />}
               </h3>
-              <p className="diagram-inspector-output">{step?.input ?? "No input yet."}</p>
+              <p className="diagram-inspector-output">{step?.input ?? gt("No input yet.")}</p>
             </section>
             <section className="diagram-inspector-section">
               <h3 className="diagram-inspector-section-heading">
-                <span>Answer</span>
+                <span>
+                  <T>Answer</T>
+                </span>
                 {step?.output && <CopyText text={step.output} />}
               </h3>
               <p className="diagram-inspector-output">
-                {step?.output ?? step?.error ?? "No answer yet."}
+                {step?.output ?? step?.error ?? gt("No answer yet.")}
               </p>
               {step && <StepStatus step={step} />}
             </section>
@@ -261,6 +289,7 @@ export function DiagramInspector({
   );
 }
 function StepStatus({ step }: { step: DiagramStepRun | undefined }) {
+  const gt = useGT();
   const duration =
     step?.startedAt && step.finishedAt
       ? Math.max(0, Math.round((Date.parse(step.finishedAt) - Date.parse(step.startedAt)) / 1000))
@@ -268,11 +297,12 @@ function StepStatus({ step }: { step: DiagramStepRun | undefined }) {
   return (
     <span className="diagram-inspector-step-status" data-status={step?.status}>
       {step?.status === "succeeded" ? <Check /> : null}
-      {duration !== null ? `${duration}s` : (step?.status ?? "Not run")}
+      {duration !== null ? `${duration}s` : (step?.status ?? gt("Not run"))}
     </span>
   );
 }
 function CopyText({ text }: { text: string }) {
+  const gt = useGT();
   const { isCopied: copied, copyToClipboard } = useCopyToClipboard({
     target: namedClipboardTarget("routine result"),
   });
@@ -280,7 +310,7 @@ function CopyText({ text }: { text: string }) {
     <SourceButton
       variant="ghost"
       size="xs"
-      aria-label={copied ? "Copied" : "Copy text"}
+      aria-label={copied ? gt("Copied") : gt("Copy text")}
       onClick={() => copyToClipboard(text, undefined)}
     >
       {copied ? <Check /> : <Copy />}
@@ -296,6 +326,7 @@ function TaskEditor({
   disabled: boolean;
   onSave: (value: string) => void;
 }) {
+  const gt = useGT();
   const [draft, setDraft] = useState(value),
     [observed, setObserved] = useState(value),
     [editing, setEditing] = useState(false),
@@ -318,7 +349,7 @@ function TaskEditor({
     <textarea
       className="ui-textarea diagram-inspector-task"
       id={id}
-      aria-label="Task instructions"
+      aria-label={gt("Task instructions")}
       rows={2}
       value={draft}
       readOnly={disabled}
@@ -348,6 +379,7 @@ export function RoutineWeek({
   upcomingRuns: readonly string[];
   size: "card" | "panel";
 }) {
+  const gt = useGT();
   const [today, setToday] = useState(() => new Date());
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Advance the source calendar at local midnight and when the app wakes.
   useEffect(() => {
@@ -392,7 +424,7 @@ export function RoutineWeek({
       className="diagram-routine-week"
       data-size={size}
       role="img"
-      aria-label={`${count} runs in the next seven days`}
+      aria-label={gt("{count} runs in the next seven days", { count })}
     >
       {days.map((day) => (
         <div

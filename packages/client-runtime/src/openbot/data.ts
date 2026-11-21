@@ -6,6 +6,7 @@ import {
   type OpenbotDataReadRequest,
   type OpenbotDataAdminRequest,
 } from "@t3tools/contracts";
+import { mFallback, msg } from "gt-i18n";
 export type DataRequest = OpenbotDataReadRequest | OpenbotDataAdminRequest;
 export type DataActions = {
   readonly execute: (request: DataRequest) => Promise<unknown>;
@@ -27,9 +28,11 @@ export function tableOwner(
   ownerAgentId: string | null,
   agents: readonly { id: string; name: string }[],
 ) {
-  if (ownerAgentId === null) return "Created outside an agent";
+  if (ownerAgentId === null) return mFallback(msg("Created outside an agent"));
   const owner = agents.find((agent) => agent.id === ownerAgentId);
-  return owner ? `Created by ${owner.name}` : `Creator unavailable (${ownerAgentId})`;
+  return owner
+    ? mFallback(msg("Created by {name}", { name: owner.name }))
+    : mFallback(msg("Creator unavailable ({ownerAgentId})", { ownerAgentId }));
 }
 export function hostedSiteLink(site: OpenbotHostedSites["sites"][number]) {
   if (site.status !== "active") return null;
@@ -49,12 +52,16 @@ export function dataFailure(value: unknown) {
   if (typeof value !== "object" || value === null || !("dataError" in value)) return null;
   switch (value.dataError) {
     case "unsupported":
-      return "This host does not support the released data capability.";
+      return mFallback(msg("This host does not support the released data capability."));
     case "forbidden":
-      return "The host refused access. Check the host role and Sled permissions.";
+      return mFallback(msg("The host refused access. Check the host role and Sled permissions."));
     case "account-or-conflict":
-      return "The host could not complete the request. Hosted sites require a signed-in host account; the resource may also be missing or belong to another server.";
+      return mFallback(
+        msg(
+          "The host could not complete the request. Hosted sites require a signed-in host account; the resource may also be missing or belong to another server.",
+        ),
+      );
     default:
-      return "The host data request failed. Refresh before retrying.";
+      return mFallback(msg("The host data request failed. Refresh before retrying."));
   }
 }

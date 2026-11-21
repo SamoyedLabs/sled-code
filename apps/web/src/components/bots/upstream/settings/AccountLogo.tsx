@@ -3,7 +3,9 @@ import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { flushSync } from "react-dom";
 import { APP_LOGO_CORNER, APP_LOGO_EYE_POINTS, APP_LOGO_SIZE } from "./account-logo-shape";
 import "./account-logo.css";
+import { useGT } from "gt-react";
 export function AccountLogo() {
+  const gt = useGT();
   const element = useRef<SVGSVGElement>(null),
     clickTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined),
     partyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined),
@@ -62,7 +64,7 @@ export function AccountLogo() {
       data-interactive="true"
       data-variant="production"
       viewBox={`0 0 ${APP_LOGO_SIZE} ${APP_LOGO_SIZE}`}
-      aria-label="Animate OpenBot logo"
+      aria-label={gt("Animate OpenBot logo")}
       role="button"
       tabIndex={0}
       onClick={click}

@@ -77,7 +77,11 @@ export function SettingsPictureChoice<T extends string | boolean>({
                 </AppText>
                 {checked ? (
                   <View className="size-[22px] items-center justify-center rounded-full bg-primary">
-                    <SymbolView name="checkmark" size={12} tintColorClassName="accent-primary-foreground" />
+                    <SymbolView
+                      name="checkmark"
+                      size={12}
+                      tintColorClassName="accent-primary-foreground"
+                    />
                   </View>
                 ) : (
                   <View className="size-[22px] rounded-full border-[1.5px] border-foreground-muted" />

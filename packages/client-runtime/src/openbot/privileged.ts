@@ -3,6 +3,7 @@ import type { Atom } from "effect/reactivity";
 import type * as EnvironmentRegistry from "../connection/registry.ts";
 import { createEnvironmentQueryAtomFamily, createEnvironmentRpcCommand } from "../state/runtime.ts";
 import { privilegedScope } from "./rpc/privileged.ts";
+import { mFallback, msg } from "gt-i18n";
 export function createOpenbotPrivilegedAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, E>,
   refreshTrigger: (target: { readonly environmentId: EnvironmentId }) => Atom.Atom<unknown>,
@@ -15,7 +16,7 @@ export function createOpenbotPrivilegedAtoms<R, E>(
       refreshTrigger,
     }),
     privilegedExecute: createEnvironmentRpcCommand(runtime, {
-      label: "Secure response",
+      label: mFallback(msg("Secure response")),
       tag: WS_METHODS.openbotPrivilegedExecute,
     }),
   };

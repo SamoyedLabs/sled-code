@@ -157,9 +157,7 @@ export function BotMessageSwipe({
           {children}
         </Animated.View>
       </GestureDetector>
-      {actions && (
-        <View style={{ alignSelf: own ? "flex-end" : "flex-start" }}>{actions}</View>
-      )}
+      {actions && <View style={{ alignSelf: own ? "flex-end" : "flex-start" }}>{actions}</View>}
     </View>
   );
 }

@@ -9,6 +9,7 @@ import * as Result from "effect/Result";
 import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { Button } from "../ui/button";
+import { T, useGT } from "gt-react";
 
 const decode = Schema.decodeUnknownResult(OpenbotConversationDetail);
 
@@ -27,6 +28,7 @@ export function BotDeferredMessageDetail({
   messageId: string;
   field: OpenbotConversationDetailField;
 }) {
+  const gt = useGT();
   const [expanded, setExpanded] = useState(false);
   const [cursor, setCursor] = useState<{ offset: number; version: string | null }>({
     offset: 0,
@@ -61,10 +63,12 @@ export function BotDeferredMessageDetail({
       : null;
   return (
     <details onToggle={(event) => setExpanded(event.currentTarget.open)}>
-      <summary>{field === "text" ? "Read full message" : field}</summary>
+      <summary>{field === "text" ? gt("Read full message") : field}</summary>
       {query.error && (
         <div role="alert">
-          <p>This content changed or could not be loaded. Reload it from the selected host.</p>
+          <p>
+            <T>This content changed or could not be loaded. Reload it from the selected host.</T>
+          </p>
           <Button
             size="sm"
             variant="outline"
@@ -74,11 +78,15 @@ export function BotDeferredMessageDetail({
               query.refresh();
             }}
           >
-            Reload content
+            <T>Reload content</T>
           </Button>
         </div>
       )}
-      {query.isPending && <p role="status">Loading content…</p>}
+      {query.isPending && (
+        <p role="status">
+          <T>Loading content…</T>
+        </p>
+      )}
       {page && (
         <>
           <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">
@@ -96,7 +104,7 @@ export function BotDeferredMessageDetail({
                 setCursor({ offset, version: page.version });
               }}
             >
-              Previous part
+              <T>Previous part</T>
             </Button>
             <span>
               {page.offset + 1}–{page.offset + page.value.length} of {page.totalLength} characters
@@ -111,7 +119,7 @@ export function BotDeferredMessageDetail({
                 setCursor({ offset: page.nextOffset, version: page.version });
               }}
             >
-              Next part
+              <T>Next part</T>
             </Button>
           </div>
         </>

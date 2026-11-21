@@ -64,7 +64,11 @@ import { BOT_ROSTER_ORDERS, BOT_ROSTER_ORDER_LABELS } from "./bot-roster-order";
 import { BotWorkspaceConnection } from "./BotWorkspaceConnection";
 import { BotWorkspaceUpdate } from "./BotWorkspaceUpdate";
 import { botRosterState, botRosterWaits, resolveRosterEnvironment } from "./bot-roster-state";
-import { BotRosterAvatarBadge, BotRosterWaitChip, botRosterStatusLabel } from "./BotRosterRowStatus";
+import {
+  BotRosterAvatarBadge,
+  BotRosterWaitChip,
+  botRosterStatusLabel,
+} from "./BotRosterRowStatus";
 import { useEnvironmentQuery } from "../../state/query";
 import { openbot } from "../../state/openbot";
 import { BotNativeConversation } from "./BotNativeConversation";
@@ -93,6 +97,7 @@ import { BotUsageLimitsButton } from "./BotUsageLimits";
 import { BotRoutineFlows } from "./BotRoutineFlows";
 import { recordBotShortcut, updateBotShortcutRoster } from "../shortcuts/botQuickActionsRuntime";
 import { useBotMotion } from "./botFeedback";
+import { T, useGT } from "gt-react-native";
 
 export type BotSelection = {
   environmentId: EnvironmentId;
@@ -167,6 +172,7 @@ export function BotNativeWorkspace({
   quickAction?: "search";
   showHiddenChats?: boolean;
 }) {
+  const gt = useGT();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const p = useBotPalette();
@@ -176,7 +182,9 @@ export function BotNativeWorkspace({
   );
   const retryEnvironment = useAtomCommand(environmentCatalog.retryNow, "environment retry");
   const enableEnvironment = useAtomCommand(environmentCatalog.setEnabled, "enable environment");
-  const [selection, setSelection] = useState(openRoster ? null : initialSelection ?? lastSelection);
+  const [selection, setSelection] = useState(
+    openRoster ? null : (initialSelection ?? lastSelection),
+  );
   const [tool, setToolState] = useState<Tool>("Chat");
   const directChatOpen = selection !== null && tool === "Chat";
   const canOpenPins = useBotMessagePinsCapability(directChatOpen ? selection : null);
@@ -316,36 +324,36 @@ export function BotNativeWorkspace({
     const scope = { environmentId: primary.environmentId, hostId };
     shortcuts.push(
       {
-        title: "Routines",
+        title: gt("Routines"),
         icon: "calendar.badge.clock",
         go: () => navigation.navigate("BotWorkspaceUtility", { ...scope, page: "routines" }),
       },
       {
-        title: "Usage",
+        title: gt("Usage"),
         icon: "chart.bar.xaxis",
         go: () => navigation.navigate("BotWorkspaceUtility", { ...scope, page: "usage" }),
       },
     );
   }
   if (marketplaceAvailable)
-    shortcuts.push({ title: "Marketplace", icon: "cube", go: openMarketplace });
+    shortcuts.push({ title: gt("Marketplace"), icon: "cube", go: openMarketplace });
   if (libraryAvailable)
-    shortcuts.push({ title: "Library", icon: "square.grid.2x2", go: openLibrary });
+    shortcuts.push({ title: gt("Library"), icon: "square.grid.2x2", go: openLibrary });
   if (primary)
     shortcuts.push({
-      title: "Server settings",
+      title: gt("Server settings"),
       icon: "slider.horizontal.3",
       go: openServerSettings,
     });
   if (primary && hostId)
     shortcuts.push({
-      title: "Add agent",
+      title: gt("Add agent"),
       icon: "plus",
       go: () =>
         navigation.navigate("SettingsBotNew", { environmentId: primary.environmentId, hostId }),
     });
   shortcuts.push({
-    title: "Settings",
+    title: gt("Settings"),
     icon: "gearshape",
     go: () => navigation.navigate("Settings"),
   });
@@ -378,7 +386,7 @@ export function BotNativeWorkspace({
             {selection && (
               <BotGlass>
                 <BotIconButton
-                  label={tool === "Chat" ? "All chats" : "Back to conversation"}
+                  label={tool === "Chat" ? gt("All chats") : gt("Back to conversation")}
                   icon="chevron.left"
                   onPress={() => (tool === "Chat" ? choose(null) : setTool("Chat"))}
                 />
@@ -388,9 +396,9 @@ export function BotNativeWorkspace({
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Menu
                   actions={[
-                    { id: "threads", title: "Threads" },
-                    { id: "info", title: "Bot info" },
-                    { id: "code", title: "Return to Code" },
+                    { id: "threads", title: gt("Threads") },
+                    { id: "info", title: gt("Bot info") },
+                    { id: "code", title: gt("Return to Code") },
                   ]}
                   onPressAction={({ nativeEvent }) => {
                     if (nativeEvent.event === "code") code();
@@ -429,7 +437,7 @@ export function BotNativeWorkspace({
               <>
                 <BotGlass>
                   <BotIconButton
-                    label="Computers"
+                    label={gt("Computers")}
                     icon={COMPUTERS_ICON}
                     onPress={() => onDrawerOpenChange(true)}
                   />
@@ -464,25 +472,25 @@ export function BotNativeWorkspace({
               actions={
                 selection
                   ? [
-                      { id: "threads", title: "Threads" },
-                      ...(canOpenPins ? [{ id: "pins", title: "Pinned messages" }] : []),
+                      { id: "threads", title: gt("Threads") },
+                      ...(canOpenPins ? [{ id: "pins", title: gt("Pinned messages") }] : []),
                       ...toolNames.map((name) => ({ id: name, title: name })),
-                      { id: "info", title: "Bot info" },
-                      { id: "voice", title: "Voice settings" },
-                      { id: "code", title: "Return to Code" },
+                      { id: "info", title: gt("Bot info") },
+                      { id: "voice", title: gt("Voice settings") },
+                      { id: "code", title: gt("Return to Code") },
                     ]
                   : [
-                      ...(libraryAvailable ? [{ id: "library", title: "Library" }] : []),
+                      ...(libraryAvailable ? [{ id: "library", title: gt("Library") }] : []),
                       ...(marketplaceAvailable
-                        ? [{ id: "marketplace", title: "Marketplace" }]
+                        ? [{ id: "marketplace", title: gt("Marketplace") }]
                         : []),
-                      ...(groupsAvailable ? [{ id: "deleted", title: "Deleted chats" }] : []),
+                      ...(groupsAvailable ? [{ id: "deleted", title: gt("Deleted chats") }] : []),
                       ...(hostScope || offlineRoster
-                        ? [{ id: "hidden", title: "Hidden chats" }]
+                        ? [{ id: "hidden", title: gt("Hidden chats") }]
                         : []),
-                      { id: "settings", title: "Settings" },
-                      { id: "voice", title: "Voice settings" },
-                      { id: "code", title: "Return to Code" },
+                      { id: "settings", title: gt("Settings") },
+                      { id: "voice", title: gt("Voice settings") },
+                      { id: "code", title: gt("Return to Code") },
                     ]
               }
               onPressAction={({ nativeEvent }) => {
@@ -506,14 +514,17 @@ export function BotNativeWorkspace({
               }}
             >
               <BotGlass>
-                <BotIconButton label={selection ? "Chat menu" : "Workspace menu"} icon="ellipsis" />
+                <BotIconButton
+                  label={selection ? gt("Chat menu") : gt("Workspace menu")}
+                  icon="ellipsis"
+                />
               </BotGlass>
             </Menu>
           </BotHeaderRow>
         )}
         {loading ? (
           <BotRosterLoading
-            label={isReady ? "Connecting to your server" : "Loading your servers"}
+            label={isReady ? gt("Connecting to your server") : gt("Loading your servers")}
           />
         ) : noServers ? (
           <EmptyBotRoster onOpen={() => onDrawerOpenChange(true)} />
@@ -562,13 +573,13 @@ export function BotNativeWorkspace({
                     paddingBottom: 16,
                   }}
                 >
-                  {primary?.label ?? "Chats"}
+                  {primary?.label ?? gt("Chats")}
                 </Text>
               )}
               {searchIdle ? (
                 <View style={{ paddingHorizontal: 16, gap: 12 }}>
                   <Text style={{ ...typeScale.caption, color: p.muted, paddingLeft: 4 }}>
-                    Go to
+                    <T>Go to</T>
                   </Text>
                   <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                     {shortcuts.map(({ title, icon, go }) => (
@@ -632,17 +643,17 @@ export function BotNativeWorkspace({
                     style={{ color: p.text, fontSize: 17, fontWeight: "600", textAlign: "center" }}
                   >
                     {roster === "disabled"
-                      ? "Bot hosting is off"
+                      ? gt("Bot hosting is off")
                       : roster === "failed"
-                        ? "Bot hosting is unavailable"
-                        : "Waiting for connection"}
+                        ? gt("Bot hosting is unavailable")
+                        : gt("Waiting for connection")}
                   </Text>
                   <Text style={{ color: p.muted, fontSize: 14, textAlign: "center" }}>
                     {roster === "disabled"
-                      ? "Enable bot hosting on this computer to load its chats."
+                      ? gt("Enable bot hosting on this computer to load its chats.")
                       : roster === "failed"
-                        ? (host.error ?? "Check the bot hosting settings for this computer.")
-                        : "The agent list will load once this server is connected."}
+                        ? (host.error ?? gt("Check the bot hosting settings for this computer."))
+                        : gt("The agent list will load once this server is connected.")}
                   </Text>
                   {roster !== "waiting" ||
                   (primary &&
@@ -671,9 +682,9 @@ export function BotNativeWorkspace({
                       <Text style={{ color: p.text, fontSize: 14, fontWeight: "600" }}>
                         {roster === "waiting"
                           ? paused
-                            ? "Connect"
-                            : "Try again"
-                          : "Bot hosting settings"}
+                            ? gt("Connect")
+                            : gt("Try again")
+                          : gt("Bot hosting settings")}
                       </Text>
                     </Pressable>
                   ) : null}
@@ -703,7 +714,7 @@ export function BotNativeWorkspace({
                 >
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Close search"
+                    accessibilityLabel={gt("Close search")}
                     onPress={endSearch}
                     style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
                   >
@@ -727,9 +738,9 @@ export function BotNativeWorkspace({
                   >
                     <SymbolView name="magnifyingglass" size={19} tintColor={p.muted} />
                     <TextInput
-                      accessibilityLabel="Search chats"
+                      accessibilityLabel={gt("Search chats")}
                       autoFocus={quickAction === "search"}
-                      placeholder="Search"
+                      placeholder={gt("Search")}
                       placeholderTextColor={p.muted}
                       value={search}
                       onFocus={() => setSearchOpen(true)}
@@ -768,10 +779,10 @@ function EmptyBotRoster({ onOpen }: { onOpen: () => void }) {
       </View>
       <View className="items-center gap-1.5">
         <Text accessibilityRole="header" style={{ color: p.text, fontSize: 20, fontWeight: "700" }}>
-          No servers available
+          <T>No servers available</T>
         </Text>
         <Text style={{ color: p.muted, fontSize: 16, lineHeight: 26, textAlign: "center" }}>
-          Connect the desktop app again or join a remote server.
+          <T>Connect the desktop app again or join a remote server.</T>
         </Text>
       </View>
       <Pressable
@@ -780,7 +791,9 @@ function EmptyBotRoster({ onOpen }: { onOpen: () => void }) {
         className="min-h-12 items-center justify-center rounded-xl px-4 active:opacity-60"
         style={{ backgroundColor: p.control }}
       >
-        <Text style={{ color: p.text, fontSize: 16, fontWeight: "600" }}>Open servers</Text>
+        <Text style={{ color: p.text, fontSize: 16, fontWeight: "600" }}>
+          <T>Open servers</T>
+        </Text>
       </Pressable>
     </View>
   );
@@ -817,6 +830,7 @@ function BotChats({
   onCloseHidden: () => void;
   onSelect: (s: BotSelection) => void;
 }) {
+  const gt = useGT();
   const navigation = useNavigation();
   const p = useBotPalette();
   const organization = useBotRosterOrganization({
@@ -986,18 +1000,18 @@ function BotChats({
           actions={[
             ...(offlineRoster
               ? []
-              : [{ id: "info", title: row.type === "group" ? "Group info" : "Bot info" }]),
+              : [{ id: "info", title: row.type === "group" ? gt("Group info") : gt("Bot info") }]),
             ...(organization.canPin
-              ? [{ id: "pin", title: pinned ? "Unpin chat" : "Pin chat" }]
+              ? [{ id: "pin", title: pinned ? gt("Unpin chat") : gt("Pin chat") }]
               : []),
-            ...(organization.canHide(pin) ? [{ id: "hide", title: "Hide chat" }] : []),
+            ...(organization.canHide(pin) ? [{ id: "hide", title: gt("Hide chat") }] : []),
             ...(organization.canEditSections && sections.length
               ? [
                   {
                     id: "move-section",
-                    title: "Move to section",
+                    title: gt("Move to section"),
                     subactions: [
-                      { id: "section-main", title: "Main list" },
+                      { id: "section-main", title: gt("Main list") },
                       ...sections.map((section) => ({
                         id: `section:${section.id}`,
                         title: section.name,
@@ -1006,7 +1020,7 @@ function BotChats({
                   },
                 ]
               : []),
-            { id: "copy", title: "Copy ID" },
+            { id: "copy", title: gt("Copy ID") },
           ]}
           onPressAction={({ nativeEvent }) => {
             if (nativeEvent.event === "copy") {
@@ -1022,11 +1036,15 @@ function BotChats({
                 void organization.setHidden(pin, true);
               } else
                 Dialog.confirm({
-                  title: "Hide this bot?",
+                  title: gt("Hide this bot?"),
                   message: organization.hiddenAgentsStillWork
-                    ? "This bot will be hidden for everyone on this computer. It can still work."
-                    : "A hidden bot cannot receive new messages or run routines until you show it again.",
-                  confirmText: "Hide chat",
+                    ? gt(
+                        "This bot will be hidden for everyone on this computer. It can still work.",
+                      )
+                    : gt(
+                        "A hidden bot cannot receive new messages or run routines until you show it again.",
+                      ),
+                  confirmText: gt("Hide chat"),
                   onConfirm: () => void organization.setHidden(pin, true),
                 });
               return;
@@ -1120,19 +1138,19 @@ function BotChats({
           }}
         >
           <Text style={{ fontSize: 13, color: p.muted }}>
-            {offlineRoster ? "Offline chats" : "Chats"}
+            {offlineRoster ? gt("Offline chats") : gt("Chats")}
           </Text>
           {!offlineRoster && (
             <Menu
               actions={[
-                { id: "bot", title: "New bot" },
-                { id: "new-group", title: "New group chat" },
-                { id: "groups", title: "Manage group chats" },
+                { id: "bot", title: gt("New bot") },
+                { id: "new-group", title: gt("New group chat") },
+                { id: "groups", title: gt("Manage group chats") },
                 ...(organization.canSaveOrder
                   ? [
                       {
                         id: "sort",
-                        title: "Sort chats",
+                        title: gt("Sort chats"),
                         subactions: BOT_ROSTER_ORDERS.map((order) => ({
                           id: `sort:${order}`,
                           title: BOT_ROSTER_ORDER_LABELS[order],
@@ -1142,11 +1160,11 @@ function BotChats({
                     ]
                   : []),
                 ...(organization.canEditSections
-                  ? [{ id: "new-section", title: "New section" }]
+                  ? [{ id: "new-section", title: gt("New section") }]
                   : []),
                 {
                   id: "mark-all-read",
-                  title: "Mark all as read",
+                  title: gt("Mark all as read"),
                   attributes: { disabled: organization.busy || unreadChats.length === 0 },
                 },
               ]}
@@ -1166,7 +1184,7 @@ function BotChats({
                   navigation.navigate("BotGroups", { environmentId, hostId });
               }}
             >
-              <BotIconButton label="New chat or manage groups" icon="square.and.pencil" />
+              <BotIconButton label={gt("New chat or manage groups")} icon="square.and.pencil" />
             </Menu>
           )}
         </View>
@@ -1182,12 +1200,12 @@ function BotChats({
       {!hasVisibleChats && !error && (
         <Text style={{ padding: 20, color: p.muted }}>
           {loading
-            ? "Loading chats…"
+            ? gt("Loading chats…")
             : !hostId
-              ? "This environment is offline."
+              ? gt("This environment is offline.")
               : term
-                ? "No matching chats."
-                : "No chats yet."}
+                ? gt("No matching chats.")
+                : gt("No chats yet.")}
         </Text>
       )}
       <BotRosterGroups
@@ -1272,6 +1290,7 @@ function SelectedBot({
   tool: Tool;
   onFiles: () => void;
 }) {
+  const gt = useGT();
   const { environmentId, hostId, agentId } = selection;
   const navigation = useNavigation();
   const focused = useIsFocused();
@@ -1312,7 +1331,7 @@ function SelectedBot({
   if (host.data?.state !== "ready" || host.data.hostId !== hostId)
     return (
       <Text accessibilityRole="alert" style={{ padding: 20, color: p.muted }}>
-        {host.error ?? "Reconnect to this bot’s environment to continue."}
+        {host.error ?? gt("Reconnect to this bot’s environment to continue.")}
       </Text>
     );
   return (

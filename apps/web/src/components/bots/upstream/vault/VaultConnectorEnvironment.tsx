@@ -16,6 +16,7 @@ import { VaultField } from "./VaultItemDialog";
 import { OnePasswordMark } from "./OnePasswordMark";
 import { t } from "./connector-text";
 import "./VaultConnectors.css";
+import { useGT } from "gt-react";
 export function VaultConnectorEnvironment(props: {
   environmentId: EnvironmentId;
   hostId: string;
@@ -43,6 +44,7 @@ function ConnectorHost({
   hostName: string;
   connector: "onepassword" | "bitwarden";
 }) {
+  const gt = useGT();
   const registry = useContext(RegistryContext),
     admin = useAtomCommand(openbot.adminToHost, { reportFailure: false });
   const connection = readPreparedConnection(environmentId),
@@ -71,7 +73,7 @@ function ConnectorHost({
     } catch (cause) {
       return {
         ok: false,
-        error: cause instanceof Error ? cause.message : "The connection request failed.",
+        error: cause instanceof Error ? cause.message : gt("The connection request failed."),
       };
     }
   });
@@ -93,7 +95,7 @@ function ConnectorHost({
     [masterPassword, setMasterPassword] = useState("");
   const load = async () => {
     const ok = await c.run(statusRequest);
-    if (active.current) setReadError(ok ? null : "Could not read the connection status.");
+    if (active.current) setReadError(ok ? null : gt("Could not read the connection status."));
   };
   const loadEvent = useEffectEvent(load);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Read only the permitted connector status when the host grants access.
@@ -150,7 +152,7 @@ function ConnectorHost({
                       ? "connector.onePassword.statusConnected"
                       : "connector.bitwarden.connected",
                   )
-                : "Not connected"
+                : gt("Not connected")
         }
       />
       {unknown ? (
@@ -162,8 +164,8 @@ function ConnectorHost({
             <div className="ui-alert-title">{t("connector.readFailed")}</div>
             <p className="ui-alert-description">
               {!canRead
-                ? "You don’t have permission to view this connection."
-                : (readError ?? "Loading connection…")}
+                ? gt("You don’t have permission to view this connection.")
+                : (readError ?? gt("Loading connection…"))}
             </p>
           </div>
           <div className="ui-alert-actions">

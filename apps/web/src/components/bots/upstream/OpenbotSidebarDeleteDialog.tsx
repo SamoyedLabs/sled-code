@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { AlertDialog } from "@base-ui/react/alert-dialog";
 import { Trash2Icon } from "lucide-react";
 import "./OpenbotSidebarDeleteDialog.css";
+import { T, useGT } from "gt-react";
 
 // Source confirm-dialog.tsx and SidebarDialogs.tsx: failed deletion stays open; pending blocks dismissal.
 export function SidebarDeleteDialog({
@@ -18,6 +19,7 @@ export function SidebarDeleteDialog({
   onCancel: () => void;
   onConfirm: () => Promise<void>;
 }) {
+  const gt = useGT();
   const confirm = useRef<HTMLButtonElement>(null);
   return (
     <AlertDialog.Root
@@ -48,8 +50,10 @@ export function SidebarDeleteDialog({
                     Delete {name}?
                   </AlertDialog.Title>
                   <AlertDialog.Description className="ui-confirm-dialog-description">
-                    The chats and folders in this folder move up one level. No agent or channel is
-                    deleted.
+                    <T>
+                      The chats and folders in this folder move up one level. No agent or channel is
+                      deleted.
+                    </T>
                   </AlertDialog.Description>
                   {error && (
                     <p role="alert" className="ob-sidebar-delete-error">
@@ -65,7 +69,7 @@ export function SidebarDeleteDialog({
                   disabled={pending}
                   onClick={onCancel}
                 >
-                  Cancel
+                  <T>Cancel</T>
                 </button>
                 <button
                   ref={confirm}
@@ -75,7 +79,7 @@ export function SidebarDeleteDialog({
                   onClick={() => void onConfirm()}
                 >
                   <Trash2Icon aria-hidden="true" />
-                  {pending ? "Deleting…" : "Delete"}
+                  {pending ? gt("Deleting…") : "Delete"}
                 </button>
               </footer>
             </AlertDialog.Popup>

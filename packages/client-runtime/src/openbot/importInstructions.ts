@@ -1,3 +1,4 @@
+/* oxlint-disable t3code/no-untranslated-copy -- Pinned upstream agent export prompts with sha256 checksums stay verbatim English per docs/internals/i18n.md. */
 // Pinned Openbot 0.60.0 export instructions, commit 0c7753fa622c38419939cd230657f40e5883d098.
 // Copyright upstream authors; see packages/contracts/src/openbotPinnedSettings/LICENSE.upstream.
 export const IMPORT_INSTRUCTIONS = [

@@ -19,6 +19,7 @@ import { assetEnvironment } from "../../state/assets";
 import { downloadMedia } from "../media/mediaContent";
 import { BotFilePreview } from "./BotFilePreview";
 import { Button } from "../ui/button";
+import { T, useGT } from "gt-react";
 
 const decodeFiles = Schema.decodeUnknownResult(Schema.Array(OpenbotFileSummary));
 
@@ -41,6 +42,7 @@ export function BotMessageFiles({
   messageId: string;
   attachments: unknown;
 }) {
+  const gt = useGT();
   const materialize = useAtomCommand(openbot.fileMaterialize, { reportFailure: false });
   const canRead = useAtomValue(openbot.fileMaterialize.permissionAtom(environmentId));
   const asset = useAtomQueryRunner(assetEnvironment.createUrl, {
@@ -54,7 +56,11 @@ export function BotMessageFiles({
   const [error, setError] = useState<string | null>(null);
   const decoded = decodeFiles(attachments ?? []);
   if (Result.isFailure(decoded))
-    return <p className="text-xs text-muted-foreground">Attachment unavailable.</p>;
+    return (
+      <p className="text-xs text-muted-foreground">
+        <T>Attachment unavailable.</T>
+      </p>
+    );
   if (!decoded.success.length) return null;
   const open = async (attachmentId: string, download: boolean) => {
     if (busy || !canRead) return;
@@ -99,7 +105,7 @@ export function BotMessageFiles({
     });
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "Could not open this file.");
+      setError(cause instanceof Error ? cause.message : gt("Could not open this file."));
     }
     setBusy(null);
   };
@@ -119,13 +125,13 @@ export function BotMessageFiles({
           >
             <span className="block truncate text-sm font-medium">{file.name}</span>
             <span className="text-xs text-muted-foreground">
-              {busy === file.id ? "Opening…" : formatAttachmentSize(file.size)}
+              {busy === file.id ? gt("Opening…") : formatAttachmentSize(file.size)}
             </span>
           </button>
           <Button
             size="icon-sm"
             variant="ghost"
-            aria-label={`Download ${file.name}`}
+            aria-label={gt("Download {name}", { name: file.name })}
             disabled={!canRead || busy !== null}
             onClick={() => void open(file.id, true)}
           >

@@ -15,8 +15,10 @@ import {
   useMobileAppLock,
 } from "./appLockRuntime";
 import { nextAppPinAttempt } from "./appLockPolicy";
+import { T, useGT } from "gt-react-native";
 
 export function AppLockHost() {
+  const gt = useGT();
   const state = useMobileAppLock();
   if (state.status === "ready" && !state.locked && !state.covered) return null;
   return (
@@ -31,12 +33,12 @@ export function AppLockHost() {
           {state.status === "failed" ? (
             <View className="w-full max-w-80 items-center gap-4">
               <Text accessibilityRole="header" className="text-xl font-bold">
-                Sled is locked
+                <T>Sled is locked</T>
               </Text>
               <Text className="text-center text-foreground-muted">
-                Unlock this device so Sled can read its App Lock settings.
+                <T>Unlock this device so Sled can read its App Lock settings.</T>
               </Text>
-              <Button label="Try again" onPress={() => void loadMobileAppLock()} />
+              <Button label={gt("Try again")} onPress={() => void loadMobileAppLock()} />
             </View>
           ) : state.status === "loading" || !state.locked ? (
             <AppActivityIndicator />
@@ -50,6 +52,7 @@ export function AppLockHost() {
 }
 
 function AppLockControls() {
+  const gt = useGT();
   const { config, confirming } = useMobileAppLock();
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
@@ -110,12 +113,12 @@ function AppLockControls() {
     <View accessibilityViewIsModal className="w-full max-w-80 items-center gap-4">
       <SymbolView name="lock" size={36} />
       <Text accessibilityRole="header" className="text-2xl font-bold">
-        {confirming ? "Confirm it’s you" : "Sled is locked"}
+        {confirming ? gt("Confirm it’s you") : gt("Sled is locked")}
       </Text>
       {!!config.pin && (
         <>
           <TextInput
-            accessibilityLabel="App Lock PIN"
+            accessibilityLabel={gt("App Lock PIN")}
             keyboardType="number-pad"
             secureTextEntry
             autoCorrect={false}
@@ -128,21 +131,27 @@ function AppLockControls() {
             className="min-h-12 w-full rounded-xl border border-border bg-card px-4 text-center text-xl text-foreground"
           />
           <Button
-            label="Unlock"
+            label={gt("Unlock")}
             onPress={() => void enterPin()}
             disabled={busy || blocked || pin.length !== 4}
           />
         </>
       )}
       {device && (config.useDevice || blocked) && (
-        <Button label={`Use ${device}`} onPress={() => void unlockDevice()} disabled={busy} />
+        <Button
+          label={gt("Use {device}", { device })}
+          onPress={() => void unlockDevice()}
+          disabled={busy}
+        />
       )}
       {(blocked || failure) && (
         <Text accessibilityRole="alert" className="text-center text-foreground-muted">
-          {blocked ? `Try again in ${Math.ceil((waitUntil - now) / 1_000)} seconds.` : failure}
+          {blocked
+            ? gt("Try again in {value} seconds.", { value: Math.ceil((waitUntil - now) / 1_000) })
+            : failure}
         </Text>
       )}
-      {confirming && <Button label="Cancel" onPress={dismissMobileAppOwnerConfirmation} />}
+      {confirming && <Button label={gt("Cancel")} onPress={dismissMobileAppOwnerConfirmation} />}
     </View>
   );
 }

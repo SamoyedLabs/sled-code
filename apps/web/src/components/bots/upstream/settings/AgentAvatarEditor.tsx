@@ -19,6 +19,7 @@ import {
 import { normalizeAvatarFile, type AvatarImageInput } from "./avatar-image";
 import "./agent-settings.css";
 import { AvatarEditorPopup } from "./AvatarEditorPopup";
+import { T, useGT } from "gt-react";
 
 export interface AgentAvatarValue {
   id: string;
@@ -52,6 +53,7 @@ export function AgentAvatarEditor({
     | undefined;
   onSetAvatar?: ((image: AvatarImageInput | null) => Promise<void>) | undefined;
 }) {
+  const gt = useGT();
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +75,7 @@ export function AgentAvatarEditor({
     const settled = await settlePromise(action);
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "Could not save the agent avatar.");
+      setError(cause instanceof Error ? cause.message : gt("Could not save the agent avatar."));
     }
     lock.current = false;
     setBusy(false);
@@ -99,18 +101,18 @@ export function AgentAvatarEditor({
   return (
     <div className="agent-settings-avatar-picker">
       <Popover.Root>
-        <Popover.Trigger className="agent-settings-avatar" aria-label="Edit agent avatar">
+        <Popover.Trigger className="agent-settings-avatar" aria-label={gt("Edit agent avatar")}>
           <Avatar seed={agent.avatarSeed} hue={agent.avatarHue} url={agent.avatarUrl} />
           <span className="agent-settings-avatar-badge" aria-hidden="true">
             <Pencil className="agent-settings-avatar-badge-icon" />
           </span>
         </Popover.Trigger>
-        <AvatarEditorPopup title="Avatar editor">
+        <AvatarEditorPopup title={gt("Avatar editor")}>
           <input
             ref={input}
             type="file"
             hidden
-            aria-label="Attach files"
+            aria-label={gt("Attach files")}
             accept="image/png,image/jpeg,image/gif,image/webp"
             onChange={(event) => {
               const file = event.target.files?.[0];
@@ -120,14 +122,16 @@ export function AgentAvatarEditor({
             }}
           />
           <div className="avatar-editor-heading">
-            <span>Image</span>
+            <span>
+              <T>Image</T>
+            </span>
             <div className="avatar-editor-actions">
               {agent.avatarUrl && (
                 <SourceButton
                   disabled={busy || !onSetAvatar}
                   onClick={() => void act(async () => onSetAvatar?.(null))}
                 >
-                  Remove
+                  <T>Remove</T>
                 </SourceButton>
               )}
             </div>
@@ -146,18 +150,22 @@ export function AgentAvatarEditor({
               )}
             </span>
             <span>
-              <strong>{agent.avatarUrl ? "Replace image" : "Upload image"}</strong>
-              <small>PNG, JPEG, GIF or WebP · square crop</small>
+              <strong>{agent.avatarUrl ? gt("Replace image") : gt("Upload image")}</strong>
+              <small>
+                <T>PNG, JPEG, GIF or WebP · square crop</T>
+              </small>
             </span>
           </SourceButton>
           <div className="avatar-editor-divider" />
           <div className="avatar-editor-heading">
-            <span>Shape</span>
+            <span>
+              <T>Shape</T>
+            </span>
             <div className="avatar-editor-actions">
               {agent.avatarSeed !== agent.id && (
                 <SourceButton
                   disabled={busy || !onUpdate}
-                  aria-label="Reset to ID"
+                  aria-label={gt("Reset to ID")}
                   onClick={() => void act(() => generated(agent.id))}
                 >
                   <RotateCcw aria-hidden="true" />
@@ -165,20 +173,20 @@ export function AgentAvatarEditor({
               )}
               <SourceButton
                 disabled={busy || !onUpdate}
-                aria-label="Random face"
+                aria-label={gt("Random face")}
                 onClick={() => void act(() => generated(avatarSeedForFace(agent.id, randomFace())))}
               >
                 <Shuffle aria-hidden="true" />
               </SourceButton>
             </div>
           </div>
-          <fieldset className="avatar-face-grid avatar-shape-grid" aria-label="Avatar shapes">
+          <fieldset className="avatar-face-grid avatar-shape-grid" aria-label={gt("Avatar shapes")}>
             {shapeSeeds.map(({ shape, seed }, index) => (
               <SourceButton
                 key={shape}
                 variant="ghost"
                 className={`avatar-face-choice${!agent.avatarUrl && face.shape === shape ? " avatar-choice-selected" : ""}`}
-                aria-label={`Shape ${index + 1}`}
+                aria-label={gt("Shape {value}", { value: index + 1 })}
                 aria-pressed={!agent.avatarUrl && face.shape === shape}
                 disabled={busy || !onUpdate}
                 onClick={() => void act(() => generated(seed))}
@@ -189,15 +197,17 @@ export function AgentAvatarEditor({
           </fieldset>
           <div className="avatar-editor-divider" />
           <div className="avatar-editor-heading">
-            <span>Eyes</span>
+            <span>
+              <T>Eyes</T>
+            </span>
           </div>
-          <fieldset className="avatar-face-grid avatar-eyes-grid" aria-label="Avatar eyes">
+          <fieldset className="avatar-face-grid avatar-eyes-grid" aria-label={gt("Avatar eyes")}>
             {expressionSeeds.map(({ expression, seed }, index) => (
               <SourceButton
                 key={expression}
                 variant="ghost"
                 className={`avatar-face-choice${!agent.avatarUrl && face.expression === expression ? " avatar-choice-selected" : ""}`}
-                aria-label={`Eyes ${index + 1}`}
+                aria-label={gt("Eyes {value}", { value: index + 1 })}
                 aria-pressed={!agent.avatarUrl && face.expression === expression}
                 disabled={busy || !onUpdate}
                 onClick={() => void act(() => generated(seed))}
@@ -208,13 +218,15 @@ export function AgentAvatarEditor({
           </fieldset>
           <div className="avatar-editor-divider" />
           <div className="avatar-editor-heading">
-            <span>Color</span>
+            <span>
+              <T>Color</T>
+            </span>
           </div>
-          <fieldset className="avatar-color-grid" aria-label="Avatar color">
+          <fieldset className="avatar-color-grid" aria-label={gt("Avatar color")}>
             <SourceButton
               variant="ghost"
               className={`avatar-color-choice${agent.avatarHue === null ? " avatar-choice-selected" : ""}`}
-              aria-label="Automatic avatar color"
+              aria-label={gt("Automatic avatar color")}
               aria-pressed={agent.avatarHue === null}
               disabled={busy || !onUpdate}
               onClick={() => void act(async () => onUpdate?.({ avatarHue: null }))}
@@ -230,7 +242,7 @@ export function AgentAvatarEditor({
                   key={option.hue}
                   variant="ghost"
                   className={`avatar-color-choice${selected ? " avatar-choice-selected" : ""}`}
-                  aria-label={`${option.label} avatar color`}
+                  aria-label={gt("{label} avatar color", { label: option.label })}
                   aria-pressed={selected}
                   disabled={busy || !onUpdate}
                   onClick={() => void act(async () => onUpdate?.({ avatarHue: option.hue }))}

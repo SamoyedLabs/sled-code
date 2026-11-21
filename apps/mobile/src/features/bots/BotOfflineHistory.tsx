@@ -22,6 +22,7 @@ import {
 } from "./botOutboxFiles";
 import { OpenBotText as Text } from "./upstream/OpenBotTypography";
 import { chatDayLabels } from "./upstream/chat-day-markers";
+import { T, useGT } from "gt-react-native";
 
 const OfflineRow = Schema.Struct({
   id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
@@ -150,6 +151,7 @@ export function BotOfflineHistory({
   chat,
   connecting,
 }: ChatScope & { connecting: boolean }) {
+  const gt = useGT();
   const scope = useBotOfflineScope(environmentId);
   const saved = useBotCachedValue({ scope, name: cacheName(hostId, chat), live: null, decode });
   const rows = saved?.rows;
@@ -176,10 +178,10 @@ export function BotOfflineHistory({
         style={{ color: p.muted, padding: 14, textAlign: "center", fontSize: 13 }}
       >
         {connecting
-          ? "Connecting…"
+          ? gt("Connecting…")
           : rows?.length
-            ? "Offline · Saved messages"
-            : "Waiting for connection"}
+            ? gt("Offline · Saved messages")
+            : gt("Waiting for connection")}
       </Text>
       <ScrollView
         ref={scroll}
@@ -228,7 +230,7 @@ export function BotOfflineHistory({
             <>
               {(failed || snapshot.storageError) && (
                 <Text accessibilityRole="alert" style={{ color: p.text }}>
-                  Could not save this message on your device.
+                  <T>Could not save this message on your device.</T>
                 </Text>
               )}
               {files.length > 0 && (
@@ -237,7 +239,7 @@ export function BotOfflineHistory({
                     <Pressable
                       key={file.id}
                       accessibilityRole="button"
-                      accessibilityLabel={`Remove attachment ${file.name}`}
+                      accessibilityLabel={gt("Remove attachment {name}", { name: file.name })}
                       disabled={saving}
                       onPress={() =>
                         setFiles((current) => current.filter(({ id }) => id !== file.id))
@@ -260,9 +262,9 @@ export function BotOfflineHistory({
                 {mayAttach && (
                   <Menu
                     actions={[
-                      { id: "files", title: "Files" },
-                      { id: "photos", title: "Photos" },
-                      { id: "camera", title: "Camera" },
+                      { id: "files", title: gt("Files") },
+                      { id: "photos", title: gt("Photos") },
+                      { id: "camera", title: gt("Camera") },
                     ]}
                     onPressAction={async ({ nativeEvent }) => {
                       const source = nativeEvent.event;
@@ -283,7 +285,7 @@ export function BotOfflineHistory({
                   >
                     <BotGlass>
                       <BotIconButton
-                        label="Attach to queued message"
+                        label={gt("Attach to queued message")}
                         icon="plus"
                         disabled={saving || picking || files.length >= 10}
                       />
@@ -291,7 +293,7 @@ export function BotOfflineHistory({
                   </Menu>
                 )}
                 <BotMessageComposer
-                  label={chat.kind === "group" ? "Message to group" : "Message to bot"}
+                  label={chat.kind === "group" ? gt("Message to group") : gt("Message to bot")}
                   text={text}
                   onChangeText={setText}
                   editable={!saving && snapshot.ready}

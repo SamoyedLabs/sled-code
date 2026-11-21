@@ -1,6 +1,8 @@
 import { useFonts } from "expo-font";
 import { createContext, use, type ReactNode } from "react";
 import { StyleSheet, Text, type TextProps, type TextStyle } from "react-native";
+import { m } from "../../../i18n/messages";
+import { msg } from "gt-react-native";
 
 const fonts = {
   Inter: require("./openbot-mobile/assets/Inter-Regular.ttf"),
@@ -16,9 +18,9 @@ export function OpenBotTypography({ children }: { children: ReactNode }) {
 
 export function useOpenBotFont(weight?: TextStyle["fontWeight"]): string | undefined {
   if (!use(InterReady)) return undefined;
-  if (weight === "bold" || Number(weight) >= 700) return "Inter-Bold";
-  if (Number(weight) >= 600) return "Inter-SemiBold";
-  return "Inter";
+  if (weight === "bold" || Number(weight) >= 700) return m(msg("Inter-Bold"));
+  if (Number(weight) >= 600) return m(msg("Inter-SemiBold"));
+  return m(msg("Inter"));
 }
 
 export function OpenBotText({ style, ...props }: TextProps) {

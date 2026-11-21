@@ -15,27 +15,30 @@ import {
   RoutineField,
   RoutineChoice,
 } from "./BotEvents";
+import { T, Var, useGT } from "gt-react-native";
 type Props = { environmentId: EnvironmentId; hostId: string };
 type Agent = { id: string; name: string };
 export function BotRoutineFlows(props: Props) {
+  const gt = useGT();
   return (
-    <RoutineDisclosure label="Inter-agent routine flows">
+    <RoutineDisclosure label={gt("Inter-agent routine flows")}>
       <CanvasPicker key={`${props.environmentId}:${props.hostId}`} {...props} />
     </RoutineDisclosure>
   );
 }
 function CanvasPicker(props: Props) {
+  const gt = useGT();
   const discovery = useBotRoutineDiscovery(props.environmentId, props.hostId);
   const [agentId, setAgentId] = useState("");
   return (
     <RoutineGroup>
       <RoutineText>
-        Choose a bot to view its routines and connect answers to another bot.
+        <T>Choose a bot to view its routines and connect answers to another bot.</T>
       </RoutineText>
-      <RoutineAction label="Refresh bots" onClick={discovery.refresh} />
+      <RoutineAction label={gt("Refresh bots")} onClick={discovery.refresh} />
       {discovery.error && <RoutineText alert>{discovery.error}</RoutineText>}
       <RoutineChoice
-        label="Canvas bot"
+        label={gt("Canvas bot")}
         value={agentId}
         options={discovery.agents.map((agent) => ({ id: agent.id, name: agent.name }))}
         disabled={false}
@@ -43,7 +46,7 @@ function CanvasPicker(props: Props) {
       />
       {discovery.agents.length === 0 && (
         <RoutineText>
-          No visible bots. Create one in the workspace before connecting routine answers.
+          <T>No visible bots. Create one in the workspace before connecting routine answers.</T>
         </RoutineText>
       )}
       {discovery.agents.some((agent) => agent.id === agentId) && (
@@ -63,6 +66,7 @@ function FlowPanel({
   agentId,
   agents,
 }: Props & { agentId: string; agents: readonly Agent[] }) {
+  const gt = useGT();
   const c = useBotRoutineFlows(environmentId, hostId, agentId);
   const [routineId, setRoutineId] = useState("");
   const [from, setFrom] = useState(agentId);
@@ -92,30 +96,39 @@ function FlowPanel({
     Math.abs(Number(y)) <= 1000000;
   return (
     <RoutineGroup>
-      <RoutineHeading>{agentName(agentId)} routine flows</RoutineHeading>
+      <RoutineHeading>
+        <T>
+          <Var>{agentName(agentId)}</Var> routine flows
+        </T>
+      </RoutineHeading>
       <RoutineText>
-        Changes require permission to manage every bot in the flow. Cycles and unavailable bots are
-        rejected by the host.
+        <T>
+          Changes require permission to manage every bot in the flow. Cycles and unavailable bots
+          are rejected by the host.
+        </T>
       </RoutineText>
-      <RoutineAction label="Refresh canvas" onClick={c.refresh} disabled={c.busy} />
+      <RoutineAction label={gt("Refresh canvas")} onClick={c.refresh} disabled={c.busy} />
       {c.error && <RoutineText alert>{c.error}</RoutineText>}
       {!canvas && (
         <RoutineText>
-          Canvas unavailable. Check the engine connection and bot visibility.
+          <T>Canvas unavailable. Check the engine connection and bot visibility.</T>
         </RoutineText>
       )}
       {canvas && (
         <RoutineGroup>
           <RoutineText>
-            Placed bots: {canvas.placedAgentIds.map(agentName).join(", ") || "None"}
+            <T>
+              Placed bots:{" "}
+              <Var>{canvas.placedAgentIds.map(agentName).join(", ") || gt("None")}</Var>
+            </T>
           </RoutineText>
           {canvas.routines.length === 0 && (
             <RoutineText>
-              No routines on this canvas. Create a bot-owned event routine first.
+              <T>No routines on this canvas. Create a bot-owned event routine first.</T>
             </RoutineText>
           )}
           <RoutineChoice
-            label="Routine"
+            label={gt("Routine")}
             value={routineId}
             options={canvas.routines.map((flow) => ({
               id: flow.routine.id,
@@ -131,28 +144,28 @@ function FlowPanel({
             }}
           />
           <RoutineChoice
-            label="Send answer from"
+            label={gt("Send answer from")}
             value={from}
             options={agents}
             disabled={c.busy}
             onChange={setFrom}
           />
           <RoutineChoice
-            label="Send answer to"
+            label={gt("Send answer to")}
             value={to}
             options={agents.filter((agent) => agent.id !== from)}
             disabled={c.busy}
             onChange={setTo}
           />
           <RoutineField
-            label="Handoff instructions"
+            label={gt("Handoff instructions")}
             value={instruction}
             onChange={setInstruction}
             multiline
             disabled={disabled}
           />
           <RoutineAction
-            label="Connect answer handoff"
+            label={gt("Connect answer handoff")}
             disabled={
               disabled ||
               !selected ||
@@ -170,8 +183,14 @@ function FlowPanel({
               })
             }
           />
-          <RoutineHeading>Answer handoffs</RoutineHeading>
-          {canvas.links.length === 0 && <RoutineText>No answer handoffs connected.</RoutineText>}
+          <RoutineHeading>
+            <T>Answer handoffs</T>
+          </RoutineHeading>
+          {canvas.links.length === 0 && (
+            <RoutineText>
+              <T>No answer handoffs connected.</T>
+            </RoutineText>
+          )}
           {canvas.links.map((link) => (
             <AnswerLink
               key={`${link.id}:${link.instruction}`}
@@ -181,18 +200,27 @@ function FlowPanel({
               act={c.act}
             />
           ))}
-          <RoutineHeading>Runs and results</RoutineHeading>
+          <RoutineHeading>
+            <T>Runs and results</T>
+          </RoutineHeading>
           {canvas.routines.map((flow) => (
             <RoutineGroup key={flow.routine.id}>
               <RoutineText>
-                {flow.routine.name || "Untitled routine"} ·{" "}
-                {flow.routine.active ? "Active" : "Paused"} ·{" "}
+                {flow.routine.name || gt("Untitled routine")} ·{" "}
+                {flow.routine.active ? gt("Active") : gt("Paused")} ·{" "}
                 {routineTriggerDescription(flow.routine.trigger)}
               </RoutineText>
               <RoutineText>
-                Upcoming: {flow.upcomingRuns.slice(0, 5).join(", ") || "None scheduled"}
+                <T>
+                  Upcoming:{" "}
+                  <Var>{flow.upcomingRuns.slice(0, 5).join(", ") || gt("None scheduled")}</Var>
+                </T>
               </RoutineText>
-              {flow.recentRuns.length === 0 && <RoutineText>No recent runs.</RoutineText>}
+              {flow.recentRuns.length === 0 && (
+                <RoutineText>
+                  <T>No recent runs.</T>
+                </RoutineText>
+              )}
               {flow.recentRuns.map((run) => (
                 <RoutineGroup key={run.id}>
                   <RoutineText>
@@ -206,17 +234,25 @@ function FlowPanel({
                   <RoutineText>
                     {agentName(step.agentId)} · {step.status}
                   </RoutineText>
-                  <RoutineText>Input: {step.input || "No input"}</RoutineText>
-                  <RoutineText>Answer: {step.output ?? "Pending"}</RoutineText>
+                  <RoutineText>
+                    <T>
+                      Input: <Var>{step.input || gt("No input")}</Var>
+                    </T>
+                  </RoutineText>
+                  <RoutineText>
+                    <T>
+                      Answer: <Var>{step.output ?? gt("Pending")}</Var>
+                    </T>
+                  </RoutineText>
                   {step.error && <RoutineText alert>{step.error}</RoutineText>}
                 </RoutineGroup>
               ))}
             </RoutineGroup>
           ))}
-          <RoutineDisclosure label="Canvas positions">
+          <RoutineDisclosure label={gt("Canvas positions")}>
             <RoutineGroup>
               <RoutineChoice
-                label="Position a bot or routine"
+                label={gt("Position a bot or routine")}
                 value={nodeKey}
                 options={nodeOptions}
                 disabled={c.busy}
@@ -228,24 +264,24 @@ function FlowPanel({
                 }}
               />
               <RoutineField
-                label="Horizontal position"
+                label={gt("Horizontal position")}
                 value={x}
                 onChange={setX}
                 disabled={disabled}
               />
               <RoutineField
-                label="Vertical position"
+                label={gt("Vertical position")}
                 value={y}
                 onChange={setY}
                 disabled={disabled}
               />
               {!positionValid && (
                 <RoutineText alert>
-                  Use finite coordinates between −1,000,000 and 1,000,000.
+                  <T>Use finite coordinates between −1,000,000 and 1,000,000.</T>
                 </RoutineText>
               )}
               <RoutineAction
-                label="Save position"
+                label={gt("Save position")}
                 disabled={
                   disabled || !positionValid || !nodeOptions.some((option) => option.id === nodeKey)
                 }
@@ -260,7 +296,7 @@ function FlowPanel({
                 }
               />
               <RoutineAction
-                label="Remove saved position"
+                label={gt("Remove saved position")}
                 disabled={
                   disabled || !canvas.positions.some((position) => position.nodeKey === nodeKey)
                 }
@@ -286,26 +322,27 @@ function AnswerLink({
   disabled: boolean;
   act: (request: OpenbotRoutineFlowCommand) => Promise<void>;
 }) {
+  const gt = useGT();
   const [text, setText] = useState(link.instruction);
   return (
     <RoutineGroup>
       <RoutineText>{name}</RoutineText>
       <RoutineField
-        label={`Instructions for ${name}`}
+        label={gt("Instructions for {name}", { name })}
         value={text}
         onChange={setText}
         multiline
         disabled={disabled}
       />
       <RoutineAction
-        label={`Save handoff from ${name}`}
+        label={gt("Save handoff from {name}", { name })}
         disabled={disabled || text === link.instruction}
         onClick={() =>
           void act({ operation: "routineFlow.updateLink", linkId: link.id, instruction: text })
         }
       />
       <RoutineAction
-        label={`Disconnect ${name}`}
+        label={gt("Disconnect {name}", { name })}
         disabled={disabled}
         onClick={() => void act({ operation: "routineFlow.disconnect", linkId: link.id })}
       />

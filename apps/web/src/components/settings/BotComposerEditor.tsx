@@ -45,6 +45,7 @@ import {
   rankBotComposerOptions,
   type BotComposerOption,
 } from "./botComposerModel";
+import { useGT } from "gt-react";
 
 export type BotComposerEditorHandle = {
   focus: () => void;
@@ -183,6 +184,7 @@ export function BotComposerEditor({
   skillsEnabled = true,
   onFiles,
 }: Props) {
+  const gt = useGT();
   const listId = useId();
   const editorInstance = useRef<Editor | null>(null);
   const savedCaret = useRef<number | null>(null);
@@ -386,7 +388,7 @@ export function BotComposerEditor({
       attributes: {
         class: `ob-chat-editor-surface ${COMPOSER_PROMPT_SURFACE}`,
         role: "textbox",
-        "aria-label": "Message to bot",
+        "aria-label": gt("Message to bot"),
         "aria-multiline": "true",
         "data-placeholder": placeholder,
       },
@@ -555,7 +557,7 @@ export function BotComposerEditor({
                 className="ob-chat-mention-picker-list"
                 role="listbox"
                 id={listId}
-                aria-label={mention?.trigger === "$" ? "Skills" : "Mention"}
+                aria-label={mention?.trigger === "$" ? gt("Skills") : gt("Mention")}
               >
                 {options.map((option, index) => (
                   <div

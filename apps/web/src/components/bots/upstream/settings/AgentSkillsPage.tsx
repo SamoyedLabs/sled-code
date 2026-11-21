@@ -15,6 +15,7 @@ import { SettingsPanelContent, SettingsPanelHeader } from "./SettingsPanel";
 import { SourceButton } from "./SettingsParts";
 import { SourceSwitch } from "./SourceSwitch";
 import "./agent-skill-preview.css";
+import { T, Var, useGT } from "gt-react";
 const decodeInstalled = Schema.decodeUnknownSync(Schema.Array(InstalledSkill));
 export function AgentSkillsPage({
   api,
@@ -25,6 +26,7 @@ export function AgentSkillsPage({
   onBack: () => void;
   onClose: () => void;
 }) {
+  const gt = useGT();
   const c = useAgentSettingsValue(
     async () => decodeInstalled(await api.setting("settings.skills-admin.list")),
     api.agentId,
@@ -72,7 +74,7 @@ export function AgentSkillsPage({
   return (
     <div className="agent-memories-view">
       <SettingsPanelHeader
-        title={detail ? detail.name : "Skills"}
+        title={detail ? detail.name : gt("Skills")}
         onBack={() => (detail ? setDetail(null) : onBack())}
         onClose={onClose}
       />
@@ -91,7 +93,11 @@ export function AgentSkillsPage({
                 </span>
                 <div className="skill-preview-name">
                   <h2>{detail.name}</h2>
-                  <p className="skill-preview-creator">By {detail.creatorName}</p>
+                  <p className="skill-preview-creator">
+                    <T>
+                      By <Var>{detail.creatorName}</Var>
+                    </T>
+                  </p>
                 </div>
                 <p className="skill-preview-summary">{detail.description}</p>
               </header>
@@ -109,7 +115,9 @@ export function AgentSkillsPage({
             c.value && (
               <div className="agent-memory-list agent-skill-rows">
                 {c.value.length === 0 ? (
-                  <p className="agent-memories-empty">No skills yet.</p>
+                  <p className="agent-memories-empty">
+                    <T>No skills yet.</T>
+                  </p>
                 ) : (
                   c.value.map((skill) => (
                     <div
@@ -132,7 +140,9 @@ export function AgentSkillsPage({
                           <small>
                             {skill.problem ??
                               skill.description ??
-                              `Version ${skill.installedVersion}`}
+                              gt("Version {installedVersion}", {
+                                installedVersion: skill.installedVersion,
+                              })}
                           </small>
                         </div>
                       </SourceButton>
@@ -145,13 +155,13 @@ export function AgentSkillsPage({
                               disabled={c.busy}
                               onClick={() => void c.change(() => update(skill))}
                             >
-                              Update
+                              <T>Update</T>
                             </SourceButton>
                           )}
                           <Menu.Root>
                             <Menu.Trigger
                               className="ui-button ui-button-variant-ghost ui-button-size-icon-sm"
-                              aria-label={`Actions for ${skill.name}`}
+                              aria-label={gt("Actions for {name}", { name: skill.name })}
                               disabled={c.busy}
                             >
                               <Ellipsis aria-hidden="true" />
@@ -177,12 +187,12 @@ export function AgentSkillsPage({
                                 }
                               >
                                 <Trash2 aria-hidden="true" />
-                                Remove
+                                <T>Remove</T>
                               </Menu.Item>
                             </MenuPopup>
                           </Menu.Root>
                           <SourceSwitch
-                            label={`Enable ${skill.name}`}
+                            label={gt("Enable {name}", { name: skill.name })}
                             checked={skill.enabled !== false}
                             disabled={
                               c.busy || skill.state === "modified" || skill.state === "needs-repair"

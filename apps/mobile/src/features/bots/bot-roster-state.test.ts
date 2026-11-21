@@ -11,7 +11,12 @@ describe("Bots home connection states", () => {
         { agentId: "one", kind: "approval" },
         { agentId: "two", kind: "takeover" },
       ]),
-    ).toEqual(new Map([["one", "prompt"], ["two", "takeover"]]));
+    ).toEqual(
+      new Map([
+        ["one", "prompt"],
+        ["two", "takeover"],
+      ]),
+    );
   });
 
   it("keeps a selected computer through reconnects instead of switching to an online one", () => {

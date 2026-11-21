@@ -2,6 +2,7 @@
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { observeResize } from "../../lib/observeResize";
 import { clampGroupPanelWidth, groupPanelBounds, groupPanelKeyWidth } from "./group-panel-width";
+import { useGT } from "gt-react";
 
 export function GroupSidePanel({
   settings,
@@ -12,6 +13,7 @@ export function GroupSidePanel({
   label: string;
   children: ReactNode;
 }) {
+  const gt = useGT();
   const id = useId();
   const panel = useRef<HTMLElement>(null);
   const handle = useRef<HTMLHRElement>(null);
@@ -69,7 +71,7 @@ export function GroupSidePanel({
         ref={handle}
         className="ob-group-panel-resizer"
         tabIndex={0}
-        aria-label="Resize group panel"
+        aria-label={gt("Resize group panel")}
         aria-controls={id}
         aria-orientation="vertical"
         aria-valuemin={settings ? 360 : 220}

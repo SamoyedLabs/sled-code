@@ -7,6 +7,8 @@ import { ScreenScrollView } from "../../components/ui/ScreenScrollView";
 import { Sheet } from "../../components/ui/Sheet";
 import { useBotPalette } from "./upstream/BotChrome";
 import { useBotMessageDetail, type BotMessageDetailScope } from "./useBotMessageDetail";
+import { m } from "../../i18n/messages";
+import { T, msg, useGT } from "gt-react-native";
 
 const memoryActions = {
   saved: "saved",
@@ -43,6 +45,7 @@ export function BotMessageNotes({
   deferredWorkers: boolean;
   agentName?: string;
 }) {
+  const gt = useGT();
   const p = useBotPalette();
   const [open, setOpen] = useState<"memory" | "workers" | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -87,33 +90,44 @@ export function BotMessageNotes({
           label={
             workers.length
               ? `${workers.length} ${workers.length === 1 ? "subagent" : "subagents"} · ${busy ? `${busy} running` : `${completed} completed`}`
-              : "Subagents"
+              : gt("Subagents")
           }
           onPress={() => reveal("workers")}
         />
       )}
       {(memories.length > 0 || deferredMemory) && (
         <NoteRow
-          label={memorySummary ? `Memory: ${memorySummary}` : "Memory changes"}
+          label={
+            memorySummary ? gt("Memory: {memorySummary}", { memorySummary }) : gt("Memory changes")
+          }
           onPress={() => reveal("memory")}
         />
       )}
       {open && (
         <Sheet
-          title={open === "memory" ? "Memory changes" : selected?.title || "Subagents"}
+          title={open === "memory" ? gt("Memory changes") : selected?.title || gt("Subagents")}
           onClose={close}
         >
           <ScreenScrollView
             contentInsetAdjustmentBehavior="automatic"
             contentContainerClassName="gap-3 px-5 py-4"
           >
-            {detail.phase === "loading" && <Text accessibilityRole="status">Loading details…</Text>}
+            {detail.phase === "loading" && (
+              <Text accessibilityRole="status">
+                <T>Loading details…</T>
+              </Text>
+            )}
             {detail.phase === "error" && (
-              <NoteRow label="Could not load details. Tap to retry." onPress={() => reveal(open)} />
+              <NoteRow
+                label={gt("Could not load details. Tap to retry.")}
+                onPress={() => reveal(open)}
+              />
             )}
             {detail.phase === "ready" &&
               !(open === "memory" ? memories.length : workers.length) && (
-                <Text className="text-foreground-muted">No details were returned.</Text>
+                <Text className="text-foreground-muted">
+                  <T>No details were returned.</T>
+                </Text>
               )}
             {open === "memory" ? (
               <>
@@ -144,7 +158,7 @@ export function BotMessageNotes({
               </>
             ) : selected ? (
               <>
-                <NoteRow label="All subagents" onPress={() => setSelectedId(null)} />
+                <NoteRow label={gt("All subagents")} onPress={() => setSelectedId(null)} />
                 <Text accessibilityRole="header" className="text-lg font-t3-semibold" selectable>
                   {selected.title}
                 </Text>
@@ -161,7 +175,7 @@ export function BotMessageNotes({
                 {selected.prompt && (
                   <View className="gap-1 rounded-xl bg-grouped-card px-4 py-3">
                     <Text className="text-xs text-foreground-muted">
-                      {agentName ? `Task from ${agentName}` : "Task"}
+                      {agentName ? gt("Task from {agentName}", { agentName }) : gt("Task")}
                     </Text>
                     <Text selectable>{selected.prompt}</Text>
                   </View>
@@ -175,7 +189,7 @@ export function BotMessageNotes({
                     <SymbolView name={stepSymbols[step.kind]} size={16} tintColor={p.muted} />
                     <View className="min-w-0 flex-1 gap-1">
                       <Text className="font-t3-medium">
-                        {step.kind === "thinking" ? "Thinking" : step.kind}
+                        {step.kind === "thinking" ? gt("Thinking") : step.kind}
                       </Text>
                       {step.kind !== "thinking" && (
                         <Text
@@ -197,7 +211,7 @@ export function BotMessageNotes({
                   className="gap-1 rounded-xl bg-grouped-card px-4 py-3"
                   onPress={() => setSelectedId(item.id)}
                 >
-                  <Text className="font-t3-medium">{item.title || "Subagent"}</Text>
+                  <Text className="font-t3-medium">{item.title || gt("Subagent")}</Text>
                   <Text style={{ color: p.muted }}>{workerState(item, now)}</Text>
                   {lastWorkerStep(item) && <Text numberOfLines={2}>{lastWorkerStep(item)}</Text>}
                 </Pressable>
@@ -218,7 +232,7 @@ function workerState(item: Worker, now: number) {
 
 function lastWorkerStep(item: Worker) {
   const step = item.steps.at(-1);
-  return step?.kind === "thinking" ? "Thinking" : step?.text;
+  return step?.kind === "thinking" ? m(msg("Thinking")) : step?.text;
 }
 
 function NoteRow({ label, onPress }: { label: string; onPress: () => void }) {

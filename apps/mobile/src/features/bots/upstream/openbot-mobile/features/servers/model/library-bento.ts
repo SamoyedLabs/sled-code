@@ -25,7 +25,12 @@ const CYCLE: readonly BentoShape[] = ["featureStart", "wideEnd", "featureEnd", "
  * cells in one row. The large tile of a block takes its first `featured` file (a picture), so the
  * files keep their order except in their block. The files after the last whole block fill plain rows.
  */
-export function bentoBlocks(featured: readonly boolean[], width: number, columns: number, gap: number): BentoBlock[] {
+export function bentoBlocks(
+  featured: readonly boolean[],
+  width: number,
+  columns: number,
+  gap: number,
+): BentoBlock[] {
   // Not rounded, so the last column ends at the side room of the title.
   const cell = (width - gap * (columns - 1)) / columns;
   const span = (cells: number) => cells * cell + (cells - 1) * gap;
@@ -41,14 +46,24 @@ export function bentoBlocks(featured: readonly boolean[], width: number, columns
   }
 
   /** Puts the small tiles in the free cells, row by row. */
-  function fill(indices: number[], rows: number, taken: (row: number, column: number) => boolean): BentoTile[] {
+  function fill(
+    indices: number[],
+    rows: number,
+    taken: (row: number, column: number) => boolean,
+  ): BentoTile[] {
     const tiles: BentoTile[] = [];
     for (let row = 0; row < rows; row += 1)
       for (let column = 0; column < columns; column += 1) {
         if (taken(row, column)) continue;
         const index = indices.shift();
         if (index === undefined) return tiles;
-        tiles.push({ index, left: column * (cell + gap), top: row * (cell + gap), width: cell, height: cell });
+        tiles.push({
+          index,
+          left: column * (cell + gap),
+          top: row * (cell + gap),
+          width: cell,
+          height: cell,
+        });
       }
     return tiles;
   }
@@ -68,7 +83,13 @@ export function bentoBlocks(featured: readonly boolean[], width: number, columns
     }
     const [lead, ...rest] = take(capacity);
     if (lead === undefined) break;
-    const large = { index: lead, left: first * (cell + gap), top: 0, width: span(2), height: span(rows) };
+    const large = {
+      index: lead,
+      left: first * (cell + gap),
+      top: 0,
+      width: span(2),
+      height: span(rows),
+    };
     const small = fill(rest, rows, (_row, column) => column === first || column === first + 1);
     blocks.push({ height: span(rows), tiles: [large, ...small] });
   }

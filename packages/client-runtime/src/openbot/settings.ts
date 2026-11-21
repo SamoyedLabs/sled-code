@@ -6,6 +6,7 @@ import {
   pinnedSetting,
   type OpenbotSettingsRequest,
 } from "@t3tools/contracts/openbot-settings";
+import { mFallback, msg } from "gt-i18n";
 export type SettingsActions = {
   readonly can: (request: OpenbotSettingsRequest) => boolean;
   readonly execute: (request: OpenbotSettingsRequest) => Promise<unknown>;
@@ -54,50 +55,50 @@ export type SettingsField = {
   readonly nullable?: boolean;
 };
 const bool = [
-  { label: "On", value: true },
-  { label: "Off", value: false },
+  { label: mFallback(msg("On")), value: true },
+  { label: mFallback(msg("Off")), value: false },
 ] as const;
 export const SETTING_FORMS = [
   {
     id: "agent-host-settings",
-    label: "Host tools and incoming messages",
+    label: mFallback(msg("Host tools and incoming messages")),
     agent: true,
     read: "settings.agent-host-settings.settings",
     update: "settings.agent-host-settings.update",
     fields: [
-      { key: "computerUse", label: "Computer use", choices: bool },
-      { key: "allowAutomation", label: "Allow local automation", choices: bool },
+      { key: "computerUse", label: mFallback(msg("Computer use")), choices: bool },
+      { key: "allowAutomation", label: mFallback(msg("Allow local automation")), choices: bool },
       {
         key: "busyMessageMode",
-        label: "Messages while busy",
+        label: mFallback(msg("Messages while busy")),
         choices: [
-          { label: "Follow host default", value: null },
-          { label: "Queue", value: "queue" },
-          { label: "Steer current work", value: "steer" },
+          { label: mFallback(msg("Follow host default")), value: null },
+          { label: mFallback(msg("Queue")), value: "queue" },
+          { label: mFallback(msg("Steer current work")), value: "steer" },
         ],
       },
     ],
   },
   {
     id: "agent-fast-mode",
-    label: "Fast mode",
+    label: mFallback(msg("Fast mode")),
     agent: true,
     read: "settings.agent-fast-mode.settings",
     update: "settings.agent-fast-mode.update",
-    fields: [{ key: "fastMode", label: "Use provider fast tier", choices: bool }],
+    fields: [{ key: "fastMode", label: mFallback(msg("Use provider fast tier")), choices: bool }],
   },
   {
     id: "agent-task-limit",
-    label: "Concurrent tasks",
+    label: mFallback(msg("Concurrent tasks")),
     agent: true,
     read: "settings.agent-task-limit.settings",
     update: "settings.agent-task-limit.update",
     fields: [
       {
         key: "taskLimit",
-        label: "Tasks at once",
+        label: mFallback(msg("Tasks at once")),
         choices: [
-          { label: "Host default", value: null },
+          { label: mFallback(msg("Host default")), value: null },
           ...[1, 2, 3, 4].map((value) => ({ label: String(value), value })),
         ],
       },
@@ -105,71 +106,81 @@ export const SETTING_FORMS = [
   },
   {
     id: "agent-new-chat",
-    label: "Automatic new chats",
+    label: mFallback(msg("Automatic new chats")),
     agent: true,
     read: "settings.agent-new-chat.settings",
     update: "settings.agent-new-chat.update",
     fields: [
-      { key: "allowNewChat", label: "Allow the agent to begin a fresh chat", choices: bool },
+      {
+        key: "allowNewChat",
+        label: mFallback(msg("Allow the agent to begin a fresh chat")),
+        choices: bool,
+      },
     ],
   },
   {
     id: "agent-plan-card",
-    label: "Plan before long work",
+    label: mFallback(msg("Plan before long work")),
     agent: true,
     read: "settings.agent-plan-card.settings",
     update: "settings.agent-plan-card.update",
-    fields: [{ key: "quickAcknowledgement", label: "Show a plan before starting", choices: bool }],
+    fields: [
+      {
+        key: "quickAcknowledgement",
+        label: mFallback(msg("Show a plan before starting")),
+        choices: bool,
+      },
+    ],
   },
   {
     id: "agent-memory-limit",
-    label: "Memory capacity",
+    label: mFallback(msg("Memory capacity")),
     agent: false,
     read: "settings.agent-memory-limit.settings",
     update: "settings.agent-memory-limit.update",
-    fields: [{ key: "limit", label: "Memories per agent", hostChoices: true }],
+    fields: [{ key: "limit", label: mFallback(msg("Memories per agent")), hostChoices: true }],
   },
   {
     id: "memory-review",
-    label: "Background memory review",
+    label: mFallback(msg("Background memory review")),
     agent: false,
     read: "settings.memory-review.settings",
     update: "settings.memory-review.update",
     fields: [
       {
         key: "interval",
-        label: "Completed turns between reviews (0 turns it off)",
+        label: mFallback(msg("Completed turns between reviews (0 turns it off)")),
         hostChoices: true,
       },
     ],
   },
   {
     id: "prompt-cache-ttl",
-    label: "Prompt cache",
+    label: mFallback(msg("Prompt cache")),
     agent: false,
     read: "settings.prompt-cache-ttl.settings",
     update: "settings.prompt-cache-ttl.update",
     fields: [
       {
         key: "ttl",
-        label: "Requested cache duration",
+        label: mFallback(msg("Requested cache duration")),
         choices: [
-          { label: "Provider default (5 minutes)", value: "5m" },
-          { label: "One hour", value: "1h" },
+          { label: mFallback(msg("Provider default (5 minutes)")), value: "5m" },
+          { label: mFallback(msg("One hour")), value: "1h" },
         ],
       },
     ],
   },
   {
     id: "host-timezone",
-    label: "Default routine timezone",
+    label: mFallback(msg("Default routine timezone")),
     agent: false,
     read: "settings.host-timezone.settings",
     update: "settings.host-timezone.update",
     fields: [
       {
         key: "timezone",
-        label: "Timezone (blank follows this machine)",
+        label: mFallback(msg("Timezone (blank follows this machine)")),
         text: true,
         nullable: true,
       },

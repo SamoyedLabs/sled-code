@@ -1,4 +1,6 @@
 import { type ShjLanguage, type ShjToken, tokenize } from "@speed-highlight/core";
+import { m } from "../../../../i18n/messages";
+import { msg } from "gt-react";
 
 export interface CodeToken {
   text: string;
@@ -254,7 +256,7 @@ export function codeLanguageLabel(language: string) {
   if (selected === "plain") {
     const original = language.trim();
     if (original.toLowerCase() === "mermaid" || original.toLowerCase() === "mmd") return "Mermaid";
-    return original ? original.toUpperCase() : "Plain text";
+    return original ? original.toUpperCase() : m(msg("Plain text"));
   }
   const labels: Partial<Record<ShjLanguage, string>> = {
     asm: "Assembly",

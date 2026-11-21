@@ -7,6 +7,7 @@ import { renderClosingPositioner } from "../../../ui/closing-positioner";
 import { menuMotionRef } from "../openbotMenuMotion";
 import { SourceButton } from "./SettingsParts";
 import { routineDateKey, parseRoutineDateKey } from "./routine-schedule-draft";
+import { T, useGT } from "gt-react";
 const YEAR = 2024;
 export function RoutineYearlyDateField({
   month,
@@ -19,6 +20,7 @@ export function RoutineYearlyDateField({
   onChange: (month: number, day: number) => void;
   disabled: boolean;
 }) {
+  const gt = useGT();
   const [open, setOpen] = useState(false);
   const value = routineDateKey(new Date(YEAR, month - 1, day));
   const label = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(
@@ -28,7 +30,7 @@ export function RoutineYearlyDateField({
     <Popover.Root modal open={open} onOpenChange={setOpen}>
       <Popover.Trigger
         className="routine-chip routine-chip-flexible"
-        aria-label={`Date: ${label}`}
+        aria-label={gt("Date: {label}", { label })}
         disabled={disabled}
       >
         <span className="routine-chip-text">{label}</span>
@@ -45,7 +47,9 @@ export function RoutineYearlyDateField({
             ref={menuMotionRef(undefined)}
             className="ui-popover-menu-surface routine-popover routine-calendar-popover"
           >
-            <Popover.Title className="sr-only">Choose a date</Popover.Title>
+            <Popover.Title className="sr-only">
+              <T>Choose a date</T>
+            </Popover.Title>
             <YearlyCalendar
               value={value}
               onSelect={(value) => {
@@ -61,6 +65,7 @@ export function RoutineYearlyDateField({
   );
 }
 function YearlyCalendar({ value, onSelect }: { value: string; onSelect: (date: string) => void }) {
+  const gt = useGT();
   const [month, setMonth] = useState(() => parseRoutineDateKey(value).getMonth()),
     [focusKey, setFocusKey] = useState(value);
   const grid = useRef<HTMLFieldSetElement>(null);
@@ -99,7 +104,7 @@ function YearlyCalendar({ value, onSelect }: { value: string; onSelect: (date: s
         <SourceButton
           variant="ghost"
           size="xs"
-          aria-label="Previous month"
+          aria-label={gt("Previous month")}
           onClick={() => setMonth((month + 11) % 12)}
         >
           <ChevronLeft aria-hidden="true" />
@@ -110,7 +115,7 @@ function YearlyCalendar({ value, onSelect }: { value: string; onSelect: (date: s
         <SourceButton
           variant="ghost"
           size="xs"
-          aria-label="Next month"
+          aria-label={gt("Next month")}
           onClick={() => setMonth((month + 1) % 12)}
         >
           <ChevronRight aria-hidden="true" />

@@ -20,6 +20,7 @@ import { AVATAR_HUE_CHOICES, avatarHueSwatch } from "../settings/avatar-editor-m
 import { CHANNEL_ICONS } from "./channel-icons";
 import "../settings/agent-settings.css";
 import { AvatarEditorPopup } from "../settings/AvatarEditorPopup";
+import { T, useGT } from "gt-react";
 export function GroupPictureEditor({
   environmentId,
   hostId,
@@ -33,6 +34,7 @@ export function GroupPictureEditor({
   agents: readonly (typeof OpenbotAgent.Type)[];
   onSaved: () => void;
 }) {
+  const gt = useGT();
   const { picture, url, refresh } = useGroupPicture(channel.id);
   const input = useRef<HTMLInputElement>(null),
     lock = useRef(false);
@@ -67,7 +69,7 @@ export function GroupPictureEditor({
     });
     if (settled._tag === "Failure") {
       const cause = squashAtomCommandFailure(settled);
-      setError(cause instanceof Error ? cause.message : "Could not save the group picture.");
+      setError(cause instanceof Error ? cause.message : gt("Could not save the group picture."));
     }
     lock.current = false;
     setBusy(false);
@@ -78,7 +80,7 @@ export function GroupPictureEditor({
       <Popover.Root>
         <Popover.Trigger
           className="channel-picture-trigger"
-          aria-label="Edit group picture"
+          aria-label={gt("Edit group picture")}
           disabled={disabled}
         >
           <GroupAvatar
@@ -92,13 +94,13 @@ export function GroupPictureEditor({
             <Pencil className="agent-settings-avatar-badge-icon" />
           </span>
         </Popover.Trigger>
-        <AvatarEditorPopup title="Group picture" className="channel-picture-editor">
+        <AvatarEditorPopup title={gt("Group picture")} className="channel-picture-editor">
           <input
             ref={input}
             type="file"
             accept="image/png,image/jpeg,image/gif,image/webp"
             hidden
-            aria-label="Choose group picture"
+            aria-label={gt("Choose group picture")}
             disabled={disabled}
             onChange={(event) => {
               const file = event.currentTarget.files?.[0];
@@ -117,21 +119,23 @@ export function GroupPictureEditor({
                   });
                 } catch (cause) {
                   setError(
-                    cause instanceof Error ? cause.message : "Could not process the picture.",
+                    cause instanceof Error ? cause.message : gt("Could not process the picture."),
                   );
                 }
               })();
             }}
           />
           <div className="avatar-editor-heading">
-            <span>Image</span>
+            <span>
+              <T>Image</T>
+            </span>
             <div className="avatar-editor-actions">
               {url && (
                 <SourceButton
                   disabled={disabled}
                   onClick={() => void save({ kind: "remove-image" })}
                 >
-                  Remove
+                  <T>Remove</T>
                 </SourceButton>
               )}
             </div>
@@ -155,18 +159,22 @@ export function GroupPictureEditor({
               )}
             </span>
             <span>
-              <strong>{url ? "Change image" : "Upload image"}</strong>
-              <small>PNG, JPEG, GIF, or WebP</small>
+              <strong>{url ? gt("Change image") : gt("Upload image")}</strong>
+              <small>
+                <T>PNG, JPEG, GIF, or WebP</T>
+              </small>
             </span>
           </SourceButton>
           <div className="avatar-editor-divider" />
           <div className="avatar-editor-heading">
-            <span>Icon</span>
+            <span>
+              <T>Icon</T>
+            </span>
             <div className="avatar-editor-actions">
               {(url || icon) && (
                 <SourceButton
                   variant="outline"
-                  aria-label="Show member faces"
+                  aria-label={gt("Show member faces")}
                   disabled={disabled}
                   onClick={() => void save({ kind: "reset" })}
                 >
@@ -177,7 +185,7 @@ export function GroupPictureEditor({
           </div>
           <fieldset
             className="avatar-face-grid channel-icon-grid"
-            aria-label="Icons"
+            aria-label={gt("Icons")}
             disabled={disabled}
           >
             {Object.entries(CHANNEL_ICONS).map(([name]) => (
@@ -194,13 +202,17 @@ export function GroupPictureEditor({
             ))}
           </fieldset>
           <div className="avatar-editor-divider" />
-          <fieldset className="avatar-color-grid" aria-label="Group color" disabled={disabled}>
+          <fieldset
+            className="avatar-color-grid"
+            aria-label={gt("Group color")}
+            disabled={disabled}
+          >
             {AVATAR_HUE_CHOICES.map((choice) => (
               <button
                 key={choice.hue}
                 type="button"
                 className="avatar-color-choice"
-                aria-label={`${choice.label} group color`}
+                aria-label={gt("{label} group color", { label: choice.label })}
                 aria-pressed={!url && icon?.hue === choice.hue}
                 style={{ background: avatarHueSwatch(choice.hue) }}
                 onClick={() =>

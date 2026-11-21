@@ -6,7 +6,9 @@ export type BotRosterWait = OpenbotAttentionRequest["kind"];
 // OpenBot mobile gives questions priority over browser takeovers, then approvals.
 const waitRank = { approval: 0, takeover: 1, prompt: 2 } satisfies Record<BotRosterWait, number>;
 
-export function botRosterWaits(requests: readonly Pick<OpenbotAttentionRequest, "agentId" | "kind">[]) {
+export function botRosterWaits(
+  requests: readonly Pick<OpenbotAttentionRequest, "agentId" | "kind">[],
+) {
   const waits = new Map<string, BotRosterWait>();
   for (const { agentId, kind } of requests) {
     const previous = waits.get(agentId);

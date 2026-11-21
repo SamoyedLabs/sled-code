@@ -9,7 +9,14 @@
 // the host ignores a mention from a member who has none of those roles. A member cannot use any
 // route; `requireAdmin` on the host is the only gate. Widening any of it needs a second capability
 // string.
-import { adminRoute, fields, identifier, list, type OptionalRouteCodec, string } from "./admin-wire.ts";
+import {
+  adminRoute,
+  fields,
+  identifier,
+  list,
+  type OptionalRouteCodec,
+  string,
+} from "./admin-wire.ts";
 
 export const DISCORD_ACCESS_CAPABILITY = "discord-access-v1";
 
@@ -26,5 +33,8 @@ const access = fields({ allowedRoles: list(role, 50) });
 export const DISCORD_ACCESS_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   [DISCORD_ACCESS_ROUTES.access, adminRoute(workspace, access)],
   [DISCORD_ACCESS_ROUTES.roles, adminRoute(workspace, fields({ roles: list(role, 250) }))],
-  [DISCORD_ACCESS_ROUTES.update, adminRoute(fields({ workspaceId: identifier, allowedRoles: list(role, 50) }), access)],
+  [
+    DISCORD_ACCESS_ROUTES.update,
+    adminRoute(fields({ workspaceId: identifier, allowedRoles: list(role, 50) }), access),
+  ],
 ]);

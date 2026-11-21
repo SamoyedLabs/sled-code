@@ -63,6 +63,8 @@ import {
 import type { Diagram, DiagramNode, DiagramPoint } from "./diagram-model";
 import "./diagrams.css";
 import "./diagrams-adapter.css";
+import { m } from "../../../../i18n/messages";
+import { T, msg, useGT } from "gt-react";
 
 type Agent = typeof OpenbotAgent.Type;
 type Camera = DiagramPoint & { scale: number };
@@ -97,6 +99,7 @@ export function RoutineFlowWorkspace({
   onCreateRoutine: (agentId: string) => void;
   onEditRoutine: (agentId: string, routineId: string) => void;
 }) {
+  const gt = useGT();
   const discovery = useBotRoutineDiscovery(environmentId, hostId);
   const c = useBotRoutineFlows(environmentId, hostId, agentId);
   const admin = useSourceSettingsAdmin(environmentId, hostId);
@@ -274,11 +277,11 @@ export function RoutineFlowWorkspace({
       fromAgentId = agentIdOfNode(from),
       toAgentId = agentIdOfNode(target);
     if (!routineId || !fromAgentId || !toAgentId) {
-      setMessage("Choose a routine, then connect one agent’s output to another agent’s input.");
+      setMessage(gt("Choose a routine, then connect one agent’s output to another agent’s input."));
       return;
     }
     const ok = await c.act({ operation: "routineFlow.connect", routineId, fromAgentId, toAgentId });
-    setMessage(ok ? "Connected." : "The connection was not saved.");
+    setMessage(ok ? gt("Connected.") : gt("The connection was not saved."));
   };
   const removeEdge = async (id: string) => {
     if (isRoutineStartEdge(id)) return;
@@ -335,7 +338,7 @@ export function RoutineFlowWorkspace({
         ) ?? [])
           await c.act({ operation: "routineFlow.updateLink", linkId: link.id, instruction });
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "The task could not be saved.");
+      setMessage(cause instanceof Error ? cause.message : gt("The task could not be saved."));
     }
   };
   const down = (e: PointerEvent<HTMLDivElement>) => {
@@ -431,7 +434,7 @@ export function RoutineFlowWorkspace({
     void started
       .then(() => c.refresh())
       .catch((cause: unknown) =>
-        setMessage(cause instanceof Error ? cause.message : "The routine could not start."),
+        setMessage(cause instanceof Error ? cause.message : gt("The routine could not start.")),
       )
       .finally(() => setRunning(false));
   };
@@ -442,7 +445,7 @@ export function RoutineFlowWorkspace({
         {actionError ? (
           <p role="alert">{actionError}</p>
         ) : (
-          <p>{c.loading ? "Loading routines…" : "Choose an agent to view its routines."}</p>
+          <p>{c.loading ? gt("Loading routines…") : gt("Choose an agent to view its routines.")}</p>
         )}
       </main>
     );
@@ -454,10 +457,13 @@ export function RoutineFlowWorkspace({
   const previewSource = source ? byId.get(source) : undefined;
   const targetRoutine = focus ?? routines[0]?.id;
   return (
-    <main className="diagram-view" aria-label={`Routine canvas for ${owner?.name ?? agentId}`}>
+    <main
+      className="diagram-view"
+      aria-label={gt("Routine canvas for {value}", { value: owner?.name ?? agentId })}
+    >
       <header className="diagram-view-header">
         {owner ? <SourceAgentAvatar agent={owner} size={18} /> : null}
-        <h1 className="diagram-view-title">{owner?.name ?? "Routines"}</h1>
+        <h1 className="diagram-view-title">{owner?.name ?? gt("Routines")}</h1>
         <span className="diagram-view-actions">
           {targetRoutine && (
             <SourceButton
@@ -466,12 +472,12 @@ export function RoutineFlowWorkspace({
               onClick={() => startRoutine(targetRoutine)}
             >
               <Play />
-              Run now
+              <T>Run now</T>
             </SourceButton>
           )}
           <SourceButton
             variant="ghost"
-            aria-label="Refresh routines"
+            aria-label={gt("Refresh routines")}
             disabled={c.busy}
             onClick={c.refresh}
           >
@@ -481,7 +487,7 @@ export function RoutineFlowWorkspace({
             <SourceButton
               variant="ghost"
               className="header-panel-toggle"
-              aria-label={inspector ? "Close routine details" : "Routine details"}
+              aria-label={inspector ? gt("Close routine details") : gt("Routine details")}
               aria-expanded={inspector}
               onClick={() => setInspector(!inspector)}
             >
@@ -501,7 +507,7 @@ export function RoutineFlowWorkspace({
                   <div
                     ref={viewport}
                     className="diagram-board-viewport"
-                    aria-label={`Canvas for ${owner?.name ?? agentId}`}
+                    aria-label={gt("Canvas for {value}", { value: owner?.name ?? agentId })}
                     role="group"
                     tabIndex={0}
                     style={
@@ -582,7 +588,7 @@ export function RoutineFlowWorkspace({
                         transform: `translate(${camera.x}px,${camera.y}px) scale(${camera.scale})`,
                       }}
                     >
-                      <svg className="diagram-edges" aria-label="Answer connections">
+                      <svg className="diagram-edges" aria-label={gt("Answer connections")}>
                         {current.edges.map((edge) => {
                           const a = byId.get(edge.from),
                             b = byId.get(edge.to);
@@ -627,7 +633,10 @@ export function RoutineFlowWorkspace({
                                   role="button"
                                   data-diagram-edge={edge.id}
                                   tabIndex={0}
-                                  aria-label={`Connection ${edge.from} to ${edge.to}`}
+                                  aria-label={gt("Connection {value} to {to}", {
+                                    value: edge.from,
+                                    to: edge.to,
+                                  })}
                                   onClick={() => {
                                     setSelectedEdge(edge.id);
                                     setSelected(edge.to);
@@ -764,7 +773,7 @@ export function RoutineFlowWorkspace({
                             }}
                           >
                             <SourceAgentAvatar agent={agent} size={20} />
-                            Place {agent.name}
+                            <T>Place</T> {agent.name}
                           </ContextMenu.Item>
                         ))}
                       <ContextMenu.Item
@@ -773,14 +782,14 @@ export function RoutineFlowWorkspace({
                         onClick={() => setNewAgentAt(menuAt.current)}
                       >
                         <Plus />
-                        New agent
+                        <T>New agent</T>
                       </ContextMenu.Item>
                       <ContextMenu.Item
                         className="ui-menu-item"
                         onClick={() => onCreateRoutine(agentId)}
                       >
                         <Plus />
-                        Create routine
+                        <T>Create routine</T>
                       </ContextMenu.Item>
                     </ContextMenu.Popup>
                   </ContextMenu.Positioner>
@@ -789,7 +798,7 @@ export function RoutineFlowWorkspace({
               {routines.length > 1 && (
                 <div className="diagram-view-lens-bar" data-diagram-overlay="">
                   <SourceSelect
-                    label="Focus routine"
+                    label={gt("Focus routine")}
                     value={focus ?? "all"}
                     options={[
                       { id: "all", name: "All routines" },
@@ -808,19 +817,23 @@ export function RoutineFlowWorkspace({
                     setSelectedEdge(null);
                   }}
                 >
-                  Disconnect connection
+                  <T>Disconnect connection</T>
                 </SourceButton>
               )}
-              <div className="diagram-board-zoom" role="toolbar" aria-label="Canvas zoom">
-                <SourceButton variant="ghost" aria-label="Zoom in" onClick={() => zoom(1.2)}>
+              <div className="diagram-board-zoom" role="toolbar" aria-label={gt("Canvas zoom")}>
+                <SourceButton variant="ghost" aria-label={gt("Zoom in")} onClick={() => zoom(1.2)}>
                   <Plus />
                 </SourceButton>
-                <SourceButton variant="ghost" aria-label="Zoom out" onClick={() => zoom(1 / 1.2)}>
+                <SourceButton
+                  variant="ghost"
+                  aria-label={gt("Zoom out")}
+                  onClick={() => zoom(1 / 1.2)}
+                >
                   <Minus />
                 </SourceButton>
                 <SourceButton
                   variant="ghost"
-                  aria-label="Fit canvas"
+                  aria-label={gt("Fit canvas")}
                   onClick={() => fit(current, true)}
                 >
                   <Scan />
@@ -935,6 +948,7 @@ function NodeCard({
   onRemove: () => void;
   onEdit: () => void;
 }) {
+  const gt = useGT();
   const outputDrag = useRef<{ start: DiagramPoint; moved: boolean } | null>(null);
   const draggedOutput = useRef(false);
   const agent = node.kind === "agent" ? agents.find((a) => a.id === node.agentId) : undefined;
@@ -977,7 +991,7 @@ function NodeCard({
           disabled={!connectable}
           data-diagram-input={node.id}
           data-target={inputTarget}
-          aria-label={`Connect input of ${name}`}
+          aria-label={gt("Connect input of {name}", { name })}
           onClick={onInput}
         />
       )}
@@ -987,7 +1001,7 @@ function NodeCard({
         data-diagram-control=""
         data-connecting={flag(source === node.id)}
         disabled={!connectable || node.kind === "routine"}
-        aria-label={`Connect output of ${name}`}
+        aria-label={gt("Connect output of {name}", { name })}
         aria-pressed={source === node.id}
         onPointerDown={(e) => {
           if (e.button !== 0) return;
@@ -1034,7 +1048,7 @@ function NodeCard({
         <SourceButton
           variant="ghost"
           className="diagram-node-select"
-          aria-label={`Select ${name}`}
+          aria-label={gt("Select {name}", { name })}
           aria-pressed={selected}
           onClick={onSelect}
           onKeyDown={(e) => {
@@ -1071,7 +1085,7 @@ function NodeCard({
             className="diagram-node-remove"
             data-diagram-control=""
             disabled={!writable}
-            aria-label={`Remove ${name} from canvas`}
+            aria-label={gt("Remove {name} from canvas", { name })}
             onClick={onRemove}
           >
             <X />
@@ -1084,7 +1098,7 @@ function NodeCard({
             <p className="diagram-node-schedule">
               {node.schedule
                 ? scheduleLabel(node.schedule)
-                : node.webhook?.eventType || "Any webhook event"}
+                : node.webhook?.eventType || gt("Any webhook event")}
             </p>
             {node.schedule && <RoutineWeek upcomingRuns={node.upcomingRuns} size="card" />}
             <p className="diagram-node-task">{node.instruction}</p>
@@ -1098,21 +1112,21 @@ function NodeCard({
                 onClick={onRun}
               >
                 <Play />
-                Run now
+                <T>Run now</T>
               </SourceButton>
             )}
             <SourceButton variant="ghost" size="xs" data-diagram-control="" onClick={onEdit}>
-              Edit routine
+              <T>Edit routine</T>
               <ChevronRight />
             </SourceButton>
           </>
         ) : (
           <>
             <p className="diagram-node-task">
-              {diagramAgentTask(node, focus) || "What this agent does with its input."}
+              {diagramAgentTask(node, focus) || gt("What this agent does with its input.")}
             </p>
             {routines.length > 0 && (
-              <ul className="diagram-node-routines" aria-label="Started by">
+              <ul className="diagram-node-routines" aria-label={gt("Started by")}>
                 {routines.map((routine) => (
                   <li key={routine.id}>
                     <SourceButton
@@ -1122,7 +1136,7 @@ function NodeCard({
                       data-diagram-control=""
                       data-routine-color={routine.color}
                       aria-pressed={focus === routine.id}
-                      title={`Show ${routine.name}`}
+                      title={gt("Show {name}", { name: routine.name })}
                       onClick={() => onFocusRoutine?.(routine.id)}
                     >
                       <span className="diagram-routine-chip-name">{routine.name}</span>
@@ -1132,7 +1146,7 @@ function NodeCard({
               </ul>
             )}
             <div className="diagram-node-preview" data-empty={flag(!result?.output)}>
-              <p>{result?.output || result?.error || "Its answer appears here."}</p>
+              <p>{result?.output || result?.error || gt("Its answer appears here.")}</p>
             </div>
           </>
         )}
@@ -1142,11 +1156,11 @@ function NodeCard({
           {status === "succeeded" ? <Check /> : null}
           {node.kind === "routine"
             ? node.active
-              ? "Active"
-              : "Paused"
+              ? gt("Active")
+              : gt("Paused")
             : step === undefined
-              ? "Not connected"
-              : `Step ${step}`}
+              ? gt("Not connected")
+              : gt("Step {step}", { step })}
         </span>
       </div>
     </div>
@@ -1158,7 +1172,7 @@ const SAMPLE_AGENTS = [
     id: "research",
     name: "Research",
     provider: "codex",
-    title: "Research partner",
+    title: m(msg("Research partner")),
     avatarSeed: "research",
     position: { x: 400, y: 0 },
     appear: 1,
@@ -1169,7 +1183,7 @@ const SAMPLE_AGENTS = [
     id: "sales",
     name: "Sales",
     provider: "codex",
-    title: "Sales partner",
+    title: m(msg("Sales partner")),
     avatarSeed: "sales-outbound",
     position: { x: 400, y: 600 },
     appear: 1,
@@ -1180,7 +1194,7 @@ const SAMPLE_AGENTS = [
     id: "writer",
     name: "Writer",
     provider: "codex",
-    title: "Writing partner",
+    title: m(msg("Writing partner")),
     avatarSeed: "writer",
     position: { x: 840, y: 0 },
     appear: 2,
@@ -1191,7 +1205,7 @@ const SAMPLE_AGENTS = [
     id: "chief",
     name: "Chief of staff",
     provider: "codex",
-    title: "Chief of staff",
+    title: m(msg("Chief of staff")),
     avatarSeed: "chief",
     position: { x: 1200, y: 300 },
     appear: 3,
@@ -1385,17 +1399,23 @@ function RoutineEmpty({ onCreate }: { onCreate: () => void }) {
         </div>
         <div className="diagram-empty-pitch">
           <h2 className="diagram-empty-title">
-            <span className="diagram-empty-lead">Draw it once.</span>
+            <span className="diagram-empty-lead">
+              <T>Draw it once.</T>
+            </span>
             <span>
-              Watch it <span className="diagram-empty-hand">run</span>.
+              <T>Watch it</T> <span className="diagram-empty-hand">run</span>.
             </span>
           </h2>
           <p className="diagram-empty-lines">
-            <span>A routine starts the work.</span>
-            <span>Each agent hands its answer to the next.</span>
+            <span>
+              <T>A routine starts the work.</T>
+            </span>
+            <span>
+              <T>Each agent hands its answer to the next.</T>
+            </span>
           </p>
           <SourceButton className="diagram-empty-action" onClick={onCreate}>
-            Create routine
+            <T>Create routine</T>
           </SourceButton>
         </div>
       </div>
@@ -1413,9 +1433,11 @@ function scheduleLabel(schedule: RoutineSchedule) {
     case "weekly":
       return `${daysLabel([draft.weekday])} at ${clockLabel(draft.time)}`;
     case "hourly":
-      return `Every ${draft.everyHours} hours`;
+      return m(msg("Every {everyHours} hours", { everyHours: draft.everyHours }));
     case "monthly":
-      return `Day ${draft.day} at ${clockLabel(draft.time)}`;
+      return m(
+        msg("Day {day} at {clockLabel}", { day: draft.day, clockLabel: clockLabel(draft.time) }),
+      );
     case "yearly":
       return `${draft.month}/${draft.day} at ${clockLabel(draft.time)}`;
     case "custom":

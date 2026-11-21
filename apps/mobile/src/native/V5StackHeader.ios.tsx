@@ -177,7 +177,7 @@ export function V5StackHeader(props: {
     leading.unshift({
       type: "item",
       id: "explicit-back",
-      title: "Back",
+      title: gt("Back"),
       icon: { type: "sfSymbol", name: "chevron.left" },
       onPress: props.onBack,
     });

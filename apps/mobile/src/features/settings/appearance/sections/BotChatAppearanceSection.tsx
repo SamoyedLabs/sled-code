@@ -19,14 +19,17 @@ import {
 } from "../../../bots/upstream/chat-colors";
 import { SettingsSection } from "../../components/SettingsSection";
 import { SettingsSwitchRow } from "../../components/SettingsSwitchRow";
+import { m } from "../../../../i18n/messages";
+import { T, msg, useGT } from "gt-react-native";
 
 const modes: { value: MessageColorMode; label: string }[] = [
-  { value: "none", label: "None" },
-  { value: "agent", label: "Bot color" },
-  { value: "custom", label: "Custom" },
+  { value: "none", label: m(msg("None")) },
+  { value: "agent", label: m(msg("Bot color")) },
+  { value: "custom", label: m(msg("Custom")) },
 ];
 
 export function BotChatAppearanceSection() {
+  const gt = useGT();
   const appearance = useBotChatAppearance();
   const palette = useBotPalette();
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +40,7 @@ export function BotChatAppearanceSection() {
       saveBotChatAppearance(update);
       setError(null);
     } catch {
-      setError("Could not save your chat appearance.");
+      setError(gt("Could not save your chat appearance."));
     }
   };
   const setBackground = (color: AvatarColor | null) =>
@@ -45,7 +48,7 @@ export function BotChatAppearanceSection() {
 
   return (
     <View className="gap-6">
-      <SettingsSection title="Bot message color" footer={error ?? undefined}>
+      <SettingsSection title={gt("Bot message color")} footer={error ?? undefined}>
         <View
           className="gap-2 px-4 py-3"
           style={{ backgroundColor: botChatCanvas(appearance, palette.scheme, palette.canvas) }}
@@ -59,19 +62,19 @@ export function BotChatAppearanceSection() {
               backgroundColor: outgoing?.fill ?? palette.control,
             }}
           >
-            Can you summarize this?
+            <T>Can you summarize this?</T>
           </Text>
           <Text
             className="self-start rounded-2xl px-3 py-2"
             style={{ color: palette.text, backgroundColor: palette.surface }}
           >
-            Of course.
+            <T>Of course.</T>
           </Text>
         </View>
         <View
           className="flex-row gap-2 p-3"
           accessibilityRole="radiogroup"
-          accessibilityLabel="Message color"
+          accessibilityLabel={gt("Message color")}
         >
           {modes.map(({ value, label }) => {
             const checked = appearance.messageColor === value;
@@ -98,30 +101,33 @@ export function BotChatAppearanceSection() {
         {appearance.messageColor === "custom" && (
           <>
             <Swatches
-              label="Message color presets"
+              label={gt("Message color presets")}
               choices={CHAT_COLOR_PRESETS}
               selected={appearance.customColor}
               onSelect={(color) => save({ customColor: color })}
             />
             <HexColorField
               key={appearance.customColor}
-              label="Custom message color"
+              label={gt("Custom message color")}
               value={appearance.customColor}
               onSelect={(color) => save({ customColor: color })}
             />
           </>
         )}
       </SettingsSection>
-      <SettingsSection title="Bot chat background" footer={`Applies to ${palette.scheme} mode.`}>
+      <SettingsSection
+        title={gt("Bot chat background")}
+        footer={`Applies to ${palette.scheme} mode.`}
+      >
         <Swatches
-          label="Chat background presets"
+          label={gt("Chat background presets")}
           choices={CHAT_BACKGROUND_PRESETS[palette.scheme]}
           selected={background}
           onSelect={setBackground}
         />
         <HexColorField
           key={background ?? "default"}
-          label="Custom chat background"
+          label={gt("Custom chat background")}
           value={background}
           onSelect={setBackground}
         />
@@ -131,24 +137,26 @@ export function BotChatAppearanceSection() {
             className="px-4 py-3"
             onPress={() => setBackground(null)}
           >
-            <Text>Use theme background</Text>
+            <Text>
+              <T>Use theme background</T>
+            </Text>
           </Pressable>
         )}
       </SettingsSection>
-      <SettingsSection title="Bot chat details">
+      <SettingsSection title={gt("Bot chat details")}>
         <SettingsSwitchRow
-          label="Show activity"
-          subtitle="Show expandable tool activity in bot replies."
+          label={gt("Show activity")}
+          subtitle={gt("Show expandable tool activity in bot replies.")}
           value={appearance.showActivity}
           onValueChange={(showActivity) => save({ showActivity })}
         />
         <SettingsSwitchRow
-          label="Show subagents"
+          label={gt("Show subagents")}
           value={appearance.showSubagents}
           onValueChange={(showSubagents) => save({ showSubagents })}
         />
         <SettingsSwitchRow
-          label="Show saved memories"
+          label={gt("Show saved memories")}
           value={appearance.showMemoryChanges}
           onValueChange={(showMemoryChanges) => save({ showMemoryChanges })}
         />
@@ -235,7 +243,9 @@ function HexColorField({
           if (valid) onSelect(color);
         }}
       >
-        <Text style={{ color: valid ? palette.text : palette.muted }}>Apply color</Text>
+        <Text style={{ color: valid ? palette.text : palette.muted }}>
+          <T>Apply color</T>
+        </Text>
       </Pressable>
     </View>
   );

@@ -25,6 +25,7 @@ import { downloadMedia } from "../../../media/mediaContent";
 import { randomUUID } from "../../../../lib/utils";
 import { InstanceTransferView, type InstanceTransferScreen } from "./InstanceTransferView";
 import { SourceButton } from "../settings/SettingsParts";
+import { T, useGT } from "gt-react";
 const decodeSummary = Schema.decodeUnknownSync(OpenbotTransferSummary),
   decodeReceipt = Schema.decodeUnknownSync(Schema.NullOr(OpenbotTransferReceipt));
 const decodeArchiveUpload = Schema.decodeUnknownSync(OpenbotArchiveUpload);
@@ -51,6 +52,7 @@ function TransferEnvironment({
   environmentId: EnvironmentId;
   hostId: string;
 }) {
+  const gt = useGT();
   const command = useAtomCommand(openbot.instanceTransfer, { reportFailure: false }),
     context = useAtomQueryRunner(openbot.fileContext, {
       reportFailure: false,
@@ -127,7 +129,9 @@ function TransferEnvironment({
         setScreen("import");
         if (!value)
           setError(
-            "The original transfer has no retained host receipt. It was not automatically replayed.",
+            gt(
+              "The original transfer has no retained host receipt. It was not automatically replayed.",
+            ),
           );
       } else {
         const pending = decodePending(await execute({ hostId, operation: "pending" }, captured));
@@ -209,9 +213,11 @@ function TransferEnvironment({
       );
     });
   return (
-    <section aria-label="Server transfer">
+    <section aria-label={gt("Server transfer")}>
       {!permission && (
-        <p role="status">Host settings permission is required to transfer agents and settings.</p>
+        <p role="status">
+          <T>Host settings permission is required to transfer agents and settings.</T>
+        </p>
       )}
       {error && (
         <p role="alert" className="storage-message">
@@ -220,13 +226,15 @@ function TransferEnvironment({
       )}
       {retained && (
         <SourceButton disabled={!!busy} onClick={() => void refresh()}>
-          Recover transfer status
+          <T>Recover transfer status</T>
         </SourceButton>
       )}
       {receipt?.state === "uncertain" && (
         <p role="status">
-          The original attempt was not confirmed. No agents will be imported again automatically.
-          Check the destination’s agents before starting a separate transfer.
+          <T>
+            The original attempt was not confirmed. No agents will be imported again automatically.
+            Check the destination’s agents before starting a separate transfer.
+          </T>
         </p>
       )}
       <input
