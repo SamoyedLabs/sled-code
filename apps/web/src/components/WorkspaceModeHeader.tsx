@@ -11,7 +11,9 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { isElectron } from "../env";
 import { randomUUID } from "../lib/utils";
 import { createContext, useState } from "react";
-import { usePullRequestsSupported } from "../state/environments";
+import { useIssuesSupported, usePullRequestsSupported } from "../state/environments";
+import { IssueGlyph } from "./issue/issuePresentation";
+import { readIssueListPreferences } from "./issue/issueListPreferences";
 import { PullRequestGlyph } from "./pullRequest/pullRequestIcons";
 import { readPullRequestListPreferences } from "./pullRequest/pullRequestListPreferences";
 import { SidebarChromeHeader } from "./sidebar/SidebarChrome";
@@ -98,6 +100,7 @@ export function WorkspaceModeRail() {
   const search = validateBotWorkspaceSearch(location.search);
   const bots = useWorkspaceBotsMode();
   const pullRequestsSupported = usePullRequestsSupported();
+  const issuesSupported = useIssuesSupported();
   const item =
     "workspace-rail-item relative flex size-10 items-center justify-center rounded-lg text-muted-foreground outline-none hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-[current=page]:text-foreground";
   const openPage = (page: BotWorkspacePage) =>
@@ -177,6 +180,29 @@ export function WorkspaceModeRail() {
               <PullRequestGlyph.pullRequest className="size-5" aria-hidden="true" />
             </TooltipTrigger>
             <TooltipPopup side="right">Pull requests</TooltipPopup>
+          </Tooltip>
+        )}
+        {issuesSupported && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label="Issues"
+                  aria-current={location.pathname === "/issues" ? "page" : undefined}
+                  className={item}
+                  onClick={() =>
+                    void navigate({
+                      to: "/issues",
+                      search: readIssueListPreferences(),
+                    })
+                  }
+                />
+              }
+            >
+              <IssueGlyph.issue className="size-5" aria-hidden="true" />
+            </TooltipTrigger>
+            <TooltipPopup side="right">Issues</TooltipPopup>
           </Tooltip>
         )}
         {(

@@ -11,7 +11,7 @@ import {
   eventFilterDraftsValid,
 } from "../settings/routine-event-filter";
 import { confirmed } from "../../../settings/BotConnectionControls";
-import { useCopyToClipboard } from "../../../../hooks/useCopyToClipboard";
+import { namedClipboardTarget, useCopyToClipboard } from "../../../../hooks/useCopyToClipboard";
 import { Link } from "@tanstack/react-router";
 import { useAgentSettingsValue } from "../settings/agent-settings-api";
 type Routine = (typeof OpenbotRoutineFlowCanvas.Type)["routines"][number]["routine"];
@@ -40,7 +40,7 @@ export function DiagramWebhookConfig({
     [error, setError] = useState<string | null>(null),
     [busy, setBusy] = useState(false);
   const { copyToClipboard } = useCopyToClipboard({
-    target: "webhook details",
+    target: namedClipboardTarget("webhook details"),
     onError: (error) => setError(error.message),
   });
   const endpoint = useAgentSettingsValue(async () => {

@@ -1,5 +1,5 @@
 /* oxlint-disable shadcn/no-unknown-classes -- Pinned OpenBot selectors are supplied by source CSS. */
-import { Sparkles, ShieldCheck, Check } from "lucide-react";
+import { Blocks, ShieldCheck, Check } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { BotAvatar } from "../../avatar/BotAvatar";
 import { SourceButton, SettingsCard, SettingsSection } from "../settings/SettingsParts";
@@ -31,7 +31,7 @@ export function SkillMark({
       {source ? (
         <img src={source} alt="" loading="lazy" onError={() => setFailed(source)} />
       ) : (
-        <Sparkles aria-hidden="true" />
+        <Blocks aria-hidden="true" />
       )}
     </span>
   );

@@ -85,6 +85,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))(
         const startupPhone = yield* startup("192.168.1.20");
         const startupBrowser = yield* startup("127.0.0.1");
         yield* environmentAuth.createPairingLink({ subject: "one-time-token" });
+        yield* environmentAuth.issuePairingCredential({ access: "auto" });
 
         yield* EnvironmentAuth.make.pipe(
           Effect.provide(
@@ -101,7 +102,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))(
       }).pipe(Effect.provide(layerEnvironmentAuth())),
     );
 
-    it.effect("revokes only T3 Connect clients when the policy keeps remote clients", () =>
+    it.effect("revokes only Sled Connect clients when the policy keeps remote clients", () =>
       Effect.gen(function* () {
         const sessions = yield* SessionStore.SessionStore;
         const phone = yield* sessions.issue({ subject: "one-time-token" });
@@ -135,6 +136,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))(
           subject: "one-time-token",
           label: "CI phone",
         });
+        // An app approval code is never listed.
+        yield* environmentAuth.issuePairingCredential({ access: "auto" });
         const listedBeforeRevoke = yield* environmentAuth.listPairingLinks();
         const revoked = yield* environmentAuth.revokePairingLink(created.id);
         const listedAfterRevoke = yield* environmentAuth.listPairingLinks();

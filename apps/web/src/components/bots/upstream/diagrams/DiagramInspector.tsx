@@ -4,7 +4,7 @@ import type { EnvironmentId, OpenbotAgent, OpenbotRoutineFlowCanvas } from "@t3t
 import { ChevronLeft, ChevronRight, Copy, Check } from "lucide-react";
 import { SourceAgentAvatar } from "../../SourceAgentAvatar";
 import { SourceButton } from "../settings/SettingsParts";
-import { useCopyToClipboard } from "../../../../hooks/useCopyToClipboard";
+import { namedClipboardTarget, useCopyToClipboard } from "../../../../hooks/useCopyToClipboard";
 import { DiagramWebhookConfig } from "./DiagramWebhookConfig";
 import {
   diagramAgentTask,
@@ -273,7 +273,9 @@ function StepStatus({ step }: { step: DiagramStepRun | undefined }) {
   );
 }
 function CopyText({ text }: { text: string }) {
-  const { isCopied: copied, copyToClipboard } = useCopyToClipboard({ target: "routine result" });
+  const { isCopied: copied, copyToClipboard } = useCopyToClipboard({
+    target: namedClipboardTarget("routine result"),
+  });
   return (
     <SourceButton
       variant="ghost"

@@ -27,11 +27,12 @@ import {
   getDesktopUpdateButtonTooltip,
   resolveDesktopUpdateButtonAction,
 } from "../desktopUpdate.logic";
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { useEnvironmentQuery } from "../../state/query";
 import { authEnvironment } from "../../state/auth";
+import { useAtomCommand } from "../../state/use-atom-command";
 import { useEnvironmentScope, readEnvironmentScope } from "../../state/session";
 import { usePrimaryEnvironmentId } from "../../state/environments";
-import { revokeServerClientSession } from "../../environments/primary";
 const decodeSessionId = Schema.decodeSync(AuthSessionId);
 const unavailable = (title: string, description: string) => (
   <SettingsSection title={title}>
@@ -217,6 +218,7 @@ function MobileSettings({ environmentId }: { environmentId: EnvironmentId | null
         via: "session" as const,
         lastActiveAt: DateTime.toEpochMillis(session.lastConnectedAt ?? session.issuedAt),
       })) ?? null;
+  const revokeClient = useAtomCommand(authEnvironment.revokeClient, { reportFailure: false });
   const revoke = async (id: string) => {
     if (
       !environmentId ||
@@ -224,7 +226,11 @@ function MobileSettings({ environmentId }: { environmentId: EnvironmentId | null
       !readEnvironmentScope(environmentId, AuthAccessWriteScope)
     )
       throw Error("Access-management permission on this environment is required.");
-    await revokeServerClientSession(decodeSessionId(id));
+    const result = await revokeClient({
+      environmentId,
+      input: { sessionId: decodeSessionId(id) },
+    });
+    if (result._tag === "Failure") throw squashAtomCommandFailure(result);
   };
   return (
     <SettingsMobileConnect

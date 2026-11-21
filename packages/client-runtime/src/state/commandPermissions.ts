@@ -1,8 +1,6 @@
 import {
   clientRpcRequiredScopes,
   sessionGrantsScope,
-  authScopeRequiredResponse,
-  EnvironmentAuthorizationError,
   type EnvironmentId,
   type AuthSessionState,
   type AuthEnvironmentScope,
@@ -12,6 +10,7 @@ import * as Option from "effect/Option";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import { ConnectionTransientError } from "../connection/model.ts";
 import type { EnvironmentRegistry } from "../connection/registry.ts";
+import { scopeRequiredError } from "../rpc/client.ts";
 import { createEnvironmentSessionAtoms } from "./session.ts";
 
 function makeCommandPermissions<R, E>(
@@ -62,11 +61,7 @@ function makeCommandPermissions<R, E>(
               detail: "The connection authorization state is temporarily unavailable.",
             });
           const missing = scopes.find((scope) => !sessionGrantsScope(session.value, scope));
-          if (missing !== undefined)
-            return yield* new EnvironmentAuthorizationError({
-              ...authScopeRequiredResponse(missing),
-              message: `This connection requires ${missing}.`,
-            });
+          if (missing !== undefined) return yield* scopeRequiredError(missing);
         }),
       );
     });

@@ -1,16 +1,12 @@
-export const GITHUB_REPOSITORY_URL = "https://github.com/pingdotgg/t3code";
+export const GITHUB_REPOSITORY_URL = "https://github.com/SamoyedLabs/sled-code";
 
-export const IOS_APP_STORE_URL =
-  "https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824";
-
-export const ANDROID_PLAY_STORE_URL =
-  "https://play.google.com/store/apps/details?id=com.t3tools.t3code";
+export const MOBILE_BUILDS_URL = `${GITHUB_REPOSITORY_URL}/blob/main/apps/mobile/README.md`;
 
 // Runs at build time, so each deploy picks up the current count.
 async function fetchGithubStars(): Promise<string> {
   const token = process.env.GITHUB_TOKEN;
   try {
-    const response = await fetch("https://api.github.com/repos/pingdotgg/t3code", {
+    const response = await fetch("https://api.github.com/repos/SamoyedLabs/sled-code", {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!response.ok) throw new Error(`GitHub API responded ${response.status}`);
@@ -26,5 +22,4 @@ async function fetchGithubStars(): Promise<string> {
 
 export const MARKETING_STATS = {
   githubStars: await fetchGithubStars(),
-  users: "500,000",
 } as const;

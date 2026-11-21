@@ -16,9 +16,11 @@ import {
   credentialConnectionId,
   insertRoute,
   entryWithRoutes,
+  isNearbyAddress,
   mergeLearnedRoutes,
   pendingRouteOrder,
   removedWithRelay,
+  routeKeepsItsHost,
   routesAfterRemoving,
   sendsTokenInClear,
   upsertRoute,
@@ -74,10 +76,39 @@ describe("connection routes", () => {
     expect(connectionRouteKind(direct("lo", "http://127.0.0.1:3773/"))).toBe("loopback");
     expect(connectionRouteKind(direct("ts6", "http://[fd7a:115c:a1e0::1]:3773/"))).toBe("tailnet");
     expect(connectionRouteLabel(TAILNET)).toBe("Tailscale");
-    expect(connectionRouteLabel(RELAY)).toBe("T3 Connect");
+    expect(connectionRouteLabel(RELAY)).toBe("Sled Connect");
   });
 
-  it("places a new route after faster kinds and ahead of T3 Connect", () => {
+  it("knows which addresses reach the same machine on every network", () => {
+    const tailnetIp = direct("ts-ip", "http://100.101.102.103:3773/");
+    const profile = Option.getOrThrow(tailnetIp.profile) as BearerConnectionProfile;
+    const marked = {
+      target: tailnetIp.target,
+      profile: Option.some(new BearerConnectionProfile({ ...profile, network: "tailscale" })),
+    };
+    expect(routeKeepsItsHost(PUBLIC)).toBe(true);
+    expect(routeKeepsItsHost(direct("ts-tls", "https://desk.tail1234.ts.net/"))).toBe(true);
+    expect(routeKeepsItsHost(direct("lo", "http://127.0.0.1:3773/"))).toBe(true);
+    // With Tailscale down, a plain http tailnet address can reach another host:
+    // carrier networks use 100.64.0.0/10 too, and nothing proves who answers.
+    expect(routeKeepsItsHost(direct("ts", "http://desk.tail1234.ts.net:3773/"))).toBe(false);
+    expect(routeKeepsItsHost(marked)).toBe(false);
+    expect(routeKeepsItsHost(tailnetIp)).toBe(false);
+    expect(routeKeepsItsHost(LAN)).toBe(false);
+    expect(routeKeepsItsHost(direct("http", "http://desk.example.com/"))).toBe(false);
+    expect(routeKeepsItsHost(RELAY)).toBe(false);
+  });
+
+  it("treats only loopback and LAN addresses as nearby", () => {
+    expect(isNearbyAddress("http://127.0.0.1:3773/")).toBe(true);
+    expect(isNearbyAddress("http://192.168.1.10:3773/")).toBe(true);
+    expect(isNearbyAddress("http://100.101.102.103:3773/")).toBe(false);
+    expect(isNearbyAddress("https://desk.tail1234.ts.net/")).toBe(false);
+    expect(isNearbyAddress("https://desk.example.com/")).toBe(false);
+    expect(isNearbyAddress("not a url")).toBe(false);
+  });
+
+  it("places a new route after faster kinds and ahead of Sled Connect", () => {
     expect(insertRoute([RELAY], LAN)).toEqual([LAN, RELAY]);
     expect(insertRoute([LAN, RELAY], TAILNET)).toEqual([LAN, TAILNET, RELAY]);
     expect(insertRoute([TAILNET], LAN)).toEqual([LAN, TAILNET]);
@@ -119,7 +150,7 @@ describe("learned routes", () => {
     routes?.map((route) => connectionRouteId(route.target)) ?? null;
   const profileOf = (route: ConnectionRoute) => Option.getOrThrow(route.profile);
 
-  it("learns a LAN address over T3 Connect, ahead of it, using the T3 Connect credential", () => {
+  it("learns a LAN address over Sled Connect, ahead of it, using the Sled Connect credential", () => {
     const routes = mergeLearnedRoutes({
       entry: relayOnly,
       activeRoute: RELAY,
@@ -195,7 +226,7 @@ describe("learned routes", () => {
       reported: [tailscale, mesh],
       allowInsecure: true,
     })!;
-    expect(first.map(connectionRouteLabel)).toEqual(["Tailscale", "VPN", "T3 Connect"]);
+    expect(first.map(connectionRouteLabel)).toEqual(["Tailscale", "VPN", "Sled Connect"]);
 
     const corrected = mergeLearnedRoutes({
       entry: entryWithRoutes(relayOnly, first),
@@ -204,7 +235,7 @@ describe("learned routes", () => {
       allowInsecure: true,
     })!;
     expect(ids(corrected)).toEqual(ids(first));
-    expect(corrected.map(connectionRouteLabel)).toEqual(["VPN", "VPN", "T3 Connect"]);
+    expect(corrected.map(connectionRouteLabel)).toEqual(["VPN", "VPN", "Sled Connect"]);
     expect(
       mergeLearnedRoutes({
         entry: entryWithRoutes(relayOnly, corrected),
@@ -284,7 +315,7 @@ describe("learned routes", () => {
       reported: [{ kind: "lan", httpBaseUrl: `${lanOrigin}/` }],
       allowInsecure: true,
     });
-    // The stale route is gone; the address is learned again with T3 Connect's credential.
+    // The stale route is gone; the address is learned again with Sled Connect's credential.
     expect(ids(routes)).toEqual([`learned:${ENVIRONMENT_ID}:${lanOrigin}`, "public", "relay"]);
     expect(profileOf(routes![0]!)).toMatchObject({ authorization: "t3-connect" });
   });
@@ -355,7 +386,7 @@ describe("learned routes", () => {
     expect(ids(routesAfterRemoving(overLan, "relay"))).toHaveLength(2);
   });
 
-  it("counts an environment reached only through T3 Connect as removed with it", () => {
+  it("counts an environment reached only through Sled Connect as removed with it", () => {
     const learned = mergeLearnedRoutes({
       entry: relayOnly,
       activeRoute: RELAY,
@@ -385,7 +416,7 @@ describe("learned routes", () => {
     );
   });
 
-  it("keeps the T3 Connect credential when learning over a learned T3 Connect route", () => {
+  it("keeps the Sled Connect credential when learning over a learned Sled Connect route", () => {
     const first = mergeLearnedRoutes({
       entry: relayOnly,
       activeRoute: RELAY,

@@ -9,6 +9,14 @@ inputs:
     description: Arguments for `vp install`, such as filters. Empty installs the whole workspace.
     required: false
     default: ""
+  restore-full-store:
+    description: Allow filtered installs to restore the larger repository-wide store
+    required: false
+    default: "true"
+  save-pnpm-store:
+    description: Set to "false" when a concurrent job with the same install args saves the pnpm store
+    required: false
+    default: "true"
 runs:
   using: composite
   steps:
@@ -27,7 +35,7 @@ runs:
     - name: Cache Vite+
       id: vp_cache
       if: steps.vp.outputs.version != ''
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.vite-plus
         key: vite-plus-home-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.vp.outputs.version }}-node${{ steps.vp.outputs.node }}-${{ steps.vp.outputs.pnpm }}
@@ -40,7 +48,12 @@ runs:
       if: steps.vp_cache.outputs.cache-hit == 'true'
       shell: bash
       run: |
-        echo "$HOME/.vite-plus/bin" >> "$GITHUB_PATH"
+        # GITHUB_PATH is consumed by the Windows runner, not by Git Bash.
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          cygpath -w "$HOME/.vite-plus/bin" >> "$GITHUB_PATH"
+        else
+          echo "$HOME/.vite-plus/bin" >> "$GITHUB_PATH"
+        fi
         "$HOME/.vite-plus/bin/vp" env use "${{ steps.vp.outputs.node }}"
 
     # vp gives each Node.js download attempt 10 minutes by default, so one
@@ -48,13 +61,20 @@ runs:
     # partial bytes, so a shorter limit costs a slow download only a retry.
     - name: Setup Vite+
       if: steps.vp_cache.outputs.cache-hit != 'true'
-      uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+      uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1.15.0
       env:
         VP_DOWNLOAD_TIMEOUT: "120"
       with:
         node-version-file: package.json
         cache: false
         run-install: false
+
+    - name: Verify Windows Vite+ launcher
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        Get-Command vp -ErrorAction Stop | Select-Object Source
+        vp --version
 
     # A shared key lets whichever install saves first, often a small filtered
     # one, become every job's store. Each set of install args gets its own.
@@ -75,8 +95,8 @@ runs:
           echo "namespace=filtered-$(printf '%s' "$INSTALL_ARGS" | cksum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
         fi
 
-    # Filtered installs prefer the current full store, which holds every package,
-    # over an older store of their own.
+    # Most filtered installs prefer the current full store. Latency-sensitive
+    # releases opt out so they only extract their smaller dependency closure.
     # The pnpm store stays a cache tarball on the runner's own disk. A store on a
     # Blacksmith sticky disk mounts in under a second, but pnpm then copies every
     # package across filesystems instead of hard-linking it: install took 28-49s
@@ -84,21 +104,21 @@ runs:
     - name: Restore pnpm store
       id: pnpm_cache
       if: inputs.install == 'true'
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.pnpm_store.outputs.path }}
         key: pnpm-${{ steps.pnpm_store.outputs.namespace }}-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
         restore-keys: |
-          pnpm-full-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
+          ${{ inputs.restore-full-store == 'true' && format('pnpm-full-v1-{0}-{1}-{2}', runner.os, runner.arch, hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json')) || '' }}
           pnpm-${{ steps.pnpm_store.outputs.namespace }}-v1-${{ runner.os }}-${{ runner.arch }}-
-          pnpm-full-v1-${{ runner.os }}-${{ runner.arch }}-
+          ${{ inputs.restore-full-store == 'true' && format('pnpm-full-v1-{0}-{1}-', runner.os, runner.arch) || '' }}
 
     # pnpm accepts an earlier pass for the same lockfile and policy at any age, so
     # a cached record skips fetching registry metadata for every package.
     - name: Restore lockfile verification
       id: pnpm_verified
       if: inputs.install == 'true'
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.pnpm_store.outputs.verified }}
         key: pnpm-verified-v1-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
@@ -113,20 +133,24 @@ runs:
 
     - name: Save lockfile verification
       if: inputs.install == 'true' && steps.pnpm_verified.outputs.cache-hit != 'true'
-      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.pnpm_store.outputs.verified }}
         key: ${{ steps.pnpm_verified.outputs.cache-primary-key }}
 
     # A filtered install that started from the current full store adds nothing
-    # worth a second copy of it.
+    # worth a second copy of it. A stacked PR, based on a branch other than the
+    # default, saves a ~1 GB store only its own reruns can read, so it only restores.
+    # Concurrent jobs with the same install args reserve one key, so the losers
+    # compress the store for nothing; all but one pass save-pnpm-store: false.
     - name: Save pnpm store
       if: >-
-        inputs.install == 'true' &&
+        inputs.install == 'true' && inputs.save-pnpm-store == 'true' &&
+        (github.event_name != 'pull_request' || github.base_ref == github.event.repository.default_branch) &&
         steps.pnpm_cache.outputs.cache-hit != 'true' &&
         (steps.pnpm_store.outputs.namespace == 'full' ||
           steps.pnpm_cache.outputs.cache-matched-key != format('pnpm-full-v1-{0}-{1}-{2}', runner.os, runner.arch, hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json')))
-      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.pnpm_store.outputs.path }}
         key: ${{ steps.pnpm_cache.outputs.cache-primary-key }}

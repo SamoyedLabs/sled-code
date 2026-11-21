@@ -1,4 +1,5 @@
 /** Maintained Openbot service extension. No HTTP route or runtime capability is implied. */
+// @effect-diagnostics-next-line extendsNativeError:off
 export class ChannelCodingAuthorityError extends Error {
   override readonly name = "ChannelCodingAuthorityError";
 }

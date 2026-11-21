@@ -1,4 +1,5 @@
 // @effect-diagnostics globalTimers:off -- Polling exists only while this native host settings panel is mounted.
+import { useGT } from "gt-react";
 import { useEffect, useState } from "react";
 import type { DesktopRemoteDesktopCommand } from "@t3tools/contracts";
 import { useEnvironmentQuery } from "~/state/query";
@@ -22,7 +23,7 @@ const networking = [
   [
     "internet",
     "Internet access",
-    "Connect from outside your local network using your paired T3 connection.",
+    "Connect from outside your local network using your paired Sled connection.",
   ],
   [
     "direct-wireless",
@@ -32,6 +33,7 @@ const networking = [
 ] as const;
 
 export function RemoteDesktopSettings() {
+  const gt = useGT();
   const bridge = window.desktopBridge?.remoteDesktop;
   const supported = !!bridge && window.desktopBridge?.getClientPlatform() === "darwin";
   const query = useEnvironmentQuery(supported ? desktopRemoteDesktopAtom : null);
@@ -56,7 +58,7 @@ export function RemoteDesktopSettings() {
     void bridge
       .change(command)
       .then(refreshRemoteDesktop)
-      .catch(() => setError("Could not apply this change. Please try again."))
+      .catch(() => setError(gt("Could not apply this change. Please try again.")))
       .finally(() => setPending(false));
   };
   const unavailable = !state || pending;
@@ -71,10 +73,12 @@ export function RemoteDesktopSettings() {
           ? "Needs permission"
           : "Ready to connect";
   return (
-    <SettingsSection id="remote-desktop" title="Remote Desktop">
+    <SettingsSection id="remote-desktop" title={gt("Remote Desktop")}>
       <SettingsRow
-        title="Allow Remote Desktop"
-        description="View and control this Mac from your iPhone or iPad. Turning this off disconnects active sessions. Applies only to this Mac."
+        title={gt("Allow Remote Desktop")}
+        description={gt(
+          "View and control this Mac from your iPhone or iPad. Turning this off disconnects active sessions. Applies only to this Mac.",
+        )}
         status={
           <span role="status" className="text-xs text-muted-foreground">
             {status}
@@ -82,7 +86,7 @@ export function RemoteDesktopSettings() {
         }
         control={
           <Switch
-            aria-label="Allow Remote Desktop"
+            aria-label={gt("Allow Remote Desktop")}
             checked={state?.enabled ?? false}
             disabled={unavailable}
             onCheckedChange={(enabled) => change({ action: enabled ? "enable" : "disable" })}
@@ -91,22 +95,22 @@ export function RemoteDesktopSettings() {
       />
       {Boolean(error || query.error) && (
         <p role="alert" className="px-4 text-sm text-destructive">
-          {error ?? "Could not load Remote Desktop settings."}
+          {error ?? gt("Could not load Remote Desktop settings.")}
         </p>
       )}
       <fieldset className="mx-4 my-5 space-y-2" disabled={unavailable}>
-        <legend className="mb-2 text-sm font-medium">Host availability</legend>
+        <legend className="mb-2 text-sm font-medium">{gt("Host availability")}</legend>
         {(
           [
             [
               "with-t3",
-              "With T3 Code",
-              "Default · Quitting T3 Code stops remote access. Closing the window keeps it available.",
+              "With Sled Code",
+              "Default · Quitting Sled Code stops remote access. Closing the window keeps it available.",
             ],
             [
               "persistent",
               "Persistent remote desktop",
-              "Keep remote access on after quitting T3 Code. Stop it from the menu bar; opening T3 Code starts it again.",
+              "Keep remote access on after quitting Sled Code. Stop it from the menu bar; opening Sled Code starts it again.",
             ],
           ] as const
         ).map(([value, label, description]) => (
@@ -130,11 +134,14 @@ export function RemoteDesktopSettings() {
         ))}
       </fieldset>
       <SettingsRow
-        title="macOS permissions"
+        title={gt("macOS permissions")}
         description={
           !state?.permissions
-            ? "Checking Screen Recording and Accessibility…"
-            : `Screen Recording: ${state.permissions.screenRecording ? "allowed" : "needed"} · Accessibility: ${state.permissions.accessibility ? "allowed" : "needed"}`
+            ? gt("Checking Screen Recording and Accessibility…")
+            : gt("Screen Recording: {value1} · Accessibility: {value2}", {
+                value1: state.permissions.screenRecording ? "allowed" : "needed",
+                value2: state.permissions.accessibility ? "allowed" : "needed",
+              })
         }
         control={
           <Button
@@ -143,13 +150,15 @@ export function RemoteDesktopSettings() {
             disabled={unavailable}
             onClick={() => change({ action: "permissions" })}
           >
-            Manage permissions…
+            {gt("Manage permissions…")}
           </Button>
         }
       />
       <SettingsRow
-        title="Pair a device"
-        description="Approve a new iPhone or iPad with a temporary pairing code. Paired devices stay trusted until you revoke them."
+        title={gt("Pair a device")}
+        description={gt(
+          "Approve a new iPhone or iPad with a temporary pairing code. Paired devices stay trusted until you revoke them.",
+        )}
         control={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -158,7 +167,7 @@ export function RemoteDesktopSettings() {
               disabled={unavailable || !state?.ready || !permissionsReady}
               onClick={() => change({ action: "pair" })}
             >
-              Pair iPhone or iPad…
+              {gt("Pair iPhone or iPad…")}
             </Button>
             {state?.pairing && (
               <Button
@@ -167,14 +176,14 @@ export function RemoteDesktopSettings() {
                 disabled={pending}
                 onClick={() => change({ action: "cancel-pairing" })}
               >
-                Cancel pairing
+                {gt("Cancel pairing")}
               </Button>
             )}
           </div>
         }
       />
       <div className="pt-4">
-        <h3 className="px-4 pb-1 text-xs font-medium text-muted-foreground">Sharing</h3>
+        <h3 className="px-4 pb-1 text-xs font-medium text-muted-foreground">{gt("Sharing")}</h3>
         {sharing.map(([key, title, description]) => (
           <SettingsRow
             key={key}
@@ -208,8 +217,10 @@ export function RemoteDesktopSettings() {
           />
         ))}
         <SettingsRow
-          title="Revoke paired devices"
-          description="Disconnect every desktop device and require them to pair again. You’ll be asked to confirm."
+          title={gt("Revoke paired devices")}
+          description={gt(
+            "Disconnect every desktop device and require them to pair again. You’ll be asked to confirm.",
+          )}
           control={
             <Button
               size="sm"
@@ -217,7 +228,7 @@ export function RemoteDesktopSettings() {
               disabled={unavailable || !state?.ready}
               onClick={() => change({ action: "forget-devices" })}
             >
-              Revoke all devices…
+              {gt("Revoke all devices…")}
             </Button>
           }
         />

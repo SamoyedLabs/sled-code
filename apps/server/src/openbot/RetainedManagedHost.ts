@@ -126,6 +126,7 @@ const make = Effect.fn("RetainedManagedHost.make")(function* (
         }
         if (descriptor?.state === "starting") throw unavailable();
         if (descriptor?.state === "exited") await NodeFSP.unlink(descriptorPath);
+        // @effect-diagnostics-next-line globalJsonInEffect:off
         await NodeFSP.writeFile(descriptorPath, JSON.stringify({ state: "starting" }), {
           flag: "wx",
           mode: 0o600,
@@ -158,6 +159,7 @@ const make = Effect.fn("RetainedManagedHost.make")(function* (
         const pipe = owner.stdio[3];
         if (!pipe || !("end" in pipe)) throw unavailable();
         pipe.on("error", () => {});
+        // @effect-diagnostics-next-line globalJsonInEffect:off
         pipe.end(JSON.stringify(config));
         owner.unref();
         const deadline = Date.now() + (configuration.host.startupTimeoutMs ?? 90000);

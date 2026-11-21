@@ -1,6 +1,15 @@
 name: Sled Mobile Release
 on:
   workflow_dispatch:
+    inputs:
+      verify_portability:
+        description: Verify Linux/Mac OTA fingerprint parity without publishing
+        type: boolean
+        default: false
+      benchmark:
+        description: Measure unsigned cold/warm native builds without publishing
+        type: boolean
+        default: false
   workflow_run:
     workflows: [CI]
     types: [completed]
@@ -8,37 +17,162 @@ on:
     - cron: "7,27,47 * * * *"
 permissions:
   contents: read
+  actions: read
 concurrency:
-  group: sled-mobile-release
+  group: ${{ inputs.benchmark && format('sled-mobile-benchmark-{0}', github.ref) || inputs.verify_portability && format('sled-mobile-portability-{0}', github.ref) || 'sled-mobile-release' }}
   cancel-in-progress: false
 jobs:
-  release:
+  resolve:
     if: >-
-      github.repository == 'SamoyedLabs/sled-code' &&
+      !inputs.benchmark && !inputs.verify_portability && github.repository == 'SamoyedLabs/sled-code' &&
       github.ref == 'refs/heads/main' &&
       vars.SLED_MOBILE_RELEASE_ENABLED == 'true' &&
       (github.event_name != 'workflow_run' ||
        (github.event.workflow_run.conclusion == 'success' &&
         github.event.workflow_run.head_repository.full_name == github.repository &&
         github.event.workflow_run.head_branch == 'main'))
-    runs-on: macos-15
-    timeout-minutes: 90
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions:
-      contents: write
+      contents: read
       checks: read
+      actions: read
+    env:
+      SLED_APPLE_TEAM_ID: ${{ vars.SLED_APPLE_TEAM_ID }}
+      T3CODE_RELAY_URL: ${{ vars.T3CODE_RELAY_URL }}
+      T3CODE_CLERK_PUBLISHABLE_KEY: ${{ vars.T3CODE_CLERK_PUBLISHABLE_KEY }}
+      T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ vars.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID }}
+      T3CODE_CLERK_JWT_TEMPLATE: ${{ vars.T3CODE_CLERK_JWT_TEMPLATE }}
+    outputs:
+      timings: ${{ steps.timing.outputs.timings }}
+      sha: ${{ steps.resolve.outputs.sha }}
+      mode: ${{ steps.plan.outputs.mode }}
     steps:
       - uses: actions/checkout@v6
         with:
           ref: main
           persist-credentials: false
+      - name: Select an unreleased checked commit before allocating macOS
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/sled/hosted-mobile-release.py resolve
+      - uses: ./.github/actions/setup-ci-deps
+        if: steps.resolve.outputs.sha != ''
+        with:
+          install-args: --filter @t3tools/mobile... --filter @t3tools/scripts...
+          restore-full-store: "false"
+      - name: Reuse pinned native downloads
+        if: steps.resolve.outputs.sha != ''
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: .tools/webrtc/*.zip
+          key: webrtc-archive-macos-v1-${{ hashFiles('third-party/webrtc/manifest.json') }}
+      - name: Choose OTA or native before allocating a Mac
+        if: steps.resolve.outputs.sha != ''
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/sled/hosted-mobile-release.py plan
+      - name: Load recent GitHub step timings
+        if: steps.resolve.outputs.sha != ''
+        id: timing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/sled/ci_progress.py history --workflow sled-mobile-release.yml
+  release:
+    name: release (${{ needs.resolve.outputs.mode }})
+    needs: resolve
+    if: needs.resolve.outputs.sha != '' && contains(fromJSON('["ota","native"]'), needs.resolve.outputs.mode)
+    runs-on: ${{ needs.resolve.outputs.mode == 'ota' && 'ubuntu-24.04' || 'macos-15' }}
+    timeout-minutes: 90
+    env:
+      CI_SOURCE_SHA: ${{ needs.resolve.outputs.sha }}
+      CI_TIMING_BASELINE: ${{ needs.resolve.outputs.timings }}
+      CI_TIMING_JOB: release (${{ needs.resolve.outputs.mode }})
+      DEVELOPER_DIR: ${{ needs.resolve.outputs.mode == 'native' && '/Applications/Xcode_26.3.app/Contents/Developer' || '' }}
+      APP_VARIANT: preview
+      SLED_APPLE_TEAM_ID: ${{ vars.SLED_APPLE_TEAM_ID }}
+      T3CODE_RELAY_URL: ${{ vars.T3CODE_RELAY_URL }}
+      T3CODE_CLERK_PUBLISHABLE_KEY: ${{ vars.T3CODE_CLERK_PUBLISHABLE_KEY }}
+      T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ vars.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID }}
+      T3CODE_CLERK_JWT_TEMPLATE: ${{ vars.T3CODE_CLERK_JWT_TEMPLATE }}
+    permissions:
+      contents: write
+      checks: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+      - name: Select release cache directories
+        run: |
+          echo "SLED_METRO_CACHE_DIR=$RUNNER_TEMP/sled-mobile-metro" >> "$GITHUB_ENV"
+          echo "npm_config_cache=$RUNNER_TEMP/sled-release-cli" >> "$GITHUB_ENV"
       - name: Test mobile release decisions
         run: python3 scripts/sled/hosted-mobile-release-test.py
       - uses: ./.github/actions/setup-ci-deps
+        with:
+          install-args: --filter @t3tools/mobile... --filter @t3tools/scripts...
+          restore-full-store: "false"
+      - name: Reuse the pinned WebRTC binary from CI
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: .tools/webrtc/*.zip
+          key: webrtc-archive-macos-v1-${{ hashFiles('third-party/webrtc/manifest.json') }}
+      - name: Plan a fingerprint-compatible update
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/sled/hosted-mobile-release.py plan
+      - name: Confirm the release still matches its selected runner
+        env:
+          EXPECTED_MODE: ${{ needs.resolve.outputs.mode }}
+          ACTUAL_MODE: ${{ steps.plan.outputs.mode }}
+        run: test "$ACTUAL_MODE" = "$EXPECTED_MODE"
+      - name: Identify the bundler cache configuration
+        if: steps.plan.outputs.mode != 'skip'
+        id: metro-context
+        run: |
+          python3 - <<'PYTHON'
+          import hashlib, json, os
+          names = ['APP_VARIANT', 'T3CODE_RELAY_URL', 'T3CODE_CLERK_PUBLISHABLE_KEY',
+                   'T3CODE_CLERK_CLI_OAUTH_CLIENT_ID', 'T3CODE_CLERK_JWT_TEMPLATE']
+          value = json.dumps({name: os.environ[name] for name in names}, sort_keys=True)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+              stream.write('key=' + hashlib.sha256(value.encode()).hexdigest() + '\n')
+          PYTHON
+      - name: Reuse Metro transforms and file map
+        if: steps.plan.outputs.mode != 'skip'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ env.SLED_METRO_CACHE_DIR }}
+          key: sled-metro-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'apps/mobile/metro.config.js', 'apps/mobile/babel.config.js', 'apps/mobile/app.config.ts') }}-${{ steps.metro-context.outputs.key }}-${{ github.sha }}
+          restore-keys: |
+            sled-metro-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'apps/mobile/metro.config.js', 'apps/mobile/babel.config.js', 'apps/mobile/app.config.ts') }}-${{ steps.metro-context.outputs.key }}-
+      - name: Reuse the pinned Expo release CLI
+        if: steps.plan.outputs.mode == 'ota'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ${{ env.npm_config_cache }}/_cacache
+            ${{ env.npm_config_cache }}/_npx
+          key: sled-release-cli-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}-eas27.4.1
+      - name: Prepare the pinned Expo release CLI
+        if: steps.plan.outputs.mode == 'ota'
+        run: npx --yes eas-cli@27.4.1 --version
+      - name: Restore native compiler and dependency caches
+        id: native-cache
+        if: steps.plan.outputs.mode == 'native'
+        uses: ./.github/actions/setup-ios-native-cache
+        with:
+          mode: restore
       - name: Install the app-target signing editor
+        if: steps.plan.outputs.mode == 'native'
         run: gem install xcodeproj --version 1.27.0 --no-document
-      - name: Release checked main to the private Sled phone channel
+      - name: Release native phone build (${{ steps.native-cache.outputs.compiler-cache-restored == 'true' && 'restored cache' || 'cold cache' }})
+        if: steps.plan.outputs.mode == 'native'
         env:
           GH_TOKEN: ${{ github.token }}
           SLED_APPLE_TEAM_ID: ${{ vars.SLED_APPLE_TEAM_ID }}
@@ -53,16 +187,51 @@ jobs:
           SLED_APPLE_API_KEY_ID: ${{ secrets.SLED_APPLE_API_KEY_ID }}
           SLED_APPLE_API_ISSUER: ${{ secrets.SLED_APPLE_API_ISSUER }}
           SLED_EXPO_TOKEN: ${{ secrets.SLED_EXPO_TOKEN }}
-        run: python3 scripts/sled/hosted-mobile-release.py release
+        run: python3 scripts/sled/ci_progress.py run --phase "Release native phone build (${{ steps.native-cache.outputs.compiler-cache-restored == 'true' && 'restored cache' || 'cold cache' }})" -- python3 scripts/sled/hosted-mobile-release.py release
+      - name: Release compatible OTA update
+        if: steps.plan.outputs.mode == 'ota'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLED_APPLE_TEAM_ID: ${{ vars.SLED_APPLE_TEAM_ID }}
+          T3CODE_RELAY_URL: ${{ vars.T3CODE_RELAY_URL }}
+          T3CODE_CLERK_PUBLISHABLE_KEY: ${{ vars.T3CODE_CLERK_PUBLISHABLE_KEY }}
+          T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ vars.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID }}
+          T3CODE_CLERK_JWT_TEMPLATE: ${{ vars.T3CODE_CLERK_JWT_TEMPLATE }}
+          SLED_EXPO_TOKEN: ${{ secrets.SLED_EXPO_TOKEN }}
+        run: python3 scripts/sled/ci_progress.py run --phase "Release compatible OTA update" -- python3 scripts/sled/hosted-mobile-release.py release
+      - name: Preserve native compiler and dependency caches
+        if: always() && steps.plan.outputs.mode == 'native'
+        uses: ./.github/actions/setup-ios-native-cache
+        with:
+          mode: save
       - name: Retain nonsecret validation evidence on failure
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: sled-mobile-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 7
           if-no-files-found: ignore
           path: |
+            release-mobile/native/native-progress.json
+            release-mobile/native/*-diagnostics.json
+            release-mobile/native/compilation-cache-statistics.json
+            release-mobile/native/phase-timings.jsonl
             release-mobile/plan.json
             release-mobile/baseline.json
             release-mobile/archive-validation.json
             release-mobile/ipa-validation.json
             release-mobile/ota-receipt.json
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-mobile-release
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
+  benchmark:
+    if: github.event_name == 'workflow_dispatch' && inputs.benchmark
+    uses: ./.github/workflows/sled-native-cache-benchmark.yml
+  portability:
+    if: github.event_name == 'workflow_dispatch' && inputs.verify_portability
+    uses: ./.github/workflows/sled-mobile-portability.yml

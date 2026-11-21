@@ -1,0 +1,37 @@
+name: Sled CI Retry
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+concurrency:
+  group: sled-ci-retry-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  retry:
+    if: >-
+      github.repository == 'SamoyedLabs/sled-code' &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+      checks: read
+    steps:
+      - name: Check out trusted retry automation
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: main
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Retry jobs that never acquired a hosted runner
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/ci-runner-retry.py

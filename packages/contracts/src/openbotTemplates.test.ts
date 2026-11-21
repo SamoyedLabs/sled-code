@@ -3,7 +3,15 @@ import * as Schema from "effect/Schema";
 import { templateRequiredScopes, TemplatePublication } from "./openbotTemplates.ts";
 const isPublication = Schema.is(TemplatePublication);
 it("requires exact provider/settings authority and operate authority for mutations on their correct port", () => {
-  for (const operation of ["templates.preview", "templates.detail", "templates.listing"]) {
+  expect(templateRequiredScopes("templates.listing", "read")).toEqual(["settings:write"]);
+  expect(templateRequiredScopes("templates.listing", "admin")).toBeNull();
+  for (const operation of [
+    "templates.preview",
+    "templates.detail",
+    "templates.publication",
+    "templates.adoptions",
+    "templates.adoptionStatus",
+  ]) {
     expect(templateRequiredScopes(operation, "read")).toEqual([
       "settings:write",
       "providers:manage",
@@ -11,6 +19,7 @@ it("requires exact provider/settings authority and operate authority for mutatio
     expect(templateRequiredScopes(operation, "admin")).toBeNull();
   }
   for (const operation of [
+    "templates.adopt",
     "templates.install",
     "templates.installMarketplace",
     "templates.updateMarketplace",

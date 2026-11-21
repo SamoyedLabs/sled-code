@@ -1,5 +1,7 @@
+import { T, useGT } from "gt-react-native";
 import * as Dialog from "../../components/ui/Dialog";
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
+import * as Application from "expo-application";
 import Constants from "expo-constants";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { useRef, useState } from "react";
@@ -9,6 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText as Text } from "../../components/ui/AppText";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { useDeadlinePassed } from "../../lib/clock";
+import { resolveMobileStageLabel } from "../../lib/mobileBranding";
 import {
   type AppUpdateCheckState,
   isAppUpdateCheckAvailable,
@@ -20,10 +23,11 @@ import { SettingsSection } from "./components/SettingsSection";
 import { SettingsScreen } from "./components/SettingsScreen";
 
 export function SettingsAboutRouteScreen() {
+  const gt = useGT();
   const insets = useSafeAreaInsets();
 
   return (
-    <SettingsScreen title="About">
+    <SettingsScreen title={gt("About")}>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
@@ -38,6 +42,7 @@ export function SettingsAboutRouteScreen() {
 }
 
 function AppSettingsSection() {
+  const gt = useGT();
   const [checkState, setCheckState] = useState<{
     readonly state: AppUpdateCheckState;
     // "Up to date" is a confirmation that fades back to idle.
@@ -50,10 +55,11 @@ function AppSettingsSection() {
   const hiddenUpdateTapCount = useRef(0);
 
   const version = Constants.expoConfig?.version ?? "0.0.0";
-  // Match app.config.ts's production fallback to avoid mislabeling builds as development.
-  const variant = (Constants.expoConfig?.extra?.appVariant as string | undefined) ?? "production";
-  const variantLabel = variant === "production" ? "" : capitalize(variant);
-  const versionLabel = variantLabel ? `${version} · ${variantLabel}` : version;
+  const stageLabel = resolveMobileStageLabel(Constants.expoConfig?.extra?.appVariant);
+  // Only the installed binary knows the build number assigned by EAS.
+  const build = Application.nativeBuildVersion;
+  const versionWithBuild = build ? `${version} (${build})` : version;
+  const versionLabel = `${versionWithBuild} · ${stageLabel}`;
   const updateCheckAvailable = isAppUpdateCheckAvailable();
   const busy =
     updateState === "checking" || updateState === "downloading" || updateState === "restarting";
@@ -66,7 +72,7 @@ function AppSettingsSection() {
     await settlePromise(() =>
       runAppUpdateCheck({
         applyMode: "immediate",
-        onFailure: (message) => Dialog.alert("Update failed", message),
+        onFailure: (message) => Dialog.alert(gt("Update failed"), message),
         onStateChange: (state) =>
           setCheckState({
             state,
@@ -88,15 +94,15 @@ function AppSettingsSection() {
 
   const statusLabel =
     updateState === "checking"
-      ? "Checking…"
+      ? gt("Checking…")
       : updateState === "downloading"
-        ? "Downloading…"
+        ? gt("Downloading…")
         : updateState === "ready"
-          ? "Update ready"
+          ? gt("Update ready")
           : updateState === "restarting"
-            ? "Restarting…"
+            ? gt("Restarting…")
             : updateState === "current"
-              ? "Up to date"
+              ? gt("Up to date")
               : null;
 
   const versionRow = (
@@ -108,7 +114,9 @@ function AppSettingsSection() {
         type="monochrome"
         weight="regular"
       />
-      <Text className="flex-1 text-lg text-foreground">Version</Text>
+      <Text className="flex-1 text-lg text-foreground">
+        <T>Version</T>
+      </Text>
       <View className="items-end">
         <Text className="text-lg text-foreground-muted">{versionLabel}</Text>
         {statusLabel ? (
@@ -119,18 +127,22 @@ function AppSettingsSection() {
   );
 
   return (
-    <SettingsSection title="App">
-      <SettingsRow icon="internaldrive" label="Client Storage" target="SettingsClientStorage" />
-      <SettingsRow icon="stethoscope" label="Diagnostics" target="SettingsDiagnostics" />
+    <SettingsSection title={gt("App", { $context: "settings section about this mobile app" })}>
+      <SettingsRow
+        icon="internaldrive"
+        label={gt("Client Storage")}
+        target="SettingsClientStorage"
+      />
+      <SettingsRow icon="stethoscope" label={gt("Diagnostics")} target="SettingsDiagnostics" />
       <SettingsRow
         icon="doc.on.doc"
-        label="Open source licenses"
+        label={gt("Open source licenses")}
         target="SettingsOpenSourceLicenses"
       />
-      <SettingsRow icon="doc.text" label="Privacy policy" fullScreenTarget="SettingsLegal" />
+      <SettingsRow icon="doc.text" label={gt("Privacy policy")} fullScreenTarget="SettingsLegal" />
       {updateCheckAvailable ? (
         <Pressable
-          accessibilityLabel={`Version ${versionLabel}`}
+          accessibilityLabel={gt("Version {version}", { version: versionLabel })}
           accessibilityRole="text"
           disabled={busy}
           onPress={handleVersionPress}
@@ -142,8 +154,4 @@ function AppSettingsSection() {
       )}
     </SettingsSection>
   );
-}
-
-function capitalize(value: string): string {
-  return value.length > 0 ? value.charAt(0).toUpperCase() + value.slice(1) : value;
 }

@@ -28,7 +28,7 @@ const facet = (kind: string): { icon: AppSymbolName; name: string } => {
     case "agent":
       return { icon: "person.crop.circle", name: "Bot" };
     case "llm":
-      return { icon: "sparkles", name: "Model" };
+      return { icon: "brain", name: "Model" };
     case "approval":
       return { icon: "checkmark.circle", name: "Approval" };
     case "condition":

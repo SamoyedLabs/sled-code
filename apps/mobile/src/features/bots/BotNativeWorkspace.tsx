@@ -328,7 +328,7 @@ export function BotNativeWorkspace({
     );
   }
   if (marketplaceAvailable)
-    shortcuts.push({ title: "Marketplace", icon: "sparkles", go: openMarketplace });
+    shortcuts.push({ title: "Marketplace", icon: "cube", go: openMarketplace });
   if (libraryAvailable)
     shortcuts.push({ title: "Library", icon: "square.grid.2x2", go: openLibrary });
   if (primary)

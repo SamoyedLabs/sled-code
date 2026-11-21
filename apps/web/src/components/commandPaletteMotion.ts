@@ -30,6 +30,7 @@ export function trackCommandPaletteFilters(nav: HTMLElement | null) {
 // OpenBot's global-search-motion, adapted to T3's existing virtualized rows and dialog lifecycle.
 export function trackCommandPaletteResults(list: LegendListRef): () => void {
   const scroller = list.getScrollableNode();
+  if (!scroller) return () => undefined;
   const results = scroller.closest<HTMLElement>("[data-slot=command-list]");
   if (!results?.closest('[data-command-palette][data-palette-mode="command"]'))
     return () => undefined;

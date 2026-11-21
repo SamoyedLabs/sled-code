@@ -14,6 +14,7 @@ export interface RelayBindings {
   readonly MINT_PUBLIC_KEY: string;
 }
 
+// @effect-diagnostics-next-line extendsNativeError:off - The Worker maps thrown HTTP errors outside Effect.
 export class RelayError extends Error {
   readonly status: number;
   readonly reason: string;

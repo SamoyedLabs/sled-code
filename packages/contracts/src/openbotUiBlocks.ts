@@ -333,6 +333,7 @@ export function isUiBlockId(value: unknown): value is string {
   );
 }
 
+// @effect-diagnostics-next-line extendsNativeError:off
 class InvalidUiBlock extends Error {}
 
 function fail(): never {

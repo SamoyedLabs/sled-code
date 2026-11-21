@@ -64,10 +64,9 @@ def run(command, cwd=root):
 
 run([sys.executable, 'scripts/sled/prepare-native.py'])
 run([sys.executable, 'scripts/build-host.py'])
-run(['pnpm', 'exec', 'vp', 'run', 'build:desktop'], checkout)
 run(['pnpm', 'exec', 'vp', 'run', 'dist:desktop:artifact', '--platform', 'mac',
      '--target', 'zip', '--arch', 'arm64', '--build-version', version,
-     '--skip-build', '--output-dir', str(output)], checkout)
+     '--output-dir', str(output)], checkout)
 if env.get('T3_REMOTE_SIGNING_IDENTITY', '-') != '-':
     run(['node', 'scripts/sign-private-desktop.cjs',
          str(output / f'T3-Code-{version}-arm64.zip')])

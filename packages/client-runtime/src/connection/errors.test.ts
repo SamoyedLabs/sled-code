@@ -3,9 +3,14 @@ import {
   RelayEnvironmentConnectNotAuthorizedError,
   RelayEnvironmentEndpointTimedOutError,
 } from "@t3tools/contracts/relay";
+import { EnvironmentAuthInvalidError } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 
-import { mapManagedRelayError, mapRemoteDpopEnvironmentError } from "./errors.ts";
+import {
+  isHostCredentialRefusal,
+  mapManagedRelayError,
+  mapRemoteDpopEnvironmentError,
+} from "./errors.ts";
 import { DPOP_UNKNOWN_HINT } from "../relay/errorPresentation.ts";
 import { ManagedRelayRequestFailedError } from "../relay/managedRelay.ts";
 import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
@@ -50,13 +55,13 @@ describe("mapManagedRelayError", () => {
     expect(mapConnectRefusal("managed_endpoint_allocation_not_ready")).toMatchObject({
       _tag: "ConnectionTransientError",
       reason: "endpoint-unavailable",
-      detail: "The environment's T3 Connect tunnel is still being set up.",
+      detail: "The environment's Sled Connect tunnel is still being set up.",
       traceId: "trace-connect-refused",
     });
     expect(mapConnectRefusal("endpoint_provider_not_managed")).toMatchObject({
       _tag: "ConnectionBlockedError",
       reason: "permission",
-      detail: expect.stringContaining("turn T3 Connect on"),
+      detail: expect.stringContaining("turn Sled Connect on"),
     });
     expect(mapConnectRefusal(undefined)).toMatchObject({
       _tag: "ConnectionBlockedError",
@@ -93,12 +98,29 @@ describe("mapRemoteDpopEnvironmentError", () => {
       message: "Failed to fetch remote environment endpoint.",
       cause: new TypeError("Failed to fetch"),
     }),
-    new RemoteEnvironmentAuthTimeoutError("https://environment.example.test", 10_000),
+    new RemoteEnvironmentAuthTimeoutError({
+      requestUrl: "https://environment.example.test",
+      timeoutMs: 10_000,
+    }),
   ])("suggests another network when the relay endpoint cannot be reached: $_tag", (error) => {
     const mapped = mapRemoteDpopEnvironmentError(error);
     expect(mapped).toMatchObject({
       _tag: "ConnectionTransientError",
       detail: `${error.message} ${NETWORK_BLOCKING_HINT}`,
     });
+  });
+
+  it("keeps a direct host's clock refusal apart from a refused pairing", () => {
+    const mapped = mapRemoteDpopEnvironmentError(
+      new EnvironmentAuthInvalidError({
+        code: "auth_invalid",
+        reason: "invalid_credential",
+        dpopFailureReason: "time_window",
+        traceId: "trace-clock",
+      }),
+      "direct",
+    );
+    expect(mapped).toMatchObject({ via: "direct", failureCause: "clock_skew" });
+    expect(isHostCredentialRefusal(mapped)).toBe(false);
   });
 });

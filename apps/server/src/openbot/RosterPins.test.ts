@@ -4,7 +4,7 @@ import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as SqlClient from "effect/sql/SqlClient";
-import migrate from "../persistence/Migrations/098_OpenbotRosterPins.ts";
+import migrate from "../persistence/Migrations/121_OpenbotRosterPins.ts";
 import { READ_ROSTER_PINS, SET_ROSTER_PINS, rosterPins } from "./RosterPins.ts";
 
 it.effect(

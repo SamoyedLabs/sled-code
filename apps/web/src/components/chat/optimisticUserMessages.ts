@@ -1,4 +1,5 @@
 import type { MessageId, ThreadId } from "@t3tools/contracts";
+import { parseUrl } from "@t3tools/shared/url";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { AsyncResult, Atom } from "effect/reactivity";
@@ -11,9 +12,11 @@ import { collectUserMessageBlobPreviewUrls } from "../ChatView.logic";
  * render its ack arrives, so it never reappears even if the server later drops its row. Its blob
  * previews stay in `handoff` until the server's copies load (see useAttachmentPreviewHandoff).
  */
+export type OptimisticUserMessage = ChatMessage & { readonly deliverySequence?: number };
+
 export interface OptimisticUserMessages {
   readonly threadId: ThreadId;
-  readonly messages: ChatMessage[];
+  readonly messages: OptimisticUserMessage[];
   readonly handoff: Readonly<Record<string, ReadonlyArray<string>>>;
 }
 
@@ -29,13 +32,17 @@ export function reconcileOptimisticUserMessages(
   state: OptimisticUserMessages,
   threadId: ThreadId,
   acknowledgedIds: ReadonlySet<MessageId>,
+  sequence = 0,
 ): OptimisticUserMessages {
   if (state.threadId !== threadId) return emptyOptimisticUserMessages(threadId);
-  if (!state.messages.some((message) => acknowledgedIds.has(message.id))) return state;
-  const messages: ChatMessage[] = [];
+  const acknowledged = (message: OptimisticUserMessage) =>
+    acknowledgedIds.has(message.id) ||
+    (message.deliverySequence !== undefined && sequence >= message.deliverySequence);
+  if (!state.messages.some(acknowledged)) return state;
+  const messages: OptimisticUserMessage[] = [];
   const handoff: Record<string, ReadonlyArray<string>> = { ...state.handoff };
   for (const message of state.messages) {
-    if (!acknowledgedIds.has(message.id)) {
+    if (!acknowledged(message)) {
       messages.push(message);
       continue;
     }
@@ -49,7 +56,7 @@ export function reconcileOptimisticUserMessages(
 export function applyOptimisticUserMessagesAction(
   state: OptimisticUserMessages,
   threadId: ThreadId,
-  action: SetStateAction<ChatMessage[]>,
+  action: SetStateAction<OptimisticUserMessage[]>,
 ): OptimisticUserMessages {
   if (state.threadId !== threadId) return state;
   const next = typeof action === "function" ? action(state.messages) : action;
@@ -125,7 +132,7 @@ class ImagePreloadError extends Schema.TaggedError<ImagePreloadError>()("ImagePr
   host: Schema.String,
 }) {
   static fromUrl(url: string) {
-    const parsed = URL.parse(url, globalThis.location?.href);
+    const parsed = parseUrl(url, globalThis.location?.href);
     return new ImagePreloadError({ protocol: parsed?.protocol ?? "", host: parsed?.host ?? "" });
   }
 }

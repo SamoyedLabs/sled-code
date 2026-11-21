@@ -2,6 +2,7 @@
 import { useState, useId, Fragment, type ReactNode, type ComponentProps } from "react";
 import {
   ArrowRight,
+  Blocks,
   Bot,
   Brain,
   CalendarClock,
@@ -12,7 +13,6 @@ import {
   Lock,
   Monitor,
   Settings,
-  Sparkles,
   TriangleAlert,
   Upload,
 } from "lucide-react";
@@ -665,7 +665,7 @@ function SetupSummary(props: { totals: Totals; label: string }) {
   const { t, format } = readText();
   const items = () => [
     { icon: Bot, text: t("import.count.agent", { count: props.totals.agents }) },
-    { icon: Sparkles, text: t("import.count.skill", { count: props.totals.skills }) },
+    { icon: Blocks, text: t("import.count.skill", { count: props.totals.skills }) },
     { icon: CalendarClock, text: t("import.count.routine", { count: props.totals.routines }) },
     { icon: Brain, text: t("import.count.memory", { count: props.totals.memories }) },
     {

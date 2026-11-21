@@ -87,7 +87,7 @@ package final class T3TunnelIngress {
                     guard let self, !self.stopped, self.permitted(),
                           self.server.remoteSessionCount < 8,
                           let name = self.trust.snapshot.paired[self.expected] else { c.cancel(); return }
-                    self.server.serve(c, route: .remote(origin: .internet, label: "through T3 Code",
+                    self.server.serve(c, route: .remote(origin: .internet, label: "through Sled Code",
                         fingerprint: self.expected, name: name), hello: hello, t3Receipts: true,
                         t3Closed: { [weak self] in self?.diagnostic("stream-closed"); self?.finish() })
                 }

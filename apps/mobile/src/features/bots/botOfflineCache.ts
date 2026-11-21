@@ -29,8 +29,10 @@ const credentialIdentity = Atom.family((environmentId: EnvironmentId) =>
       const store = yield* CredentialStore.ConnectionCredentialStore;
       const credential = Option.getOrNull(yield* store.get(target.connectionId));
       if (!credential) return null;
+      const secret =
+        credential._tag === "DpopConnectionCredential" ? credential.accessToken : credential.token;
       return yield* Effect.promise(() =>
-        Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, credential.token),
+        Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, secret),
       );
     });
   }),

@@ -42,7 +42,7 @@ import {
   type BotThreadBranch,
 } from "./bot-branch-markers";
 import { firstLargeBotAttachment } from "./bot-attachment-transfer";
-import { FilePreviewModal } from "../../components/FilePreviewModal";
+import { FilePreviewModal } from "../../components/ui/FilePreviewModal";
 import {
   botFileQuoteTarget,
   resolveBotQuotedFileSource,

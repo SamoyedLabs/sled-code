@@ -54,7 +54,7 @@ import { useBotConversationPanel } from "./useBotConversationPanel";
 import { BotConversationQueue } from "./BotConversationQueue";
 import { cn, randomUUID } from "../../lib/utils";
 import { useStableCallback } from "../../hooks/useStableCallback";
-import { writeTextToClipboard } from "../../hooks/useCopyToClipboard";
+import { namedClipboardTarget, writeTextToClipboard } from "../../hooks/useCopyToClipboard";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { BotComposerEditor, type BotComposerEditorHandle } from "./BotComposerEditor";
@@ -685,7 +685,10 @@ function ConversationBody({
                           className="ob-chat-action-button"
                           aria-label={copiedId === message.id ? "Copied" : "Copy message"}
                           onClick={() => {
-                            void writeTextToClipboard(message.text, "message").then(
+                            void writeTextToClipboard(
+                              message.text,
+                              namedClipboardTarget("message"),
+                            ).then(
                               () => {
                                 setCopiedId(message.id);
                                 setCopyError(null);

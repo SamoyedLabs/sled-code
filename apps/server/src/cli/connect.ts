@@ -1,9 +1,7 @@
 import {
   AuthRelayReadScope,
   AuthRelayWriteScope,
-  type AuthEnvironmentScope,
   type EnvironmentConnectReachability,
-  EnvironmentHttpApi,
   formatConnectReachable,
   type RelayClientInstallProgressEvent,
   type RelayClientInstallProgressStage,
@@ -28,7 +26,6 @@ import * as References from "effect/References";
 import * as Schema from "effect/Schema";
 import { Command, Flag, GlobalFlag, Prompt } from "effect/cli";
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
-import * as HttpApiClient from "effect/http-api/HttpApiClient";
 
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as ManagedLimits from "../policy/managedLimits.ts";
@@ -51,9 +48,14 @@ import * as RelayTracing from "../cloud/relayTracing.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as ExternalLauncher from "../process/externalLauncher.ts";
-import { readPersistedServerRuntimeState } from "../serverRuntimeState.ts";
+import {
+  isProcessAlive,
+  readLiveServerRuntimeState,
+  readPersistedServerRuntimeState,
+} from "../serverRuntimeState.ts";
 import { projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
-import { resolveCliCommand } from "./invocation.ts";
+import * as RunningServer from "./runningServer.ts";
+import { resolveHostCliHint } from "./invocation.ts";
 import * as CliService from "./service.ts";
 
 const jsonFlag = Flag.Boolean("json").pipe(
@@ -62,6 +64,17 @@ const jsonFlag = Flag.Boolean("json").pipe(
 );
 
 const isCloudCliTokenManagerError = Schema.is(CliTokenManager.CloudCliTokenManagerError);
+
+class PersonalRelayValidationError extends Schema.TaggedError<PersonalRelayValidationError>()(
+  "PersonalRelayValidationError",
+  { message: Schema.String, cause: Schema.Defect() },
+) {}
+
+const personalRelayFailure = (cause: unknown) =>
+  new PersonalRelayValidationError({
+    message: cause instanceof Error ? cause.message : "Could not validate the personal Sled relay.",
+    cause,
+  });
 
 export const headlessFlag = Flag.Boolean("headless").pipe(
   Flag.withDescription(
@@ -181,7 +194,11 @@ function formatRelayClientStatus(executable: RelayClient.RelayClientStatus): Rea
   }
 }
 
-function formatCloudStatus(status: CloudCliStatus, options?: { readonly json?: boolean }): string {
+function formatCloudStatus(
+  status: CloudCliStatus,
+  commands: { readonly link: string; readonly serviceStatus: string },
+  options?: { readonly json?: boolean },
+): string {
   if (options?.json) {
     return JSON.stringify(status, null, 2);
   }
@@ -193,37 +210,45 @@ function formatCloudStatus(status: CloudCliStatus, options?: { readonly json?: b
       : status.desired && status.authenticated
         ? "pending server startup"
         : "not provisioned";
+  const publishOnly = status.desired && status.linkMode === "publish_only";
   const nextStep = !status.authenticated
-    ? "Run `t3 connect link` to authorize and enable Sled Connect."
+    ? `Run \`${commands.link}\` to authorize and enable Sled Connect.`
     : status.revoked
-      ? "Run `t3 connect link` to link this environment again."
+      ? `Run \`${commands.link}\` to link this environment again.`
       : !status.desired
-        ? "Run `t3 connect link` to enable Sled Connect."
+        ? `Run \`${commands.link}\` to enable Sled Connect.`
         : !status.linked
-          ? "Start T3 to provision the environment link and launch its managed tunnel."
+          ? publishOnly
+            ? "Start T3 to provision the environment link."
+            : "Start T3 to provision the environment link and launch its managed tunnel."
           : undefined;
 
   return [
     "Sled Connect",
-    `  Exposure: ${status.desired ? "enabled" : "disabled"}`,
+    `  Exposure: ${publishOnly ? "publish-only" : status.desired ? "enabled" : "disabled"}`,
     `  Authorization: ${status.authenticated ? "stored credential" : "missing"}`,
     `  Environment link: ${provisioned}`,
     `  Relay: ${status.relayUrl ?? "not provisioned"}`,
     `  Publish agent activity: ${status.publishAgentActivity ? "enabled" : "disabled"}`,
     ...formatRelayClientStatus(status.relayClient),
-    ...(!status.desired || status.linkMode !== "managed"
+    ...(!status.desired
       ? []
-      : status.reachability === null
+      : publishOnly
         ? [
             "",
-            "No running server answered, so reachability was not checked. Check the background service with `t3 service status`.",
+            "This link only publishes agent activity. Remote access through T3 Connect is off, so other devices need their own route to this machine, such as LAN or Tailscale.",
           ]
-        : status.reachability.status === "reachable"
+        : status.reachability === null
           ? [
               "",
-              `✓ Other devices can reach this machine · ${formatConnectReachable(status.reachability)}`,
+              `No running server answered, so reachability was not checked. Check the background service with \`${commands.serviceStatus}\`.`,
             ]
-          : ["", formatReachabilityFailure(status.reachability)]),
+          : status.reachability.status === "reachable"
+            ? [
+                "",
+                `✓ Other devices can reach this machine · ${formatConnectReachable(status.reachability)}`,
+              ]
+            : ["", formatReachabilityFailure(status.reachability)]),
     ...(nextStep ? ["", `Next: ${nextStep}`] : []),
   ].join("\n");
 }
@@ -282,23 +307,9 @@ export const acquireRelayClientForLink = Effect.fn("cloud.cli.acquire_relay_clie
   },
 );
 
-const withCloudCliSessionToken = <A, E, R>(
-  environmentAuth: EnvironmentAuth.EnvironmentAuth["Service"],
-  scope: AuthEnvironmentScope,
-  run: (token: string) => Effect.Effect<A, E, R>,
-) =>
-  Effect.acquireUseRelease(
-    environmentAuth.issueSession({
-      scopes: [scope],
-      subject: "cloud-cli",
-      label: "t3 connect cli",
-    }),
-    (issued) => run(issued.token),
-    (issued) => environmentAuth.revokeSession(issued.sessionId).pipe(Effect.ignore({ log: true })),
-  );
-
 type LiveCloudActionResult =
   | { readonly status: "not-running" }
+  | { readonly status: "server-gone" }
   | { readonly status: "succeeded" }
   | { readonly status: "failed"; readonly cause: Cause.Cause<unknown> };
 
@@ -308,18 +319,16 @@ const runLiveCloudUnlink = Effect.fn("cloud.cli.run_live_unlink")(function* () {
   if (Option.isNone(runtimeState)) {
     return { status: "not-running" } satisfies LiveCloudActionResult;
   }
+  // A killed server leaves its record behind, and another process may own its port by now.
+  if (!isProcessAlive(runtimeState.value.pid)) {
+    return { status: "server-gone" } satisfies LiveCloudActionResult;
+  }
 
-  const environmentAuth = yield* EnvironmentAuth.EnvironmentAuth;
   const result = yield* Effect.exit(
-    withCloudCliSessionToken(environmentAuth, AuthRelayWriteScope, (token) =>
-      HttpApiClient.make(EnvironmentHttpApi, {
-        baseUrl: runtimeState.value.origin,
-      }).pipe(
-        Effect.flatMap((client) =>
-          client.connect.unlink({ headers: { authorization: `Bearer ${token}` } }),
-        ),
-        Effect.timeout(CLOUD_CLI_LIVE_SERVER_TIMEOUT),
-      ),
+    RunningServer.serverClient(runtimeState.value.origin, [AuthRelayWriteScope]).pipe(
+      Effect.flatMap((client) => client.connect.unlink({ headers: {} })),
+      Effect.timeout(CLOUD_CLI_LIVE_SERVER_TIMEOUT),
+      Effect.scoped,
     ),
   );
   return Exit.isSuccess(result)
@@ -335,17 +344,14 @@ const CLOUD_CLI_REACHABILITY_RETRY = Duration.seconds(5);
 /** Asks the running server to check Sled Connect now. `null` when no server answers. */
 const checkLiveReachability = Effect.fn("cloud.cli.check_live_reachability")(function* () {
   const config = yield* ServerConfig.ServerConfig;
-  const runtimeState = yield* readPersistedServerRuntimeState(config.serverRuntimeStatePath);
+  const runtimeState = yield* readLiveServerRuntimeState(config.serverRuntimeStatePath);
   if (Option.isNone(runtimeState)) return null;
-  const environmentAuth = yield* EnvironmentAuth.EnvironmentAuth;
-  return yield* withCloudCliSessionToken(environmentAuth, AuthRelayReadScope, (token) =>
-    HttpApiClient.make(EnvironmentHttpApi, { baseUrl: runtimeState.value.origin }).pipe(
-      Effect.flatMap((client) =>
-        client.connect.checkReachability({ headers: { authorization: `Bearer ${token}` } }),
-      ),
-      Effect.timeout(CLOUD_CLI_REACHABILITY_TIMEOUT),
-    ),
-  ).pipe(Effect.orElseSucceed(() => null));
+  return yield* RunningServer.serverClient(runtimeState.value.origin, [AuthRelayReadScope]).pipe(
+    Effect.flatMap((client) => client.connect.checkReachability({ headers: {} })),
+    Effect.timeout(CLOUD_CLI_REACHABILITY_TIMEOUT),
+    Effect.scoped,
+    Effect.orElseSucceed(() => null),
+  );
 });
 
 function formatAlertBox(text: string): string {
@@ -459,6 +465,12 @@ const reportCloudDisconnectResults = Effect.fn("cloud.cli.report_disconnect_resu
       );
     } else {
       yield* Console.log("Sled Connect is disabled locally.");
+      // A killed server cannot stop the connector it started, and nothing adopts it on restart.
+      if (input.liveResult.status === "server-gone") {
+        yield* Console.warn(
+          "The server that ran Sled Connect is gone, but its cloudflared process may still be running.\nStop that process if it is.",
+        );
+      }
     }
 
     if (Exit.isFailure(input.relayResult)) {
@@ -660,7 +672,7 @@ const connectLinkCommand = Command.make("link", {
         yield* Console.log("Sled Connect\n");
         const linked = yield* linkEnvironmentForConnect(flags);
         if (linked) {
-          const serveCommand = yield* resolveCliCommand("serve");
+          const serveCommand = yield* resolveHostCliHint("serve", flags.baseDir);
           yield* Console.log(
             flags.publishOnly
               ? `✓ Authorized${connectedAs(linked.identity)}\n\nNext\n  Start T3 to publish agent activity (no managed tunnel).`
@@ -725,7 +737,11 @@ const connectStatusCommand = Command.make("status", {
           linkMode,
           reachability,
         };
-        yield* Console.log(formatCloudStatus(status, { json: flags.json }));
+        const commands = {
+          link: yield* resolveHostCliHint("connect link", flags.baseDir),
+          serviceStatus: yield* resolveHostCliHint("service status", flags.baseDir),
+        };
+        yield* Console.log(formatCloudStatus(status, commands, { json: flags.json }));
       }),
       {
         quietLogs: flags.json,
@@ -806,7 +822,10 @@ const connectRelayCommand = Command.make("relay", {
         const secrets = yield* ServerSecretStore.ServerSecretStore;
         const saved = yield* secrets.get(RELAY_URL_SECRET);
         const linked = yield* secrets.get(CLOUD_LINKED_USER_ID);
-        const url = yield* Effect.try(() => personalRelayUrl(flags.url));
+        const url = yield* Effect.try({
+          try: () => personalRelayUrl(flags.url),
+          catch: personalRelayFailure,
+        });
         if (Option.isSome(linked) && Option.isSome(saved) && bytesToString(saved.value) !== url) {
           yield* Console.error(
             "Unlink the existing connection with `t3 connect unlink` before changing relays.",
@@ -816,7 +835,10 @@ const connectRelayCommand = Command.make("relay", {
           });
         }
         const publishableKey = yield* clerkPublishableKeyConfig;
-        yield* Effect.tryPromise(() => validatePersonalRelay(url, publishableKey));
+        yield* Effect.tryPromise({
+          try: () => validatePersonalRelay(url, publishableKey),
+          catch: personalRelayFailure,
+        });
         yield* secrets.set(RELAY_URL_SECRET, stringToBytes(url));
         yield* Console.log(
           `Sled Connect relay saved: ${url}\nRun \`t3 connect\` to sign in and connect this machine.`,

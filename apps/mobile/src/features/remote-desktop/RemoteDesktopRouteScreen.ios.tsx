@@ -1,3 +1,4 @@
+import { useGT } from "gt-react-native";
 import {
   RemoteDesktopView,
   remoteDesktopAcceptanceEnabled,
@@ -37,6 +38,7 @@ const snapshotIdle = () => idleSnapshot;
 const subscribeIdle = () => () => {};
 
 export function RemoteDesktopRouteScreen() {
+  const gt = useGT();
   useFocusEffect(
     useCallback(() => {
       const activation = activateKeepAwakeAsync("t3-remote-desktop");
@@ -144,13 +146,13 @@ export function RemoteDesktopRouteScreen() {
     );
     if (hosts.length === 0) {
       setSelectionError(
-        "Connect your development Mac to T3 Code first. You can pair a nearby Mac below.",
+        gt("Connect your development Mac to Sled Code first. You can pair a nearby Mac below."),
       );
       return;
     }
     ActionSheetIOS.showActionSheetWithOptions(
       {
-        title: "Development Macs",
+        title: gt("Development Macs"),
         options: ["Cancel", ...hosts.map((entry) => entry.environmentLabel)],
         cancelButtonIndex: 0,
       },
@@ -176,7 +178,7 @@ export function RemoteDesktopRouteScreen() {
         <View className="flex-row items-center justify-between gap-3">
           <IconButton
             icon="chevron.left"
-            accessibilityLabel="Back"
+            accessibilityLabel={gt("Back")}
             onPress={() => {
               session?.stop();
               if (navigation.canGoBack()) navigation.goBack();
@@ -185,11 +187,11 @@ export function RemoteDesktopRouteScreen() {
           />
           <AppText className="min-w-0 flex-1" textRole="footnote">
             {state.phase === "idle"
-              ? "Your development Macs"
+              ? gt("Your development Macs")
               : `${state.phase === "connected" ? "Connected to" : state.phase === "recovering" ? "Reconnecting to" : "Connecting to"} ${state.host}${state.path ? ` · ${state.path === "direct" ? "Direct" : "Relayed"}` : ""}`}
           </AppText>
           <Button
-            label={state.phase === "idle" ? "Connect to Mac" : "Disconnect"}
+            label={state.phase === "idle" ? gt("Connect to Mac") : gt("Disconnect")}
             disabled={session === null}
             tone="secondary"
             onPress={state.phase === "idle" ? chooseHost : () => session?.stop()}

@@ -40,6 +40,7 @@ interface CronSpec {
 }
 
 /** A routine request the caller can correct. Other errors are faults. */
+// @effect-diagnostics-next-line extendsNativeError:off
 export class RoutineInputError extends Error {}
 
 export function validateStoredRoutineSchedule(schedule: RoutineSchedule, timezone: string): void {

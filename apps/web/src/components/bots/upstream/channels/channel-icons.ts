@@ -14,6 +14,7 @@ import {
   Palette,
   Search,
   ShieldCheck,
+  // oxlint-disable-next-line t3code/no-sparkles-icon -- Users pick their own channel icon from OpenBot's upstream icon set.
   Sparkles,
   Star,
   Store,
@@ -34,6 +35,7 @@ export const CHANNEL_ICONS = {
   palette: { component: Palette, label: "channel.picture.icon.palette" },
   brain: { component: Brain, label: "channel.picture.icon.brain" },
   book: { component: BookOpen, label: "channel.picture.icon.book" },
+  // oxlint-disable-next-line t3code/no-sparkles-icon -- Users pick their own channel icon from OpenBot's upstream icon set.
   sparkles: { component: Sparkles, label: "channel.picture.icon.sparkles" },
   star: { component: Star, label: "channel.picture.icon.star" },
   zap: { component: Zap, label: "channel.picture.icon.zap" },

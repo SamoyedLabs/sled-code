@@ -376,6 +376,7 @@ export const RelayEnvironmentLinkProofInvalidReason = Schema.Literals([
   "challenge_invalid",
   "origin_not_allowed",
   "endpoint_not_secure",
+  "environment_key_mismatch",
 ]);
 export type RelayEnvironmentLinkProofInvalidReason =
   typeof RelayEnvironmentLinkProofInvalidReason.Type;
@@ -405,7 +406,7 @@ export type RelayEnvironmentEndpointUnavailableReason =
 /**
  * Which part of the path from the relay to the environment failed. `tunnel_down`
  * means Cloudflare has no live connector for the tunnel; `origin_unreachable`
- * means the tunnel answered but T3 Code behind it did not. Optional on the wire
+ * means the tunnel answered but Sled Code behind it did not. Optional on the wire
  * so old relays and old clients keep working.
  */
 export const RelayEnvironmentEndpointFailure = Schema.Literals([
@@ -694,7 +695,7 @@ export class RelayEnvironmentPrincipal extends Context.Service<
 const RelayClientBearerAuthorization = HttpApiSecurity.http({ scheme: "bearer" }).pipe(
   HttpApiSecurity.annotate(
     OpenApi.Description,
-    "Clerk session or OAuth bearer token for the signed-in T3 Connect user.",
+    "Clerk session or OAuth bearer token for the signed-in Sled Connect user.",
   ),
 );
 
@@ -1292,6 +1293,19 @@ const RelayServerGroup = HttpApiGroup.make("server")
         error: RelayAuthAndInternalErrors,
       },
     ).annotate(OpenApi.Summary, "Update an environment's link preferences"),
+    HttpApiEndpoint.post(
+      "updateLiveActivityPreference",
+      "/v1/environments/:environmentId/live-activity-preference",
+      {
+        params: Schema.Struct({ environmentId: EnvironmentId }),
+        payload: Schema.Struct({
+          cloudUserId: Schema.String,
+          liveActivitiesEnabled: Schema.Boolean,
+        }),
+        success: RelayOkResponse,
+        error: RelayAuthAndInternalErrors,
+      },
+    ),
     HttpApiEndpoint.post("wakeHeldHooks", "/v1/environments/:environmentId/hooks/wake", {
       params: Schema.Struct({ environmentId: EnvironmentId }),
       success: RelayWakeHeldHooksResponse,
@@ -1350,7 +1364,7 @@ export const RelayApi = HttpApi.make("RelayApi")
     RelayHooksGroup,
     RelayMobileTelemetryGroup,
   )
-  .annotate(OpenApi.Title, "T3 Code Relay API")
+  .annotate(OpenApi.Title, "Sled Code Relay API")
   .annotate(OpenApi.Version, "1.0.0")
   .annotate(
     OpenApi.Description,

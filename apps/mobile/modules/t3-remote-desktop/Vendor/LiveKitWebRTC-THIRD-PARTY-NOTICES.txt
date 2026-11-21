@@ -1,4 +1,4 @@
-T3 Code remote desktop — WebRTC 150.7871.04 third-party notices
+Sled Code remote desktop — WebRTC 150.7871.04 third-party notices
 Upstream license and patent notices are reproduced below. Source revisions and
 binary audit provenance are in LiveKitWebRTC-PROVENANCE.json.
 

@@ -149,12 +149,12 @@ describe("DesktopWslBackend", () => {
 
       yield* recordOwnershipFailure();
       const refusal = yield* backend.lastPreflightError;
-      assert.include(Option.getOrThrow(refusal), "Another T3 Code server");
+      assert.include(Option.getOrThrow(refusal), "Another Sled Code server");
       yield* backend.reconcile;
       assert.equal(startCount, 1);
       assert.deepEqual(yield* backend.lastPreflightError, refusal);
 
-      yield* clearFailure(new URL("http://127.0.0.1:41773"));
+      yield* clearFailure(new URL("http://127.0.0.1:41773"), 123);
       assert.deepEqual(yield* backend.lastPreflightError, Option.none());
       yield* recordOwnershipFailure();
       const settings = yield* DesktopAppSettings.DesktopAppSettings;

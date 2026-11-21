@@ -29,10 +29,13 @@ export const routeLayer = HttpRouter.use((router) =>
           .filter((value) => /^sled-browser-view\.[a-f0-9]{64}$/.test(value));
         if (!match || tokens?.length !== 1)
           return HttpServerResponse.text("Bad Request", { status: 400 });
-        const decoded = yield* Effect.try(() => ({
-          hostId: decodeURIComponent(match[1]!),
-          id: decodeURIComponent(match[2]!),
-        })).pipe(Effect.option);
+        const decoded = yield* Effect.try({
+          try: () => ({
+            hostId: decodeURIComponent(match[1]!),
+            id: decodeURIComponent(match[2]!),
+          }),
+          catch: () => null,
+        }).pipe(Effect.option);
         if (Option.isNone(decoded)) return HttpServerResponse.text("Bad Request", { status: 400 });
         const { hostId, id } = decoded.value;
         if (hostId.length > 128 || id.length > 128)

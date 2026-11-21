@@ -13,7 +13,7 @@ import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime"
 import * as Option from "effect/Option";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { View } from "react-native";
-import { FilePreviewModal } from "../../components/FilePreviewModal";
+import { FilePreviewModal } from "../../components/ui/FilePreviewModal";
 import { AppText as Text } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
 import * as Dialog from "../../components/ui/Dialog";

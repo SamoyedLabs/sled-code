@@ -1,3 +1,12 @@
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+class IncomingBotShareUploadError extends Schema.TaggedError<IncomingBotShareUploadError>()(
+  "IncomingBotShareUploadError",
+  {
+    cause: Schema.Defect(),
+  },
+) {}
 import { resolveOwnedComposerAttachmentFileUri } from "../../lib/composerAttachmentFiles";
 import type { IncomingShareDraft } from "./incoming-share-model";
 import { isShareFileUriUnderOwnedRoots } from "./incoming-share-model";
@@ -63,35 +72,38 @@ export async function uploadIncomingBotShare(input: {
   const { environmentSession } = await import("../../state/session");
   const Option = await import("effect/Option");
   const { fetch } = await import("expo/fetch");
-  const abort = new AbortController();
-  input.assertCurrent();
-  const uploaded = await runAttachmentUploadCycle({
-    registry: appAtomRegistry,
-    createUploadUrl: attachmentEnvironment.createUploadUrl,
-    remove: attachmentEnvironment.remove,
-    environmentId: input.environmentId,
-    upload: { type: "file", name: item.name, sizeBytes: bytes.length, mimeType: item.mimeType },
-    resolveUploadUrl: (relativeUrl) => {
-      input.assertCurrent();
-      const connection = appAtomRegistry.get(
-        environmentSession.preparedConnectionValueAtom(input.environmentId),
-      );
-      return Option.isSome(connection)
-        ? resolveAssetUrl(connection.value.httpBaseUrl, relativeUrl)
-        : null;
-    },
-    transport: (url) => ({
-      abort: () => abort.abort(),
-      done: fetch(url, {
-        method: "POST",
-        body: bytes,
-        headers: { "Content-Type": item.mimeType },
-        signal: abort.signal,
-      }).then((response) => {
-        if (!response.ok) throw new Error("Shared file upload failed.");
-      }),
+  const uploaded = await Effect.runPromise(
+    runAttachmentUploadCycle({
+      registry: appAtomRegistry,
+      createUploadUrl: attachmentEnvironment.createUploadUrl,
+      remove: attachmentEnvironment.remove,
+      environmentId: input.environmentId,
+      upload: { type: "file", name: item.name, sizeBytes: bytes.length, mimeType: item.mimeType },
+      resolveUploadUrl: (relativeUrl) => {
+        input.assertCurrent();
+        const connection = appAtomRegistry.get(
+          environmentSession.preparedConnectionValueAtom(input.environmentId),
+        );
+        return Option.isSome(connection)
+          ? resolveAssetUrl(connection.value.httpBaseUrl, relativeUrl)
+          : null;
+      },
+      transport: (url) =>
+        Effect.tryPromise({
+          try: (signal) =>
+            fetch(url, {
+              method: "POST",
+              body: bytes,
+              headers: { "Content-Type": item.mimeType },
+              signal,
+            }).then((response) => {
+              if (!response.ok)
+                throw new IncomingBotShareUploadError({ cause: "Shared file upload failed." });
+            }),
+          catch: (cause) => new IncomingBotShareUploadError({ cause }),
+        }),
     }),
-  });
+  );
   if (uploaded.status !== "uploaded") throw new Error("Shared file upload was not confirmed.");
   input.assertCurrent();
   const outcome = await input.originalUpload({

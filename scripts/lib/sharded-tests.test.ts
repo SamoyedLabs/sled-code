@@ -19,13 +19,13 @@ it("uses the configured sequencer and discovers every file exactly once", async 
     await NodeFSP.writeFile(NodePath.join(root, "package.json"), '{"type":"module"}');
     await NodeFSP.writeFile(
       NodePath.join(root, "vite.config.ts"),
-      `import {BaseSequencer} from "vite-plus/test/node";
-       class Sequencer extends BaseSequencer {
-         async shard(files) {
-           const {index,count}=this.ctx.config.shard;
-           return files.sort((a,b)=>a.moduleId.localeCompare(b.moduleId)).filter((_,i)=>i%count===index-1);
-         }
-       }
+      `import {weightedShardSequencer} from ${JSON.stringify(new URL("./weighted-shard-sequencer.ts", import.meta.url).href)};
+       const Sequencer = weightedShardSequencer({
+         "included/a.test.ts": 9,
+         "included/b.test.ts": 4,
+         "included/c.test.ts": 3,
+         "included/d.spec.ts": 2,
+       });
        export default {test:{include:["included/*.{test,spec}.ts"],sequence:{sequencer:Sequencer}}};`,
     );
     await NodeFSP.mkdir(NodePath.join(root, "included"));
@@ -34,6 +34,7 @@ it("uses the configured sequencer and discovers every file exactly once", async 
       "included/b.test.ts",
       "included/c.test.ts",
       "included/d.spec.ts",
+      "included/e.test.ts",
       "excluded.test.ts",
     ]) {
       await NodeFSP.writeFile(NodePath.join(root, file), "export {};");
@@ -41,13 +42,14 @@ it("uses the configured sequencer and discovers every file exactly once", async 
     const first = await shardedTestFiles(root, "1/2");
     const second = await shardedTestFiles(root, "2/2");
     expect(first).toEqual(
-      ["a", "c"].map((file) => NodePath.join(root, `included/${file}.test.ts`)),
+      ["a", "e"].map((file) => NodePath.join(root, `included/${file}.test.ts`)),
     );
     expect(second).toEqual([
       NodePath.join(root, "included/b.test.ts"),
+      NodePath.join(root, "included/c.test.ts"),
       NodePath.join(root, "included/d.spec.ts"),
     ]);
-    expect(new Set([...first, ...second]).size).toBe(4);
+    expect(new Set([...first, ...second]).size).toBe(5);
     await expect(shardedTestFiles(root, "0/2")).rejects.toThrow("Shard must be");
   } finally {
     await NodeFSP.rm(root, { recursive: true, force: true });

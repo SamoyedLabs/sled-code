@@ -1,4 +1,8 @@
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { m } from "~/i18n/messages";
+import * as Schema from "effect/Schema";
 import type { DeviceHostSummary, DeviceSummary, EnvironmentId } from "@t3tools/contracts";
+import { useGT } from "gt-react";
 import { useRef, useState } from "react";
 import {
   captureDeviceScreenshot,
@@ -10,6 +14,8 @@ import { DeviceStreamView } from "./DeviceStreamView";
 import { DeviceToolsPanel } from "./DeviceToolsPanel";
 import { useDeviceControls } from "./useDeviceControls";
 
+const isDeviceScreenshotError = Schema.is(DeviceScreenshotError);
+
 const DOWNLOAD_URL_LIFETIME_MS = 60_000;
 
 export function DeviceWorkspace(props: {
@@ -19,10 +25,14 @@ export function DeviceWorkspace(props: {
   hostKind: DeviceHostSummary["kind"] | undefined;
   hostDiagnostics: string | undefined;
   visible: boolean;
+  interactive?: boolean;
+  controlsHost?: HTMLElement | null;
+  defaultPresentation?: "phone" | "flat";
   onFloat: () => void;
   onClose: () => void;
   onPowerOff: () => void;
 }) {
+  const gt = useGT();
   const [toolsOpen, setToolsOpen] = useState(false);
   const [axOverlay, setAxOverlay] = useState(false);
   const [screenshotPending, setScreenshotPending] = useState(false);
@@ -30,12 +40,12 @@ export function DeviceWorkspace(props: {
   // A capture always finishes, even if the panel hides or closes meanwhile; the user asked for it.
   const capturing = useRef(false);
   const access = useDeviceHubAccess(props.environmentId, props.device.hostId);
-  // Settings and tools run commands on the device's own machine, which EAS and Simlock do not expose.
+  // Settings and tools run commands on the device's own machine, which Expo and Simlock do not expose.
   const runsHostCommands = props.hostKind === "local" || props.hostKind === "ssh";
   const controls = useDeviceControls({
     ...props,
     access,
-    visible: props.visible && runsHostCommands,
+    visible: props.visible && runsHostCommands && props.interactive !== false,
   });
   const saveScreenshot = () => {
     if (!access || capturing.current || !props.visible) return;
@@ -59,10 +69,10 @@ export function DeviceWorkspace(props: {
         window.setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_URL_LIFETIME_MS);
       })
       .catch((cause: unknown) => {
-        if (cause instanceof DeviceScreenshotError && cause.status === 401)
+        if (isDeviceScreenshotError(cause) && cause.status === 401)
           refreshDeviceHubAccess(props.environmentId);
         setScreenshotError(
-          cause instanceof Error ? cause.message : "Screenshot capture failed. Try again.",
+          thrownErrorMessage(cause, m) ?? gt("Screenshot capture failed. Try again."),
         );
       })
       .finally(() => {
@@ -89,27 +99,35 @@ export function DeviceWorkspace(props: {
             visible={props.visible}
             serveSimOnly={props.hostKind === "simlock"}
             axOverlay={axOverlay}
-            allowPhoneView
-            renderControls={(view) => (
-              <DeviceControlsRail
-                platform={props.device.platform}
-                hostKind={props.hostKind}
-                handle={view.handle}
-                view={view}
-                controls={controls}
-                screenshotPending={screenshotPending}
-                onScreenshot={() => void saveScreenshot()}
-                toolsOpen={toolsOpen}
-                onTools={() => setToolsOpen(!toolsOpen)}
-                onFloat={props.onFloat}
-                onClose={props.onClose}
-                onPowerOff={props.onPowerOff}
-              />
-            )}
+            allowPhoneView={props.interactive !== false}
+            workspaceTile={props.controlsHost !== undefined}
+            defaultPresentation={props.defaultPresentation}
+            showPresentationControls={props.interactive !== false}
+            renderControls={
+              props.interactive === false
+                ? undefined
+                : (view) => (
+                    <DeviceControlsRail
+                      platform={props.device.platform}
+                      hostKind={props.hostKind}
+                      handle={view.handle}
+                      view={view}
+                      controls={controls}
+                      screenshotPending={screenshotPending}
+                      onScreenshot={() => void saveScreenshot()}
+                      toolsOpen={toolsOpen}
+                      onTools={() => setToolsOpen(!toolsOpen)}
+                      onFloat={props.onFloat}
+                      onClose={props.onClose}
+                      onPowerOff={props.onPowerOff}
+                      controlsHost={props.controlsHost}
+                    />
+                  )
+            }
           />
         </div>
       </div>
-      {toolsOpen ? (
+      {toolsOpen && props.interactive !== false ? (
         <DeviceToolsPanel
           device={props.device}
           controls={controls}

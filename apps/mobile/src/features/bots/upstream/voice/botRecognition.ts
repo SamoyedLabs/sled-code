@@ -201,11 +201,11 @@ export function getBotSpeechTranscriber(): VoiceTranscriber | null {
       try {
         await load.call(native, directory.uri, 4);
       } catch (cause) {
-        throw new VoiceTranscriptionError(
-          "preparation-failed",
-          "The selected bot speech model could not load.",
-          { cause },
-        );
+        throw new VoiceTranscriptionError({
+          code: "preparation-failed",
+          message: "The selected bot speech model could not load.",
+          cause,
+        });
       }
       throwIfVoiceTranscriptionAborted(signal);
       return {

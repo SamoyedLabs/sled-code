@@ -41,7 +41,6 @@ export function BotModelPicker(props: OpenbotProviderModelPickerProps & { scope?
     instanceId: active.instanceId,
     models: active.models,
     model: props.value,
-    planModeEnabled: false,
     allowPromptInjectedEffort: false,
     modelOptions: props.reasoningEffort
       ? [{ id: "reasoningEffort", value: props.reasoningEffort }]

@@ -6,11 +6,13 @@ import {
 } from "@t3tools/contracts";
 import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
 import {
+  AttachmentTransferError,
   deletePendingAttachmentUpload,
   formatAttachmentSize,
   runAttachmentUploadCycle,
 } from "@t3tools/client-runtime/state/attachments";
 import { runAtomCommand, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
@@ -77,37 +79,47 @@ export async function transferBotFile<T>(
     throw new Error(
       `Choose an available, nonempty file up to ${formatAttachmentSize(OPENBOT_MAX_FILE_BYTES)}.`,
     );
-  const pending = await runAttachmentUploadCycle({
-    registry: appAtomRegistry,
-    createUploadUrl: attachmentEnvironment.createUploadUrl,
-    remove: attachmentEnvironment.remove,
-    environmentId,
-    upload: {
-      type: "file",
-      name,
-      sizeBytes: size,
-      mimeType,
-      ...(size > PROVIDER_SEND_TURN_MAX_FILE_BYTES ? { purpose: "openbot" as const } : {}),
-    },
-    resolveUploadUrl: (relativeUrl) =>
-      current() ? resolveAssetUrl(connection.httpBaseUrl, relativeUrl) : null,
-    transport: (url) => ({
-      abort: () => controller.abort(),
-      done: file
-        .upload(url, {
-          httpMethod: "POST",
-          uploadType: UploadType.BINARY_CONTENT,
-          headers: { "Content-Type": mimeType },
-          signal: controller.signal,
-        })
-        .then((response) => {
-          if (response.status < 200 || response.status >= 300)
-            throw new Error("Could not upload this file to the environment.");
+  const pending = await Effect.runPromise(
+    runAttachmentUploadCycle({
+      registry: appAtomRegistry,
+      createUploadUrl: attachmentEnvironment.createUploadUrl,
+      remove: attachmentEnvironment.remove,
+      environmentId,
+      upload: {
+        type: "file",
+        name,
+        sizeBytes: size,
+        mimeType,
+        ...(size > PROVIDER_SEND_TURN_MAX_FILE_BYTES ? { purpose: "openbot" as const } : {}),
+      },
+      resolveUploadUrl: (relativeUrl) =>
+        current() ? resolveAssetUrl(connection.httpBaseUrl, relativeUrl) : null,
+      transport: (url) =>
+        Effect.tryPromise({
+          try: (signal) => {
+            const onAbort = () => controller.abort();
+            signal.addEventListener("abort", onAbort, { once: true });
+            return file
+              .upload(url, {
+                httpMethod: "POST",
+                uploadType: UploadType.BINARY_CONTENT,
+                headers: { "Content-Type": mimeType },
+                signal: controller.signal,
+              })
+              .then((response) => {
+                if (response.status < 200 || response.status >= 300)
+                  throw new AttachmentTransferError({
+                    cause: "Could not upload this file to the environment.",
+                  });
+              })
+              .finally(() => signal.removeEventListener("abort", onAbort));
+          },
+          catch: (cause) => new AttachmentTransferError({ cause }),
         }),
     }),
-  });
+  );
   try {
-    if (pending.status === "cancelled" || !current()) return null;
+    if (!current()) return null;
     if (pending.status === "failed") throw pending.error;
     const result = await commit(pending.attachmentId, size);
     return current() ? result : null;

@@ -143,6 +143,7 @@ const fixture = Effect.fnUntraced(function* () {
             ? Option.some({
                 projectId,
                 title: "Project",
+                hasCustomTitle: false,
                 workspaceRoot: "/tmp/policy-project",
                 defaultModelSelection: null,
                 defaultThreadEnvMode: null,

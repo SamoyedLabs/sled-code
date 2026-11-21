@@ -1,11 +1,11 @@
 ---
 import type { ComponentProps } from "astro/types";
 import { Image } from "astro:assets";
-import iconStable from "../assets/icon.webp";
-import iconNightly from "../assets/icon-nightly.webp";
+import iconStable from "../../../desktop/branding/sled-icon.png";
+import iconNightly from "../../../desktop/branding/sled-icon.png";
 import Layout from "../layouts/Layout.astro";
 import { RELEASES_URL } from "../lib/releases";
-import { ANDROID_PLAY_STORE_URL, IOS_APP_STORE_URL } from "../lib/site";
+import { GITHUB_REPOSITORY_URL, MOBILE_BUILDS_URL } from "../lib/site";
 
 const imageProps = {
   alt: "",
@@ -16,7 +16,7 @@ const imageProps = {
 } satisfies Partial<ComponentProps<typeof Image>>;
 ---
 
-<Layout title="Download | T3 Code" description="Download T3 Code for macOS, Windows, or Linux.">
+<Layout title="Download | Sled Code" description="Download Sled Code for macOS, Windows, or Linux.">
   <div class="download-page" id="download-page" data-channel="stable">
     <header class="download-head">
       <div class="sky" aria-hidden="true"></div>
@@ -25,7 +25,7 @@ const imageProps = {
           <Image class="head-icon--stable" src={iconStable} width={64} height={64} loading="eager" {...imageProps} />
           <Image class="head-icon--nightly" src={iconNightly} width={64} height={64} loading="eager" {...imageProps} />
         </span>
-        <h1 class="heading">Download T3 Code</h1>
+        <h1 class="heading">Download Sled Code</h1>
       </div>
       <div class="channel-toggle" role="tablist" aria-label="Release channel" data-rise style="--d:90ms">
         <span class="channel-thumb" aria-hidden="true"></span>
@@ -121,16 +121,16 @@ const imageProps = {
           <h2 class="platform-name">Mobile</h2>
         </div>
         <div class="download-cards">
-          <a class="download-card" href={IOS_APP_STORE_URL} target="_blank" rel="noopener noreferrer">
+          <a class="download-card" href={MOBILE_BUILDS_URL} target="_blank" rel="noopener noreferrer">
             <span class="card-text">
               <span class="card-arch">iPhone &amp; iPad</span>
-              <span class="card-format">App Store</span>
+              <span class="card-format">Build instructions</span>
             </span>
           </a>
-          <a class="download-card" href={ANDROID_PLAY_STORE_URL} target="_blank" rel="noopener noreferrer">
+          <a class="download-card" href={MOBILE_BUILDS_URL} target="_blank" rel="noopener noreferrer">
             <span class="card-text">
               <span class="card-arch">Android</span>
-              <span class="card-format">Google Play</span>
+              <span class="card-format">Build instructions</span>
             </span>
           </a>
         </div>
@@ -141,13 +141,7 @@ const imageProps = {
           <svg class="platform-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7l5 5-5 5M12 17h7"/></svg>
           <h2 class="platform-name">Terminal</h2>
         </div>
-        <code class="cli-line cli-line--stable">curl -fsSL https://t3.codes/install.sh | sh</code>
-        <code class="cli-line cli-line--stable">irm https://t3.codes/install.ps1 | iex</code>
-        <code class="cli-line cli-line--nightly">curl -fsSL https://t3.codes/install.sh | T3CODE_CHANNEL=nightly sh</code>
-        <code class="cli-line cli-line--nightly">$env:T3CODE_CHANNEL="nightly"; irm https://t3.codes/install.ps1 | iex</code>
-        <p class="cli-note">Or try it once without installing:</p>
-        <code class="cli-line cli-line--stable">npx t3@latest</code>
-        <code class="cli-line cli-line--nightly">npx t3@nightly</code>
+        <p class="cli-note">Build and install the CLI from the <a href={GITHUB_REPOSITORY_URL}>Sled Code repository</a>.</p>
       </section>
     </div>
 

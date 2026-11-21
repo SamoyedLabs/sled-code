@@ -11,6 +11,7 @@ import { Image } from "expo-image";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  // oxlint-disable-next-line eslint/no-restricted-imports -- Horizontal full-screen paging modal relies on FlatList pagingEnabled and getItemLayout.
   FlatList,
   Modal,
   ScrollView,

@@ -443,7 +443,8 @@ export function bridge(port: MessagePort, onTheme: (value: unknown) => void) {
             events.event(host, { type: "queue-changed", snapshot });
           }
           await taskRefresh.refresh(host, selectedAgent, () => !disposed && selectedHost === host);
-        } while (dirty && !disposed);
+          if (disposed) break;
+        } while (dirty);
       } catch {
         /* The next scoped read shows the current refusal; never retry a mutation. */
       } finally {

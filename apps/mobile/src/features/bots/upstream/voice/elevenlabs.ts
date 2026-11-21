@@ -45,6 +45,7 @@ const REASON_MAX_LENGTH = 300;
  * as a plan that does not allow a voice, with the key removed. The message stays the code, so a log
  * never holds the reason.
  */
+// @effect-diagnostics-next-line extendsNativeError:off
 export class ElevenLabsError extends Error {
   constructor(
     readonly code: ElevenLabsFailure,

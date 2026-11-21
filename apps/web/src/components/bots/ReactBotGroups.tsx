@@ -26,7 +26,7 @@ import {
 } from "./upstream/conversation/SourceChatNavigation";
 /* oxlint-disable shadcn/no-unknown-classes -- Source OpenBot conversation selectors are provided by the imported feature CSS. */
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { writeTextToClipboard } from "../../hooks/useCopyToClipboard";
+import { namedClipboardTarget, writeTextToClipboard } from "../../hooks/useCopyToClipboard";
 import { BotComposerEditor, type BotComposerEditorHandle } from "../settings/BotComposerEditor";
 import { BotStreamingMessage } from "../settings/BotStreamingMessage";
 import { BotToolActivity } from "./BotToolActivity";
@@ -1040,7 +1040,7 @@ function GroupWorkspace({
                                       onClick={() =>
                                         void writeTextToClipboard(
                                           message.message.text,
-                                          "message",
+                                          namedClipboardTarget("message"),
                                         ).then(
                                           () => {
                                             setCopiedId(message.id);

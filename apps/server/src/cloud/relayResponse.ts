@@ -62,12 +62,16 @@ export function relayRetryAfterMillis(error: unknown): number | undefined {
 function recoveryHint(error: RelayProtectedError): string {
   switch (error._tag) {
     case "RelayEnvironmentLinkLimitExceededError":
-      return "Unlink an unused environment in Sled Connect, then restart T3 Code on this machine.";
+      return "Unlink an unused environment in Sled Connect, then restart Sled Code on this machine.";
     case "RelayAuthInvalidError":
-      return "Run `t3 connect login` to check this machine's authorization. If the stored credential was revoked, sign out with `t3 connect logout`, then run `t3 connect` again. Restart T3 Code after signing in.";
-    case "RelayEnvironmentLinkProofExpiredError":
+      return "Run `t3 connect login` to check this machine's authorization. If the stored credential was revoked, sign out with `t3 connect logout`, then run `t3 connect` again. Restart Sled Code after signing in.";
     case "RelayEnvironmentLinkProofInvalidError":
-      return "Check this machine's date and time, update T3 Code, then restart it.";
+      if (error.reason === "environment_key_mismatch") {
+        return "Sled Connect already has this environment linked with a different key. Unlink it in Sled Connect, then restart Sled Code on this machine.";
+      }
+      return "Check this machine's date and time, update Sled Code, then restart it.";
+    case "RelayEnvironmentLinkProofExpiredError":
+      return "Check this machine's date and time, update Sled Code, then restart it.";
     default:
       return "Retry when the relay is available. If this continues, include the trace ID when reporting it.";
   }
@@ -84,7 +88,7 @@ export const filterRelayResponse = Effect.fn("cloud.filter_relay_response")(func
   const requestId = ray && /^[a-zA-Z0-9-]{1,128}$/.test(ray) ? ` Cloudflare Ray ID: ${ray}.` : "";
   const description = Option.isSome(decoded)
     ? `Sled Connect: ${decoded.value.message}. ${recoveryHint(decoded.value)} Trace ID: ${decoded.value.traceId}.`
-    : `Sled Connect relay returned HTTP ${response.status} without a recognized error response. Check relay access and any proxy or firewall restrictions, then restart T3 Code.${requestId}`;
+    : `Sled Connect relay returned HTTP ${response.status} without a recognized error response. Check relay access and any proxy or firewall restrictions, then restart Sled Code.${requestId}`;
 
   // Only a schema-decoded expired-proof 401 is retryable for clock skew; every other 401 is permanent.
   if (

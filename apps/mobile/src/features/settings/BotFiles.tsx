@@ -9,7 +9,7 @@ import { channelPage, channelList, taskViews } from "@t3tools/client-runtime/ope
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { useRef, useState } from "react";
 import { View } from "react-native";
-import { FilePreviewModal, type FilePreviewSource } from "../../components/FilePreviewModal";
+import { FilePreviewModal, type FilePreviewSource } from "../../components/ui/FilePreviewModal";
 import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
 import { Menu } from "../../components/ui/Menu";

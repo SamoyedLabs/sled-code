@@ -46,7 +46,7 @@ final class T3NativeSession {
         guard let pin = Base64URL.decode(fingerprint), pin.count == 32,
               let saved = client.savedMacs.first(where: { $0.fingerprintData == pin && $0.revoked != true && $0.newKey != true }),
               DeviceIdentity.existing() != nil else {
-            throw Self.failure("Pair this Mac in Remote Desktop before connecting through T3 Code.")
+            throw Self.failure("Pair this Mac in Remote Desktop before connecting through Sled Code.")
         }
         self.client = client
         hostPin = pin

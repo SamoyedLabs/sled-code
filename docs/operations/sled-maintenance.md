@@ -86,6 +86,10 @@ The Sled Expo project is `@samoyed-labs/sled-code` (`707658f3-e37c-410c-b0fd-74a
 
 Use `scripts/testflight-ios.py archive --team <existing-team> --build-number <unused-build> --prepare`, then its separate `export` and `upload` actions. Existing credentials remain under the ignored `.tools/apple-credentials` directory on their original machine. Keep bundle ID/team and existing sign-in configuration; do not uninstall the phone app as a migration step. The script's default remains OTA off and keeps the current private identity override. TestFlight upload/access and an increasing App Store build number are still required; export is not upload.
 
+Local archives retain toolchain-scoped compiler and package caches under `~/Library/Caches/Sled/ios-native`; DerivedData is separate per checkout. `--prepare` reuses installed Pods only when native inputs, installed lockfiles and the calculated runtime still match. Use `--force-prepare` to regenerate, or `--disable-compiler-cache` for an uncached comparison. Manual signing checks the private key before compilation and temporarily extends only the dedicated distribution keychain's timeout, then restores its settings and locks it on success or failure.
+
+Before choosing a native build, run `scripts/sled/ota-ios.py --archive <existing-archive> --public-config <public-config> --plan`. Its JSON selects `ota` only when the calculated runtime matches that archive; `native` requires a new binary. Planning does not publish. Patched dependencies remain source-built unless an exactly compatible precompiled artifact is available.
+
 The currently installed OTA-disabled binary cannot receive the change that enables OTA. Obtain a Sled-owned Expo project and owner first. Export `SLED_EXPO_PROJECT_ID` and `SLED_EXPO_OWNER` in the local build environment, then prepare a new native archive:
 
 ```sh
@@ -105,9 +109,15 @@ After validating the exported binary and installing that native build through Te
 python3 scripts/sled/ota-ios.py --archive .tools/testflight/com.samoyedlabs.sled/T3CodeRemote.xcarchive
 ```
 
-To export without publishing, add `--export --output .tools/ota-ios-<unique-name>`. To export and publish a compatible JS/assets update through the saved EAS login, use `--publish --message "<release description>" --output .tools/ota-ios-<unique-name>`. The helper fixes the project, channel, development variant, existing private identity override, team and fingerprint policy to match this private native release. It loads the same four public connection settings and rejects a differing runtime before any upload. It never forces a runtime override; a mismatch requires a new native build. Keep the generated iOS project and matching dependency installation available for fingerprint calculation on this Mac. Do not publish from a different checkout unless its independently computed runtime matches. Expo receives the exported JS/assets only. No OTA update is published as part of the initial binary preparation.
+To export without publishing, add `--export --output .tools/ota-ios-<unique-name>`. To export and publish a compatible JS/assets update through the saved EAS login, use `--publish --message "<release description>" --output .tools/ota-ios-<unique-name>`. The helper fixes the project, channel, preview (Nightly) variant, existing private identity override, team and fingerprint policy to match this private native release. It loads the same four public connection settings and rejects a differing runtime before any upload. It never forces a runtime override; a mismatch requires a new native build. Keep the generated iOS project and matching dependency installation available for fingerprint calculation on this Mac. Do not publish from a different checkout unless its independently computed runtime matches. Expo receives the exported JS/assets only. No OTA update is published as part of the initial binary preparation.
 
 Verify an archive and its separately exported IPA with `python3 scripts/sled/verify-ios-artifact.py <artifact>`. Both checks verify the signed app identity, OTA endpoint/channel, fingerprint runtime, embedded JS and WebRTC. IPA verification additionally requires an App Store profile with debugging disabled. Run both before the explicit upload action. Artifact verification does not prove installation, sign-in, stored-connection continuity or native permissions on the phone.
+
+### Reconciling interrupted hosted mobile releases
+
+A draft named `sled-mobile-<sha>` reserves an Apple or Expo operation. If retained workflow evidence proves that archive or export failed before upload began, attach that evidence and a reconciliation record, then retain the draft under `sled-failed-mobile-<sha>`. Do not delete its assets, publish the failed attempt, or clear a reservation whose upload outcome is unknown.
+
+After a separately uploaded native build, verify its signed archive, exported IPA and Apple build state before using `scripts/sled/hosted-mobile-release.py seed` to create a new `baseline.json`. Publish that verified baseline under its matching `sled-ios-native-<build>` tag. An outdated baseline can reuse an existing build number or select the wrong OTA compatibility path.
 
 ### Portable desktop update channel
 
@@ -145,7 +155,36 @@ For Windows x64, use the existing `dist:desktop:artifact --platform win --target
 
 ### Unattended GitHub-hosted desktop releases
 
+Desktop publication reconciles a retained draft and uploads only missing, digest-matching certified assets. Transient GitHub failures get bounded retries; rerunning the failed publication job reuses the original artifacts and version. Conflicting source provenance or remote bytes stop publication. Private Mac builds sign the app inside Electron packaging before the final ZIP is created.
+
+Mobile release planning runs on Linux and selects Linux for compatible OTA updates, macOS for native archives. The selected worker recomputes the plan and refuses a changed mode before publishing. Dispatch `sled-mobile-release.yml` with `verify_portability=true` to compare Linux/Mac runtime fingerprints and verify that native source changes invalidate them.
+
+To measure native compiler reuse without publishing, dispatch `sled-mobile-release.yml` with `benchmark=true`. It builds two unsigned Release archives on one Mac runner, round-trips the compiler cache through GitHub, and removes DerivedData between builds. The job summary reports archive time and compiler hits/misses; `native-cache-benchmark` retains the evidence. This measures compiler reuse with warm OS/dependency state, not a fresh-runner signed release or TestFlight availability. Native release evidence also includes `phase-timings.jsonl` for Pods, package resolution, archive, export, and upload.
+
 `sled-desktop-release.yml` runs on GitHub-hosted Ubuntu, macOS arm64 and Windows x64 VMs. No personal computer, self-hosted runner, local cron or persistent server is required. Its five-minute cloud schedule covers bot merges even without a push event. It selects main only after successful `Check` for that exact SHA and avoids duplicate source releases/drafts. Both platforms must verify before the draft is published. Devices receive releases when next online. Mobile OTA/native cloud automation is separate and is not implemented by this desktop workflow.
+
+To verify a branch's desktop build tooling without signing or publishing, dispatch
+`sled-desktop-release.yml` on that branch with `verify_only=true`. This runs the desktop
+build on standard Linux, Windows and Mac runners, compiles the native Mac host, and packages unsigned Mac/Windows installers.
+It does not validate installer signatures, TestFlight upload or Apple processing.
+
+CI and release logs emit `[progress]` phase start, elapsed-time heartbeats and completion
+records. Job summaries and `phase-timings-*` artifacts retain durations and the historical
+samples used for estimates. To inspect a running or completed workflow, including runner
+allocation and the active step, run:
+
+```sh
+python3 scripts/sled/ci_progress.py status --repo SamoyedLabs/sled-code --run RUN_ID --output timings.json
+```
+
+Ranges use up to five successful main runs from the last 30 days and require three
+observations. Release history prefers runs with phase-timing artifacts so scheduled no-op
+runs do not crowd out real builds. They are historical ranges, not deadlines or calibrated confidence intervals.
+Overruns and missing history explicitly have no ETA. Whole-run estimates require the same
+enabled jobs; mobile whole-run estimates remain unavailable because native and OTA paths
+differ. Native and OTA phase histories are separate. Queueing, cache misses and changed
+workloads can exceed the observed range. The JSON export preserves run attempts and step
+timings for comparing forecasts with actual completion.
 
 The release gate is `SLED_DESKTOP_RELEASE_ENABLED=true`. The default **private same-owner Mac** path is `SLED_MAC_DISTRIBUTION=private-development`. Securely provision `SLED_MAC_CSC_LINK` (base64 encrypted PKCS#12 containing only the existing authorized Apple Development certificate and private key) and `SLED_MAC_CSC_KEY_PASSWORD` (its export password). No Developer ID certificate, notarization key or purchase is required for this private route. Root owns credential provisioning; implementation did not transfer keys. Export only the selected identity, never all identities in the login keychain.
 

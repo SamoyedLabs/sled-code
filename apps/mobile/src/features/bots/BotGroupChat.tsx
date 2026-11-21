@@ -15,13 +15,22 @@ import { BotOfflineHistory, useRememberGroupChat } from "./BotOfflineHistory";
 import { BotPendingMessages, useEditingBotOutbox } from "./BotPendingMessages";
 import { useBotEnvironmentOnline } from "./botOfflineCache";
 import { botChatCanvas, botMessageColors, useBotChatAppearance } from "./botChatAppearance";
-import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentRef,
+} from "react";
 import { BotMessageActions } from "./BotMessageActions";
 import { useBotGroupAttachments } from "./useBotGroupAttachments";
 import { BotAttachmentList, useBotAttachmentPreview } from "./BotAttachmentPreview";
 import { firstLargeBotAttachment } from "./bot-attachment-transfer";
-import { FilePreviewModal } from "../../components/FilePreviewModal";
-import { FlatList, Keyboard, Pressable, View } from "react-native";
+import { FilePreviewModal } from "../../components/ui/FilePreviewModal";
+import { Keyboard, Pressable, View } from "react-native";
 import {
   StackActions,
   useIsFocused,
@@ -258,7 +267,7 @@ function GroupConversation({ environmentId, hostId, channelId, name }: Group) {
     send: c.sendVoice,
     interrupt: c.stopVoice,
   });
-  const list = useRef<FlatList<OpenbotChannelMessage>>(null);
+  const list = useRef<ComponentRef<typeof Animated.FlatList<OpenbotChannelMessage>>>(null);
   const follow = useRef(true);
   const listSize = useRef({ content: 0, viewport: 0 });
   const scrollToLatest = (animated = false) => {

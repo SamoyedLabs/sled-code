@@ -7,6 +7,7 @@ import type {
   OpenbotFileTarget,
 } from "@t3tools/contracts";
 import {
+  AttachmentTransferError,
   formatAttachmentSize,
   runAttachmentUploadCycle,
   deletePendingAttachmentUpload,
@@ -31,6 +32,7 @@ import { attachmentEnvironment } from "../../state/attachments";
 import { assetEnvironment } from "../../state/assets";
 import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
+import * as Effect from "effect/Effect";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
 import { AttachmentFilePreview } from "../files/AttachmentFilePreview";
@@ -252,31 +254,37 @@ function FilesPanel({ environmentId, hostId, agentId, initialTarget }: Props) {
           `Choose a nonempty file up to ${formatAttachmentSize(PROVIDER_SEND_TURN_MAX_FILE_BYTES)}.`,
         );
       const mimeType = file.type || "application/octet-stream";
-      const controller = new AbortController();
-      const pending = await runAttachmentUploadCycle({
-        registry: appAtomRegistry,
-        createUploadUrl: attachmentEnvironment.createUploadUrl,
-        remove: attachmentEnvironment.remove,
-        environmentId,
-        upload: { type: "file", name: file.name, sizeBytes: file.size, mimeType },
-        resolveUploadUrl: (relativeUrl) => {
-          const connection = readPreparedConnection(environmentId);
-          return connection ? resolveAssetUrl(connection.httpBaseUrl, relativeUrl) : null;
-        },
-        transport: (url) => ({
-          abort: () => controller.abort(),
-          done: fetch(url, {
-            method: "POST",
-            body: file,
-            headers: { "Content-Type": mimeType },
-            signal: controller.signal,
-          }).then((response) => {
-            if (!response.ok) throw new Error("Could not upload this file to the environment.");
-          }),
+      const pending = await Effect.runPromise(
+        runAttachmentUploadCycle({
+          registry: appAtomRegistry,
+          createUploadUrl: attachmentEnvironment.createUploadUrl,
+          remove: attachmentEnvironment.remove,
+          environmentId,
+          upload: { type: "file", name: file.name, sizeBytes: file.size, mimeType },
+          resolveUploadUrl: (relativeUrl) => {
+            const connection = readPreparedConnection(environmentId);
+            return connection ? resolveAssetUrl(connection.httpBaseUrl, relativeUrl) : null;
+          },
+          transport: (url) =>
+            Effect.tryPromise({
+              try: (signal) =>
+                // @effect-diagnostics-next-line globalFetchInEffect:off
+                fetch(url, {
+                  method: "POST",
+                  body: file,
+                  headers: { "Content-Type": mimeType },
+                  signal,
+                }).then((response) => {
+                  if (!response.ok)
+                    throw new AttachmentTransferError({
+                      cause: "Could not upload this file to the environment.",
+                    });
+                }),
+              catch: (cause) => new AttachmentTransferError({ cause }),
+            }),
         }),
-      });
+      );
       const delivered = await settlePromise(async () => {
-        if (pending.status === "cancelled") return;
         if (pending.status === "failed") throw pending.error;
         const result = await upload({
           environmentId,

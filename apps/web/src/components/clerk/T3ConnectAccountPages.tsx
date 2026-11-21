@@ -1,21 +1,23 @@
 import { useAuth, useClerk } from "@clerk/react";
 import { MessageSquareIcon, ServerIcon, SmartphoneIcon } from "lucide-react";
+import { msg, useMessages } from "gt-react";
 import { type ReactNode, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { MobileClientsUserProfilePage } from "./MobileClientsUserProfilePage";
 import { T3ChatUserProfilePage } from "./T3ChatUserProfilePage";
 import { T3ConnectUserProfilePage } from "./T3ConnectUserProfilePage";
+import { SLED_CONNECT_NAME } from "~/branding";
 
 const T3_CONNECT_ACCOUNT_PAGES = [
   {
-    label: "Mobile clients",
+    label: msg("Mobile clients"),
     url: "mobile-clients",
     icon: <SmartphoneIcon className="size-4" />,
     content: <MobileClientsUserProfilePage />,
   },
   {
-    label: "Sled Connect",
+    label: SLED_CONNECT_NAME,
     url: "t3-connect",
     icon: <ServerIcon className="size-4" />,
     content: <T3ConnectUserProfilePage />,
@@ -43,6 +45,7 @@ export function useT3ConnectAccountPage(): {
 } {
   const clerk = useClerk();
   const { isSignedIn } = useAuth();
+  const m = useMessages();
   const [targets, setTargets] = useState<PortalTargets>({});
 
   const open = (page: T3ConnectAccountPageUrl = "t3-connect") => {
@@ -51,7 +54,7 @@ export function useT3ConnectAccountPage(): {
     clerk.openUserProfile({
       __experimental_startPath: `/${page}`,
       customPages: SLED_CONNECT_ACCOUNT_PAGES.map((page) => ({
-        label: page.label,
+        label: m(page.label),
         url: page.url,
         mount: (element: HTMLDivElement) => setTarget(`content:${page.url}`, element),
         unmount: () => setTarget(`content:${page.url}`, undefined),

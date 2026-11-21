@@ -33,6 +33,7 @@ const layerRejectedBeforeSession = Layer.succeed(
     isPartition: () => false,
     getSession: () => Effect.die("getSession must not be reached"),
     clearCookies: () => Effect.die("clearCookies must not be reached"),
+    cookiesCleared: () => Effect.die("cookiesCleared must not be reached"),
     clearCache: () => Effect.die("clearCache must not be reached"),
   }),
 );
@@ -57,7 +58,7 @@ const withImporter = Effect.fnUntraced(function* () {
         Layer.provide(DesktopManagedPolicy.layerTest()),
         Layer.provide(layerEnvironment),
         Layer.provide(Layer.succeed(HostProcess.Platform, "darwin")),
-        Layer.provide(Layer.succeed(HostProcess.ExecutablePath, "/Applications/T3 Code.app")),
+        Layer.provide(Layer.succeed(HostProcess.ExecutablePath, "/Applications/Sled Code.app")),
         Layer.provide(NodeServices.layer),
       ),
     ),
@@ -88,7 +89,7 @@ describe("BrowserImport.importCookies", () => {
 
       assert.instanceOf(error, BrowserImport.BrowserImportFailedError);
       assert.equal(error.reason, "unknownSourceProfile");
-    }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+    }).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect.skipIf(!symlinksSupported)(
@@ -113,7 +114,7 @@ describe("BrowserImport.importCookies", () => {
 
         assert.instanceOf(error, BrowserImport.BrowserImportFailedError);
         assert.equal(error.reason, "browserRunning");
-      }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+      }).pipe(Effect.provide(NodeServices.layer)),
   );
 });
 

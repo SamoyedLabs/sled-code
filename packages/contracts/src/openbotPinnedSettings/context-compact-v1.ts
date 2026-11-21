@@ -25,4 +25,5 @@ export const CONTEXT_COMPACT_CODECS: ReadonlyMap<string, OptionalRouteCodec> = n
 ]);
 
 /** The host cannot compact the context now. Its text is a sentence for the member. */
+// @effect-diagnostics-next-line extendsNativeError:off
 export class ContextCompactRefusedError extends Error {}

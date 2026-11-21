@@ -1,15 +1,18 @@
 import * as NodeHttpServerRequest from "@effect/platform-node/NodeHttpServerRequest";
 import { rewriteComputerAsset } from "./ComputerViewAssets.ts";
-// @effect-diagnostics preferSchemaOverJson:off - Opaque Moonlight viewer-state JSON is rewritten only at the private HTTP boundary.
 import * as ByteSize from "effect/ByteSize";
 import * as HttpIncomingMessage from "effect/http/HttpIncomingMessage";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { requestUrl } from "../requestUrl.ts";
 import * as Gateway from "./ComputerViewGateway.ts";
 
 const PREFIX = "/api/openbot/computer-view/v1/remote-screen/sessions";
+const ComputerViewerStateJson = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown));
+const decodeComputerViewerState = Schema.decodeEffect(ComputerViewerStateJson);
+const encodeComputerViewerState = Schema.encodeEffect(ComputerViewerStateJson);
 export const routeLayer = HttpRouter.use((router) =>
   Effect.gen(function* () {
     const gateway = yield* Gateway.ComputerViewGateway;
@@ -106,19 +109,17 @@ export const routeLayer = HttpRouter.use((router) =>
           request.method === "POST" ? new Uint8Array(yield* request.arrayBuffer) : undefined;
         if (body && body.byteLength > 1024 * 1024) return HttpServerResponse.empty({ status: 413 });
         if (body && path === "/viewer-state") {
-          const value: unknown = yield* Effect.try(() =>
-            JSON.parse(new TextDecoder().decode(body)),
+          const decoded = yield* decodeComputerViewerState(new TextDecoder().decode(body)).pipe(
+            Effect.option,
           );
-          if (
-            !value ||
-            typeof value !== "object" ||
-            !("sessionId" in value) ||
-            value.sessionId !== id
-          )
+          if (Option.isNone(decoded) || decoded.value.sessionId !== id)
             return HttpServerResponse.empty({ status: 400 });
-          body = new TextEncoder().encode(
-            JSON.stringify({ ...value, sessionId: entry.session.upstreamId }),
-          );
+          const encoded = yield* encodeComputerViewerState({
+            ...decoded.value,
+            sessionId: entry.session.upstreamId,
+          }).pipe(Effect.option);
+          if (Option.isNone(encoded)) return HttpServerResponse.empty({ status: 400 });
+          body = new TextEncoder().encode(encoded.value);
         }
         yield* attempt(() => gateway.views.access(id, cookie));
         const response = yield* attempt(() =>

@@ -313,7 +313,7 @@ function MarketplacePanel({
                 />
               ) : (
                 <SymbolView
-                  name="sparkles"
+                  name="cube"
                   size={24}
                   tintColorClassName="accent-foreground-muted"
                 />

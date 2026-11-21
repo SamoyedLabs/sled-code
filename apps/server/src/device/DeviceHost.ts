@@ -80,6 +80,8 @@ export type HostDevice = Omit<DeviceSummary, "hostId">;
 /** Where a device is being opened from, for hosts whose devices depend on the project. */
 export interface DeviceOpenContext {
   readonly workspaceRoot?: string | undefined;
+  readonly reduceSimulatorMemory?: boolean;
+  readonly fullServices?: boolean;
 }
 
 export type AgentDaemonEndpoint = Pick<AgentDeviceEndpoint, "baseUrl" | "token">;
@@ -110,6 +112,8 @@ export interface DeviceOperations {
       readonly detail: string | undefined;
       /** Some Android virtual devices could not be listed; the rest are. */
       readonly androidDiscoveryIncomplete?: boolean;
+      /** Platforms that could not be listed; their last known devices stay listed. */
+      readonly incompletePlatforms?: ReadonlyArray<DevicePlatform>;
     },
     DeviceOperationError
   >;
@@ -122,7 +126,10 @@ export interface DeviceOperations {
     context?: DeviceOpenContext,
   ) => Effect.Effect<string, DeviceOperationError | DeviceBootError | DeviceHostUnavailableError>;
   /** Prepares the stream of a device that is already booted. */
-  readonly attach: (device: HostDevice) => Effect.Effect<void, DeviceOperationError>;
+  readonly attach: (
+    device: HostDevice,
+    context?: DeviceOpenContext,
+  ) => Effect.Effect<void, DeviceOperationError>;
   readonly shutdown: (device: {
     readonly id: string;
     readonly platform: DevicePlatform;
@@ -137,7 +144,7 @@ export interface DeviceOperations {
     deviceId: string,
   ) => Effect.Effect<AgentDeviceBinding, DeviceHostUnavailableError>;
   /**
-   * Set by hosts that end devices on their own (EAS stops sessions at their
+   * Set by hosts that end devices on their own (Expo stops sessions at their
    * limits), so a session on a device the host stops listing is dropped.
    */
   readonly endsDevices?: boolean;
@@ -160,7 +167,12 @@ export interface DeviceHostReady {
   readonly run: (
     command: string,
     args: ReadonlyArray<string>,
-    options?: { readonly timeoutMs?: number; readonly stdin?: string },
+    options?: {
+      readonly timeoutMs?: number;
+      readonly stdin?: string;
+      /** Local output cap; SSH output is not capped. */
+      readonly maxOutputBytes?: number;
+    },
   ) => Effect.Effect<{ readonly stdout: string; readonly stderr: string; readonly code: number }>;
   readonly helpers: {
     readonly serveSimAxSettings: string | null;

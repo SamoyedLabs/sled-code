@@ -17,7 +17,7 @@ const USERNS_RESTRICTION = "/proc/sys/kernel/apparmor_restrict_unprivileged_user
 export const APPARMOR_PROFILE_PATH = "/etc/apparmor.d/t3-chrome-headless-shell";
 
 /** Match Ubuntu's Chrome profile; unconfined adds nothing beyond userns. */
-export const APPARMOR_PROFILE = `# Written by \`t3 browser setup\`: lets T3 Code's headless browser use Chrome's sandbox.
+export const APPARMOR_PROFILE = `# Written by \`t3 browser setup\`: lets Sled Code's headless browser use Chrome's sandbox.
 abi <abi/4.0>,
 include <tunables/global>
 
@@ -126,13 +126,18 @@ export const missingLibraries = Effect.fn("PreviewBrowserHost.missingLibraries")
   return listed.length > 0 ? listed : [loaderError];
 });
 
-export const sandboxBlocked = Effect.gen(function* () {
+export const usernsRestricted = Effect.gen(function* () {
   if ((yield* HostProcess.Platform) !== "linux") return false;
   const fs = yield* FileSystem.FileSystem;
-  const restricted = yield* fs.readFileString(USERNS_RESTRICTION).pipe(
+  return yield* fs.readFileString(USERNS_RESTRICTION).pipe(
     Effect.map((value) => value.trim() === "1"),
     Effect.orElseSucceed(() => false),
   );
-  if (!restricted) return false;
+}).pipe(Effect.withSpan("PreviewBrowserHost.usernsRestricted"));
+
+/** A profile on disk can still be unloaded; only a failed launch shows that without root. */
+export const sandboxBlocked = Effect.gen(function* () {
+  if (!(yield* usernsRestricted)) return false;
+  const fs = yield* FileSystem.FileSystem;
   return !(yield* fs.exists(APPARMOR_PROFILE_PATH).pipe(Effect.orElseSucceed(() => false)));
 }).pipe(Effect.withSpan("PreviewBrowserHost.sandboxBlocked"));

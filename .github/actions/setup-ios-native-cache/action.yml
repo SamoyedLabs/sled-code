@@ -1,0 +1,83 @@
+name: Cache native iOS compiler and dependency inputs
+description: Restore or save content-addressed compilation results and public native dependency downloads.
+inputs:
+  mode:
+    description: Use restore before a native build and save in an always() step afterwards.
+    required: false
+    default: restore
+outputs:
+  compiler-cache-hit:
+    description: Whether this run restored an exact compiler cache key.
+    value: ${{ steps.restore-compiler.outputs.cache-hit }}
+  dependency-cache-hit:
+    description: Whether this run restored an exact native dependency cache key.
+    value: ${{ steps.restore-dependencies.outputs.cache-hit }}
+  compiler-cache-restored:
+    description: Whether compiler results were restored, including compatible earlier source revisions.
+    value: ${{ steps.restore-compiler.outputs.cache-matched-key != '' }}
+  dependency-cache-restored:
+    description: Whether native downloads were restored, including a compatible fallback cache.
+    value: ${{ steps.restore-dependencies.outputs.cache-matched-key != '' }}
+runs:
+  using: composite
+  steps:
+    - name: Select native cache identity and directories
+      id: identity
+      shell: bash
+      env:
+        MODE: ${{ inputs.mode }}
+      run: |
+        [[ "$MODE" == restore || "$MODE" == save ]]
+        test "$RUNNER_OS" = macOS
+        test -n "$RUNNER_TEMP"
+        toolchain=$( { xcodebuild -version; xcrun --sdk iphoneos --show-sdk-version; xcrun --sdk iphoneos --show-sdk-build-version; xcrun swift --version; } | shasum -a 256 | cut -d' ' -f1)
+        cache_root="$RUNNER_TEMP/sled-ios-native-cache"
+        mkdir -p "$cache_root/compiler" "$cache_root/source-packages" "$cache_root/package-cache"
+        echo "toolchain=$toolchain" >> "$GITHUB_OUTPUT"
+        echo "root=$cache_root" >> "$GITHUB_OUTPUT"
+        echo "SLED_IOS_COMPILER_CACHE_DIR=$cache_root/compiler" >> "$GITHUB_ENV"
+        echo "SLED_IOS_SWIFT_PACKAGE_DIR=$cache_root/source-packages" >> "$GITHUB_ENV"
+        echo "SLED_IOS_SWIFT_PACKAGE_CACHE_DIR=$cache_root/package-cache" >> "$GITHUB_ENV"
+        if [[ -n "$(find "$cache_root/compiler" -type f -print -quit)" ]]; then
+          echo "compiler-populated=true" >> "$GITHUB_OUTPUT"
+        fi
+    - name: Restore native compiler results
+      id: restore-compiler
+      if: inputs.mode == 'restore'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: ${{ steps.identity.outputs.root }}/compiler
+        key: sled-ios-cas-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.identity.outputs.toolchain }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'sources.lock.json', 'apps/mobile/package.json', 'apps/mobile/app.config.ts') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: |
+          sled-ios-cas-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.identity.outputs.toolchain }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'sources.lock.json', 'apps/mobile/package.json', 'apps/mobile/app.config.ts') }}-
+          sled-ios-cas-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.identity.outputs.toolchain }}-
+    - name: Restore native dependency downloads
+      id: restore-dependencies
+      if: inputs.mode == 'restore'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: |
+          ${{ steps.identity.outputs.root }}/source-packages
+          ${{ steps.identity.outputs.root }}/package-cache
+          ~/Library/Caches/CocoaPods
+          ~/.cocoapods/repos/trunk
+        key: sled-ios-dependencies-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.identity.outputs.toolchain }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'sources.lock.json', 'apps/mobile/package.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: |
+          sled-ios-dependencies-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.identity.outputs.toolchain }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'sources.lock.json', 'apps/mobile/package.json') }}-
+          sled-ios-dependencies-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.identity.outputs.toolchain }}-
+    - name: Save native compiler results
+      if: inputs.mode == 'save' && steps.identity.outputs.compiler-populated == 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: ${{ steps.identity.outputs.root }}/compiler
+        key: sled-ios-cas-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.identity.outputs.toolchain }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'sources.lock.json', 'apps/mobile/package.json', 'apps/mobile/app.config.ts') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+    - name: Save native dependency downloads
+      if: inputs.mode == 'save'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: |
+          ${{ steps.identity.outputs.root }}/source-packages
+          ${{ steps.identity.outputs.root }}/package-cache
+          ~/Library/Caches/CocoaPods
+          ~/.cocoapods/repos/trunk
+        key: sled-ios-dependencies-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.identity.outputs.toolchain }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'sources.lock.json', 'apps/mobile/package.json') }}-${{ github.run_id }}-${{ github.run_attempt }}

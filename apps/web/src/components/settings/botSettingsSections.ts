@@ -1,12 +1,12 @@
 import {
   BellIcon,
   BrainIcon,
+  CpuIcon,
   FolderIcon,
   HardDriveIcon,
   MessageSquareIcon,
   Settings2Icon,
   ShieldIcon,
-  SparklesIcon,
   WorkflowIcon,
 } from "lucide-react";
 
@@ -28,7 +28,7 @@ export const botSettingsSections = [
   {
     id: "models",
     label: "Models",
-    icon: SparklesIcon,
+    icon: CpuIcon,
     description: "Model performance, provider settings, and fallback choices.",
     forms: ["agent-fast-mode", "prompt-cache-ttl"],
     advanced: ["backups", "session", "fast-models"],

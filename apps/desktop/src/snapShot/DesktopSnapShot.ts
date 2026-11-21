@@ -94,6 +94,8 @@ import {
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { readImageDimensions } from "@t3tools/shared/imageDimensions";
 
+const isCaptureSetupRequiredError = Schema.is(CaptureSetupRequiredError);
+
 const MAX_CAPTURE_WIDTH = 2_560;
 const MAX_CAPTURE_HEIGHT = 1_600;
 const SHORTCUT_COOLDOWN_NS = 200_000_000n;
@@ -105,11 +107,11 @@ const FLASH_FRAME_INTERVAL_MS = 16;
 const FLASH_PEAK_OPACITY = 0.08;
 const MAC_SCREEN_CAPTURE_SETTINGS_URL = MAC_PERMISSION_SETTINGS_URLS["screen-recording"];
 const MAC_SCREEN_CAPTURE_PERMISSION_MESSAGE =
-  "Allow Screen Recording in System Settings, then restart T3 Code.";
+  "Allow Screen Recording in System Settings, then restart Sled Code.";
 const MAC_ACCESSIBILITY_PERMISSION_MESSAGE =
-  "Allow Accessibility in System Settings, then restart T3 Code.";
+  "Allow Accessibility in System Settings, then restart Sled Code.";
 const MAC_BOTH_PERMISSIONS_MESSAGE =
-  "Allow Accessibility and Screen Recording in System Settings, then restart T3 Code.";
+  "Allow Accessibility and Screen Recording in System Settings, then restart Sled Code.";
 const MAC_PERMISSION_MESSAGES = new Set([
   MAC_SCREEN_CAPTURE_PERMISSION_MESSAGE,
   MAC_ACCESSIBILITY_PERMISSION_MESSAGE,
@@ -167,9 +169,20 @@ export class DesktopSnapShotError extends Schema.TaggedError<DesktopSnapShotErro
 
 const isDesktopSnapShotError = Schema.is(DesktopSnapShotError);
 
+class SnapShotShortcutError extends Schema.TaggedError<SnapShotShortcutError>()(
+  "SnapShotShortcutError",
+  { cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return "Could not register the SnapShot shortcut.";
+  }
+}
+
+const shortcutFailure = (cause: unknown) => new SnapShotShortcutError({ cause });
+
 function captureFailure(cause: unknown, captureId?: string): DesktopSnapShotError {
   if (isDesktopSnapShotError(cause)) return cause;
-  const operation = cause instanceof CaptureSetupRequiredError ? "setup-required" : "capture";
+  const operation = isCaptureSetupRequiredError(cause) ? "setup-required" : "capture";
   return new DesktopSnapShotError({ operation, captureId, cause });
 }
 
@@ -495,7 +508,6 @@ async function captureSource({
       ({ source, png } = await captureRegionWindowSnapshot(
         regionSnapShotPool,
         active,
-        snapShotFlashBounds(active, platform),
         snapShotThumbnailSize(active),
       ));
     } else {
@@ -534,7 +546,7 @@ async function captureSource({
       }
     }
     const accessibleIdentity = active
-      ? { ...active, bounds: snapShotFlashBounds(active, platform) }
+      ? active
       : linuxWindow?.processId
         ? {
             title: linuxWindow.title,
@@ -768,6 +780,8 @@ export const make = Effect.gen(function* () {
   const captureDirectory = path.join(environment.stateDir, "snap-shots");
   const linuxAppId = environment.linuxDesktopEntryName.replace(/\.desktop$/, "");
   const home = yield* HostProcess.HomeDirectory;
+  // Shell discovery can replace XDG_CURRENT_DESKTOP after startup, so read the live env per state.
+  const hostEnv = yield* HostProcess.Environment;
   let shortcutVerified = false;
   const gnomeSetupPaths = {
     bundle: environment.isPackaged
@@ -935,7 +949,7 @@ export const make = Effect.gen(function* () {
       const capturedAt = yield* DateTime.now.pipe(Effect.map(DateTime.formatIso));
       if (snapshot.linuxActivationFailure) {
         yield* Effect.logWarning(
-          "The compositor could not activate T3 Code after the snapshot",
+          "The compositor could not activate Sled Code after the snapshot",
           snapshot.linuxActivationFailure.cause,
         );
       }
@@ -1053,7 +1067,7 @@ export const make = Effect.gen(function* () {
     if (mode === "portal" && niriSocketPath()) {
       return {
         available: false,
-        message: "Configure the capture shortcut in your Niri config, not in T3 Code.",
+        message: "Configure the capture shortcut in your Niri config, not in Sled Code.",
       };
     }
     if (mode === "portal" && isHyprlandCaptureSession()) {
@@ -1066,13 +1080,15 @@ export const make = Effect.gen(function* () {
       if (mode === "portal") {
         return { available: false, message: WAYLAND_MODIFIER_PAIR_UNAVAILABLE_MESSAGE };
       }
-      const available = yield* Effect.tryPromise(() =>
-        startPairShortcutProcess(
-          snapShotShortcutModifierPair(shortcut),
-          () => undefined,
-          () => undefined,
-        ),
-      ).pipe(
+      const available = yield* Effect.tryPromise({
+        try: () =>
+          startPairShortcutProcess(
+            snapShotShortcutModifierPair(shortcut),
+            () => undefined,
+            () => undefined,
+          ),
+        catch: shortcutFailure,
+      }).pipe(
         Effect.tap((stop) => Effect.sync(stop)),
         Effect.as(true),
         Effect.orElseSucceed(() => false),
@@ -1087,7 +1103,10 @@ export const make = Effect.gen(function* () {
     const systemConflict = snapShotShortcutSystemConflict(shortcut);
     if (systemConflict) return { available: false, message: systemConflict };
     if (mode === "portal") {
-      return yield* Effect.try(() => portalShortcutTrigger(shortcut)).pipe(
+      return yield* Effect.try({
+        try: () => portalShortcutTrigger(shortcut),
+        catch: shortcutFailure,
+      }).pipe(
         Effect.match({
           onSuccess: () => ({
             available: true,
@@ -1197,13 +1216,16 @@ export const make = Effect.gen(function* () {
       return;
     }
     if (mode === "portal" && niriSocketPath()) {
-      const registered = yield* Effect.tryPromise(async () => {
-        const { startNiriCaptureShortcut } = await import("./NiriCaptureShortcut.ts");
-        return startNiriCaptureShortcut(linuxAppId, onCurrentShortcut, () => {
-          void runPromise(
-            setShortcutFailure("The Niri capture endpoint disconnected. Restart T3 Code."),
-          ).catch(() => undefined);
-        });
+      const registered = yield* Effect.tryPromise({
+        try: async () => {
+          const { startNiriCaptureShortcut } = await import("./NiriCaptureShortcut.ts");
+          return startNiriCaptureShortcut(linuxAppId, onCurrentShortcut, () => {
+            void runPromise(
+              setShortcutFailure("The Niri capture endpoint disconnected. Restart Sled Code."),
+            ).catch(() => undefined);
+          });
+        },
+        catch: shortcutFailure,
       }).pipe(
         Effect.tap((stop) =>
           Effect.sync(() => {
@@ -1223,7 +1245,7 @@ export const make = Effect.gen(function* () {
         shortcutActionRegistered: registered,
         shortcutMessage: registered
           ? "Set up the shortcut to add it to your Niri config."
-          : "Could not start the Niri capture endpoint. Another T3 Code instance may be using it.",
+          : "Could not start the Niri capture endpoint. Another Sled Code instance may be using it.",
         message: null,
       });
       return;
@@ -1247,29 +1269,32 @@ export const make = Effect.gen(function* () {
         shortcutMessage: null,
         message: null,
       });
-      yield* Effect.tryPromise(async () => {
-        const { PortalCaptureShortcut } = await import("./PortalCaptureShortcut.ts");
-        return new PortalCaptureShortcut(
-          linuxAppId,
-          isModifierPairShortcut(shortcut)
-            ? {
-                key: "2",
-                ctrlKey: true,
-                modKey: false,
-                altKey: false,
-                shiftKey: true,
-                metaKey: false,
-              }
-            : shortcut,
-          onCurrentShortcut,
-          () => {
-            if (generation !== shortcutGeneration) return;
-            shortcutVerified = false;
-            void runPromise(emit({ type: "shortcut-changed" })).catch(() => undefined);
-          },
-          undefined,
-          hyprland,
-        );
+      yield* Effect.tryPromise({
+        try: async () => {
+          const { PortalCaptureShortcut } = await import("./PortalCaptureShortcut.ts");
+          return new PortalCaptureShortcut(
+            linuxAppId,
+            isModifierPairShortcut(shortcut)
+              ? {
+                  key: "2",
+                  ctrlKey: true,
+                  modKey: false,
+                  altKey: false,
+                  shiftKey: true,
+                  metaKey: false,
+                }
+              : shortcut,
+            onCurrentShortcut,
+            () => {
+              if (generation !== shortcutGeneration) return;
+              shortcutVerified = false;
+              void runPromise(emit({ type: "shortcut-changed" })).catch(() => undefined);
+            },
+            undefined,
+            hyprland,
+          );
+        },
+        catch: shortcutFailure,
       }).pipe(
         Effect.tap((registration) =>
           Effect.sync(() => {
@@ -1291,15 +1316,21 @@ export const make = Effect.gen(function* () {
 
     let registered = false;
     if (isModifierPairShortcut(shortcut)) {
-      registered = yield* Effect.tryPromise(() =>
-        startPairShortcutProcess(snapShotShortcutModifierPair(shortcut), onCurrentShortcut, () => {
-          void pipe(
-            snapShotShortcutRegistrationFailureMessage(shortcut, environment.platform),
-            setShortcutFailure,
-            runPromise,
-          ).catch(() => undefined);
-        }),
-      ).pipe(
+      registered = yield* Effect.tryPromise({
+        try: () =>
+          startPairShortcutProcess(
+            snapShotShortcutModifierPair(shortcut),
+            onCurrentShortcut,
+            () => {
+              void pipe(
+                snapShotShortcutRegistrationFailureMessage(shortcut, environment.platform),
+                setShortcutFailure,
+                runPromise,
+              ).catch(() => undefined);
+            },
+          ),
+        catch: shortcutFailure,
+      }).pipe(
         Effect.tap((stop) =>
           Effect.sync(() => {
             stopShiftShortcut = stop;
@@ -1487,7 +1518,10 @@ export const make = Effect.gen(function* () {
     if (action === "retry-shortcut") {
       const currentPortal = portalShortcut;
       if (currentPortal?.hasSession && !currentPortal.state.shortcutPending) {
-        yield* Effect.tryPromise(() => currentPortal.configure()).pipe(
+        yield* Effect.tryPromise({
+          try: () => currentPortal.configure(),
+          catch: shortcutFailure,
+        }).pipe(
           Effect.mapError(
             (error) =>
               new DesktopSnapShotSetupError({
@@ -1581,9 +1615,12 @@ export const make = Effect.gen(function* () {
     state: Ref.get(stateRef).pipe(
       Effect.flatMap((state) =>
         state.mode === "portal"
-          ? Effect.tryPromise(async () => {
-              const { getLinuxCaptureSupport } = await import("./LinuxSnapShot.ts");
-              return getLinuxCaptureSupport(linuxAppId);
+          ? Effect.tryPromise({
+              try: async () => {
+                const { getLinuxCaptureSupport } = await import("./LinuxSnapShot.ts");
+                return getLinuxCaptureSupport(linuxAppId);
+              },
+              catch: (cause) => new DesktopSnapShotError({ operation: "unsupported", cause }),
             }).pipe(
               Effect.map((support) => ({ ...state, ...support })),
               Effect.catch((error) =>
@@ -1621,7 +1658,8 @@ export const make = Effect.gen(function* () {
         Effect.gen(function* () {
           const linuxDesktop =
             state.mode === "portal"
-              ? process.env.XDG_CURRENT_DESKTOP?.toLowerCase()
+              ? (hostEnv.XDG_CURRENT_DESKTOP ?? "")
+                  .toLowerCase()
                   .split(":")
                   .find(
                     (name) =>

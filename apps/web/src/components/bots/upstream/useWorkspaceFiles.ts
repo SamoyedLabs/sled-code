@@ -4,6 +4,7 @@ import {
   type EnvironmentId,
 } from "@t3tools/contracts";
 import {
+  AttachmentTransferError,
   runAttachmentUploadCycle,
   deletePendingAttachmentUpload,
 } from "@t3tools/client-runtime/state/attachments";
@@ -17,6 +18,7 @@ import { appAtomRegistry } from "../../../rpc/atomRegistry";
 import { attachmentEnvironment } from "../../../state/attachments";
 import { openbot } from "../../../state/openbot";
 import { readPreparedConnection } from "../../../state/session";
+import * as Effect from "effect/Effect";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { useAtomQueryRunner } from "../../../state/use-atom-query-runner";
 
@@ -219,38 +221,49 @@ export function useWorkspaceFiles(environmentId: EnvironmentId, hostId: string |
       const abort = new AbortController();
       const cancelTransfer = () => abort.abort();
       control.signal?.addEventListener("abort", cancelTransfer, { once: true });
-      const temporary = await runAttachmentUploadCycle({
-        registry: appAtomRegistry,
-        createUploadUrl: attachmentEnvironment.createUploadUrl,
-        remove: attachmentEnvironment.remove,
-        environmentId,
-        onMinted: (attachmentId) => {
-          record = { ...record, temporaryAttachmentId: attachmentId };
-          save(record);
-          return control.signal?.aborted || control.current?.() === false ? "cancel" : "continue";
-        },
-        upload: {
-          type: "file",
-          name: identity.name,
-          sizeBytes: identity.size,
-          mimeType: identity.mimeType,
-        },
-        resolveUploadUrl: (relative) =>
-          readPreparedConnection(environmentId) === connection
-            ? resolveAssetUrl(connection.httpBaseUrl, relative)
-            : null,
-        transport: (url) => ({
-          abort: () => abort.abort(),
-          done: fetch(url, {
-            method: "POST",
-            body: file,
-            headers: { "Content-Type": identity.mimeType },
-            signal: abort.signal,
-          }).then((response) => {
-            if (!response.ok) throw new Error("File upload failed.");
-          }),
+      const temporary = await Effect.runPromise(
+        runAttachmentUploadCycle({
+          registry: appAtomRegistry,
+          createUploadUrl: attachmentEnvironment.createUploadUrl,
+          remove: attachmentEnvironment.remove,
+          environmentId,
+          onMinted: (attachmentId) => {
+            record = { ...record, temporaryAttachmentId: attachmentId };
+            save(record);
+            return control.signal?.aborted || control.current?.() === false ? "cancel" : "continue";
+          },
+          upload: {
+            type: "file",
+            name: identity.name,
+            sizeBytes: identity.size,
+            mimeType: identity.mimeType,
+          },
+          resolveUploadUrl: (relative) =>
+            readPreparedConnection(environmentId) === connection
+              ? resolveAssetUrl(connection.httpBaseUrl, relative)
+              : null,
+          transport: (url) =>
+            Effect.tryPromise({
+              try: (signal) => {
+                const onAbort = () => abort.abort();
+                signal.addEventListener("abort", onAbort, { once: true });
+                // @effect-diagnostics-next-line globalFetchInEffect:off
+                return fetch(url, {
+                  method: "POST",
+                  body: file,
+                  headers: { "Content-Type": identity.mimeType },
+                  signal: abort.signal,
+                })
+                  .then((response) => {
+                    if (!response.ok)
+                      throw new AttachmentTransferError({ cause: "File upload failed." });
+                  })
+                  .finally(() => signal.removeEventListener("abort", onAbort));
+              },
+              catch: (cause) => new AttachmentTransferError({ cause }),
+            }),
         }),
-      });
+      );
       control.signal?.removeEventListener("abort", cancelTransfer);
       if (temporary.status !== "uploaded")
         throw new Error("The file upload did not complete. Original identity retained.");

@@ -1,5 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Latch from "effect/Latch";
 import * as Layer from "effect/Layer";
 import { Atom, AtomRegistry } from "effect/reactivity";
@@ -30,13 +31,15 @@ it.live(
             return operation;
           }),
       });
-      const load = command.run(registry, "browser.load");
+      const load = yield* Effect.forkChild(command.run(registry, "browser.load"));
       yield* started.await;
-      const reload = command.run(registry, "browser.reload");
-      const display = command.run(registry, "browser.display");
-      const stop = command.run(registry, "browser.stop");
+      const reload = yield* Effect.forkChild(command.run(registry, "browser.reload"));
+      const display = yield* Effect.forkChild(command.run(registry, "browser.display"));
+      const stop = yield* Effect.forkChild(command.run(registry, "browser.stop"));
       try {
-        yield* Effect.promise(() => Promise.all([display, stop])).pipe(Effect.timeout("1 second"));
+        yield* Effect.all([Fiber.join(display), Fiber.join(stop)], {
+          concurrency: "unbounded",
+        }).pipe(Effect.timeout("1 second"));
         expect(events).toEqual(["browser.load", "browser.display", "browser.stop"]);
         expect(openbotAdminCommandKey("owned", "agent.delete")).toBe(
           openbotAdminCommandKey("owned", "agent.update"),
@@ -46,7 +49,10 @@ it.live(
         );
       } finally {
         release.openUnsafe();
-        yield* Effect.promise(() => Promise.all([load, reload, display, stop]));
+        yield* Effect.all(
+          [Fiber.join(load), Fiber.join(reload), Fiber.join(display), Fiber.join(stop)],
+          { concurrency: "unbounded" },
+        );
         registry.dispose();
       }
     }),

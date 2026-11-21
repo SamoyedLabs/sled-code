@@ -76,6 +76,7 @@ function harness() {
   const project = {
     projectId,
     title: "Integration",
+    hasCustomTitle: false,
     workspaceRoot: "/tmp/integration-fixture",
     defaultModelSelection: null,
     defaultThreadEnvMode: null,

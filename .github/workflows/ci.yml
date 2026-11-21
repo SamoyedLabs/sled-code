@@ -16,9 +16,11 @@ on:
   push:
     branches:
       - main
+      - t3/optimize-ci-runtime
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || inputs.candidate_sha || github.ref }}
@@ -38,8 +40,26 @@ jobs:
           persist-credentials: false
       - name: Test upstream merge and promotion safeguards
         run: python3 scripts/sled/upstream_test.py
+      - name: Verify upstream branch read with the workflow token
+        if: github.repository == 'SamoyedLabs/sled-code'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/branches/main" |
+            jq --exit-status '.protected and (.protection.required_status_checks.contexts | index("Check") != null)'
+      - name: Test progress and ETA reporting
+        run: python3 scripts/sled/ci_progress_test.py
+      - name: Test iOS release, signing restoration, and cache invalidation
+        run: |
+          python3 scripts/sled/hosted-mobile-release-test.py
+          python3 scripts/sled/native_signing_test.py
+          python3 scripts/sled/native_build_cache_test.py
       - name: Test CI routing
         run: node --test .github/scripts/ci-changes.test.cjs .github/scripts/ci-gate.test.cjs
+      - name: Test runner allocation retries
+        run: python3 .github/scripts/ci-runner-retry-test.py
+      - name: Test independent release detection
+        run: node --test .github/scripts/sled-release-detector.test.mjs
       - name: Verify pinned native dependency notices
         run: |
           python3 scripts/prepare-webrtc-notices.py
@@ -51,17 +71,20 @@ jobs:
   # .github/scripts/ci-changes.cjs maps changed files to workspace packages and
   # their dependents, on both PRs and main. Detection fails open: if the diff
   # cannot be resolved or a path has no known owner, everything runs.
+
   changes:
     name: Changes
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
+      timings: ${{ steps.timing.outputs.timings }}
       docs: ${{ steps.detect.outputs.docs }}
       docs_files: ${{ steps.detect.outputs.docs_files }}
       lint: ${{ steps.detect.outputs.lint }}
       automation: ${{ steps.detect.outputs.automation }}
       typecheck: ${{ steps.detect.outputs.typecheck }}
       build: ${{ steps.detect.outputs.build }}
+      desktop_launch: ${{ steps.detect.outputs.desktop_launch }}
       test: ${{ steps.detect.outputs.test }}
       test_packages: ${{ steps.detect.outputs.test_packages }}
       test_web: ${{ steps.detect.outputs.test_web }}
@@ -77,7 +100,7 @@ jobs:
       # Only the package manifests the script reads to build the dependency graph.
       # Depth 2 brings the base commit the change is diffed against.
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 2
           ref: ${{ inputs.candidate_sha || github.sha }}
@@ -87,6 +110,7 @@ jobs:
             /pnpm-workspace.yaml
             /.github/scripts/ci-changes.cjs
             /.github/actions/ci-changes/
+            /scripts/sled/ci_progress.py
             /config/sled-upstream.json
             /*/package.json
             /*/*/package.json
@@ -114,6 +138,12 @@ jobs:
         uses: ./.github/actions/ci-changes
         with:
           base-sha: ${{ inputs.base_sha }}
+
+      - name: Load recent GitHub step timings
+        id: timing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/sled/ci_progress.py history --workflow ci.yml
 
   docs:
     name: Docs
@@ -155,14 +185,18 @@ jobs:
   lint:
     permissions:
       contents: read
+      actions: read
     name: Lint
     needs: changes
+    env:
+      CI_TIMING_JOB: Lint
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.lint != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.candidate_sha || github.sha }}
           persist-credentials: false
@@ -187,7 +221,7 @@ jobs:
       # electron's install.js (run by ensure:electron) reads this cache before it
       # downloads from GitHub. The key changes only with the Electron version.
       - name: Cache Electron download
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/electron
           key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/.pnpm/electron@*/node_modules/electron/package.json') }}
@@ -197,7 +231,7 @@ jobs:
 
       # Files/dependencies are repo-wide; export checks cover clean workspaces only.
       - name: Check unused code
-        run: vp run knip:check
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Check unused code" -- vp run knip:check
 
       - name: Check generated GitHub GraphQL operations
         run: vp run --filter @t3tools/source-control-github generate --check
@@ -205,20 +239,39 @@ jobs:
       - name: Check generated Expo GraphQL operations
         run: vp run --filter t3 generate --check
 
+      - name: Check generated Linear GraphQL operations
+        run: vp run --filter @t3tools/issue-tracker-linear generate --check
+
+      - name: Check i18n catalogs
+        run: vp run i18n:check
+
       - name: Check
-        run: vp check
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Check" -- vp check
+
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
 
   build:
     permissions:
       contents: read
+      actions: read
     name: Build and Typecheck
     needs: changes
+    env:
+      CI_TIMING_JOB: Build and Typecheck
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && (needs.changes.outputs.build != 'false' || needs.changes.outputs.typecheck != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.candidate_sha || github.sha }}
           persist-credentials: false
@@ -230,12 +283,23 @@ jobs:
           sparse-checkout-cone-mode: false
 
       # Runs in the background while Vite+ installs; the step before the build waits for it.
+      # Xvfb is for the desktop launch check below.
       - name: Start installing browser secret helper build libraries
         if: needs.changes.outputs.build != 'false'
         run: |
+          # Fetch only the indexes these main and universe packages need. The full set is ~42 MB,
+          # which a slow mirror can stretch past the wait below.
+          for sources in /etc/apt/blacksmith-ubuntu-mirrors.txt /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$sources" ]]; then
+              sudo sed -i -e 's|http://|https://|g' -e 's/^Components: .*/Components: main universe/' "$sources"
+            fi
+          done
           (
             set +e
-            sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config
+            sudo apt-get update -o Acquire::Languages=none \
+              -o Acquire::IndexTargets::deb::DEP-11::DefaultEnabled=false \
+              -o Acquire::IndexTargets::deb::CNF::DefaultEnabled=false &&
+              sudo apt-get install -y libsecret-1-dev pkg-config xvfb
             echo "$?" > "$RUNNER_TEMP/apt-status"
           ) > "$RUNNER_TEMP/apt.log" 2>&1 < /dev/null &
 
@@ -245,7 +309,7 @@ jobs:
       # electron's install.js (run by ensure:electron) reads this cache before it
       # downloads from GitHub. The key changes only with the Electron version.
       - name: Cache Electron download
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/electron
           key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/.pnpm/electron@*/node_modules/electron/package.json') }}
@@ -278,11 +342,65 @@ jobs:
       - name: Build desktop pipeline
         id: build
         if: ${{ !cancelled() && steps.electron.outcome == 'success' && steps.apt.outcome == 'success' && needs.changes.outputs.build != 'false' }}
-        run: vp run build:desktop
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Build desktop pipeline" -- vp run build:desktop
 
       - name: Verify preload bundle output
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: node apps/desktop/scripts/verify-preload-bundle.mjs
+
+      # The release launch check, run unpackaged against the same old-state fixture, for
+      # startup and sidebar changes. Packaging and signing stay release-only.
+      - name: Open the seeded thread in the built desktop app
+        id: desktop_launch
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && needs.changes.outputs.desktop_launch != 'false' }}
+        timeout-minutes: 4
+        run: |
+          electron=$(node -p "require('./apps/desktop/node_modules/electron')")
+          xvfb-run -a node scripts/smoke-desktop-app.ts --executable "$electron" --app apps/desktop \
+            --artifacts-dir "$RUNNER_TEMP/desktop-launch-check"
+
+      - name: Upload desktop launch check
+        if: ${{ failure() && steps.desktop_launch.outcome == 'failure' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-launch-check
+          path: ${{ runner.temp }}/desktop-launch-check
+          if-no-files-found: ignore
+
+      # Browser tests run source modules; this boots the production chunk graph. The
+      # desktop build above already produced apps/web/dist, and the client waits about
+      # 15s for a session that never comes, so this runs here instead of in Test Web,
+      # which gates the whole run. Chromium comes from the cache Test Web shares.
+      - name: Resolve Playwright version
+        id: playwright_version
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && needs.changes.outputs.test_web != 'false' }}
+        run: echo "version=$(node -p "require('./apps/web/node_modules/playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Chromium
+        id: chromium_cache
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && needs.changes.outputs.test_web != 'false' }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-shell-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright_version.outputs.version }}
+
+      - name: Install Chromium for the built web client boot check
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && needs.changes.outputs.test_web != 'false' && steps.chromium_cache.outputs.cache-hit != 'true' }}
+        run: node apps/web/node_modules/playwright/cli.js install --only-shell chromium
+
+      - name: Install missing Chromium system dependencies
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && needs.changes.outputs.test_web != 'false' }}
+        run: |
+          browser=$(find "$HOME/.cache/ms-playwright" -name chrome-headless-shell -type f -print -quit)
+          test -n "$browser"
+          if ldd "$browser" | grep '=> not found'; then
+            node apps/web/node_modules/playwright/cli.js install-deps chromium
+          fi
+
+      - name: Boot the built web client
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && needs.changes.outputs.test_web != 'false' }}
+        timeout-minutes: 3
+        run: node apps/web/scripts/verify-built-boot.ts
 
       - name: Typecheck
         if: ${{ !cancelled() && steps.typecheck.outcome == 'success' }}
@@ -291,6 +409,15 @@ jobs:
           until test -s "$RUNNER_TEMP/typecheck-status"; do sleep 1; done
           cat "$RUNNER_TEMP/typecheck.log"
           exit "$(cat "$RUNNER_TEMP/typecheck-status")"
+
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
 
   # Server, web, mobile and scripts have independent jobs below.
   # `--parallel` drops the package dependency ordering that `vp run`
@@ -301,14 +428,18 @@ jobs:
   test:
     permissions:
       contents: read
+      actions: read
     name: Test
     needs: changes
+    env:
+      CI_TIMING_JOB: Test
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.test != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.candidate_sha || github.sha }}
           persist-credentials: false
@@ -323,9 +454,19 @@ jobs:
       # the background while Vite+ installs; the step before the tests waits for it.
       - name: Start installing browser secret helper build libraries
         run: |
+          # Fetch only the indexes these main and universe packages need. The full set is ~42 MB,
+          # which a slow mirror can stretch past the wait below.
+          for sources in /etc/apt/blacksmith-ubuntu-mirrors.txt /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$sources" ]]; then
+              sudo sed -i -e 's|http://|https://|g' -e 's/^Components: .*/Components: main universe/' "$sources"
+            fi
+          done
           (
             set +e
-            sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config
+            sudo apt-get update -o Acquire::Languages=none \
+              -o Acquire::IndexTargets::deb::DEP-11::DefaultEnabled=false \
+              -o Acquire::IndexTargets::deb::CNF::DefaultEnabled=false &&
+              sudo apt-get install -y libsecret-1-dev pkg-config
             echo "$?" > "$RUNNER_TEMP/apt-status"
           ) > "$RUNNER_TEMP/apt.log" 2>&1 < /dev/null &
 
@@ -335,13 +476,19 @@ jobs:
       # electron's install.js (run by ensure:electron) reads this cache before it
       # downloads from GitHub. The key changes only with the Electron version.
       - name: Cache Electron download
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/electron
           key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/.pnpm/electron@*/node_modules/electron/package.json') }}
 
       - name: Ensure Electron runtime is installed
         run: vp run --filter @t3tools/desktop ensure:electron
+
+      - name: Test preview artifact validation
+        run: python3 -B .github/scripts/stage-preview-bundle.test.py
+
+      - name: Test release checks
+        run: node --test .github/scripts/check-nightly-release.test.cjs .github/scripts/vercel-deployment-output.test.cjs .github/scripts/mobile-preview-comment.test.cjs .github/scripts/mobile-ios-preview-record.test.cjs .github/scripts/test-delta.test.cjs
 
       - name: Finish installing browser secret helper build libraries
         timeout-minutes: 5
@@ -355,24 +502,43 @@ jobs:
         env:
           TEST_PACKAGES: ${{ needs.changes.outputs.test_packages }}
         run: |
+          set -o pipefail
           filters=(--filter '!t3' --filter '!@t3tools/monorepo' --filter '!@t3tools/web' --filter '!@t3tools/mobile' --filter '!@t3tools/scripts' --filter '!@t3tools/oxlint-plugin-t3code')
           if [[ -n "$TEST_PACKAGES" ]]; then
             filters=()
             for package in $TEST_PACKAGES; do filters+=(--filter "$package"); done
           fi
-          vp run --parallel --concurrency-limit 4 "${filters[@]}" test
+          # The runner's trace writer can crash on surrogate pairs in test output.
+          python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Test" -- vp run --parallel --concurrency-limit 4 "${filters[@]}" test 2>&1 | python3 -u -c '
+          import sys
+          for line in sys.stdin:
+              sys.stdout.write(line.encode("ascii", "backslashreplace").decode("ascii"))
+          '
+
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
 
   test_scripts:
     permissions:
       contents: read
+      actions: read
     name: Test Scripts
     needs: changes
+    env:
+      CI_TIMING_JOB: Test Scripts
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.test_scripts != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.candidate_sha || github.sha }}
           persist-credentials: false
@@ -393,20 +559,29 @@ jobs:
         run: node --test .github/scripts/check-nightly-release.test.cjs .github/scripts/vercel-deployment-output.test.cjs
 
       - name: Test
-        run: vp run --filter @t3tools/scripts test
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Test" -- vp run --filter @t3tools/scripts test
+
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
 
   test_lint_rules:
     permissions:
       contents: read
-    name: Test Lint Rules ${{ matrix.shard }}/2
+      actions: read
+    name: Test Lint Rules
     needs: changes
+    env:
+      CI_TIMING_JOB: Test Lint Rules
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.test_lint_rules != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -426,20 +601,32 @@ jobs:
       - name: Test
         id: tests
         working-directory: oxlint-plugin-t3code
-        run: vp test run --config ../vite.config.ts --dir . --shard=${{ matrix.shard }}/2 --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Test" -- vp test run --config ../vite.config.ts --dir . --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
 
       - name: Upload test timings
         if: always() && steps.tests.outcome != 'skipped'
         uses: actions/upload-artifact@v7
         with:
-          name: test-timings-lint-rules-${{ matrix.shard }}
+          name: test-timings-lint-rules
           path: ${{ runner.temp }}/test-results.json
           retention-days: 7
           if-no-files-found: error
 
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
+
   test_web:
     name: Test Web ${{ matrix.project }} ${{ matrix.shard }}/2
     needs: changes
+    env:
+      CI_TIMING_JOB: Test Web ${{ matrix.project }} ${{ matrix.shard }}/2
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.test_web != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -493,7 +680,7 @@ jobs:
       - name: Test
         id: tests
         working-directory: apps/web
-        run: vp test run --project ${{ matrix.project }} --shard=${{ matrix.shard }}/2 --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Test" -- vp test run --project ${{ matrix.project }} --shard=${{ matrix.shard }}/2 --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
 
       - name: Upload test timings
         if: always() && steps.tests.outcome != 'skipped'
@@ -504,9 +691,21 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
+
   test_web_boot:
     name: Web Production Boot
     needs: changes
+    env:
+      CI_TIMING_JOB: Web Production Boot
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.test_web != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -532,7 +731,7 @@ jobs:
 
       - name: Cache Chromium
         id: chromium_cache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-shell-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright_version.outputs.version }}
@@ -551,12 +750,24 @@ jobs:
 
       - name: Boot the built web client
         run: |
-          vp run --filter @t3tools/web build
+          python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Boot the built web client" -- vp run --filter @t3tools/web build
           node apps/web/scripts/verify-built-boot.ts
+
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
 
   test_mobile:
     name: Test Mobile ${{ matrix.project }} ${{ matrix.shard }}/${{ matrix.total }}
     needs: changes
+    env:
+      CI_TIMING_JOB: Test Mobile ${{ matrix.project }} ${{ matrix.shard }}/${{ matrix.total }}
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.test_mobile != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -581,12 +792,13 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Setup Vite+
+        id: dependencies
         uses: ./.github/actions/setup-ci-deps
 
       - name: Test
         id: tests
         working-directory: apps/mobile
-        run: vp test run --project ${{ matrix.project }} --shard=${{ matrix.shard }}/${{ matrix.total }} --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Test" -- vp test run --project ${{ matrix.project }} --shard=${{ matrix.shard }}/${{ matrix.total }} --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
 
       - name: Upload test timings
         if: always() && steps.tests.outcome != 'skipped'
@@ -597,47 +809,31 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-  test_mobile_compiler:
-    name: Mobile Compiler ${{ matrix.shard }}/2
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.test_mobile != 'false' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ inputs.candidate_sha || github.sha }}
-          persist-credentials: false
-          sparse-checkout: |
-            /*
-            !/.repos/
-            !/vendor/
-            !/apps/mobile/modules/t3-terminal/Vendor/**/*.a
-          sparse-checkout-cone-mode: false
-
-      - name: Setup Vite+
-        uses: ./.github/actions/setup-ci-deps
-
       - name: Test compiler coverage
-        id: tests
+        if: ${{ !cancelled() && matrix.project == 'react' && steps.dependencies.outcome == 'success' }}
+        id: compiler
         working-directory: apps/mobile
         env:
           T3_MOBILE_COMPILER_SHARD: ${{ matrix.shard }}/2
-        run: vp test run --project compiler --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Test compiler coverage" -- vp test run --project compiler --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
 
-      - name: Upload test timings
-        if: always() && steps.tests.outcome != 'skipped'
+      - name: Upload compiler timings
+        if: always() && matrix.project == 'react' && steps.compiler.outcome != 'skipped'
         uses: actions/upload-artifact@v7
         with:
           name: test-timings-compiler-${{ matrix.shard }}
           path: ${{ runner.temp }}/test-results.json
           retention-days: 7
           if-no-files-found: error
+
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
 
   # apps/server sets `fileParallelism: false`, so its test files run strictly
   # one at a time. Sharding spreads them over separate runners instead of
@@ -649,12 +845,14 @@ jobs:
   test_server:
     permissions:
       contents: read
+      actions: read
     name: Test Server ${{ matrix.shard }}
     needs: changes
+    env:
+      CI_TIMING_JOB: Test Server ${{ matrix.shard }}
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.test_server != 'false' }}
     runs-on: ubuntu-24.04
-    # Shards take 2-5 minutes. When the shared task cache throttles reads, each
-    # failed fetch stalls vp for 15-90s, which pushed shards past 10 minutes.
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -663,7 +861,7 @@ jobs:
     steps:
       # Depth 2 brings the base commit the change is diffed against.
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 2
           ref: ${{ inputs.candidate_sha || github.sha }}
@@ -691,7 +889,7 @@ jobs:
       - name: Cache Chromium
         id: chromium_cache
         if: needs.changes.outputs.test_server != 'false'
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-shell-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright_version.outputs.version }}
@@ -710,21 +908,25 @@ jobs:
           fi
 
       - name: Test
+        id: tests
         if: needs.changes.outputs.test_server != 'false'
+        working-directory: apps/server
         env:
           T3CODE_TRANSFER_BUDGET_REPORT_PATH: ${{ runner.temp }}/t3code-transfer-budget.md
           T3CODE_TRANSFER_BUDGET_RESULT_PATH: ${{ runner.temp }}/thread-transfer-result.json
+          T3CODE_TRANSFER_BUDGET_SCENARIOS_PATH: ${{ runner.temp }}/thread-transfer-scenarios.json
+        # Remote task caching is disabled; one invocation avoids a cold task runner per file.
         run: >-
-          vp run test:cached -- --shard ${{ matrix.shard }}/${{ strategy.job-total }}
-          --uncached apps/server/integration/transferBudgetV2.integration.test.ts
-          --verify-hits 1 --report "${{ runner.temp }}/test-cache-${{ matrix.shard }}.json" apps/server
+          python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Test" -- vp test run --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          --reporter=default --reporter=json --outputFile=${{ runner.temp }}/test-results.json
 
-      - name: Upload test cache measurements
-        if: always() && needs.changes.outputs.test_server != 'false'
+      - name: Upload test timings
+        if: always() && steps.tests.outcome != 'skipped'
         uses: actions/upload-artifact@v7
         with:
-          name: test-cache-${{ matrix.shard }}
-          path: ${{ runner.temp }}/test-cache-${{ matrix.shard }}.json
+          name: test-timings-server-${{ matrix.shard }}
+          retention-days: 7
+          path: ${{ runner.temp }}/test-results.json
           if-no-files-found: error
 
       # integration/transferBudgetV2.integration.test.ts writes the report; exactly one shard
@@ -752,12 +954,23 @@ jobs:
 
       - name: Upload thread transfer result
         if: always() && steps.transfer_budget.outputs.present == 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: thread-transfer-results
-          path: ${{ runner.temp }}/thread-transfer-result.json
+          path: |
+            ${{ runner.temp }}/thread-transfer-result.json
+            ${{ runner.temp }}/thread-transfer-scenarios.json
           if-no-files-found: ignore
           retention-days: 30
+
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
 
   # Split out of Check and Test: both paid ~7-9s to install a Rust toolchain
   # for checks that take under 3s, on the critical path of every PR.
@@ -769,7 +982,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.candidate_sha || github.sha }}
           persist-credentials: false
@@ -781,8 +994,9 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
+          toolchain: stable
           components: rustfmt
 
       - name: Check Rust formatting
@@ -800,12 +1014,15 @@ jobs:
   mobile_native_static_analysis:
     name: Mobile Native Static Analysis
     needs: changes
+    env:
+      CI_TIMING_JOB: Mobile Native Static Analysis
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.mobile_native != 'false' }}
     runs-on: macos-15
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.candidate_sha || github.sha }}
           persist-credentials: false
@@ -816,19 +1033,16 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@v1
+        uses: ./.github/actions/setup-ci-deps
         with:
-          node-version-file: package.json
-          cache: true
-          run-install: |
-            args:
-              - --filter=@t3tools/scripts...
+          install-args: --filter=@t3tools/scripts...
+          restore-full-store: "false"
 
       - name: Install mobile native static analysis tools
         run: brew bundle install --file apps/mobile/Brewfile
 
       - name: Lint mobile native sources
-        run: vp run lint:mobile
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Lint mobile native sources" -- vp run lint:mobile
 
       - name: Parse remote desktop Swift sources against the iOS Simulator SDK
         run: |
@@ -839,6 +1053,15 @@ jobs:
           xcrun swiftc -frontend -parse -target arm64-apple-ios18.0-simulator \
             -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" "${sources[@]}"
 
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
+
   remote_native:
     name: Remote Desktop Host Build
     needs: changes
@@ -846,6 +1069,8 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     env:
+      CI_TIMING_JOB: Remote Desktop Host Build
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
       # SecIdentityCreate is public in the macOS 26 SDK; the runner defaults to Xcode 16.4.
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
@@ -856,8 +1081,8 @@ jobs:
       - name: Cache pinned WebRTC binary
         uses: actions/cache@v6
         with:
-          path: .tools/webrtc
-          key: webrtc-macos-${{ hashFiles('third-party/webrtc/manifest.json') }}
+          path: .tools/webrtc/*.zip
+          key: webrtc-archive-macos-v1-${{ hashFiles('third-party/webrtc/manifest.json') }}
       - name: Prepare pinned native dependencies
         run: python3 scripts/sled/prepare-native.py
       - name: Report native build toolchain
@@ -866,13 +1091,26 @@ jobs:
           xcrun --sdk macosx --show-sdk-version
           swift --version
       - name: Compile macOS capture, encoding, transport and input host
-        run: swift build --package-path native/remote-desktop --product T3RemoteHost -c debug
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Compile macOS capture, encoding, transport and input host" -- swift build --package-path native/remote-desktop --product T3RemoteHost -c debug
+
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
 
   release_smoke:
     permissions:
       contents: read
+      actions: read
     name: Release Smoke
     needs: changes
+    env:
+      CI_TIMING_JOB: Release Smoke
+      CI_TIMING_BASELINE: ${{ needs.changes.outputs.timings }}
     if: ${{ !cancelled() && needs.changes.outputs.release_smoke != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -893,7 +1131,16 @@ jobs:
         uses: ./.github/actions/setup-ci-deps
 
       - name: Exercise release-only workflow steps
-        run: node scripts/release-smoke.ts
+        run: python3 "$GITHUB_WORKSPACE/scripts/sled/ci_progress.py" run --phase "Exercise release-only workflow steps" -- node scripts/release-smoke.ts
+
+      - name: Retain phase timing records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase-timings-${{ github.job }}-${{ strategy.job-index || 0 }}
+          path: ${{ runner.temp }}/ci-timings.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
 
   # Branch protection requires this job by its name, `Check`. It fails when any
   # other job fails, is cancelled, or is skipped without a reason, so splitting
@@ -916,7 +1163,6 @@ jobs:
         test_scripts,
         test_lint_rules,
         test_mobile,
-        test_mobile_compiler,
         test_server,
         rust,
         mobile_native_static_analysis,
@@ -935,7 +1181,7 @@ jobs:
           # not needed. Gates are keyed by job name, except merged Build and the
           # macOS lint.
           echo "$RESULTS" | jq -e '.changes.outputs as $gates
-            | {build: ["build", "typecheck"], mobile_native_static_analysis: ["mobile_native"], test_web_boot: ["test_web"], test_mobile_compiler: ["test_mobile"]} as $renamed
+            | {build: ["build", "typecheck", "desktop_launch"], mobile_native_static_analysis: ["mobile_native"], test_web_boot: ["test_web"]} as $renamed
             | all(to_entries[];
                 .value.result == "success"
                 or (.value.result == "skipped"
@@ -945,7 +1191,7 @@ jobs:
       # server tests ran must have produced it.
       - name: Require transfer measurements
         if: needs.test_server.result == 'success' && needs.changes.outputs.test_server != 'false'
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: thread-transfer-results
           path: ${{ runner.temp }}/thread-transfer

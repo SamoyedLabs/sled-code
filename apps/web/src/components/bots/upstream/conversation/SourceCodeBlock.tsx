@@ -1,7 +1,7 @@
 /* oxlint-disable shadcn/no-unknown-classes -- OpenBot CodeBlock DOM and message-content.css. */
 import { useEffect, useRef, useState } from "react";
 import { CheckIcon, CopyIcon } from "lucide-react";
-import { writeTextToClipboard } from "../../../../hooks/useCopyToClipboard";
+import { namedClipboardTarget, writeTextToClipboard } from "../../../../hooks/useCopyToClipboard";
 import {
   codeLanguage,
   codeLanguageLabel,
@@ -73,7 +73,7 @@ export function SourceCodeBlock({
             className="ui-button message-code-copy"
             aria-label={copied ? "Copied code" : "Copy code"}
             onClick={() => {
-              void writeTextToClipboard(code, "code").then(
+              void writeTextToClipboard(code, namedClipboardTarget("code")).then(
                 () => {
                   setCopied(true);
                   clearTimeout(copiedTimer.current);

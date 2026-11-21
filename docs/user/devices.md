@@ -55,6 +55,50 @@ to the other screen switches the live display and touch input to that screen.
 On supported Android foldables, use **Fold device** and **Unfold device** beside
 the screen to change its posture in either view.
 
+## View multiple devices
+
+When two or more devices are open in the same thread, the Device panel offers
+**View together**. Choose it to keep the thread's open simulators and emulators
+visible beside chat. Use **Grid** to compare them or
+**Focus** to enlarge the selected device. Select a preview before controlling
+it; keyboard input goes to that device only. The workspace shows up to four
+live previews at a time, with paging for larger groups.
+When only one open device remains, the panel returns to its normal preview.
+
+Multi-view starts with flat screens. Use the toolbar below the previews to
+control the selected device or turn on its 3D view when available.
+
+Focus gives chat more room on wide windows. Drag the divider to adjust it.
+Grid and Focus remember their chat widths separately. On narrow windows, chat
+sits below the previews.
+
+Hiding a preview keeps its device running. Use **Show hidden** to bring it
+back, or the device's power control to shut it down.
+
+## Reduce iOS simulator memory
+
+Sled Code automatically installs [SimSlim](https://github.com/MobAI-App/simslim)
+when opening an iOS simulator on a local or SSH Apple Silicon Mac. The default
+profile reduces background services while keeping Photos, purchases, push,
+web links, and iCloud enabled. Android, physical devices, Intel Macs, EAS,
+and Simlock devices are unaffected.
+
+Turn off **Reduce iOS simulator memory** in Settings → Devices to restore
+standard services the next time you open a managed simulator. Some services
+need a restart: Sled Code powers the simulator off and asks you to reopen it
+when that is required. Changing services does not erase apps or data.
+
+Agents can call `device_open` with `fullServices: true` before testing Health,
+contacts or calendar sync, Siri, widgets, or other disabled system features.
+That choice survives reopening and restarting the simulator. Calling
+`device_open` with `fullServices: false` returns it to the reduced profile
+when memory reduction is enabled. Ordinary reopens preserve the choice.
+
+Services enabled manually through SimSlim stay enabled for the current boot;
+the reduced profile reapplies after a restart. A successful service check is
+not proof that the app's feature works: test the actual flow after restoring
+services.
+
 ## Tools
 
 The toolbar's **Tools** button opens a drawer for the open device. It shows the
@@ -94,7 +138,7 @@ started from then on; your own Device panel is unaffected.
 The device stream goes through the environment server, so it works over the
 local network, Tailscale, and T3 Connect. Live video needs a secure page
 (HTTPS or localhost); on a plain-HTTP remote origin iOS falls back to a slower
-still-image stream and Android cannot show video, except on EAS Simulator.
+still-image stream and Android cannot show video, except on Expo Simulators.
 
 ## SSH device hosts
 
@@ -108,9 +152,13 @@ not supported.
 anything, with a result for each selected environment. Targets that resolve to
 the environment’s own machine are skipped, since its devices are already local.
 The first device listing installs pinned device tools on the host.
-Node 22 or newer and npm must be available to non-interactive SSH commands.
+SSH device hosts currently need macOS or Linux. To use devices on a Windows
+machine, run T3 Code on that machine and connect to its environment.
+Node 22.12 or newer and npm must be available to non-interactive SSH commands.
 T3 checks common Homebrew and Android SDK locations; custom installations need
-the appropriate PATH and ANDROID_HOME on the host. Android emulator video needs
+the appropriate PATH and `ANDROID_HOME` or `ANDROID_SDK_ROOT` on the host.
+Android on an SSH host needs the same SDK tools as a local environment; adb on
+the PATH alone does not enable it. Android emulator video needs
 `ffmpeg` with libx264 on that host; physical Android devices use scrcpy and do
 not need ffmpeg.
 

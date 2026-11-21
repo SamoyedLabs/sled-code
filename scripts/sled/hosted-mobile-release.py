@@ -32,6 +32,8 @@ import subprocess
 import sys
 import tempfile
 
+from native_build_diagnostics import publish_progress, retain_errors
+
 ROOT = Path(__file__).resolve().parents[2]
 REPO = 'SamoyedLabs/sled-code'
 PROJECT = '707658f3-e37c-410c-b0fd-74aadb09e855'
@@ -45,9 +47,9 @@ SECRETS = ('SLED_IOS_CSC_LINK', 'SLED_IOS_CSC_KEY_PASSWORD',
            'SLED_APPLE_API_KEY_ID', 'SLED_APPLE_API_ISSUER', 'SLED_EXPO_TOKEN')
 
 
-def run(command, cwd=ROOT, capture=False, private=False):
+def run(command, cwd=ROOT, capture=False, private=False, env=None):
     result = subprocess.run(command, cwd=cwd, check=False, text=True,
-                            capture_output=capture or private)
+                            capture_output=capture or private, env=env)
     if result.returncode:
         if private:
             raise RuntimeError('Private signing operation failed (output suppressed)')
@@ -98,7 +100,7 @@ def baseline_from_releases(items, output):
     if not candidates:
         raise ValueError('Missing verified native baseline: seed the retained uploaded release first')
     latest = max(candidates, key=lambda r: int(r['tag_name'].rsplit('-', 1)[1]))
-    gh('release', 'download', latest['tag_name'], '--repo', REPO, '--pattern', 'baseline.json', '--dir', str(output))
+    gh('release', 'download', latest['tag_name'], '--repo', REPO, '--pattern', 'baseline.json', '--dir', str(output), '--clobber')
     baseline = validate_baseline(json.loads((output / 'baseline.json').read_text()))
     if latest['tag_name'] != 'sled-ios-native-' + str(baseline['build']):
         raise ValueError('Baseline tag/build mismatch')
@@ -121,15 +123,16 @@ def checked_main():
     return sha
 
 
-def configure():
-    missing = [k for k in (*PUBLIC, *SECRETS[:-1]) if not os.environ.get(k)]
+def configure(require_signing=True):
+    required = (*PUBLIC, *SECRETS[:-1]) if require_signing else PUBLIC
+    missing = [k for k in required if not os.environ.get(k)]
     if missing:
         raise ValueError('Missing release settings: ' + ', '.join(missing))
     if os.environ.get('SLED_APPLE_TEAM_ID') != TEAM:
         raise ValueError('Unexpected Apple team variable')
     for key in ('EXPO_UPDATES_FINGERPRINT_OVERRIDE', 'EXPO_UPDATES_WORKFLOW_OVERRIDE'):
         os.environ.pop(key, None)
-    os.environ.update(APP_VARIANT='development', MOBILE_VERSION_POLICY='fingerprint',
+    os.environ.update(APP_VARIANT='preview', MOBILE_VERSION_POLICY='fingerprint',
                       T3CODE_MOBILE_UPDATES_ENABLED='1', T3CODE_IOS_TEAM_ID=TEAM,
                       T3CODE_IOS_PERSONAL_TEAM='1', T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID=BUNDLE,
                       SLED_EXPO_PROJECT_ID=PROJECT, SLED_EXPO_OWNER='samoyed-labs',
@@ -219,11 +222,63 @@ def signing(directory):
     return keychain
 
 
-def release():
+def prepare_runtime(sha, output, reuse=False):
+    prepared = output / 'plan.json'
+    if reuse and prepared.is_file():
+        previous = json.loads(prepared.read_text())
+        if previous['sourceSha'] != sha:
+            raise ValueError('Prepared native configuration belongs to another commit')
+        current = runtime()
+        if current != previous['runtimeVersion']:
+            raise ValueError('Prepared native runtime changed; generate a fresh release plan')
+        return current
+    run([sys.executable, 'scripts/sled/prepare-native.py'])
+    run(['pnpm', 'exec', 'expo', 'prebuild', '--platform', 'ios', '--no-install'], cwd=ROOT / 'apps/mobile')
+    return runtime()
+
+
+def pending_release(sha, items):
+    existing = next((r for r in items if r['tag_name'] == 'sled-mobile-' + sha), None)
+    if existing and not existing['draft']:
+        return False
+    if any(r['draft'] and r['tag_name'].startswith('sled-mobile-') for r in items):
+        raise ValueError('An earlier mobile release is unresolved; reconcile it before continuing')
+    return True
+
+
+def resolve():
     sha = checked_main()
-    configure()
+    if pending_release(sha, releases()) and os.environ.get('GITHUB_OUTPUT'):
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+            stream.write('sha=' + sha + '\n')
+
+
+def plan():
+    sha = checked_main()
+    configure(require_signing=False)
     output = ROOT / 'release-mobile'
     output.mkdir(exist_ok=False)
+    items = releases()
+    if not pending_release(sha, items):
+        mode = 'skip'
+    else:
+        baseline = baseline_from_releases(items, output)
+        source_runtime = prepare_runtime(sha, output)
+        mode = decide(source_runtime, baseline)
+        write(output / 'plan.json', dict(sourceSha=sha, runtimeVersion=source_runtime, mode=mode,
+                                        baselineBuild=baseline['build']))
+    if os.environ.get('GITHUB_OUTPUT'):
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+            stream.write('mode=' + mode + '\n')
+    print('Release plan: ' + mode, flush=True)
+    return mode
+
+
+def release():
+    sha = checked_main()
+    configure(require_signing=False)
+    output = ROOT / 'release-mobile'
+    output.mkdir(exist_ok=(output / 'plan.json').is_file())
     items = releases()
     tag = 'sled-mobile-' + sha
     existing = next((r for r in items if r['tag_name'] == tag), None)
@@ -236,12 +291,11 @@ def release():
     unresolved = [r for r in items if r['draft'] and r['tag_name'].startswith('sled-mobile-')]
     if unresolved:
         raise ValueError('An earlier mobile release is unresolved; reconcile it before continuing')
-    run([sys.executable, 'scripts/sled/prepare-native.py'])
     mobile = ROOT / 'apps/mobile'
-    # Reconstruct managed native config on every run; never copy a runtime override.
-    run(['pnpm', 'exec', 'expo', 'prebuild', '--platform', 'ios', '--no-install'], cwd=mobile)
-    source_runtime = runtime()
+    source_runtime = prepare_runtime(sha, output, reuse=True)
     mode = decide(source_runtime, baseline)
+    if mode == 'native':
+        configure()
     if mode == 'ota' and not os.environ.get('SLED_EXPO_TOKEN'):
         raise ValueError('OTA requires dedicated SLED_EXPO_TOKEN; local OAuth sessions are forbidden')
     write(output / 'plan.json', dict(sourceSha=sha, runtimeVersion=source_runtime, mode=mode,
@@ -276,18 +330,24 @@ def release():
     else:
         build = str(int(baseline['build']) + 1)
         native = output / 'native'
+        native_environment = dict(os.environ, SLED_MOBILE_PROGRESS_TAG=tag)
         public = output / 'public-config.json'
         write(public, {key: os.environ[key] for key in PUBLIC})
         with tempfile.TemporaryDirectory(prefix='sled-signing-') as temporary:
             credentials = Path(temporary) / 'credentials'
             keychain = None
             try:
+                publish_progress(dict(stage='signing-preparation', status='running',
+                                      updatedAt=datetime.now(timezone.utc).isoformat()),
+                                 native / 'native-progress.json', native_environment)
+                print('[native] signing preparation started', flush=True)
                 keychain = signing(credentials)
+                print('[native] signing preparation finished', flush=True)
                 common = ['--team', TEAM, '--build-number', build, '--public-config', str(public),
                           '--credentials-dir', str(credentials), '--output-dir', str(native)]
                 run([sys.executable, 'scripts/testflight-ios.py', 'archive', *common,
-                     '--prepare', '--enable-ota', '--ota-channel', CHANNEL, '--manual-signing'])
-                run([sys.executable, 'scripts/testflight-ios.py', 'export', *common])
+                     '--prepare', '--skip-prebuild', '--enable-ota', '--ota-channel', CHANNEL, '--manual-signing'], env=native_environment)
+                run([sys.executable, 'scripts/testflight-ios.py', 'export', *common], env=native_environment)
                 archive_evidence = verify(native / 'T3CodeRemote.xcarchive')
                 ipa = next((native / 'export').glob('*.ipa'))
                 ipa_evidence = verify(ipa)
@@ -300,7 +360,7 @@ def release():
                 packed = output / ('Sled-' + build + '.xcarchive.zip')
                 run(['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', str(native / 'T3CodeRemote.xcarchive'), str(packed)])
                 gh('release', 'upload', tag, str(packed), str(ipa), '--repo', REPO)
-                run([sys.executable, 'scripts/testflight-ios.py', 'upload', *common])
+                run([sys.executable, 'scripts/testflight-ios.py', 'upload', *common], env=native_environment)
                 new_baseline = evidence(native, sha)
                 write(output / 'baseline.json', new_baseline)
                 native_tag = 'sled-ios-native-' + build
@@ -309,8 +369,11 @@ def release():
                    '--repo', REPO, '--target', sha, '--prerelease', '--title', 'Sled iOS native ' + build,
                    '--notes', 'Signed archive and IPA verified; TestFlight upload accepted. Native artifacts in ' + tag)
             finally:
-                if keychain:
-                    run(['security', 'delete-keychain', str(keychain)], private=True)
+                try:
+                    retain_errors(native, os.environ, credentials)
+                finally:
+                    if keychain:
+                        run(['security', 'delete-keychain', str(keychain)], private=True)
     gh('release', 'upload', tag, str(output / 'plan.json'), '--repo', REPO)
     gh('release', 'edit', tag, '--repo', REPO, '--draft=false', '--prerelease',
        '--notes', 'Completed ' + mode + ' release from checked main ' + sha + '. TestFlight installation remains user controlled.')
@@ -320,6 +383,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest='command', required=True)
     commands.add_parser('release')
+    commands.add_parser('plan')
+    commands.add_parser('resolve')
     check = commands.add_parser('check-environment')
     check.add_argument('--manifest', type=Path, required=True)
     seed = commands.add_parser('seed')
@@ -335,6 +400,10 @@ def main():
         write(args.output, value)
     elif args.command == 'check-environment':
         check_environment(args.manifest)
+    elif args.command == 'plan':
+        plan()
+    elif args.command == 'resolve':
+        resolve()
     else:
         release()
 

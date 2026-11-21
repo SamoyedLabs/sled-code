@@ -50,7 +50,7 @@ export async function setUpRemoteDesktopPermissions(
       state.screenRecording && state.accessibility
         ? "This Mac is ready to share and control."
         : "Allow screen sharing and remote control on this Mac.",
-    detail: `Screen Recording: ${state.screenRecording ? "Allowed" : "Needs access"}\nAccessibility: ${state.accessibility ? "Allowed" : "Needs access"}\n\nEnable T3 Code, or T3 Remote Desktop if macOS lists the helper. Reopen T3 Code if macOS asks. Clipboard, audio and virtual displays remain available.`,
+    detail: `Screen Recording: ${state.screenRecording ? "Allowed" : "Needs access"}\nAccessibility: ${state.accessibility ? "Allowed" : "Needs access"}\n\nEnable Sled Code, or Sled Remote Desktop if macOS lists the helper. Reopen Sled Code if macOS asks. Clipboard, audio and virtual displays remain available.`,
     buttons: ["Done", "Screen Recording…", "Accessibility…"],
     defaultId: 0,
     cancelId: 0,

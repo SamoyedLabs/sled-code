@@ -16,7 +16,7 @@ import { compareExactServiceVersions, SERVICE_ENV_FILE } from "../cloud/serviceP
 import * as ServerConfig from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import { projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
-import { resolveEntryPath } from "./invocation.ts";
+import { resolveEntryPath, resolveHostCliHint } from "./invocation.ts";
 
 export const layer = (config: ServerConfig.ServerConfig["Service"]) =>
   BootService.layer({
@@ -47,14 +47,37 @@ export const upsertServiceEnv = (
   entries: Readonly<Record<string, string | undefined>>,
 ): string => {
   const written = new Set<string>();
-  const lines = contents.split("\n").flatMap((line) => {
-    const key = SERVICE_ENV_KEY.exec(line)?.[1];
-    if (key === undefined || !Object.hasOwn(entries, key)) return [line];
+  const source = contents.split("\n");
+  const lines: string[] = [];
+  for (let index = 0, offset = 0; index < source.length;) {
+    const line = source[index]!;
+    const match = SERVICE_ENV_KEY.exec(line);
+    let end = index + 1;
+    if (match !== null) {
+      // util.parseEnv lets a quoted value run to its closing quote across lines,
+      // skipping only spaces, tabs and CRs before the opening quote.
+      const rest = line.slice(match[0].length).replace(/^[ \t\r]+/u, "");
+      const quote = rest[0];
+      if ((quote === '"' || quote === "'" || quote === "`") && !rest.includes(quote, 1)) {
+        const closing = contents.indexOf(quote, offset + line.length);
+        if (closing !== -1) {
+          end += contents.slice(offset + line.length, closing).split("\n").length - 1;
+        }
+      }
+    }
+    const span = source.slice(index, end);
+    offset += span.reduce((length, part) => length + part.length + 1, 0);
+    index = end;
+    const key = match?.[1];
+    if (key === undefined || !Object.hasOwn(entries, key)) {
+      lines.push(span.join("\n"));
+      continue;
+    }
     const value = entries[key];
-    if (value === undefined || written.has(key)) return [];
+    if (value === undefined || written.has(key)) continue;
     written.add(key);
-    return [`${key}=${value}`];
-  });
+    lines.push(`${key}=${value}`);
+  }
   while (lines.at(-1) === "") lines.pop();
   for (const [key, value] of Object.entries(entries)) {
     if (value !== undefined && !written.has(key)) lines.push(`${key}=${value}`);
@@ -92,6 +115,13 @@ export const reconcileService = Effect.fn("cli.service.reconcile")(function* (op
   const { baseDir } = yield* ServerConfig.ServerConfig;
   const service = yield* BootService.BootService;
   const status = yield* service.status;
+  // Before the downgrade check, which reads this home's state, not the service's.
+  if (status.otherBaseDir !== undefined) {
+    return yield* new BootService.BootServiceOtherBaseDirError({
+      installedBaseDir: status.otherBaseDir,
+      baseDir,
+    });
+  }
   if (status.installed && status.current) {
     return { changed: false, status } satisfies ServiceReconcileResult;
   }
@@ -129,14 +159,19 @@ export function formatServiceChange(
   return `Service ${result.previouslyInstalled ? "updated" : "installed"} · t3@${packageJson.version}\nLog: ${result.plan.logPath}`;
 }
 
+const MEMORY_CONTROLLER_DISABLED =
+  "the kernel's memory cgroup controller is disabled. Add `cgroup_enable=memory` to the kernel command line and reboot.";
+
 function formatProtection(
   protection: ServiceProtection.ServiceProtectionState | undefined,
 ): ReadonlyArray<string> {
   if (protection === undefined) return [];
   return [
-    protection.unprotected === undefined
-      ? `  Memory protection: on${protection.setByProtect ? " (t3 service protect)" : ""}`
-      : `  Memory protection: off, ${protection.unprotected} grants none. Run \`t3 service protect\`.`,
+    !protection.memoryControllerAvailable
+      ? `  Memory protection: unavailable, ${MEMORY_CONTROLLER_DISABLED}`
+      : protection.unprotected === undefined
+        ? `  Memory protection: on${protection.setByProtect ? " (t3 service protect)" : ""}`
+        : `  Memory protection: off, ${protection.unprotected} grants none. Run \`t3 service protect\`.`,
     ...(protection.oomScoreAdj === undefined ? [] : [`  OOM score: ${protection.oomScoreAdj}`]),
   ];
 }
@@ -144,17 +179,26 @@ function formatProtection(
 function formatServiceStatus(
   status: BootService.BootServiceStatus,
   cliVersion: string,
+  commands: { readonly install: string; readonly restart: string; readonly update: string },
   protection?: ServiceProtection.ServiceProtectionState,
 ): string {
   if (!status.supported) {
-    return "T3 Code service\n  Status: unavailable on this machine\n  Supported on: Linux with systemd, macOS with launchd";
+    return "Sled Code service\n  Status: unavailable on this machine\n  Supported on: Linux with systemd, macOS with launchd, Windows with Task Scheduler";
   }
   if (!status.installed) {
-    return "T3 Code service\n  Status: not installed\n  Next: Run `t3 service install`.";
+    return `Sled Code service\n  Status: not installed\n  Next: Run \`${commands.install}\`.`;
+  }
+  if (status.otherBaseDir !== undefined) {
+    return [
+      "T3 Code service",
+      "  Status: installed for another T3 home",
+      `  Base dir: ${status.otherBaseDir}`,
+      `  Next: Pass \`${BootService.formatBootServiceBaseDirOption(status.otherBaseDir)}\` to manage it.`,
+    ].join("\n");
   }
   const installedVersion = status.installedVersion ?? cliVersion;
   const problems = (status.problems ?? []).map(
-    (problem) => `  [${problem}] ${BootService.formatBootServiceProblem(problem)}`,
+    (problem) => `  [${problem}] ${BootService.formatBootServiceProblem(problem, commands)}`,
   );
   if (
     !status.current &&
@@ -162,23 +206,23 @@ function formatServiceStatus(
     compareExactServiceVersions(status.installedVersion, cliVersion) > 0
   ) {
     return [
-      "T3 Code service",
+      "Sled Code service",
       `  Status: installed · t3@${installedVersion} (newer than this t3@${cliVersion} CLI)`,
       `  Unit: ${status.unitPath}`,
       `  Logs: ${status.logPath}`,
       ...formatProtection(protection),
       ...problems,
-      `  Next: Run \`t3 update ${installedVersion}\` to match it, or pass \`--allow-downgrade\` to \`t3 service install\` explicitly.`,
+      `  Next: Run \`${commands.update}\` to match it, or pass \`--allow-downgrade\` to \`${commands.install}\` explicitly.`,
     ].join("\n");
   }
   return [
-    "T3 Code service",
+    "Sled Code service",
     `  Status: ${status.current ? `installed · t3@${installedVersion}` : "needs an update or repair"}`,
     `  Unit: ${status.unitPath}`,
     `  Logs: ${status.logPath}`,
     ...formatProtection(protection),
     ...problems,
-    ...(status.current ? [] : ["  Next: Run `t3 service install` to repair it."]),
+    ...(status.current ? [] : [`  Next: Run \`${commands.install}\` to repair it.`]),
   ].join("\n");
 }
 
@@ -201,7 +245,7 @@ const serviceReconcileFlags = {
 
 const serviceInstallCommand = Command.make("install", serviceReconcileFlags).pipe(
   Command.withDescription(
-    "Install T3 Code as a background service for this user. `t3 up` also chooses how your other devices reach it.",
+    "Install Sled Code as a background service for this user. `t3 up` also chooses how your other devices reach it.",
   ),
   Command.withHandler((flags) =>
     runServiceCommand(
@@ -210,13 +254,14 @@ const serviceInstallCommand = Command.make("install", serviceReconcileFlags).pip
         const result = yield* reconcileService({ allowDowngrade: flags.allowDowngrade });
         if (!result.changed) {
           yield* Console.log(
-            `T3 Code service is already installed with t3@${packageJson.version} (${yield* resolveEntryPath}).`,
+            `Sled Code service is already installed with t3@${packageJson.version} (${yield* resolveEntryPath}).`,
           );
           return;
         }
         yield* Console.log(formatServiceChange(result));
         if (!result.previouslyInstalled) {
-          yield* Console.log("Run `t3 up` to choose how your other devices reach it.");
+          const upCommand = yield* resolveHostCliHint("up", flags.baseDir);
+          yield* Console.log(`Run \`${upCommand}\` to choose how your other devices reach it.`);
         }
       }),
     ),
@@ -236,7 +281,7 @@ const serviceUpdateCommand = Command.make("update", serviceReconcileFlags).pipe(
         const result = yield* reconcileService({ allowDowngrade: flags.allowDowngrade });
         if (!result.changed) {
           yield* Console.log(
-            `T3 Code service is already using t3@${packageJson.version} (${yield* resolveEntryPath}).`,
+            `Sled Code service is already using t3@${packageJson.version} (${yield* resolveEntryPath}).`,
           );
           return;
         }
@@ -261,10 +306,12 @@ const serviceRestartCommand = Command.make("restart", projectLocationFlags).pipe
           status.installedVersion === undefined ? "" : ` on t3@${status.installedVersion}`;
         yield* Console.log(
           outcome === "restarted"
-            ? `Restarted the T3 Code service${onVersion}.`
+            ? `Restarted the Sled Code service${onVersion}.`
             : outcome === "queued"
-              ? `Queued a restart of the T3 Code service${onVersion}. This session runs inside the service and disconnects when it goes down.\nLogs: ${status.logPath}`
-              : "T3 Code service is not installed.",
+              ? `Queued a restart of the Sled Code service${onVersion}. This session runs inside the service and disconnects when it goes down.\nLogs: ${status.logPath}`
+              : status.otherBaseDir !== undefined
+                ? `The Sled Code service serves ${status.otherBaseDir}, so it was not restarted. Pass \`${BootService.formatBootServiceBaseDirOption(status.otherBaseDir)}\` to restart it.`
+                : "Sled Code service is not installed.",
         );
       }),
     ),
@@ -272,15 +319,31 @@ const serviceRestartCommand = Command.make("restart", projectLocationFlags).pipe
 );
 
 const serviceUninstallCommand = Command.make("uninstall", projectLocationFlags).pipe(
-  Command.withDescription("Stop and remove the T3 Code background service."),
+  Command.withDescription("Stop and remove the Sled Code background service."),
   Command.withHandler((flags) =>
     runServiceCommand(
       flags,
       Effect.gen(function* () {
         const service = yield* BootService.BootService;
+        const path = yield* Path.Path;
+        const { baseDir } = yield* ServerConfig.ServerConfig;
+        // An unreadable unit stays removable; only a unit known to serve another home is kept.
+        const installedBaseDir = yield* service.status.pipe(
+          Effect.map((status) => status.installedBaseDir),
+          Effect.orElseSucceed(() => undefined),
+        );
+        if (
+          installedBaseDir !== undefined &&
+          path.resolve(installedBaseDir) !== path.resolve(baseDir)
+        ) {
+          yield* Console.log(
+            `The T3 Code service serves ${installedBaseDir}, so it was not removed. Pass \`${BootService.formatBootServiceBaseDirOption(installedBaseDir)}\` to remove it.`,
+          );
+          return;
+        }
         const removed = yield* service.uninstall;
         yield* Console.log(
-          removed ? "Removed the T3 Code service." : "T3 Code service is not installed.",
+          removed ? "Removed the Sled Code service." : "Sled Code service is not installed.",
         );
       }),
     ),
@@ -288,7 +351,7 @@ const serviceUninstallCommand = Command.make("uninstall", projectLocationFlags).
 );
 
 const serviceStatusCommand = Command.make("status", projectLocationFlags).pipe(
-  Command.withDescription("Show whether the T3 Code background service is installed."),
+  Command.withDescription("Show whether the Sled Code background service is installed."),
   Command.withHandler((flags) =>
     runServiceCommand(
       flags,
@@ -302,7 +365,14 @@ const serviceStatusCommand = Command.make("status", projectLocationFlags).pipe(
                 Effect.provide(ProcessRunner.layer),
               )
             : undefined;
-        yield* Console.log(formatServiceStatus(status, packageJson.version, protection));
+        const commands = {
+          install: yield* resolveHostCliHint("service install", flags.baseDir),
+          restart: yield* resolveHostCliHint("service restart", flags.baseDir),
+          update: yield* resolveHostCliHint("update", flags.baseDir, [
+            status.installedVersion ?? packageJson.version,
+          ]),
+        };
+        yield* Console.log(formatServiceStatus(status, packageJson.version, commands, protection));
       }),
     ),
   ),
@@ -328,7 +398,7 @@ const serviceProtectCommand = Command.make("protect", {
   ),
 }).pipe(
   Command.withDescription(
-    "Protect the T3 Code server from agents under memory pressure (Linux with systemd). Asks for sudo.",
+    "Protect the Sled Code server from agents under memory pressure (Linux with systemd). Asks for sudo.",
   ),
   Command.withHandler((flags) =>
     Effect.gen(function* () {
@@ -337,7 +407,7 @@ const serviceProtectCommand = Command.make("protect", {
       // Before resolving config, which creates T3 directories that root would then own.
       if ((yield* HostProcess.UserId) === 0) {
         return yield* Console.log(
-          "Run `t3 service protect` as the user that runs T3 Code, without sudo. It asks for sudo when it needs root.",
+          "Run `t3 service protect` as the user that runs Sled Code, without sudo. It asks for sudo when it needs root.",
         );
       }
       return yield* runServiceCommand(
@@ -360,7 +430,7 @@ const serviceProtectCommand = Command.make("protect", {
               }),
             );
             if (installed === undefined) {
-              return yield* Console.log("T3 Code service protection is not set up.");
+              return yield* Console.log("Sled Code service protection is not set up.");
             }
             yield* Console.log(
               [
@@ -371,17 +441,17 @@ const serviceProtectCommand = Command.make("protect", {
                 ),
               ].join("\n"),
             );
-            if (!(yield* confirm(flags.yes, "Remove T3 Code service protection?"))) return;
+            if (!(yield* confirm(flags.yes, "Remove Sled Code service protection?"))) return;
             yield* ServiceProtection.removeProtection(installed);
             return yield* Console.log(
-              "Removed T3 Code service protection. The server's OOM score returns to normal after `t3 service restart`.",
+              "Removed Sled Code service protection. The server's OOM score returns to normal after `t3 service restart`.",
             );
           }
 
           yield* Console.log(
             [
-              "Keeps T3 Code running when agents fill this machine's memory:",
-              "  - reserves memory for the T3 Code server, so the kernel takes memory from agents first",
+              "Keeps Sled Code running when agents fill this machine's memory:",
+              "  - reserves memory for the Sled Code server, so the kernel takes memory from agents first",
               "  - makes the out-of-memory killer pick agents before the server",
               "It adds systemd drop-in files and changes nothing else. Undo with `t3 service protect --undo`.",
             ].join("\n"),
@@ -406,10 +476,16 @@ const serviceProtectCommand = Command.make("protect", {
               ...formatDropIns([plan.managerDefaults, ...plan.user]),
             ].join("\n"),
           );
+          const memoryController = yield* ServiceProtection.memoryControllerAvailable;
+          if (!memoryController) {
+            yield* Console.log(`Only the OOM scores can apply: ${MEMORY_CONTROLLER_DISABLED}`);
+          }
           if (!(yield* confirm(flags.yes, "Apply these settings?"))) return;
           yield* ServiceProtection.applyProtection(plan);
           yield* Console.log(
-            "Protected T3 Code. Memory protection applies now; the server takes its OOM score after `t3 service restart`. Undo with `t3 service protect --undo`.",
+            memoryController
+              ? "Protected Sled Code. Memory protection applies now; the server takes its OOM score after `t3 service restart`. Undo with `t3 service protect --undo`."
+              : "Protected Sled Code's OOM score; the server takes it after `t3 service restart`. Memory protection applies once the kernel's memory controller is enabled. Undo with `t3 service protect --undo`.",
           );
         }).pipe(Effect.provide(ProcessRunner.layer)),
       );
@@ -418,7 +494,7 @@ const serviceProtectCommand = Command.make("protect", {
 );
 
 export const serviceCommand = Command.make("service").pipe(
-  Command.withDescription("Manage the T3 Code background service."),
+  Command.withDescription("Manage the Sled Code background service."),
   Command.withSubcommands([
     serviceInstallCommand,
     serviceRestartCommand,

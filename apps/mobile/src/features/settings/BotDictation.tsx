@@ -15,11 +15,9 @@ export function useBotDictation(
   const { session } = useGlobalVoiceInput();
   const recognizerAvailable = useBotVoiceRecognizerAvailable();
   const draft = useRef<string | null>(value);
-  const listeners = useRef(new Set<() => void>());
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- synchronize the external voice session's draft revision with the bot composer
   useEffect(() => {
     draft.current = value;
-    listeners.current.forEach((fn) => fn());
   }, [value]);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- release microphone and reject late transcription when this bot destination unmounts
   useEffect(
@@ -33,12 +31,6 @@ export function useBotDictation(
     ownerKey,
     label: "Bot message",
     readDraftMessage: () => draft.current,
-    subscribeToDraftChanges: (fn) => {
-      listeners.current.add(fn);
-      return () => {
-        listeners.current.delete(fn);
-      };
-    },
     selection: { start: value.length, end: value.length },
     disabled,
     ...(recognizerAvailable === null ? {} : { transcriberAvailable: recognizerAvailable }),

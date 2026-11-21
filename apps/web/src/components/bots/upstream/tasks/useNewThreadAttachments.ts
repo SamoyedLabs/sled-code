@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId, OpenbotDraftFile } from "@t3tools/contracts";
 import {
+  AttachmentTransferError,
   runAttachmentUploadCycle,
   deletePendingAttachmentUpload,
 } from "@t3tools/client-runtime/state/attachments";
@@ -11,6 +12,7 @@ import { appAtomRegistry } from "../../../../rpc/atomRegistry";
 import { attachmentEnvironment } from "../../../../state/attachments";
 import { readPreparedConnection } from "../../../../state/session";
 import { openbot } from "../../../../state/openbot";
+import * as Effect from "effect/Effect";
 import { useAtomCommand } from "../../../../state/use-atom-command";
 
 /** Reuse the Files upload/draft service; first-turn delivery stays in its durable new-task journal. */
@@ -66,30 +68,41 @@ export function useNewThreadAttachments(
         const mimeType = file.type || "application/octet-stream";
         const abort = new AbortController();
         transfers.current.add(abort);
-        const pending = await runAttachmentUploadCycle({
-          registry: appAtomRegistry,
-          createUploadUrl: attachmentEnvironment.createUploadUrl,
-          remove: attachmentEnvironment.remove,
-          environmentId,
-          upload: { type: "file", name: file.name, sizeBytes: file.size, mimeType },
-          resolveUploadUrl: (relative) =>
-            readPreparedConnection(environmentId) === connection
-              ? resolveAssetUrl(connection.httpBaseUrl, relative)
-              : null,
-          transport: (url) => ({
-            abort: () => abort.abort(),
-            done: fetch(url, {
-              method: "POST",
-              body: file,
-              headers: { "Content-Type": mimeType },
-              signal: abort.signal,
-            }).then((response) => {
-              if (!response.ok) throw Error("The file upload failed.");
-            }),
+        const pending = await Effect.runPromise(
+          runAttachmentUploadCycle({
+            registry: appAtomRegistry,
+            createUploadUrl: attachmentEnvironment.createUploadUrl,
+            remove: attachmentEnvironment.remove,
+            environmentId,
+            upload: { type: "file", name: file.name, sizeBytes: file.size, mimeType },
+            resolveUploadUrl: (relative) =>
+              readPreparedConnection(environmentId) === connection
+                ? resolveAssetUrl(connection.httpBaseUrl, relative)
+                : null,
+            transport: (url) =>
+              Effect.tryPromise({
+                try: (signal) => {
+                  const onAbort = () => abort.abort();
+                  signal.addEventListener("abort", onAbort, { once: true });
+                  // @effect-diagnostics-next-line globalFetchInEffect:off
+                  return fetch(url, {
+                    method: "POST",
+                    body: file,
+                    headers: { "Content-Type": mimeType },
+                    signal: abort.signal,
+                  })
+                    .then((response) => {
+                      if (!response.ok)
+                        throw new AttachmentTransferError({ cause: "The file upload failed." });
+                    })
+                    .finally(() => signal.removeEventListener("abort", onAbort));
+                },
+                catch: (cause) => new AttachmentTransferError({ cause }),
+              }),
           }),
-        });
+        );
         transfers.current.delete(abort);
-        if (pending.status === "cancelled" || !alive.current) return;
+        if (!alive.current) return;
         if (pending.status !== "uploaded") throw Error("The file upload did not complete.");
         if (readPreparedConnection(environmentId) !== connection)
           throw Error("The original connection changed. The file was not sent.");

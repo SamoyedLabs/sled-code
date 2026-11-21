@@ -1,5 +1,6 @@
 import type { ExpoConfig } from "expo/config";
 import { SLED_BRANDING } from "./branding/sled.ts";
+import { usesDarkMobileMascot } from "./src/lib/mobileBranding.ts";
 
 import { BRAND_ASSET_PATHS } from "../../scripts/lib/brand-assets.ts";
 import { loadRepoEnv } from "../../scripts/lib/public-config.ts";
@@ -8,6 +9,8 @@ type AppVariant = "development" | "preview" | "production";
 
 const repoEnv = loadRepoEnv();
 Object.assign(process.env, repoEnv);
+// Expo's TypeScript setup otherwise installs `typescript` on every start; we typecheck with tsrs.
+process.env.EXPO_NO_TYPESCRIPT_SETUP = "1";
 
 const APP_VARIANT = resolveAppVariant(repoEnv.APP_VARIANT);
 const isIosPersonalTeamBuild = repoEnv.T3CODE_IOS_PERSONAL_TEAM === "1";
@@ -20,7 +23,7 @@ const sledExpoProjectId = repoEnv.SLED_EXPO_PROJECT_ID?.trim();
 const sledExpoOwner = repoEnv.SLED_EXPO_OWNER?.trim();
 const wantsOtaUpdates = repoEnv.T3CODE_MOBILE_UPDATES_ENABLED === "1";
 if (sledExpoProjectId?.toLowerCase() === "d763fcb8-d37c-41ea-a773-b54a0ab4a454") {
-  throw new Error("Sled must use its own Expo project, not T3 Code's upstream project.");
+  throw new Error("Sled must use its own Expo project instead of the upstream project.");
 }
 if (
   sledExpoProjectId &&
@@ -144,9 +147,16 @@ const variant = {
     ...baseVariant.assets,
     appIcon: SLED_BRANDING.icon,
     iosIcon: SLED_BRANDING.icon,
-    splashIcon: SLED_BRANDING.icon,
+    splashIcon: fromRepoRoot(
+      `assets/branding/${usesDarkMobileMascot(APP_VARIANT) ? "startup-dev" : "startup"}/rest.png`,
+    ),
+    androidAdaptiveForeground: SLED_BRANDING.icon,
+    androidSplashIcon: fromRepoRoot(
+      `assets/branding/${usesDarkMobileMascot(APP_VARIANT) ? "startup-dev" : "startup"}/android-rest.png`,
+    ),
   },
 };
+const HOSTED_APP_HOST = "app.samoyedlabs.com";
 const iosBundleIdentifier = isIosPersonalTeamBuild
   ? personalTeamBundleIdentifier!
   : variant.iosBundleIdentifier;
@@ -170,7 +180,7 @@ const widgetsPlugin: NonNullable<ExpoConfig["plugins"]>[number] = [
       {
         name: "SubscriptionUsage",
         displayName: "Subscription usage",
-        description: "Subscription quotas from your connected T3 Code environments.",
+        description: "Subscription quotas from your connected Sled Code environments.",
         ios: {
           configuration: {
             title: "Subscription usage",
@@ -220,9 +230,14 @@ const widgetsPlugin: NonNullable<ExpoConfig["plugins"]>[number] = [
       {
         name: "AgentActivity",
         displayName: "Agent Activity",
-        description: "Shows the current state of active T3 Code agents.",
+        description: "Shows the current state of active Sled Code agents.",
         android: null,
-        ios: { supportedFamilies: ["systemSmall", "systemMedium", "accessoryRectangular"] },
+        ios: {
+          supportedFamilies: ["systemSmall", "systemMedium", "accessoryRectangular"],
+          // Embeds the layout so the gallery preview and a new widget render
+          // before the app has run once; the app replaces it on publish.
+          initialLayout: "./src/widgets/AgentActivityWidget.tsx",
+        },
       },
     ],
   },
@@ -259,7 +274,7 @@ const config: ExpoConfig = {
   slug: SLED_BRANDING.slug,
   platforms: ["ios", "android"],
   scheme: variant.scheme,
-  version: repoEnv.T3CODE_MOBILE_VERSION ?? "2.2.0",
+  version: repoEnv.T3CODE_MOBILE_VERSION ?? "2.3.0",
   runtimeVersion: {
     // Skip costly fingerprinting on dev launches; preview and production OTAs require matching native projects.
     policy: runtimeVersionPolicy,
@@ -288,6 +303,7 @@ const config: ExpoConfig = {
     associatedDomains: [
       `applinks:${variant.relyingParty}`,
       `webcredentials:${variant.relyingParty}`,
+      `applinks:${HOSTED_APP_HOST}`,
     ],
     entitlements: {
       "keychain-access-groups": [`$(AppIdentifierPrefix)${iosBundleIdentifier}`],
@@ -302,8 +318,9 @@ const config: ExpoConfig = {
         NSAllowsArbitraryLoads: true,
       },
       NSBonjourServices: ["_t3desktop._tcp"],
-      NSLocalNetworkUsageDescription: `Allow ${variant.appName} to connect to T3 Code servers on your local network or tailnet.`,
+      NSLocalNetworkUsageDescription: `Allow ${variant.appName} to connect to Sled Code servers on your local network or tailnet.`,
       NSPhotoLibraryAddUsageDescription: `Allow ${variant.appName} to save images to your photo library.`,
+      UIViewControllerBasedStatusBarAppearance: true,
       // System picture in picture needs background audio to start and survive outside the app.
       UIBackgroundModes: ["audio"],
       ITSAppUsesNonExemptEncryption: false,
@@ -338,13 +355,20 @@ const config: ExpoConfig = {
     predictiveBackGestureEnabled: true,
     // expo-sensors declares this for its pedometer, which the app does not use.
     blockedPermissions: ["android.permission.ACTIVITY_RECOGNITION"],
+    intentFilters: [
+      {
+        action: "VIEW",
+        autoVerify: true,
+        data: [{ scheme: "https", host: HOSTED_APP_HOST, pathPrefix: "/threads/" }],
+        category: ["BROWSABLE", "DEFAULT"],
+      },
+    ],
   },
   web: {
     favicon: variant.assets.appIcon,
   },
   plugins: [
     "expo-asset",
-    "react-native-pdf-jsi",
     [
       "expo-font",
       {
@@ -404,7 +428,7 @@ const config: ExpoConfig = {
       "expo-audio",
       {
         microphonePermission: `Allow ${variant.appName} to use your microphone for voice input.`,
-        recordAudioAndroid: false,
+        recordAudioAndroid: true,
         enableBackgroundPlayback: false,
         enableBackgroundRecording: false,
       },
@@ -418,14 +442,21 @@ const config: ExpoConfig = {
         recordAudioAndroid: false,
       },
     ],
-    ["expo-image-picker", { photosPermission: false, microphonePermission: false }],
+    [
+      "expo-image-picker",
+      {
+        photosPermission: false,
+        // `false` makes this plugin add RECORD_AUDIO to blockedPermissions, breaking Android dictation.
+        microphonePermission: `Allow ${variant.appName} to use your microphone for voice input.`,
+      },
+    ],
     [
       "expo-splash-screen",
       {
         image: variant.assets.splashIcon,
         resizeMode: "contain",
         backgroundColor: "#ffffff",
-        imageWidth: 220,
+        imageWidth: 200,
         dark: {
           image: variant.assets.splashIcon,
           backgroundColor: "#0a0a0a",
@@ -470,12 +501,17 @@ const config: ExpoConfig = {
     "./plugins/withAndroidModernPopupMenu.cjs",
     "./plugins/withAndroidModernAlertDialog.cjs",
     "./plugins/withAndroidPredictiveBackCompat.cjs",
+    // MainActivity mods run in reverse order; extend the tablet-orientation override.
+    "./plugins/withAndroidWindowDisplayMetrics.cjs",
     "./plugins/withAndroidTabletOrientation.cjs",
     ...(isIosPersonalTeamBuild ? ["./plugins/withoutIosPersonalTeamCapabilities.cjs"] : []),
   ],
   extra: {
     sledConnectNotifications: false,
     appVariant: APP_VARIANT,
+    secretsFeatureEnabled: ["1", "true"].includes(
+      process.env.T3CODE_FEATURE_SECRETS?.trim().toLowerCase() ?? "",
+    ),
     iosPersonalTeamBuild: isIosPersonalTeamBuild,
     relay: {
       url: repoEnv.T3CODE_RELAY_URL ?? null,

@@ -33,7 +33,7 @@ function kdeCaptureDesktopEntry(executable: string): string {
   return [
     "[Desktop Entry]",
     "Type=Application",
-    "Name=T3 Code SnapShots",
+    "Name=Sled Code SnapShots",
     "NoDisplay=true",
     `Exec=${escapeDesktopEntryExecArgument(executable)} check`,
     // KService reads this custom property as a KConfig list, not an XDG ';' list.
@@ -115,7 +115,7 @@ export class KdeCaptureSetup {
       if (!bundle)
         return {
           status: "error",
-          message: "The capture helper is missing from this build. Update or reinstall T3 Code.",
+          message: "The capture helper is missing from this build. Update or reinstall Sled Code.",
         };
       if (!installed.equals(bundle) || entry.toString() !== kdeCaptureDesktopEntry(executable))
         return {
@@ -160,7 +160,7 @@ export class KdeCaptureSetup {
       const bundle = await regularFile(this.paths.bundle);
       if (!bundle)
         throw new Error(
-          "The capture helper is missing from this build. Update or reinstall T3 Code.",
+          "The capture helper is missing from this build. Update or reinstall Sled Code.",
         );
       await NodeFSP.mkdir(directory, { recursive: true });
       await NodeFSP.mkdir(NodePath.dirname(desktop), { recursive: true });
@@ -215,7 +215,7 @@ export async function captureKdeWindow(
   options?: { readonly flash: boolean; readonly animate: boolean },
 ): Promise<LinuxWindowSnapshot> {
   const state = await new KdeCaptureSetup(paths).state();
-  if (state.status !== "ready") throw new CaptureSetupRequiredError(state.message);
+  if (state.status !== "ready") throw new CaptureSetupRequiredError({ state: state.message });
   const { executable } = kdeCapturePaths(paths);
   const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-kde-capture-"));
   let retained = false;

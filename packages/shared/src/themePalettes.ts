@@ -103,6 +103,8 @@ export type ThemeDefinition = Readonly<{
   collection?: Readonly<{ id: string; label: string }>;
   sidebarArtwork?: boolean;
   managed?: boolean;
+  /** Custom styles for web and desktop. */
+  css?: string;
 }>;
 
 export const T3_CODE_LIGHT_THEME_COLORS: ThemeColors = {
@@ -235,7 +237,7 @@ export const T3_CODE_DARK_THEME_COLORS: ThemeColors = {
 
 export const T3_CHAT_THEME: ThemeDefinition = {
   id: "t3-chat",
-  label: "T3 Chat",
+  label: "Sled",
   appearance: "light",
   colors: {
     canvas: "oklch(0.982446 0.010114 325.653)",

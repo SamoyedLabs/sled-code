@@ -210,9 +210,13 @@ struct StreamScreen: View {
         _pairingOverlay = State(initialValue: pairingOverlay)
         self.scannerOverride = scannerOverride
     }
+    #else
+    init(client: StreamClient) {
+        self.client = client
+    }
     #endif
 
-    var body: some View {
+    private var streamCanvas: some View {
         // Which layout, and at which size — see `DuoLayout` for the thresholds and the Duo posture
         // behind each one.
         GeometryReader { geo in
@@ -322,6 +326,10 @@ struct StreamScreen: View {
             }
             #endif
         }
+    }
+
+    private var streamSession: some View {
+        streamCanvas
         .background(Color.black)
         .overlayPreferenceValue(WindowMenuAnchorKey.self) { anchor in
             if let anchor, let id = windowMenu, let window = client.windows.first(where: { $0.id == id }) {
@@ -372,6 +380,10 @@ struct StreamScreen: View {
         .onChange(of: client.connected) { _, up in
             if up { sendViewport() }
         }
+    }
+
+    var body: some View {
+        streamSession
         // A hardware keyboard (docs/hardware-keyboard-plan.md §2): the input view takes the keyboard by
         // itself while one is attached and nothing open takes it, never as the person's own.
         .onReceive(HardwareKeyboardMonitor.shared.$attached) { overlay.update(attached: $0) }

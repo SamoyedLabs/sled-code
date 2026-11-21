@@ -23,7 +23,7 @@ import { appAtomRegistry } from "../../state/atom-registry";
 import { Button } from "../../components/ui/Button";
 import { AppText as Text } from "../../components/ui/AppText";
 import { View } from "react-native";
-import storage from "@react-native-async-storage/async-storage";
+import storage from "expo-sqlite/kv-store";
 import { randomUUID as newId } from "expo-crypto";
 const Acquiring = Schema.Struct({
   kind: Schema.Literal("acquiring"),

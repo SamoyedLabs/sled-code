@@ -13,11 +13,12 @@ import { View } from "react-native";
 
 import { hasCloudPublicConfig } from "../cloud/publicConfig";
 import { T3ConnectProfilePage } from "../cloud/T3ConnectProfilePage";
+import { SLED_CONNECT_NAME } from "../../lib/mobileBranding";
 
 const USER_PROFILE_CUSTOM_PAGES = [
   {
     path: "t3-connect",
-    label: "Sled Connect",
+    label: SLED_CONNECT_NAME,
     icon: "globe",
     content: <T3ConnectProfilePage />,
   },

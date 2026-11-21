@@ -76,10 +76,7 @@ import { openbot } from "../../state/openbot";
 import { SettingsScreen } from "../settings/components/SettingsScreen";
 import { SettingsRow } from "../settings/components/SettingsRow";
 import { SettingsSection } from "../settings/components/SettingsSection";
-import {
-  AndroidSettingsEnvironmentFilter,
-  SettingsEnvironmentFilterHeader,
-} from "../settings/components/SettingsEnvironmentFilterHeader";
+import { useSettingsEnvironmentMenu } from "../settings/components/SettingsEnvironmentFilterHeader";
 import {
   useSettingsEnvironmentFilter,
   type SettingsTarget,
@@ -87,7 +84,7 @@ import {
 
 const botServerSettings = {
   general: { label: "General", icon: "gearshape", description: "Hosting and connections" },
-  ai: { label: "AI", icon: "sparkles", description: "Providers and Sled tools" },
+  ai: { label: "AI", icon: "robot", description: "Providers and Sled tools" },
   data: { label: "Data", icon: "internaldrive", description: "Import and transfer agents" },
   maintenance: { label: "Maintenance", icon: "hammer", description: "Engine releases and updates" },
 } as const;
@@ -284,6 +281,7 @@ function BotsRouteScreen({
   category?: BotSettingsCategory | undefined;
 }) {
   const navigation = useNavigation();
+  const environmentMenu = useSettingsEnvironmentMenu();
   const { selectedTargets, availableTargets } = useSettingsEnvironmentFilter();
   const targets =
     environmentId === undefined
@@ -295,12 +293,10 @@ function BotsRouteScreen({
       : undefined;
   const scopedHome = environmentId !== undefined && categoryLabel === undefined;
   return (
-    <>
-      {!environmentId && <SettingsEnvironmentFilterHeader />}
-      <SettingsScreen
-        title={categoryLabel ?? (environmentId ? "Server settings" : "Bots")}
-        trailing={environmentId ? undefined : <AndroidSettingsEnvironmentFilter />}
-      >
+    <SettingsScreen
+      title={categoryLabel ?? (environmentId ? "Server settings" : "Bots")}
+      menus={environmentId ? undefined : [environmentMenu]}
+    >
         <ScreenScrollView
           keyboardShouldPersistTaps="handled"
           contentInsetAdjustmentBehavior="automatic"
@@ -359,7 +355,6 @@ function BotsRouteScreen({
           )}
         </ScreenScrollView>
       </SettingsScreen>
-    </>
   );
 }
 

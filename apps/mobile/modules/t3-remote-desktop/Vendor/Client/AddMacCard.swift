@@ -1,4 +1,4 @@
-// Modified for T3 Code remote desktop; based on Sill 6c5b5d249602ad60ebda79d384698909f2c5e7d7 (Apache-2.0). See MODIFICATIONS.md.
+// Modified for Sled Code remote desktop; based on Sill 6c5b5d249602ad60ebda79d384698909f2c5e7d7 (Apache-2.0). See MODIFICATIONS.md.
 import SwiftUI
 
 /// How the connect screen's column sits on this screen (docs/remote-access-plan.md §7.10).
@@ -117,12 +117,12 @@ struct AddMacCard: View {
                 .font(.system(size: 13))
                 .foregroundStyle(Palette.muted)
         } else {
-            Text("Pair this Mac once, then connect to it from T3 Code.")
+            Text("Pair this Mac once, then connect to it from Sled Code.")
                 .font(.system(size: 13))
                 .foregroundStyle(Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(typed ? "Type the address and pairing code from T3 Code on your Mac."
-                       : "On your Mac, choose Pair iPhone or iPad… in T3 Code’s Remote Desktop menu, then point this \(device) at the code.")
+            Text(typed ? "Type the address and pairing code from Sled Code on your Mac."
+                       : "On your Mac, choose Pair iPhone or iPad… in Sled Code’s Remote Desktop menu, then point this \(device) at the code.")
                 .font(.system(size: 13))
                 .foregroundStyle(Palette.text)
                 .fixedSize(horizontal: false, vertical: true)

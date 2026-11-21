@@ -1,6 +1,10 @@
 import type { EnvironmentId } from "@t3tools/contracts";
-import { runAttachmentUploadCycle } from "@t3tools/client-runtime/state/attachments";
+import {
+  AttachmentTransferError,
+  runAttachmentUploadCycle,
+} from "@t3tools/client-runtime/state/attachments";
 import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
+import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { appAtomRegistry } from "../../state/atom-registry";
 import { attachmentEnvironment } from "../../state/attachments";
@@ -32,37 +36,39 @@ export async function pickQueueAttachment(
   const name = selected.name || "file",
     mimeType = selected.mimeType || "application/octet-stream";
   const identity = { ...target, operationId: randomUUID(), name, mimeType, size, sha256 };
-  const controller = new AbortController();
-  const pending = await runAttachmentUploadCycle({
-    registry: appAtomRegistry,
-    createUploadUrl: attachmentEnvironment.createUploadUrl,
-    remove: attachmentEnvironment.remove,
-    environmentId,
-    upload: { type: "file", name, sizeBytes: size, mimeType },
-    resolveUploadUrl: (relative) => {
-      const connection = appAtomRegistry.get(
-        environmentSession.preparedConnectionValueAtom(environmentId),
-      );
-      return Option.isSome(connection)
-        ? resolveAssetUrl(connection.value.httpBaseUrl, relative)
-        : null;
-    },
-    transport: (url) => ({
-      abort: () => controller.abort(),
-      done: file
-        .upload(url, {
-          httpMethod: "POST",
-          uploadType: UploadType.BINARY_CONTENT,
-          headers: { "Content-Type": mimeType },
-          signal: controller.signal,
-        })
-        .then((response) => {
-          if (response.status < 200 || response.status >= 300)
-            throw new Error("File upload failed.");
+  const pending = await Effect.runPromise(
+    runAttachmentUploadCycle({
+      registry: appAtomRegistry,
+      createUploadUrl: attachmentEnvironment.createUploadUrl,
+      remove: attachmentEnvironment.remove,
+      environmentId,
+      upload: { type: "file", name, sizeBytes: size, mimeType },
+      resolveUploadUrl: (relative) => {
+        const connection = appAtomRegistry.get(
+          environmentSession.preparedConnectionValueAtom(environmentId),
+        );
+        return Option.isSome(connection)
+          ? resolveAssetUrl(connection.value.httpBaseUrl, relative)
+          : null;
+      },
+      transport: (url) =>
+        Effect.tryPromise({
+          try: (signal) =>
+            file
+              .upload(url, {
+                httpMethod: "POST",
+                uploadType: UploadType.BINARY_CONTENT,
+                headers: { "Content-Type": mimeType },
+                signal,
+              })
+              .then((response) => {
+                if (response.status < 200 || response.status >= 300)
+                  throw new AttachmentTransferError({ cause: "File upload failed." });
+              }),
+          catch: (cause) => new AttachmentTransferError({ cause }),
         }),
     }),
-  });
-  if (pending.status === "cancelled") return null;
+  );
   if (pending.status === "failed") throw pending.error;
   return { identity, attachmentId: pending.attachmentId };
 }

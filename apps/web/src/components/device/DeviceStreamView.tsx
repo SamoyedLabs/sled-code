@@ -1,6 +1,7 @@
 import type { DevicePlatform, EnvironmentId } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult, Atom } from "effect/reactivity";
+import { T, useGT } from "gt-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "~/lib/utils";
@@ -89,7 +90,10 @@ export function DeviceStreamView(props: {
   readonly visible: boolean;
   readonly hostId: string;
   readonly allowPhoneView?: boolean;
-  readonly renderControls?: (view: DeviceViewControls) => ReactNode;
+  readonly workspaceTile?: boolean;
+  readonly defaultPresentation?: "phone" | "flat" | undefined;
+  readonly showPresentationControls?: boolean;
+  readonly renderControls?: ((view: DeviceViewControls) => ReactNode) | undefined;
   readonly axOverlay?: boolean;
   /** Lets a parent read this view's own stream state, such as its screen size. */
   readonly viewId?: string;
@@ -97,8 +101,10 @@ export function DeviceStreamView(props: {
   readonly serveSimOnly?: boolean;
 }) {
   const model = deviceModel(props.platform, props.deviceName ?? "");
+  const missingPhoneModel = props.platform === "ios" && model === null;
   const isDuo = model?.id === "iphone-duo";
-  const [presentation, setPresentation] = useState<"phone" | "flat">("phone");
+  const gt = useGT();
+  const [presentation, setPresentation] = useState(props.defaultPresentation ?? "phone");
   const [keyboardAttached, setKeyboardAttached] = useState(false);
   const cancelPhoneInputRef = useRef<(() => void) | null>(null);
   const cancelPhoneInput = () => cancelPhoneInputRef.current?.();
@@ -151,6 +157,7 @@ export function DeviceStreamView(props: {
     status === "connecting" && hasFrame && inputState.connected && screen !== null;
   const showPhone =
     props.allowPhoneView &&
+    !missingPhoneModel &&
     (status === "streaming" || retainingFrame) &&
     props.visible &&
     presentation === "phone" &&
@@ -158,7 +165,8 @@ export function DeviceStreamView(props: {
     !mjpegUrl &&
     !props.axOverlay &&
     (!isDuo || screen?.supportsHingeAngle === true);
-  const controlsInset = props.renderControls && !showPhone ? CONTROLS_RAIL_WIDTH : 0;
+  const controlsInset =
+    props.renderControls && !showPhone && !props.workspaceTile ? CONTROLS_RAIL_WIDTH : 0;
 
   // Fit the frame in both dimensions; pinned CSS height plus a width clamp distorts aspect-ratio.
   const [host, setHost] = useState({ width: 0, height: 0 });
@@ -224,15 +232,16 @@ export function DeviceStreamView(props: {
     client?.sendTouch("end", x, y);
   };
 
-  const phoneUnavailableReason =
-    isDuo && !screen?.supportsHingeAngle
-      ? "iPhone Duo 3D requires Device Hub 0.11.0 or newer"
+  const phoneUnavailableReason = missingPhoneModel
+    ? gt("No matching 3D model for this device")
+    : isDuo && !screen?.supportsHingeAngle
+      ? gt("iPhone Duo 3D requires Device Hub {version} or newer", { version: "0.11.0" })
       : phoneUnavailable
-        ? "3D is unavailable on this browser"
+        ? gt("3D is unavailable on this browser")
         : mjpegUrl
-          ? "3D requires the H.264 stream"
+          ? gt("3D requires the H.264 stream")
           : props.axOverlay
-            ? "Turn off accessibility frames to use 3D"
+            ? gt("Turn off accessibility frames to use 3D")
             : null;
 
   const keyboardSource = deviceKeyboard(props.platform, props.deviceName ?? "");
@@ -253,7 +262,7 @@ export function DeviceStreamView(props: {
     <div
       className={cn(
         "relative flex size-full min-h-0 min-w-0",
-        props.allowPhoneView ? "bg-background" : "bg-black/90",
+        props.workspaceTile ? "p-2" : props.allowPhoneView ? "bg-background" : "bg-black/90",
       )}
     >
       {props.renderControls ? (
@@ -322,7 +331,9 @@ export function DeviceStreamView(props: {
         )}
         tabIndex={0}
         role="application"
-        aria-label={`${props.platform === "ios" ? "iOS Simulator" : "Android Emulator"} screen`}
+        aria-label={
+          props.platform === "ios" ? gt("iOS Simulator screen") : gt("Android Emulator screen")
+        }
         onKeyDown={(event) => {
           if (event.target !== event.currentTarget) return;
           if (event.metaKey && !["r", "R"].includes(event.key)) return;
@@ -347,7 +358,11 @@ export function DeviceStreamView(props: {
         }}
       >
         <div
-          className={cn("relative select-none", showPhone && "invisible pointer-events-none")}
+          className={cn(
+            "relative select-none",
+            showPhone && "invisible pointer-events-none",
+            props.workspaceTile && hasFrame && "overflow-hidden rounded-md ring-1 ring-border",
+          )}
           style={{ width: frame.width, height: frame.height }}
           onPointerDown={(event) => {
             if (event.button !== 0 || !inputState.connected || activePointer.current !== null)
@@ -436,14 +451,17 @@ export function DeviceStreamView(props: {
             onUnavailable={session.markPhoneUnavailable}
           />
         ) : null}
-        {props.allowPhoneView && !props.renderControls && status === "streaming" ? (
+        {props.allowPhoneView &&
+        props.showPresentationControls !== false &&
+        !props.renderControls &&
+        status === "streaming" ? (
           <div className="absolute top-3 left-3 flex gap-1 rounded-lg border border-border/50 bg-background/90 p-1 shadow-sm">
             <Button
               variant={showPhone ? "secondary" : "ghost"}
               size="xs"
               aria-pressed={!!showPhone}
               disabled={!!phoneUnavailableReason}
-              title={phoneUnavailableReason ?? "Show 3D phone"}
+              title={phoneUnavailableReason ?? gt("Show 3D phone")}
               onClick={() => setPresentation("phone")}
             >
               3D
@@ -454,14 +472,16 @@ export function DeviceStreamView(props: {
               aria-pressed={!showPhone}
               onClick={() => setPresentation("flat")}
             >
-              Flat
+              <T context="flat device view">Flat</T>
             </Button>
           </div>
         ) : null}
         {status === "streaming" && !inputState.connected ? (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-2">
             <span className="rounded-md bg-background/85 px-2 py-1 text-xs text-muted-foreground">
-              Input disconnected{inputState.detail ? ` (${inputState.detail})` : ""}, reconnecting…
+              {inputState.detail
+                ? gt("Input disconnected ({detail}), reconnecting…", { detail: inputState.detail })
+                : gt("Input disconnected, reconnecting…")}
             </span>
           </div>
         ) : null}
@@ -469,17 +489,19 @@ export function DeviceStreamView(props: {
           // Shown only once the device has been silent for two seconds.
           <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-2 transition-opacity delay-2000 duration-0 starting:opacity-0">
             <span className="rounded-md bg-background/85 px-2 py-1 text-xs text-muted-foreground">
-              Waiting for device video…
+              <T>Waiting for device video…</T>
             </span>
           </div>
         ) : null}
         {status !== "streaming" && !(retainingFrame && showPhone) ? (
           <div className="absolute inset-0">
             <DeviceLoadingView
-              name={props.deviceName ?? "Device"}
+              name={props.deviceName ?? gt("Device")}
               description={props.deviceDescription ?? ""}
               stage="stream"
-              message={status === "error" ? (detail ?? "Stream failed.") : "Connecting video…"}
+              message={
+                status === "error" ? (detail ?? gt("Stream failed.")) : gt("Connecting video…")
+              }
               error={status === "error"}
             >
               {status === "error" ? (
@@ -492,7 +514,7 @@ export function DeviceStreamView(props: {
                     session?.reconnect();
                   }}
                 >
-                  Reconnect
+                  <T>Reconnect</T>
                 </Button>
               ) : null}
             </DeviceLoadingView>

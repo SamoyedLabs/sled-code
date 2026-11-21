@@ -1,6 +1,10 @@
+import * as Effect from "effect/Effect";
 import { randomUUID } from "../../lib/utils";
 import type { EnvironmentId } from "@t3tools/contracts";
-import { runAttachmentUploadCycle } from "@t3tools/client-runtime/state/attachments";
+import {
+  AttachmentTransferError,
+  runAttachmentUploadCycle,
+} from "@t3tools/client-runtime/state/attachments";
 import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
 import { appAtomRegistry } from "../../rpc/atomRegistry";
 import { attachmentEnvironment } from "../../state/attachments";
@@ -24,30 +28,33 @@ export async function pickQueueAttachment(
     size: file.size,
     sha256,
   };
-  const controller = new AbortController();
-  const pending = await runAttachmentUploadCycle({
-    registry: appAtomRegistry,
-    createUploadUrl: attachmentEnvironment.createUploadUrl,
-    remove: attachmentEnvironment.remove,
-    environmentId,
-    upload: { type: "file", name: file.name, sizeBytes: file.size, mimeType },
-    resolveUploadUrl: (relative) => {
-      const connection = readPreparedConnection(environmentId);
-      return connection ? resolveAssetUrl(connection.httpBaseUrl, relative) : null;
-    },
-    transport: (url) => ({
-      abort: () => controller.abort(),
-      done: fetch(url, {
-        method: "POST",
-        body: file,
-        headers: { "Content-Type": mimeType },
-        signal: controller.signal,
-      }).then((response) => {
-        if (!response.ok) throw new Error("File upload failed.");
-      }),
+  const pending = await Effect.runPromise(
+    runAttachmentUploadCycle({
+      registry: appAtomRegistry,
+      createUploadUrl: attachmentEnvironment.createUploadUrl,
+      remove: attachmentEnvironment.remove,
+      environmentId,
+      upload: { type: "file", name: file.name, sizeBytes: file.size, mimeType },
+      resolveUploadUrl: (relative) => {
+        const connection = readPreparedConnection(environmentId);
+        return connection ? resolveAssetUrl(connection.httpBaseUrl, relative) : null;
+      },
+      transport: (url) =>
+        Effect.tryPromise({
+          try: (signal) =>
+            // @effect-diagnostics-next-line globalFetchInEffect:off
+            fetch(url, {
+              method: "POST",
+              body: file,
+              headers: { "Content-Type": mimeType },
+              signal,
+            }).then((response) => {
+              if (!response.ok) throw new AttachmentTransferError({ cause: "File upload failed." });
+            }),
+          catch: (cause) => new AttachmentTransferError({ cause }),
+        }),
     }),
-  });
-  if (pending.status === "cancelled") return null;
+  );
   if (pending.status === "failed") throw pending.error;
   return { identity, attachmentId: pending.attachmentId };
 }

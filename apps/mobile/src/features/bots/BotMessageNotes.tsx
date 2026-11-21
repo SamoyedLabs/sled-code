@@ -18,7 +18,7 @@ const memoryActions = {
 type Memory = ReturnType<typeof botMemoryRows>[number];
 type Worker = ReturnType<typeof botSubagentRows>[number];
 const stepSymbols: Record<Worker["steps"][number]["kind"], AppSymbolName> = {
-  thinking: "sparkles",
+  thinking: "brain",
   text: "text.bubble",
   search: "magnifyingglass",
   read: "doc",

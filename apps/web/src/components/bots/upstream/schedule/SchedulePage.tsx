@@ -4,6 +4,10 @@ import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import * as Schema from "effect/Schema";
 import { Effect } from "effect";
+
+class ScheduleLoadError extends Schema.TaggedError<ScheduleLoadError>()("ScheduleLoadError", {
+  cause: Schema.Defect(),
+}) {}
 import type { EnvironmentId, OpenbotReadRequest } from "@t3tools/contracts";
 import { channelList, workflowAgents } from "@t3tools/client-runtime/openbot/presentation";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
@@ -129,15 +133,18 @@ function ScheduleBody(props: SchedulePageProps) {
             Effect.forEach(
               owners,
               (owner) =>
-                Effect.tryPromise(async () => {
-                  const rows = decodeRoutines(
-                    await read(
-                      owner.kind === "agent"
-                        ? { operation: "routine.list", agentId: owner.agentId }
-                        : { operation: "channel.routines", channelId: owner.channelId },
-                    ),
-                  );
-                  return rows.map((routine) => ({ ...routine, owner }));
+                Effect.tryPromise({
+                  try: async () => {
+                    const rows = decodeRoutines(
+                      await read(
+                        owner.kind === "agent"
+                          ? { operation: "routine.list", agentId: owner.agentId }
+                          : { operation: "channel.routines", channelId: owner.channelId },
+                      ),
+                    );
+                    return rows.map((routine) => ({ ...routine, owner }));
+                  },
+                  catch: (cause) => new ScheduleLoadError({ cause }),
                 }),
               { concurrency: 8 },
             ),
@@ -149,27 +156,30 @@ function ScheduleBody(props: SchedulePageProps) {
             Effect.forEach(
               routines,
               (routine) =>
-                Effect.tryPromise(async () => {
-                  const history =
-                    range.from < clock
-                      ? decodeRuns(
-                          await read(
-                            routine.owner.kind === "agent"
-                              ? {
-                                  operation: "routine.runs",
-                                  agentId: routine.owner.agentId,
-                                  routineId: routine.id,
-                                }
-                              : {
-                                  operation: "channel.routine.runs",
-                                  channelId: routine.owner.channelId,
-                                  routineId: routine.id,
-                                  limit: 100,
-                                },
-                          ),
-                        )
-                      : [];
-                  return routineRuns(routine, history, range, clock);
+                Effect.tryPromise({
+                  try: async () => {
+                    const history =
+                      range.from < clock
+                        ? decodeRuns(
+                            await read(
+                              routine.owner.kind === "agent"
+                                ? {
+                                    operation: "routine.runs",
+                                    agentId: routine.owner.agentId,
+                                    routineId: routine.id,
+                                  }
+                                : {
+                                    operation: "channel.routine.runs",
+                                    channelId: routine.owner.channelId,
+                                    routineId: routine.id,
+                                    limit: 100,
+                                  },
+                            ),
+                          )
+                        : [];
+                    return routineRuns(routine, history, range, clock);
+                  },
+                  catch: (cause) => new ScheduleLoadError({ cause }),
                 }),
               { concurrency: 8 },
             ),

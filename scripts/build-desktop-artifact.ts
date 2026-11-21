@@ -41,11 +41,13 @@ import { loadRepoEnv } from "./lib/public-config.ts";
 import * as ConfigProvider from "effect/ConfigProvider";
 import { selectDesktopRuntimeExternalDependencies } from "./lib/desktop-external-packages.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
+import { resolveTaggedSourceVersion } from "./lib/tagged-source-version.ts";
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
@@ -683,6 +685,15 @@ export class DesktopBuildDistDirectoryMissingError extends Schema.TaggedError<De
   }
 }
 
+export class DesktopBuildArtifactCopyError extends Schema.TaggedError<DesktopBuildArtifactCopyError>()(
+  "DesktopBuildArtifactCopyError",
+  { from: Schema.String, to: Schema.String, cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return `Failed to copy build artifact ${this.from} to ${this.to}.`;
+  }
+}
+
 export class DesktopBuildNoArtifactsProducedError extends Schema.TaggedError<DesktopBuildNoArtifactsProducedError>()(
   "DesktopBuildNoArtifactsProducedError",
   {
@@ -1007,14 +1018,15 @@ export const LINUX_FILE_EXCLUSIONS = [
   "!**/node_modules/node-pty/prebuilds/darwin-*/**/*",
 ] as const;
 
-// node-pty bundles both Darwin architectures; only universal apps need both.
+// Native packages (node-pty, objc-js) ship prebuilds for both Darwin architectures; only universal
+// apps need both. macOS 27 warns that an arm64 app holding x64-only code won't open on macOS 28.
 export function resolveMacFileExclusions(arch?: typeof BuildArch.Type) {
   if (arch === undefined || arch === "universal") {
     return [...MAC_FILE_EXCLUSIONS];
   }
 
   const unusedArch = arch === "arm64" ? "x64" : "arm64";
-  return [...MAC_FILE_EXCLUSIONS, `!**/node_modules/node-pty/prebuilds/darwin-${unusedArch}/**/*`];
+  return [...MAC_FILE_EXCLUSIONS, `!**/node_modules/**/prebuilds/darwin-${unusedArch}/**/*`];
 }
 // Large ASAR sidecars avoid NSIS extracting thousands of loose files during installs and updates.
 export const WINDOWS_SERVER_ASAR_RESOURCE = "server.asar";
@@ -1053,7 +1065,8 @@ export function resolveWindowsServerAsarIgnoreGlobs(arch: typeof BuildArch.Type)
   ];
 }
 
-export const WINDOWS_PACKAGED_PAYLOAD_FILE_LIMIT = 80;
+// Current Windows packaging produces 91 files; retain a bounded loose-file budget.
+export const WINDOWS_PACKAGED_PAYLOAD_FILE_LIMIT = 128;
 export const WINDOWS_SERVER_RESOURCE_SOURCE_DIR = "apps/desktop/prod-resources/windows-server";
 export const WINDOWS_SERVER_EXTRA_RESOURCES = [
   {
@@ -1762,6 +1775,8 @@ const runCommand = Effect.fn("runCommand")(function* (
   },
 ) {
   const commandSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const started = performance.now();
+  yield* Effect.log(`[desktop-phase] ${options.label}: started`);
   const child = yield* commandSpawner.spawn(command);
   const [stdout, stderr, exitCode] = yield* Effect.all(
     [
@@ -1772,6 +1787,33 @@ const runCommand = Effect.fn("runCommand")(function* (
     { concurrency: "unbounded" },
   );
 
+  const elapsed = (performance.now() - started) / 1000;
+  const environment = yield* HostProcess.Environment;
+  if (environment.RUNNER_TEMP) {
+    const path = yield* Path.Path;
+    const fs = yield* FileSystem.FileSystem;
+    const record = yield* encodeJsonString({
+      event: "finish",
+      phase: options.label,
+      job: environment.CI_TIMING_JOB ?? environment.GITHUB_JOB,
+      at: DateTime.formatIso(yield* DateTime.now),
+      elapsed_seconds: Math.round(elapsed * 1000) / 1000,
+      exit_code: exitCode,
+      source_sha: environment.CI_SOURCE_SHA || environment.GITHUB_SHA,
+      run_id: environment.GITHUB_RUN_ID,
+      attempt: environment.GITHUB_RUN_ATTEMPT,
+      runner_os: environment.RUNNER_OS,
+      runner_arch: environment.RUNNER_ARCH,
+    });
+    yield* fs
+      .writeFileString(path.join(environment.RUNNER_TEMP, "ci-timings.jsonl"), record + "\n", {
+        flag: "a",
+      })
+      .pipe(Effect.catch(() => Effect.logWarning("Could not write desktop phase timing")));
+  }
+  yield* Effect.log(
+    `[desktop-phase] ${options.label}: finished in ${elapsed.toFixed(1)}s (exit=${exitCode})`,
+  );
   if (exitCode !== 0) {
     return yield* new BuildCommandFailedError({
       command: options.label,
@@ -2097,7 +2139,7 @@ const NativeMarkerManifest = Schema.Struct({
   dependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   optionalDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 });
-const decodeNativeMarkerManifest = Schema.decodeUnknownSync(
+const decodeNativeMarkerManifest = Schema.decodeUnknownOption(
   Schema.fromJsonString(NativeMarkerManifest),
 );
 
@@ -2137,13 +2179,12 @@ const hasNativeLoaderMarkers = Effect.fn("hasNativeLoaderMarkers")(function* (pa
   if (!(yield* exists(manifestPath))) return false;
   const source = yield* fs.readFileString(manifestPath).pipe(Effect.orElseSucceed(() => ""));
   if (source === "") return false;
-  const manifest = yield* Effect.try(() => decodeNativeMarkerManifest(source)).pipe(
-    Effect.orElseSucceed(() => null),
-  );
-  if (manifest === null) return false;
-  return Object.keys({ ...manifest.dependencies, ...manifest.optionalDependencies }).some(
-    (dependency) => dependency.startsWith("node-gyp-build"),
-  );
+  const manifest = decodeNativeMarkerManifest(source);
+  if (Option.isNone(manifest)) return false;
+  return Object.keys({
+    ...manifest.value.dependencies,
+    ...manifest.value.optionalDependencies,
+  }).some((dependency) => dependency.startsWith("node-gyp-build"));
 });
 
 /** Stage the exact accepted engine, preserving native dependencies, licenses and local framework links. */
@@ -2266,6 +2307,13 @@ export const copyDirectoryPreservingSymlinks = Effect.fn("copyDirectoryPreservin
 
 export const verifyPackagedBundleIsSelfContained = Effect.fn("verifyPackagedBundleIsSelfContained")(
   function* (input: { readonly asarPath: string; readonly verbose: boolean }) {
+    // A PR preview's bundle is untrusted and this job may hold signing secrets, so never run it.
+    if (yield* Config.Boolean("T3CODE_DESKTOP_UNTRUSTED_BUNDLE").pipe(Config.withDefault(false))) {
+      yield* Effect.log(
+        "[desktop-artifact] Skipped the bundle self-check for an untrusted bundle.",
+      );
+      return;
+    }
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
 
@@ -2861,7 +2909,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     // Disable smart unpack so native packages' JS/metadata stay archived and avoid slowing NSIS with loose files.
     ...(platform === "win"
       ? { asar: { smartUnpack: false }, asarUnpack: [WINDOWS_NATIVE_ASAR_UNPACK_GLOB] }
-      : {}),
+      : { asarUnpack: ["**/node_modules/@transcribe-cpp/**/*.{dylib,so,so.*}"] }),
     extraResources: [
       ...DESKTOP_EXTRA_RESOURCES,
       ...(bundledOpenbot ? [{ from: "apps/desktop/prod-resources/openbot", to: "openbot" }] : []),
@@ -2945,6 +2993,14 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
         );
       buildConfig.forceCodeSigning = true;
     }
+    const privateIdentity =
+      privateLaunch &&
+      (yield* Config.String("SLED_MAC_DISTRIBUTION").pipe(
+        Config.withDefault("private-development"),
+      )) === "private-development"
+        ? yield* Config.String("T3_REMOTE_SIGNING_IDENTITY").pipe(Config.withDefault(""))
+        : "";
+    if (privateIdentity && privateIdentity !== "-") buildConfig.forceCodeSigning = true;
     buildConfig.mac = {
       target: target === "dmg" ? [target, "zip"] : [target],
       // Private unsigned builds still need a fresh resource seal after Electron is repackaged.
@@ -2969,6 +3025,12 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
         NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
         NSLocalNetworkUsageDescription:
           "Sled Code connects to devices on your local network for remote environments and commands run by terminals and coding agents.",
+        NSCalendarsUsageDescription:
+          "Commands you run in Sled Code may need access to your calendars.",
+        NSCalendarsFullAccessUsageDescription:
+          "Commands you run in Sled Code may need to read and write your calendar events.",
+        NSCalendarsWriteOnlyAccessUsageDescription:
+          "Commands you run in Sled Code may need to add events to your calendars.",
         NSScreenCaptureUsageDescription:
           "Sled Code captures the active window when you use the window capture shortcut.",
         NSCameraUsageDescription:
@@ -2997,7 +3059,14 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
           role: "Viewer",
         },
       ],
-      ...(signed ? { sign: path.join(repoRoot, "scripts/sign-macos.ts") } : {}),
+      ...(privateIdentity && privateIdentity !== "-"
+        ? {
+            identity: privateIdentity.replace(/^Apple Development:\s*/, ""),
+            sign: path.join(repoRoot, "scripts/sign-private-desktop.cjs"),
+          }
+        : signed
+          ? { sign: path.join(repoRoot, "scripts/sign-macos.ts") }
+          : {}),
       ...(macPasskeySigning
         ? {
             entitlements: macPasskeySigning.entitlementsPath,
@@ -3038,7 +3107,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       icon: "icons",
       category: "Development",
       synopsis: "Desktop GUI for coding agents",
-      maintainer: "T3 Tools <hello@t3.codes>",
+      maintainer: "Samoyed Labs <raajtarun951@gmail.com>",
       protocols: [
         {
           name: "Sled Code",
@@ -3047,10 +3116,18 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       ],
       desktop: {
         entry: {
-          StartupWMClass: "t3code",
+          // Match Electron's WM_CLASS from setDesktopName so docks use this launcher.
+          StartupWMClass: "com.t3tools.T3Code",
         },
       },
     };
+    // electron-updater replaces an installed AppImage in place only when its name has no x.y.z version.
+    if (buildConfig.publish) {
+      buildConfig.appImage = {
+        artifactName:
+          updateChannel === "nightly" ? "T3-Code-Nightly-${arch}.${ext}" : "T3-Code-${arch}.${ext}",
+      };
+    }
     buildConfig.deb = {
       // FPM runs outside the staged app directory, so source paths must be absolute.
       fpm: [
@@ -3709,6 +3786,34 @@ export const validateMacPackagedPayload = Effect.fn("desktopArtifact.validateMac
   },
 );
 
+export class LinuxPackagedAppMissingError extends Schema.TaggedError<LinuxPackagedAppMissingError>()(
+  "LinuxPackagedAppMissingError",
+  { stageDistDir: Schema.String },
+) {
+  override get message(): string {
+    return `Expected electron-builder to leave resources/app.asar under ${this.stageDistDir}/linux*-unpacked.`;
+  }
+}
+
+export const validateLinuxPackagedPayload = Effect.fn(
+  "desktopArtifact.validateLinuxPackagedPayload",
+)(function* (input: { readonly stageDistDir: string; readonly verbose?: boolean }) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const asarPaths = (yield* fs.readDirectory(input.stageDistDir))
+    .filter((entry) => entry.startsWith("linux") && entry.endsWith("-unpacked"))
+    .map((entry) => path.join(input.stageDistDir, entry, "resources/app.asar"));
+  if (asarPaths.length === 0) {
+    return yield* new LinuxPackagedAppMissingError({ stageDistDir: input.stageDistDir });
+  }
+  for (const asarPath of asarPaths) {
+    yield* verifyPackagedBundleIsSelfContained({ asarPath, verbose: input.verbose ?? false });
+  }
+  yield* Effect.log(
+    `[desktop-artifact] Validated Linux payload (${String(asarPaths.length)} app bundle(s)).`,
+  );
+});
+
 const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(function* (
   options: ResolvedBuildOptions,
 ) {
@@ -3785,7 +3890,8 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
       }),
   });
 
-  const appVersion = options.version ?? serverPackageJson.version;
+  const appVersion =
+    options.version ?? resolveTaggedSourceVersion(repoRoot, serverPackageJson.version);
   const developmentBrand = yield* Config.Boolean("T3CODE_DESKTOP_DEV_BRANDING").pipe(
     Config.withDefault(false),
   );
@@ -4053,8 +4159,8 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     description:
       "Sled Code is an open-source desktop app for coding agents. Work with your existing agent subscriptions, review code changes, and run commands in your projects. Connect from desktop, web, or mobile to continue working remotely.",
     license: "MIT",
-    homepage: "https://t3.codes",
-    author: "T3 Tools",
+    homepage: "https://app.samoyedlabs.com",
+    author: "Samoyed Labs",
     main: "apps/desktop/dist-electron/boot.cjs",
     build: yield* createBuildConfig(
       options.platform,
@@ -4216,7 +4322,7 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
       shell: builderCommand.shell,
     }),
     {
-      label: `vp exec --filter @t3tools/desktop -- electron-builder --projectDir ${stageAppDir} ${platformConfig.cliFlag} --${options.arch} --publish never`,
+      label: `electron-builder ${platformConfig.cliFlag} --${options.arch}`,
       verbose: options.verbose,
     },
   );
@@ -4242,6 +4348,14 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
       }),
       verbose: options.verbose,
     });
+  }
+  // The probe runs on the host Node, so a cross-arch build skips it.
+  if (
+    options.platform === "linux" &&
+    hostPlatform === "linux" &&
+    options.arch === (yield* HostProcess.Architecture)
+  ) {
+    yield* validateLinuxPackagedPayload({ stageDistDir, verbose: options.verbose });
   }
   // x64 builds on arm64 runners; the arm64 check covers the shared JS bundle.
   if (options.platform === "mac" && options.arch === "arm64" && hostPlatform === "darwin") {
@@ -4344,13 +4458,15 @@ export const copyDesktopBuildArtifacts = Effect.fn("copyDesktopBuildArtifacts")(
     // overwrite a directory with a file or a file with a directory, and only merges into
     // an existing directory, so a stale entry of either type must go first.
     yield* fs.remove(to, { recursive: true, force: true });
-    yield* Effect.tryPromise(() =>
-      NodeFSP.cp(from, to, {
-        recursive: true,
-        force: true,
-        verbatimSymlinks: true,
-      }),
-    );
+    yield* Effect.tryPromise({
+      try: () =>
+        NodeFSP.cp(from, to, {
+          recursive: true,
+          force: true,
+          verbatimSymlinks: true,
+        }),
+      catch: (cause) => new DesktopBuildArtifactCopyError({ from, to, cause }),
+    });
     copiedArtifacts.push(to);
   }
 

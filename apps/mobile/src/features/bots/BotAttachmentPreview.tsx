@@ -8,7 +8,7 @@ import * as Option from "effect/Option";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 
-import type { FilePreviewSource } from "../../components/FilePreviewModal";
+import type { FilePreviewSource } from "../../components/ui/FilePreviewModal";
 import {
   downloadAndShareAttachment,
   downloadAttachmentForPreview,

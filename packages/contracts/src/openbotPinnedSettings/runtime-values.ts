@@ -25,7 +25,7 @@ export function isBoolean(value: unknown): value is boolean {
 }
 
 export function isFunction(value: unknown): value is (...args: never[]) => unknown {
-  return value instanceof Function;
+  return typeof value === "function";
 }
 
 export function isObjectValue(value: unknown): value is object | null {

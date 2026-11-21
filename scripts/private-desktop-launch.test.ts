@@ -23,6 +23,8 @@ const readMac = Schema.decodeUnknownSync(
       extendInfo: Schema.Record(Schema.String, Schema.Unknown),
       type: Schema.optional(Schema.String),
       notarize: Schema.optional(Schema.Boolean),
+      sign: Schema.optional(Schema.String),
+      identity: Schema.optional(Schema.String),
     }),
   }),
 );
@@ -42,6 +44,8 @@ it.effect("private desktop launch preserves its isolated profile when opened in 
     assert.strictEqual(config.productName, "Sled Bots Preview");
     assert.strictEqual(readMac(config).mac.type, "development");
     assert.strictEqual(readMac(config).mac.notarize, false);
+    assert.match(readMac(config).mac.sign ?? "", /sign-private-desktop\.cjs$/);
+    assert.strictEqual(readMac(config).mac.identity, "Fixture");
     assert.deepStrictEqual(readMac(config).mac.extendInfo.LSEnvironment, {
       T3CODE_HOME: "/private/t3-remote-desktop",
       T3CODE_DISABLE_AUTO_UPDATE: "true",
@@ -60,6 +64,7 @@ it.effect("private desktop launch preserves its isolated profile when opened in 
             T3CODE_DESKTOP_PRIVATE_BUILD: "true",
             T3CODE_DESKTOP_PRIVATE_APP_ID: "com.samoyedlabs.sled.bots-preview",
             T3CODE_DESKTOP_PRIVATE_NAME: "Sled Bots Preview",
+            T3_REMOTE_SIGNING_IDENTITY: "Apple Development: Fixture",
             T3CODE_DESKTOP_PRIVATE_HOME: "/private/t3-remote-desktop",
             T3CODE_RELAY_URL: "https://relay.example.test",
             T3CODE_CLERK_PUBLISHABLE_KEY: "pk_test_public",

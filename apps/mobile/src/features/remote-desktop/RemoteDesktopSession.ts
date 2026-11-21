@@ -9,6 +9,9 @@ import {
   type RemoteDesktopStartInput,
   type RemoteDesktopStatus,
 } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
+
+const isRemoteDesktopError = Schema.is(RemoteDesktopError);
 
 interface NativeSession {
   createNativeOffer(fingerprint: string): Promise<RemoteDesktopStartInput>;
@@ -82,7 +85,9 @@ export interface DesktopNativeState {
   readonly path?: "direct" | "relayed";
   readonly available?: boolean;
 }
+// @effect-diagnostics-next-line extendsNativeError:off - Internal sentinels stay inside this Promise-based native controller.
 class ConnectionLost extends Error {}
+// @effect-diagnostics-next-line extendsNativeError:off - Internal sentinels stay inside this Promise-based native controller.
 class SetupRequired extends Error {}
 function tagged(error: unknown, tag: string): boolean {
   return typeof error === "object" && error !== null && "_tag" in error && error._tag === tag;
@@ -94,7 +99,7 @@ function transientSignaling(error: unknown): boolean {
 }
 function retryable(error: unknown): boolean {
   if (error instanceof ConnectionLost) return true;
-  if (error instanceof RemoteDesktopError)
+  if (isRemoteDesktopError(error))
     return [
       "transport",
       "unavailable",
@@ -105,7 +110,7 @@ function retryable(error: unknown): boolean {
   return transientSignaling(error);
 }
 const initialFailure =
-  "Couldn't connect. Enable Remote Desktop on this Mac, pair it below, and grant Control desktop in its T3 connection permissions.";
+  "Couldn't connect. Enable Remote Desktop on this Mac, pair it below, and grant Control desktop in its Sled connection permissions.";
 const recoveryFailure =
   "The connection couldn't recover. Check the Mac's connection and reconnect.";
 const refreshAt = (connectivity: RemoteDesktopStatus["connectivity"]) =>

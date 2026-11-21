@@ -12,13 +12,16 @@ import {
 import { settingsCapabilities } from "@t3tools/client-runtime/openbot/settings";
 import { randomUUID } from "expo-crypto";
 import * as Schema from "effect/Schema";
+import { LegendList } from "@legendapp/list/react-native";
 import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
-import { FlatList, Pressable, ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { FilePreviewModal } from "../../components/FilePreviewModal";
+import { FilePreviewModal } from "../../components/ui/FilePreviewModal";
 import { SymbolView, type AppSymbolName } from "../../components/ui/AppSymbol";
 import * as Dialog from "../../components/ui/Dialog";
 import { Menu } from "../../components/ui/Menu";
+import { RefreshControl } from "../../components/ui/RefreshControl";
+import { NativeScrollView } from "../../native/NativeScrollViewMarker";
 import { openbot } from "../../state/openbot";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -412,16 +415,34 @@ function BotLibrary({ environmentId, hostId }: Scope) {
         style={{ flex: 1, backgroundColor: p.canvas }}
         onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
       >
-        <FlatList
+        <LegendList
+          renderScrollComponent={NativeScrollView}
           data={layout}
+          estimatedItemSize={220}
+          extraData={{
+            shown,
+            folders,
+            agents,
+            agentNames,
+            p,
+            canOrganize,
+            canDelete,
+            busy,
+            streamingImages,
+            preview,
+          }}
           contentInsetAdjustmentBehavior="automatic"
           keyExtractor={(block) => block.tiles.map((tile) => shown[tile.index]?.id).join(",")}
-          refreshing={rescan && inventory.isPending}
-          onRefresh={() => {
-            setRescan(true);
-            if (rescan) inventory.refresh();
-            structure.refresh();
-          }}
+          refreshControl={
+            <RefreshControl
+              refreshing={rescan && inventory.isPending}
+              onRefresh={() => {
+                setRescan(true);
+                if (rescan) inventory.refresh();
+                structure.refresh();
+              }}
+            />
+          }
           contentContainerStyle={{
             paddingHorizontal: 20,
             paddingTop: 12,
@@ -524,8 +545,6 @@ function BotLibrary({ environmentId, hostId }: Scope) {
                     : "Library is unavailable on this computer."}
             </Text>
           }
-          initialNumToRender={5}
-          maxToRenderPerBatch={5}
           renderItem={({ item }) => (
             <View style={{ height: item.height, marginBottom: TILE_GAP }}>
               {item.tiles.map(({ index, left, top, width: tileWidth, height }) => {

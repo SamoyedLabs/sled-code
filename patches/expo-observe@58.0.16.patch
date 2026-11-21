@@ -1,0 +1,21 @@
+diff --git a/ios/ObserveModule.swift b/ios/ObserveModule.swift
+--- a/ios/ObserveModule.swift
++++ b/ios/ObserveModule.swift
+@@ -62,7 +62,16 @@
+ 
+       // Broadcast the integrations config so integration libraries (e.g. expo-image) can activate.
+       self.lastIntegrations = config.integrations ?? [:]
+-      self.emit(event: "configure", payload: ["integrations": self.lastIntegrations])
++      // Function bodies run on the JS thread; convert cached values before scheduling emission.
++      guard let appContext = self.appContext else { return }
++      do {
++        let payload = try [String: [String: Any]].getDynamicType().castToJS(
++          ["integrations": self.lastIntegrations], appContext: appContext
++        )
++        self.emit(event: "configure", payload: payload)
++      } catch {
++        observeLogger.warn("Failed to convert integrations config: \(error)")
++      }
+     }
+ 
+     Function("getIntegrations") {

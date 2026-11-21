@@ -22,4 +22,5 @@ export const CONTEXT_RESET_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new
 ]);
 
 /** The host refuses a new chat while the agent works. Its text is a sentence for the member. */
+// @effect-diagnostics-next-line extendsNativeError:off
 export class ContextResetBusyError extends Error {}

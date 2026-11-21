@@ -57,7 +57,7 @@ if args.audit_symbols:
             if components != set(audit['observedThirdPartyComponents']):
                 raise SystemExit(f'Compiled dependency coverage changed: {architecture}')
 
-parts = [f'T3 Code remote desktop — WebRTC {pin["version"]} third-party notices\n',
+parts = [f'Sled Code remote desktop — WebRTC {pin["version"]} third-party notices\n',
          'Upstream license and patent notices are reproduced below. Source revisions and\n'
          'binary audit provenance are in LiveKitWebRTC-PROVENANCE.json.\n']
 for entry in manifest['files']:

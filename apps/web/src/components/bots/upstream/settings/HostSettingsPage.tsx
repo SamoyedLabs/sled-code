@@ -3,6 +3,7 @@ import {
   ArrowLeftRight,
   Blocks,
   CalendarClock,
+  Cpu,
   Download,
   Globe2,
   HardDrive,
@@ -12,7 +13,6 @@ import {
   RefreshCw,
   Settings,
   ShieldCheck,
-  Sparkles,
   UsersRound,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -78,7 +78,7 @@ const sections = [
     id: "providers",
     title: "Providers",
     description: "Manage the AI providers of the computer that runs this server.",
-    icon: Sparkles,
+    icon: Cpu,
   },
   {
     id: "updates",

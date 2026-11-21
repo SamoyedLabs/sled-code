@@ -1,6 +1,6 @@
 /* oxlint-disable shadcn/no-unknown-classes -- Source AgentSteps selectors are defined in group-conversation.css. */
 import { useId, useState } from "react";
-import { ChevronRightIcon, SparklesIcon } from "lucide-react";
+import { BotIcon, ChevronRightIcon } from "lucide-react";
 import type { GroupCommentary } from "./group-conversation";
 
 export function GroupCommentarySteps({
@@ -38,7 +38,7 @@ export function GroupCommentarySteps({
             <ol id={id}>
               {group.entries.map((entry) => (
                 <li key={entry.id} id={`group-message-${entry.id}`}>
-                  <SparklesIcon aria-hidden="true" />
+                  <BotIcon aria-hidden="true" />
                   <span dir="auto">
                     {entry.message.text}
                     {entry.superseded && <span className="ob-group-earlier"> Earlier attempt</span>}

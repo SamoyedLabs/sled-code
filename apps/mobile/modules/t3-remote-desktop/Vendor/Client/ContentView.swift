@@ -1,4 +1,4 @@
-// Modified for T3 Code remote desktop; based on Sill 6c5b5d249602ad60ebda79d384698909f2c5e7d7 (Apache-2.0). See MODIFICATIONS.md.
+// Modified for Sled Code remote desktop; based on Sill 6c5b5d249602ad60ebda79d384698909f2c5e7d7 (Apache-2.0). See MODIFICATIONS.md.
 import SwiftUI
 import Network
 
@@ -323,8 +323,8 @@ struct ContentView: View {
 ///   `hint` (nothing listed: the hint and Search Nearby), `nearby` (a Wi-Fi row and Direct
 ///   rows), `methods` (a row ending in each word: Wired, Wi-Fi, none, Direct, and long names) or
 ///   `denied` (Local Network access denied: the status says what to do, no hint); `update` (a Mac
-///   refused this version: "Update T3 Code on your iPad to keep using Mac mini. It needs version 1.2
-///   or later." as the status line above a Wi‑Fi row, and "Update T3 Code in the App Store" under it
+///   refused this version: "Update Sled Code on your iPad to keep using Mac mini. It needs version 1.2
+///   or later." as the status line above a Wi‑Fi row, and "Update Sled Code in the App Store" under it
 ///   when `-SillAppStoreURL https://apps.apple.com/app/id000000000` gives the link an address) or
 ///   `notice` (a goodbye reason this build does not know: the Mac's two-line message, no link);
 ///   or remote access's: `remote` (Remote rows), `addmac`, `addcode`, `addcodeerror`, `pairing`,
@@ -333,10 +333,10 @@ struct ContentView: View {
 ///   `externalpair` (an outside link's confirmation); or pairing at home's
 ///   (docs/home-pairing-plan.md §7.9): `homerows` (a saved Wi-Fi row, "Not paired", an unpaired
 ///   "Wired" over the cable, a Wired row through a USB Ethernet adapter reading "Not paired", an
-///   open door's row reading "Not paired", "Update T3 Code", and long names), `homeasking` (a tap's ask: "Pairing with Mac mini…", the row
+///   open door's row reading "Not paired", "Update Sled Code", and long names), `homeasking` (a tap's ask: "Pairing with Mac mini…", the row
 ///   lit), `homecard` (the home card, scanning), `homecode` (its typed path), `homecodeerror` (a
 ///   wrong code), `homelocked`, `homeopenonmac`, `homerevoked`, `homecabledone`, `homeolder` (a tap
-///   on an "Update T3 Code" row) or `pairingrequired`; or `asleep` (issue #69: a saved Mac's row stays
+///   on an "Update Sled Code" row) or `pairingrequired`; or `asleep` (issue #69: a saved Mac's row stays
 ///   listed and the automatic reconnect's dials of it have not connected: "Mac mini isn’t answering.
 ///   It may be asleep. Sill keeps trying, or tap it to try now."); or `tiles` (issue #116: the Macs as
 ///   tiles, six of them in Home, Work and Other: the Mac mini twice, its Wired row taken for it by its
@@ -444,7 +444,7 @@ struct ContentView: View {
 ///   on|muted` makes the mock Mac send its sound and this device play it or have it muted (Mute off or
 ///   on; the mock plays nothing), and `-SillSettingsCase sound|soundoff|soundnote|nosound` the Send
 ///   Audio row on, off, on with the Mac's note (why no sound comes), or a Mac without sound (the row
-///   disabled, "Update T3 Code…", no Mute). In the normal app and under `-SillLive 1`: `-SillSoundSink
+///   disabled, "Update Sled Code…", no Mute). In the normal app and under `-SillLive 1`: `-SillSoundSink
 ///   manual|device` (the engine renders offline and opens no output device, the simulator's default
 ///   in every build, or it plays to the output; `device` in the simulator plays through the Mac's
 ///   speakers: never in a gate), `-SillSoundVolume 0` (the player's volume, a second guard),
@@ -1276,7 +1276,7 @@ struct ConnectScreen: View {
         // before Sill's App Store address is known (SillLinks): the words say what to do anyway.
         if let notice = client.notice, notice.storeLink, notice.text == client.status, let url = SillLinks.appStore {
             Link(destination: url) {
-                Text("Update T3 Code in the App Store")
+                Text("Update Sled Code in the App Store")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Palette.accent)
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
@@ -1321,7 +1321,7 @@ struct ConnectScreen: View {
         }
 
         if client.showsNearbyHint {
-            Text("Your Mac has to be on the same Wi\u{2011}Fi network as this \(device), or have Direct Wireless Connection turned on in T3 Code. Away from home, add it once with a code from your Mac.")
+            Text("Your Mac has to be on the same Wi\u{2011}Fi network as this \(device), or have Direct Wireless Connection turned on in Sled Code. Away from home, add it once with a code from your Mac.")
                 .font(.system(size: 13))
                 .foregroundStyle(Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1414,7 +1414,7 @@ struct ConnectScreen: View {
         // The kind of link, never the Wi-Fi network's name: that needs Location access, which
         // Sill does not ask for (DiscoveryPolicy.method); "Remote" for a saved Mac dialed away
         // from home; at home, what a tap does first when it pairs ("Not paired", "Wired" over
-        // the cable) or cannot connect ("Update T3 Code"), with VoiceOver's label and hint for it
+        // the cable) or cannot connect ("Update Sled Code"), with VoiceOver's label and hint for it
         // (DiscoveryPolicy.RowWord). The row a tap's ask is waiting on is lit, as the drawer
         // lights the app on screen, while the status line says "Pairing with…".
         DrawerRow(height: 50, highlighted: asking(mac),
@@ -1550,7 +1550,7 @@ struct ConnectScreen: View {
     /// openURL), and VoiceOver reads it as a link. The addresses are SillLinks'.
     private func footer(_ layout: ConnectLayout) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("On your Mac, enable Remote Desktop in T3 Code, then choose Pair iPhone or iPad…")
+            Text("On your Mac, enable Remote Desktop in Sled Code, then choose Pair iPhone or iPad…")
                 .foregroundStyle(Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             // All three on one line while they fit, else the download link over the other two,

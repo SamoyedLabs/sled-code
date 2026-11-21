@@ -1,5 +1,12 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+
+class RoutineCalendarLoadError extends Schema.TaggedError<RoutineCalendarLoadError>()(
+  "RoutineCalendarLoadError",
+  {
+    cause: Schema.Defect(),
+  },
+) {}
 import { selectionAsync } from "./botFeedback";
 import { useEffect, useEffectEvent, useState } from "react";
 import { Pressable, View } from "react-native";
@@ -78,15 +85,18 @@ async function loadCalendar(
       Effect.forEach(
         owners,
         (owner) =>
-          Effect.tryPromise(async () => {
-            const rows = decodeList(
-              await read(
-                owner.kind === "agent"
-                  ? { operation: "routine.list", agentId: owner.agentId }
-                  : { operation: "channel.routines", channelId: owner.channelId },
-              ),
-            );
-            return rows.filter(isRoutine).map((routine) => ({ ...routine, owner }));
+          Effect.tryPromise({
+            try: async () => {
+              const rows = decodeList(
+                await read(
+                  owner.kind === "agent"
+                    ? { operation: "routine.list", agentId: owner.agentId }
+                    : { operation: "channel.routines", channelId: owner.channelId },
+                ),
+              );
+              return rows.filter(isRoutine).map((routine) => ({ ...routine, owner }));
+            },
+            catch: (cause) => new RoutineCalendarLoadError({ cause }),
           }),
         { concurrency: 8 },
       ),
@@ -102,32 +112,35 @@ async function loadCalendar(
       Effect.forEach(
         routines,
         (routine) =>
-          Effect.tryPromise(async () => {
-            const owner: CalendarOwner = routine.owner;
-            const history =
-              range.from < now
-                ? decodeRuns(
-                    await read(
-                      owner.kind === "agent"
-                        ? {
-                            operation: "routine.runs",
-                            agentId: owner.agentId,
-                            routineId: routine.id,
-                          }
-                        : {
-                            operation: "channel.routine.runs",
-                            channelId: owner.channelId,
-                            routineId: routine.id,
-                            limit: 100,
-                          },
-                    ),
-                  )
-                : [];
-            return routineRuns(routine, history, range, now).map((run) => ({
-              run,
-              routine,
-              owner: routine.owner.name,
-            }));
+          Effect.tryPromise({
+            try: async () => {
+              const owner: CalendarOwner = routine.owner;
+              const history =
+                range.from < now
+                  ? decodeRuns(
+                      await read(
+                        owner.kind === "agent"
+                          ? {
+                              operation: "routine.runs",
+                              agentId: owner.agentId,
+                              routineId: routine.id,
+                            }
+                          : {
+                              operation: "channel.routine.runs",
+                              channelId: owner.channelId,
+                              routineId: routine.id,
+                              limit: 100,
+                            },
+                      ),
+                    )
+                  : [];
+              return routineRuns(routine, history, range, now).map((run) => ({
+                run,
+                routine,
+                owner: routine.owner.name,
+              }));
+            },
+            catch: (cause) => new RoutineCalendarLoadError({ cause }),
           }),
         { concurrency: 8 },
       ),

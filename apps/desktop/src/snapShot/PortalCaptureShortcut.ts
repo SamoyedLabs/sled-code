@@ -67,6 +67,7 @@ export class PortalCaptureShortcut {
   };
   readonly ready: Promise<void>;
   private closed = false;
+  private connection = 0;
   private owner = "";
   private namespace = "";
   private session = "";
@@ -74,8 +75,10 @@ export class PortalCaptureShortcut {
   private version = 0;
   private pending: { path: string; resolve: (body: unknown) => void } | undefined;
   private responses = new Map<string, unknown>();
-  private readonly stopped: Promise<never>;
+  private stopped!: Promise<never>;
   private rejectStopped!: (reason: Error) => void;
+  private readonly appId: string;
+  private readonly trigger: string;
   private readonly onCapture: () => void;
   private readonly onStateChanged: () => void;
   private readonly bus: MessageBus;
@@ -89,6 +92,8 @@ export class PortalCaptureShortcut {
     bus: MessageBus = sessionBus(),
     managedByHyprland = false,
   ) {
+    this.appId = appId;
+    this.trigger = portalShortcutTrigger(shortcut);
     this.onCapture = onCapture;
     this.onStateChanged = onStateChanged;
     this.bus = bus;
@@ -99,13 +104,41 @@ export class PortalCaptureShortcut {
         shortcutPending: true,
         shortcutMessage: "Connecting to Hyprland shortcuts…",
       };
+    this.resetStopped();
+    bus.on("error", this.failed);
+    bus.on("message", this.message);
+    this.ready = this.connect(true);
+  }
+
+  private resetStopped() {
     this.stopped = new Promise((_, reject) => {
       this.rejectStopped = reject;
     });
     void this.stopped.catch(() => undefined);
-    bus.on("error", this.failed);
-    bus.on("message", this.message);
-    this.ready = this.initialize(appId, shortcut).catch(this.failed);
+  }
+
+  private connect(first = false) {
+    const connection = ++this.connection;
+    return this.initialize(first).catch((error: unknown) => {
+      if (connection === this.connection) this.failed(error);
+    });
+  }
+
+  private portalGone() {
+    this.rejectStopped(new Error("The desktop shortcut service restarted."));
+    this.resetStopped();
+    this.owner = "";
+    this.session = "";
+    this.pending = undefined;
+    this.responses.clear();
+    this.update({
+      shortcutRegistered: false,
+      shortcutActionRegistered: false,
+      shortcutPending: true,
+      shortcutMessage: "The desktop shortcut service restarted. Reconnecting…",
+    });
+    // Register is sent to the well-known name, so it D-Bus-activates a portal that is not running.
+    void this.connect();
   }
 
   close = () => {
@@ -130,7 +163,7 @@ export class PortalCaptureShortcut {
       throw new Error("Change the capture binding in your Hyprland config, then save it.");
     if (!this.hasSession || this.version < 2)
       throw new Error(
-        "Open your desktop's shortcut settings and allow T3 Code's capture shortcut.",
+        "Open your desktop's shortcut settings and allow Sled Code's capture shortcut.",
       );
     await this.call({
       destination: this.owner,
@@ -158,7 +191,7 @@ export class PortalCaptureShortcut {
       shortcutPending: false,
       shortcutCanRetry: !this.managedByHyprland,
       shortcutMessage: this.managedByHyprland
-        ? "Couldn't connect to Hyprland shortcuts. Make sure xdg-desktop-portal-hyprland is running, then restart T3 Code."
+        ? "Couldn't connect to Hyprland shortcuts. Make sure xdg-desktop-portal-hyprland is running, then restart Sled Code."
         : error instanceof Error
           ? error.message
           : "Could not register the capture shortcut.",
@@ -209,10 +242,9 @@ export class PortalCaptureShortcut {
       message.sender === "org.freedesktop.DBus" &&
       message.interface === DBUS &&
       message.member === "NameOwnerChanged" &&
-      message.body[0] === PORTAL &&
-      message.body[1] === this.owner
+      message.body[0] === PORTAL
     ) {
-      this.failed(new Error("The desktop shortcut service restarted. Retry the shortcut request."));
+      if (this.owner && message.body[1] === this.owner) this.portalGone();
       return;
     }
     if (!this.owner || message.sender !== this.owner) return;
@@ -270,7 +302,8 @@ export class PortalCaptureShortcut {
     const response = new Promise<unknown>((done) => {
       resolve = done;
     });
-    this.pending = { path: expectedPath, resolve };
+    const pending = { path: expectedPath, resolve };
+    this.pending = pending;
     this.responses.clear();
     let completed = false;
     try {
@@ -284,7 +317,7 @@ export class PortalCaptureShortcut {
       });
       const handle = string(reply.body[0]);
       if (!handle.startsWith(this.namespace)) throw new Error("Invalid shortcut request handle.");
-      this.pending.path = handle;
+      pending.path = handle;
       if (this.responses.has(handle)) resolve(this.responses.get(handle));
       const [status, results] = decodeResponse(
         await this.wait(response, member === "BindShortcuts" ? 120_000 : 5_000),
@@ -298,7 +331,7 @@ export class PortalCaptureShortcut {
             shortcutMessage:
               this.version >= 2
                 ? "Shortcut permission wasn't granted. Open shortcut permissions to allow it."
-                : "Shortcut permission wasn't granted. Allow T3 Code in your desktop's shortcut settings.",
+                : "Shortcut permission wasn't granted. Allow Sled Code in your desktop's shortcut settings.",
           });
           return undefined;
         }
@@ -306,9 +339,11 @@ export class PortalCaptureShortcut {
       }
       return results;
     } finally {
-      if (!completed && !this.closed && this.pending) this.closeObject(this.pending.path, REQUEST);
-      this.pending = undefined;
-      this.responses.clear();
+      if (this.pending === pending) {
+        if (!completed && !this.closed) this.closeObject(pending.path, REQUEST);
+        this.pending = undefined;
+        this.responses.clear();
+      }
     }
   }
 
@@ -321,7 +356,7 @@ export class PortalCaptureShortcut {
         shortcutPending: false,
         shortcutMessage: shortcut
           ? "Managed by Hyprland. Add the binding to your config and save it."
-          : "Hyprland did not register the capture action. Check that xdg-desktop-portal-hyprland is running, then restart T3 Code.",
+          : "Hyprland did not register the capture action. Check that xdg-desktop-portal-hyprland is running, then restart Sled Code.",
       });
       return;
     }
@@ -338,8 +373,8 @@ export class PortalCaptureShortcut {
     });
   }
 
-  private async initialize(appId: string, shortcut: SnapShotKeyChord) {
-    const trigger = portalShortcutTrigger(shortcut);
+  private async initialize(first: boolean) {
+    const trigger = this.trigger;
     if (!process.env.FLATPAK_ID && !process.env.SNAP) {
       await this.call({
         destination: PORTAL,
@@ -347,7 +382,7 @@ export class PortalCaptureShortcut {
         interface: "org.freedesktop.host.portal.Registry",
         member: "Register",
         signature: "sa{sv}",
-        body: [appId, {}],
+        body: [this.appId, {}],
       }).catch((error: unknown) => {
         if (
           !(
@@ -381,7 +416,11 @@ export class PortalCaptureShortcut {
     this.version = decodeVersion(version.body[0]).value;
     for (const rule of [
       `type='signal',sender='${this.owner}',path_namespace='${PATH}'`,
-      `type='signal',sender='org.freedesktop.DBus',interface='${DBUS}',member='NameOwnerChanged',arg0='${PORTAL}'`,
+      ...(first
+        ? [
+            `type='signal',sender='org.freedesktop.DBus',interface='${DBUS}',member='NameOwnerChanged',arg0='${PORTAL}'`,
+          ]
+        : []),
     ])
       await this.call({
         destination: DBUS,

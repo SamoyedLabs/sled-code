@@ -23,6 +23,9 @@ describe("resolveT3McpToolPresentation", () => {
         "t3code:",
         "mcp_t3-code_",
         "T3 Code ",
+        "Sled Code ",
+        "sled-code.",
+        "mcp__sled_code__",
         "t3-code · ",
       ]) {
         expect(resolveT3McpToolPresentation(`${prefix}${tool} completed`), tool).toEqual(
