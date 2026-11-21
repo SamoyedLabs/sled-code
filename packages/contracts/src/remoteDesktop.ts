@@ -26,11 +26,16 @@ const IceUrl = Schema.String.check(
     (url) => {
       const authority = url.slice(url.indexOf(":") + 1).split("?")[0] ?? "";
       const port = authority.match(/:([0-9]+)$/)?.[1];
-      return port === undefined || (Number(port) > 0 && Number(port) <= 65_535);
+      return (
+        !(url.startsWith("turns:") && url.endsWith("transport=udp")) &&
+        (port === undefined || (Number(port) > 0 && Number(port) <= 65_535))
+      );
     },
     { expected: "a valid ICE endpoint and port" },
   ),
 );
+export const isRemoteDesktopTurnUrl = (url: string): boolean =>
+  url.startsWith("turn:") || url.startsWith("turns:");
 const IceSecret = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(1024),
@@ -45,10 +50,8 @@ export const RemoteDesktopIceServer = Schema.Struct({
     (server) =>
       server.urls.every(
         (url) =>
-          url.startsWith("stun:") ||
-          (server.username !== undefined &&
-            server.credential !== undefined &&
-            !(url.startsWith("turns:") && url.endsWith("transport=udp"))),
+          !isRemoteDesktopTurnUrl(url) ||
+          (server.username !== undefined && server.credential !== undefined),
       ),
     { expected: "authenticated TURN endpoints" },
   ),
@@ -58,7 +61,15 @@ export const RemoteDesktopConnectivity = Schema.Struct({
   expiresAt: Deadline,
   relayOnly: Schema.Boolean,
   relayAvailable: Schema.Boolean,
-});
+}).check(
+  Schema.makeFilter(
+    ({ iceServers, relayOnly, relayAvailable }) => {
+      const hasTurn = iceServers.some((server) => server.urls.some(isRemoteDesktopTurnUrl));
+      return relayAvailable === hasTurn && (!relayOnly || hasTurn);
+    },
+    { expected: "authenticated TURN endpoints when relay is available or required" },
+  ),
+);
 export type RemoteDesktopConnectivity = typeof RemoteDesktopConnectivity.Type;
 
 export const RemoteDesktopErrorReason = Schema.Literals([

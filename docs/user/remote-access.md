@@ -102,6 +102,50 @@ on that host.
 Background push notifications and remote Live Activity updates are unavailable
 in this version. Remote terminal and agent streaming work while the app is open.
 
+### Sound from a Windows host
+
+In the Remote Desktop viewer, open Settings and turn on **Send Audio** to hear
+the Windows host's default multimedia output during that session. Windows keeps
+playing through its local output. **Mute** silences playback on your viewer.
+Send Audio starts off with each new connection.
+
+### Remote Desktop across networks
+
+Sled Connect discovers your computer and carries Remote Desktop signaling. To
+relay the media when the viewer and computer cannot reach one another directly,
+configure a TURN provider on the computer hosting Remote Desktop.
+
+Save one of these configurations to a private JSON file:
+
+```json
+{ "provider": "cloudflare", "keyId": "<TURN key ID>", "apiToken": "<TURN key API token>" }
+```
+
+```json
+{
+  "provider": "coturn",
+  "urls": ["turns:turn.example.com:443?transport=tcp"],
+  "sharedSecret": "<coturn shared secret>"
+}
+```
+
+Use a [Cloudflare Realtime TURN key](https://developers.cloudflare.com/realtime/turn/generate-credentials/)
+or a coturn server configured for shared-secret authentication. Set
+`"relayOnly": true` to require TURN for Remote Desktop on this computer.
+Credentials last an hour by default. Set `ttlSeconds` to a value from 600 to 3600
+to shorten that lifetime.
+
+Install the configuration on the Remote Desktop host:
+
+```bash
+t3 remote-desktop turn set --base-dir <sled-data-directory> <private-json-file>
+```
+
+Use the data directory of your desktop host. The command stores the provider
+secret in that environment and takes effect at the next negotiation. You can
+remove the input file after saving it. Run `t3 remote-desktop turn clear` with
+the same `--base-dir` to remove the configuration.
+
 ## Pair over a LAN or private network
 
 Use direct pairing when the other device can reach the host's network address.

@@ -6,7 +6,7 @@ import Foundation
 #endif
 
 /// One of the seven settings a device can change on the Mac.
-enum SettingsField: CaseIterable, Hashable {
+enum SettingsField: String, CaseIterable, Hashable {
     case maxFPS, bitrate, captureScale, prioritizeSpeed, virtualDisplay, directWireless, sendAudio
 }
 
@@ -100,6 +100,7 @@ struct SettingsLedger: Equatable {
         guard let shown = displayed else { return nil }
         var out = HostSettingsChange(token: token)
         for field in change.fields {
+            if let allowed = host?.changeable, !allowed.contains(field.rawValue) { continue }
             // Rule 9: applied(to:) would set the field anyway, and a nil differs from any value.
             if field == .directWireless, shown.directWireless == nil { continue }
             if field == .sendAudio, shown.sendAudio == nil { continue }

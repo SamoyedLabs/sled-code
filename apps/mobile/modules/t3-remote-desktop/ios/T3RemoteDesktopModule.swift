@@ -54,8 +54,14 @@ public final class T3RemoteDesktopModule: Module {
         }.runOnQueue(.main)
         OnDestroy { self.closeBotVoice() }
 
+        AsyncFunction("getPickerPreview") { (fingerprint: String) -> String? in
+            T3DesktopPickerPreviews.get(fingerprint)
+        }
         View(T3RemoteDesktopView.self) {
             Events("onNativeState")
+            Prop("appearance") { (view: T3RemoteDesktopView, value: String) in
+                view.setAppearance(value)
+            }
             AsyncFunction("createNativeOffer") { (view: T3RemoteDesktopView, fingerprint: String, promise: Promise) in
                 view.createNativeOffer(fingerprint, promise: promise)
             }
@@ -78,7 +84,36 @@ public final class T3RemoteDesktopModule: Module {
                 view.createNativeRestartOffer(config, promise: promise)
             }
             AsyncFunction("closeNativeSession") { (view: T3RemoteDesktopView) in view.closeNativeSession() }
+            AsyncFunction("refreshPickerPreview") { (view: T3RemoteDesktopView, promise: Promise) in
+                view.refreshPickerPreview(promise)
+            }
             AsyncFunction("recordAcceptanceEvent") { (view: T3RemoteDesktopView, json: String) in view.recordAcceptanceEvent(json) }
+        }
+    }
+}
+
+private enum T3DesktopPickerPreviews {
+    private static let pictures: NSCache<NSString, NSString> = {
+        let cache = NSCache<NSString, NSString>()
+        cache.countLimit = 12
+        cache.totalCostLimit = 1_048_576
+        return cache
+    }()
+
+    static func get(_ fingerprint: String) -> String? {
+        guard let pin = Base64URL.decode(fingerprint), pin.count == 32 else { return nil }
+        return pictures.object(forKey: Base64URL.encode(pin) as NSString) as String?
+    }
+
+    static func capture(_ client: StreamClient, fingerprint: String, done: @escaping () -> Void) {
+        guard UIApplication.shared.applicationState == .active, client.connected,
+              let pin = Base64URL.decode(fingerprint), pin.count == 32 else { done(); return }
+        client.t3PickerPicture { image in
+            defer { done() }
+            guard let image, let jpeg = UIImage(cgImage: image).jpegData(compressionQuality: 0.65),
+                  jpeg.count <= 128 * 1024 else { return }
+            let uri = "data:image/jpeg;base64," + jpeg.base64EncodedString()
+            pictures.setObject(uri as NSString, forKey: Base64URL.encode(pin) as NSString, cost: uri.utf8.count * 2)
         }
     }
 }
@@ -100,12 +135,22 @@ final class T3RemoteDesktopView: ExpoView {
     private let measurementQueue = DispatchQueue(label: "com.t3tools.remote-desktop.acceptance")
     let onNativeState = EventDispatcher()
 
+    func setAppearance(_ value: String) {
+        guard value == "light" || value == "dark" else { return }
+        overrideUserInterfaceStyle = value == "dark" ? .dark : .light
+        controller?.overrideUserInterfaceStyle = overrideUserInterfaceStyle
+    }
+
     func createNativeOffer(_ fingerprint: String, connectivity: T3IceConfiguration? = nil, promise: Promise) {
         closeNativeSession()
         client.t3Disconnect()
         do {
             let session = try T3NativeSession(client: client, fingerprint: fingerprint, connectivity: connectivity)
             self.session = session
+            session.onPickerPreview = { [weak self] done in
+                guard let self else { done(); return }
+                T3DesktopPickerPreviews.capture(self.client, fingerprint: fingerprint, done: done)
+            }
             observedPath.removeAll()
             unhealthySeconds = 0
             requestedRelayRecovery = false
@@ -139,13 +184,18 @@ final class T3RemoteDesktopView: ExpoView {
         try session.accept(json, promise: promise)
     }
     func createNativeRestartOffer(_ config: T3IceConfiguration, promise: Promise) {
-        guard let session else { promise.reject(T3NativeSession.failure("Connect to the Mac first.")); return }
+        guard let session else { promise.reject(T3NativeSession.failure("Connect to the computer first.")); return }
         session.restart(config, promise: promise)
     }
     func closeNativeSession() {
         let previous = session
         session = nil
         previous?.close()
+    }
+
+    func refreshPickerPreview(_ promise: Promise) {
+        guard let session else { promise.resolve(nil); return }
+        session.capturePickerPreview { promise.resolve(nil) }
     }
 
     required init(appContext: AppContext? = nil) {
@@ -160,6 +210,11 @@ final class T3RemoteDesktopView: ExpoView {
         }
         client.t3PathChanged = { [weak self] available in
             self?.onNativeState(["state":"network", "available":available])
+        }
+        client.t3StopRequested = { [weak self] in
+            guard let self else { return }
+            self.closeNativeSession()
+            self.onNativeState(["state":"stopRequested"])
         }
         connectionObservation = client.$connected.removeDuplicates().sink { [weak self] connected in
             guard let self else { return }
@@ -293,6 +348,8 @@ final class T3RemoteDesktopView: ExpoView {
         }
         guard let parent = ancestor as? UIViewController else { return }
         let child = T3RemoteHostingController(rootView: T3RemoteRootView(client: client))
+        child.overrideUserInterfaceStyle = overrideUserInterfaceStyle
+        child.view.backgroundColor = .clear
         parent.addChild(child)
         addSubview(child.view)
         child.view.frame = bounds
@@ -307,7 +364,7 @@ private struct T3RemoteRootView: View {
     @State private var scenePhase: ScenePhase = .active
     var body: some View {
         // Expo owns the scene; its nested hosting controller has no SwiftUI App lifecycle.
-        ContentView(client: client).readsDuoPosture()
+        ContentView(client: client, usesEnvironmentConnections: true).readsDuoPosture()
             .environment(\.scenePhase, scenePhase)
             .onAppear {
                 scenePhase = UIApplication.shared.applicationState == .background ? .background : .active

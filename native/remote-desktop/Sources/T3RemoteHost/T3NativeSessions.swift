@@ -6,7 +6,7 @@ import SillHostCore
 import StreamProtocol
 
 /// Only inherited, parent-owned IPC reaches this supervisor. T3's server issues
-/// leases; the TLS ingress independently requires the exact paired device key.
+/// leases; the TLS ingress independently requires the exact lease-bound device key.
 @MainActor
 final class T3NativeSessions {
     struct Request: Decodable {
@@ -173,7 +173,7 @@ final class T3NativeSessions {
                 self.close(id)
             }
         }
-        session.ingress = host.t3OpenTunnel(remote: remote, fingerprint: expected,
+        session.ingress = host.t3OpenTunnel(remote: remote, admission: .authenticatedLease(expected),
             expiresAt: Date(timeIntervalSince1970: Double(expiry) / 1000), ready: { [weak self, weak session] port in
                 guard let session, let port else { failed(); return }
                 transport.start(port: port, offer: offer, servers: servers, relayOnly: command.connectivity?.relayOnly ?? false,

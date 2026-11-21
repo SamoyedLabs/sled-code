@@ -62,7 +62,7 @@ public struct StreamSettings: Codable, Hashable, Sendable {
     public var maxFPS: Int
     /// Bits per second per 60 fps (a 120 fps stream gets twice as much).
     public var bitrate: Int
-    /// 2 = Retina, 1 = Standard.
+    /// Mac: 2 = Retina, 1 = Standard. Windows: 2 = native pixels, 1 = half encoded dimensions.
     public var captureScale: Double
     public var prioritizeSpeed: Bool
     public var virtualDisplay: Bool
@@ -101,6 +101,9 @@ public struct RunningStream: Codable, Hashable, Sendable {
     /// The encoder's target (per-60 bitrate × fps / 60), whole Mbps.
     public var mbps: Int
     public var onVirtualDisplay: Bool
+    /// Exact encoder target and client-reported received fps, when supplied by the host.
+    public var targetBitrate: Int? = nil
+    public var deliveredFPS: Int? = nil
 
     public init(width: Int, height: Int, fps: Int, mbps: Int, onVirtualDisplay: Bool) {
         self.width = width; self.height = height; self.fps = fps; self.mbps = mbps
@@ -209,6 +212,9 @@ public struct HostSettingsState: Codable, Hashable, Sendable {
     /// while all is well, while Send Audio is off, and from hosts without sound. The Mac's, the same
     /// for every connection.
     public var audioNote: String?
+    /// Nil preserves Mac behavior; Windows lists only its implemented stream fields.
+    public var changeable: [String]? = nil
+    public var settingsNote: String? = nil
 
     public init(settings: StreamSettings, persistent: Bool, virtualDisplayAvailable: Bool,
                 virtualDisplayNote: String? = nil, softwareEncoder: Bool, stream: RunningStream? = nil,

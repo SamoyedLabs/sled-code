@@ -93,6 +93,13 @@ public enum StreamMessageKind: UInt8 {
                              // has not come in 4 s (or four round trips), 2 s apart at least (KeyframeRecovery);
                              // at most one a second per connection on the host
     case t3StreamReceipt = 45 // T3 tunnel only: cumulative far TLS-reader bytes, not a display ACK
+    case windowsCapabilities = 46
+    case selectWindowsOutput = 47
+    case windowsGeometry = 48
+    case windowsInput = 49
+    case windowsFrameContext = 50
+    case windowsFrameReady = 51
+    case windowsCursor = 52  // WindowsCursorReport: bound position/visibility and optional CursorShapeBlob
     case unknown = 255       // never sent: what parseHeader yields for a kind this build does not know
 }
 

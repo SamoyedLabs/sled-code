@@ -16,18 +16,32 @@ extension Color {
 }
 
 enum Palette {
-    static let bar = Color(hex: 0x16181C)          // top bar and drawer background
-    static let control = Color(hex: 0x23262C)      // bar buttons, search field, selected row
-    static let controlOpen = Color(hex: 0x2C3550)  // a bar button whose thing is showing
-    static let accent = Color(hex: 0x9BB7FF)
-    static let text = Color(hex: 0xEEF0F3)
-    static let barLabel = Color(hex: 0xC4C9D1)     // the 11pt labels under the bar icons
-    static let muted = Color(hex: 0xA4ABB5)        // section headers, window counts, placeholder
-    static let panel = Color(hex: 0x1F2126)        // the stream panel behind the video
-    static let trackpad = Color(hex: 0x101215)     // the portrait trackpad's well
-    static let thumbBody = Color(hex: 0x26282D)    // thumbnail placeholder
-    static let thumbTitleBar = Color(hex: 0x34373D)
-    static let iconFallback = Color(hex: 0x3A3D44) // two-letter app badge
+    static let canvas = adaptive(light: 0xF7F8FA, dark: 0x000000)
+    static let bar = adaptive(light: 0xF3F4F6, dark: 0x16181C)
+    static let control = adaptive(light: 0xE7EAF0, dark: 0x23262C)
+    static let controlOpen = adaptive(light: 0xDCE6FF, dark: 0x2C3550)
+    static let accent = adaptive(light: 0x335CBA, dark: 0x9BB7FF)
+    static let text = adaptive(light: 0x1C2027, dark: 0xEEF0F3)
+    static let barLabel = adaptive(light: 0x414955, dark: 0xC4C9D1)
+    static let muted = adaptive(light: 0x5B6472, dark: 0xA4ABB5)
+    static let panel = adaptive(light: 0xE9ECF1, dark: 0x1F2126)
+    static let trackpad = adaptive(light: 0xF0F2F6, dark: 0x101215)
+    static let thumbBody = adaptive(light: 0xDCE1E8, dark: 0x26282D)
+    static let thumbTitleBar = adaptive(light: 0xCDD4DD, dark: 0x34373D)
+    static let iconFallback = adaptive(light: 0xC8D0DA, dark: 0x3A3D44)
+    static let edge = adaptive(light: 0x000000, dark: 0xFFFFFF)
+    static let floatingShadow = Color(uiColor: UIColor { traits in
+        UIColor.black.withAlphaComponent(traits.userInterfaceStyle == .dark ? 0.28 : 0.10)
+    })
+
+    private static func adaptive(light: UInt32, dark: UInt32) -> Color {
+        Color(uiColor: UIColor { traits in
+            let hex = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: Double((hex >> 16) & 0xFF) / 255,
+                           green: Double((hex >> 8) & 0xFF) / 255,
+                           blue: Double(hex & 0xFF) / 255, alpha: 1)
+        })
+    }
 }
 
 // MARK: - Layout selection
@@ -256,8 +270,11 @@ struct StreamScreen: View {
                 .allowsHitTesting(!overlayShown && tour == nil)
                 // The pointer sprite follows the layout: the trackpad's arrow shows only in the
                 // laptop layout, and a rotation re-renders it at once; the Mac's arrow stays.
-                .onChange(of: DuoLayout.of(geo.size).isPortrait, initial: true) { _, portrait in
-                    client.setPointerLayout(portrait: portrait)
+                .onChange(of: duo, initial: true) { previous, current in
+                    client.setPointerLayout(portrait: current.isPortrait)
+                    if previous != current, client.viewerHost == .windows, client.windowsViewMode == .manual {
+                        client.performViewerCommand(.fit)
+                    }
                 }
                 // The clipboard's chip on screen or not: its 20 s run only while it is, and VoiceOver
                 // is told when it first shows (ClipboardPolicy.chipCounts).
@@ -330,7 +347,7 @@ struct StreamScreen: View {
 
     private var streamSession: some View {
         streamCanvas
-        .background(Color.black)
+        .background(Palette.canvas)
         .overlayPreferenceValue(WindowMenuAnchorKey.self) { anchor in
             if let anchor, let id = windowMenu, let window = client.windows.first(where: { $0.id == id }) {
                 WindowLightsMenu(anchor: anchor, window: window,
@@ -346,7 +363,14 @@ struct StreamScreen: View {
         }
         .onChange(of: scenePhase) { _, phase in
             // A gesture cut short by a scene change never ends: put the transient UI away.
-            if phase != .active { scaleOpen = false; windowMenu = nil }
+            if phase != .active {
+                scaleOpen = false; windowMenu = nil
+                if client.viewerHost == .windows {
+                    latched = []
+                    overlay.sourceWillChange()
+                    client.releaseViewerInput()
+                }
+            }
         }
         // One thing open at a time: the Aa ruler and a thumbnail's traffic lights put the Settings
         // panel away. (Opening the panel closes them, the drawer and the keyboard.)
@@ -359,6 +383,7 @@ struct StreamScreen: View {
             // dictation and an input method may revise (#138).
             let proxy = overlay
             client.onCaretMayMove = { [weak proxy] in proxy?.caretMayHaveMoved() }
+            client.onViewerSourceWillChange = { [weak proxy] in proxy?.sourceWillChange() }
             // A fresh connection starts on the Desktop (the client asks for it as soon as the host
             // reports nothing streaming), so the drawer stays closed until the user opens it.
             sendViewport()
@@ -376,6 +401,15 @@ struct StreamScreen: View {
             // The host sizes a window as it selects it, from the last viewport it has; this repeat
             // is for a host that restarted, or a window that was picked from the Mac's side.
             sendViewport()
+        }
+        .onChange(of: client.windowsGeometry?.generation) { _, _ in
+            latched = []
+            overlay.sourceWillChange()
+        }
+        .onChange(of: client.windowsInputReady) { _, ready in
+            latched = []
+            overlay.sourceWillChange()
+            if !ready { client.releaseViewerInput() }
         }
         .onChange(of: client.connected) { _, up in
             if up { sendViewport() }
@@ -424,6 +458,12 @@ struct StreamScreen: View {
         .onDisappear {
             tourWait?.cancel()
             tourWait = nil
+            pendingViewport?.cancel()
+            if client.viewerHost == .windows { overlay.sourceWillChange() }
+            overlay.setKeyboard(shown: false)
+            client.releaseViewerInput()
+            client.onCaretMayMove = nil
+            client.onViewerSourceWillChange = nil
         }
     }
 
@@ -441,7 +481,7 @@ struct StreamScreen: View {
 
     /// The clipboard's chip shows where the link's line may, and not over a thumbnail's lights or the
     /// Aa ruler either (the Settings panel has its own Paste).
-    private var clipboardChipAllowed: Bool { linkLineAllowed && windowMenu == nil && !scaleOpen }
+    private var clipboardChipAllowed: Bool { client.viewerCapabilities.clipboard && linkLineAllowed && windowMenu == nil && !scaleOpen }
 
     /// The chip itself on screen, not its note in its place: its time runs only then.
     private var clipboardChipOnScreen: Bool {
@@ -481,7 +521,7 @@ struct StreamScreen: View {
                 try? await Task.sleep(for: .seconds(delay))
                 if Task.isCancelled { return }
             }
-            guard client.connected, panelSize.width > 0, panelSize.height > 0 else { return }
+            guard client.viewerCapabilities.windowTextScale, client.connected, panelSize.width > 0, panelSize.height > 0 else { return }
             let fps = StreamClient.wantedFPS(remote: client.awayCapsFrameRate)
             #if DEBUG
             print("viewport: \(Self.points(panelSize.width))×\(Self.points(panelSize.height)) pt, scale "
@@ -716,6 +756,7 @@ struct StreamScreen: View {
             scaleOpen = false
             keyboardBeforeSettings = keyboardShown
             overlay.setKeyboard(shown: false)
+            if client.viewerHost == .windows { client.releaseViewerInput() }
         }
         let motion: Animation = open && !reduceMotion ? .spring(duration: 0.25, bounce: 0.15) : .easeOut(duration: 0.18)
         withAnimation(motion) {
@@ -881,6 +922,7 @@ struct StreamScreen: View {
     /// The automatic tour's rule (TourPolicy.automatic), asked at the picture, at a layout change
     /// and when a wait runs out. One decision per session and layout.
     private func considerTour() {
+        guard client.viewerCapabilities.tour else { return }
         tourWait?.cancel()
         tourWait = nil
         guard tour == nil, let layout = tourLayout else { return }
@@ -989,6 +1031,7 @@ struct StreamScreen: View {
     /// Settings › Take the Tour: the panel closes without putting the keyboard back (the tour does,
     /// at its end, if it was up before the panel opened), then every step of the layout on screen.
     private func takeTour() {
+        guard client.viewerCapabilities.tour else { return }
         let keyboard = keyboardBeforeSettings
         setSettings(false, restoreKeyboard: false)
         tourLog("Take the Tour")
@@ -1049,7 +1092,7 @@ struct StreamScreen: View {
         // The book pose (docs/iphone-duo-plan.md, (a)): nothing on the fold's band; elsewhere as before.
         let (bar, stripWidth) = plain.clearing(fold, width: width)
         return VStack(spacing: 0) {
-            TopBar(client: client, metrics: bar, stripWidth: stripWidth, drawerOpen: $drawerOpen,
+            TopBar(client: client, overlay: overlay, metrics: bar, stripWidth: stripWidth, drawerOpen: $drawerOpen,
                    keyboardShown: $keyboardShown,
                    textScale: $textScale, scaleOpen: $scaleOpen, windowMenu: $windowMenu,
                    settingsOpen: settingsOpen,
@@ -1060,8 +1103,28 @@ struct StreamScreen: View {
                    toggleKeyboard: { overlay.toggleKeyboard() },
                    setSettings: { setSettings($0, restoreKeyboard: $1) },
                    menusOpened: menusOpened, menusClosed: menusClosed)
+            if client.viewerHost == .windows {
+                landscapeKeys(width: width, fold: fold)
+            }
             contentArea(bar: bar)
         }
+    }
+
+    private func landscapeKeys(width: CGFloat, fold: FoldInfo) -> some View {
+        let session = client.viewerInputSession
+        let band = fold.verticalBand
+        let leading = band?.minX ?? width
+        let trailing = band.map { width - $0.maxX } ?? width
+        let alignment: Alignment = band == nil ? .center : (leading >= trailing ? .leading : .trailing)
+        return KeyRow(metrics: .phone, keys: .phone, latched: $latched, keyboardShown: keyboardShown,
+                      send: { client.sendViewerKey($0, captured: session) },
+                      toggleKeyboard: { overlay.toggleKeyboard() }, showSpotlight: false, windowsHost: true,
+                      winTap: session.standaloneWinTap ? { client.performViewerCommand(.windowsWinTap, captured: session) } : nil)
+            .disabled(!session.inputReady || settingsOpen)
+            .frame(width: min(360, max(0, max(leading, trailing) - 16)))
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, alignment: alignment)
+            .background(Palette.bar)
     }
 
     /// `largerKeyboard`: Larger Picture's keyboard on a phone (see `body`), nil otherwise.
@@ -1085,24 +1148,14 @@ struct StreamScreen: View {
 
     private func contentArea(bar: BarMetrics) -> some View {
         ZStack(alignment: .topLeading) {
-            Color.black
+            Palette.canvas
 
-            ZStack {
-                StreamView(client: client)
-                // Same frame as the video, so a touch maps straight onto the streamed frame.
-                InputOverlay(videoSize: client.videoSize,
-                             send: { client.sendInput($0) },
-                             setOwnPointer: { client.setOwnPointer($0, from: $1) },
-                             proxy: overlay,
-                             isKeyboardShown: $keyboardShown,
-                             latchedModifiers: latched,
-                             onModifiersConsumed: { latched = [] },
-                             sendGesture: { client.sendGesture($0, fingers: $1) })
-            }
+            StreamPicture(client: client, overlay: overlay, keyboardShown: $keyboardShown,
+                          latched: latched, consumed: { latched = [] })
             .background(Palette.panel)
             .overlay(alignment: .top) { LinkLineView(text: shownLinkLine) }
             .clipShape(streamShape)
-            .overlay(streamShape.strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
+            .overlay(streamShape.strokeBorder(Palette.edge.opacity(0.09), lineWidth: 1))
             // The panel itself, inside the padding: the size the host fits the Mac window to.
             .onGeometryChange(for: CGSize.self, of: { $0.size }, action: { panelSize = $0 })
             .tourTarget(.stream)
@@ -1237,6 +1290,7 @@ struct BarMetrics {
 
 private struct TopBar: View {
     @ObservedObject var client: StreamClient
+    let overlay: InputOverlayProxy
     let metrics: BarMetrics
     /// The book pose: the strip's width, so that it ends short of the fold (BarMetrics.clearing);
     /// nil: it takes the room there is, as before.
@@ -1259,14 +1313,16 @@ private struct TopBar: View {
 
     var body: some View {
         HStack(spacing: metrics.gap) {
-            button(open: drawerOpen, symbol: "magnifyingglass", label: "Apps",
-                   accessibilityLabel: drawerOpen ? "Close the app list" : "Open the app list",
-                   action: {
-                       setSettings(false, false)
-                       withAnimation(.easeOut(duration: 0.18)) { drawerOpen.toggle() }
-                   })
+            if client.viewerCapabilities.apps {
+                button(open: drawerOpen, symbol: "magnifyingglass", label: "Apps",
+                       accessibilityLabel: drawerOpen ? "Close the app list" : "Open the app list",
+                       action: {
+                           setSettings(false, false)
+                           withAnimation(.easeOut(duration: 0.18)) { drawerOpen.toggle() }
+                       })
 
-            WindowStrip(client: client, width: metrics.thumbWidth, height: metrics.thumbHeight,
+            }
+            WindowStrip(client: client, overlay: overlay, width: metrics.thumbWidth, height: metrics.thumbHeight,
                         radius: metrics.thumbRadius, spacing: metrics.thumbSpacing,
                         pad: metrics.thumbPad, fade: metrics.thumbFade, menuFor: $windowMenu)
                 .opacity(scaleOpen ? 0.2 : 1)      // the ruler is centred on Aa and reaches over the strip's end
@@ -1279,7 +1335,7 @@ private struct TopBar: View {
             // The Mac's menus of the streamed app, next to the thumbnails because they are the picked
             // window's app's. Only while the Mac sent some, and where the bar holds it: with none the
             // strip takes its room back.
-            if client.menus.hasMenus, menusFit {
+            if client.viewerCapabilities.menus, client.menus.hasMenus, menusFit {
                 MacMenuButton(client: client, width: metrics.buttonWidth, height: metrics.buttonHeight,
                               spacing: metrics.buttonSpacing, onOpen: menusOpened, onClose: menusClosed)
                     .opacity(scaleOpen ? 0 : 1)    // under the Aa ruler, as the buttons after Aa
@@ -1290,10 +1346,15 @@ private struct TopBar: View {
             // Text size: the host sizes the Mac window to the panel divided by this scale, so a
             // bigger number means a smaller Mac window and bigger text here. The slider unfolds to
             // the right, over the two buttons after it, which fade while it is open.
-            TextScaleControl(scale: $textScale, open: $scaleOpen,
-                             width: metrics.buttonWidth, height: metrics.buttonHeight,
-                             pointsPerStep: metrics.buttonHeight >= 60 ? 44 : 40)
-                .tourTarget(.textSize)
+            if client.viewerCapabilities.windowTextScale {
+                TextScaleControl(scale: $textScale, open: $scaleOpen,
+                                 width: metrics.buttonWidth, height: metrics.buttonHeight,
+                                 pointsPerStep: metrics.buttonHeight >= 60 ? 44 : 40)
+                    .tourTarget(.textSize)
+            } else {
+                button(open: false, symbol: client.windowsViewActionSymbol, label: client.windowsViewAction,
+                       accessibilityLabel: client.windowsViewActionLabel, action: { client.toggleWindowsView() })
+            }
 
             button(open: keyboardShown, symbol: "keyboard", label: "Keyboard",
                    accessibilityLabel: keyboardShown ? "Hide the keyboard" : "Show the keyboard",
@@ -1301,16 +1362,19 @@ private struct TopBar: View {
                 .opacity(scaleOpen ? 0 : 1)
                 .allowsHitTesting(!scaleOpen)
                 .tourTarget(.keyboard)
+                .disabled(!client.viewerInputSession.inputReady)
 
-            button(open: client.active == .desktop, symbol: "desktopcomputer", label: "Desktop",
-                   accessibilityLabel: "Show the full Mac desktop",
-                   action: { client.select(.desktop) })
-                .opacity(scaleOpen ? 0 : 1)
-                .allowsHitTesting(!scaleOpen)
+            if client.viewerHost == .mac {
+                button(open: client.active == .desktop, symbol: "desktopcomputer", label: "Desktop",
+                       accessibilityLabel: "Show the full Mac desktop",
+                       action: { client.performViewerCommand(.select(.desktop)) })
+                    .opacity(scaleOpen ? 0 : 1)
+                    .allowsHitTesting(!scaleOpen)
 
+            }
             // Leave's old slot: Disconnect is the Settings panel's pinned last row now.
             button(open: settingsOpen, symbol: "gearshape", label: "Settings",
-                   accessibilityLabel: settingsOpen ? "Close settings" : "Settings for \(client.macName.isEmpty ? "the Mac" : client.macName)",
+                   accessibilityLabel: settingsOpen ? "Close settings" : "Settings for \(client.viewerName)",
                    action: { setSettings(!settingsOpen, true) })
                 .opacity(scaleOpen ? 0 : 1)
                 .allowsHitTesting(!scaleOpen)
@@ -1562,6 +1626,7 @@ struct TextScaleControl: View {
 /// stay one view in every posture.
 struct WindowStrip: View {
     @ObservedObject var client: StreamClient
+    let overlay: InputOverlayProxy
     var width: CGFloat = 104
     var height: CGFloat = 66
     var radius: CGFloat = 10
@@ -1588,38 +1653,51 @@ struct WindowStrip: View {
     @State private var lifted: UInt32? = nil
     @State private var liftOffset: CGFloat = 0
     @State private var liftStartIndex = 0
+    @State private var renaming: DisplayRename?
+    private struct DisplayRename: Identifiable {
+        let output: String
+        let computer: String
+        let name: String
+        var id: String { computer + ":" + output }
+    }
 
     var body: some View {
         let windows = client.orderedWindows
         let slot = width + spacing
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: spacing) {
-                ForEach(Array(windows.enumerated()), id: \.element.id) { index, window in
-                    WindowThumbnail(window: window,
-                                    image: client.thumbnails[window.id],
-                                    icon: client.icons[window.bundleID],
-                                    isActive: client.active == .window(window.id),
-                                    width: width, height: height, radius: radius, badge: badge,
-                                    menuOpen: menuFor == window.id,
-                                    lifted: lifted == window.id,
-                                    onSelect: { client.select(.window(window.id)) },
-                                    onCommand: { client.command($0, window: window.id) },
-                                    onMove: { step in
-                                        client.moveWindow(window.id, to: index + step)
-                                        client.persistWindowOrder()
-                                    })
-                        .overlay {
-                            HoldDragOverlay(minimumHold: Self.holdToOpen,
-                                            onTap: { if menuFor != nil { closeMenu() } else { client.select(.window(window.id)) } },
-                                            onHold: { openMenu(for: window.id) },
-                                            onMove: { t in holdMoved(window: window, index: index, count: windows.count, slot: slot, translation: t) },
-                                            onEnd: { holdEnded(window: window) })
-                        }
-                        .offset(x: lifted == window.id ? liftOffset : 0)
-                        .zIndex(lifted == window.id ? 1 : 0)
-                        // The lifted thumbnail follows the finger: its slot change must not animate,
-                        // or the layout springs one way while the compensating offset jumps the other.
-                        .transaction { if lifted == window.id { $0.animation = nil } }
+                if client.viewerHost == .windows {
+                    ForEach(client.viewerSession.sources) { source in
+                        monitor(source)
+                    }
+                } else {
+                    ForEach(Array(windows.enumerated()), id: \.element.id) { index, window in
+                        WindowThumbnail(window: window,
+                                        image: client.thumbnails[window.id],
+                                        icon: client.icons[window.bundleID],
+                                        isActive: client.active == .window(window.id),
+                                        width: width, height: height, radius: radius, badge: badge,
+                                        menuOpen: menuFor == window.id,
+                                        lifted: lifted == window.id,
+                                        onSelect: { client.performViewerCommand(.select(.window(window.id))) },
+                                        onCommand: { client.command($0, window: window.id) },
+                                        onMove: { step in
+                                            client.moveWindow(window.id, to: index + step)
+                                            client.persistWindowOrder()
+                                        })
+                            .overlay {
+                                HoldDragOverlay(minimumHold: Self.holdToOpen,
+                                                onTap: { if menuFor != nil { closeMenu() } else { client.performViewerCommand(.select(.window(window.id))) } },
+                                                onHold: { openMenu(for: window.id) },
+                                                onMove: { t in holdMoved(window: window, index: index, count: windows.count, slot: slot, translation: t) },
+                                                onEnd: { holdEnded(window: window) })
+                            }
+                            .offset(x: lifted == window.id ? liftOffset : 0)
+                            .zIndex(lifted == window.id ? 1 : 0)
+                            // The lifted thumbnail follows the finger: its slot change must not animate,
+                            // or the layout springs one way while the compensating offset jumps the other.
+                            .transaction { if lifted == window.id { $0.animation = nil } }
+                    }
                 }
             }
             .padding(.vertical, pad)
@@ -1640,7 +1718,12 @@ struct WindowStrip: View {
                 client.persistWindowOrder()
             }
         }
-        .onDisappear { lifted = nil; liftOffset = 0 }
+        .onDisappear { lifted = nil; liftOffset = 0; overlay.setDisplayNameEditing(false) }
+        .sheet(item: $renaming, onDismiss: { overlay.setDisplayNameEditing(false) }) { target in
+            DisplayNameEditor(name: target.name) { name in
+                client.renameDisplay(target.output, on: target.computer, to: name)
+            }
+        }
         #if DEBUG
         // Harness: `-SillWindowMenu 1` opens the first window's submenu at launch.
         .onAppear {
@@ -1652,6 +1735,45 @@ struct WindowStrip: View {
     /// The finger moved while the hold is still down. More than 8 pt lifts the thumbnail and
     /// drags it; the drag reorders live: crossing the middle of a neighbour swaps slots, and the
     /// lifted thumbnail's offset is corrected by the slots it has moved so it stays under the finger.
+    private func monitor(_ source: ViewerSource) -> some View {
+        let active = client.viewerInputSession.selected == source.id
+        return Button { client.performViewerCommand(.select(source.id)) } label: {
+            VStack(spacing: 4) {
+                Image(systemName: "display").font(.system(size: min(24, height * 0.4)))
+                Text(source.title).font(.system(size: 10, weight: .medium)).lineLimit(1)
+                    .padding(.horizontal, 4)
+            }
+            .foregroundStyle(active ? Palette.accent : Palette.text)
+            .frame(width: width, height: height)
+            .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(Palette.control))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .strokeBorder(active ? Palette.accent : Palette.edge.opacity(0.12), lineWidth: active ? 2 : 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(source.title + (active ? ", selected" : ""))
+        .accessibilityAddTraits(active ? [.isSelected] : [])
+        .contextMenu {
+            if case .monitor(let id) = source.id, let computer = client.session?.macID {
+                Button("Rename display", systemImage: "pencil") {
+                    overlay.setDisplayNameEditing(true)
+                    renaming = DisplayRename(output: id, computer: computer,
+                                             name: client.displayNames[id] ?? source.originalTitle ?? "")
+                }
+                if client.displayNames[id] != nil {
+                    Button("Use original name", systemImage: "arrow.counterclockwise") {
+                        client.renameDisplay(id, on: computer, to: "")
+                    }
+                }
+            }
+        }
+        .accessibilityAction(named: Text("Rename display")) {
+            guard case .monitor(let id) = source.id, let computer = client.session?.macID else { return }
+            overlay.setDisplayNameEditing(true)
+            renaming = DisplayRename(output: id, computer: computer,
+                                     name: client.displayNames[id] ?? source.originalTitle ?? "")
+        }
+    }
+
     private func holdMoved(window: WindowInfo, index: Int, count: Int, slot: CGFloat, translation t: CGSize) {
         if lifted == nil {
             guard abs(t.width) > 8 || abs(t.height) > 8 else { return }
@@ -1783,7 +1905,7 @@ struct WindowLightsMenu: View {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(Palette.control)
                         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+                            .strokeBorder(Palette.edge.opacity(0.1), lineWidth: 1))
                         .shadow(color: .black.opacity(0.5), radius: 16, y: 6)
                 )
                 .position(x: x, y: y)
@@ -1853,7 +1975,7 @@ private struct WindowThumbnail: View {
             .frame(width: width, height: height)
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                .strokeBorder(Palette.edge.opacity(0.12), lineWidth: 1))
             // The active halo sits under the app badge: the badge's bar-coloured ring then reads as
             // cutting through the halo, instead of the halo slicing across the icon. It follows the
             // thumbnail's own radius so both sizes keep the same 3 pt gap.
@@ -1976,8 +2098,9 @@ struct AppDrawer: View {
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Palette.bar))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
-        .shadow(color: .black.opacity(0.65), radius: 30, x: 0, y: 24)
+            .strokeBorder(Palette.edge.opacity(0.10), lineWidth: 1))
+        .compositingGroup()
+        .shadow(color: Palette.floatingShadow, radius: 12, x: 0, y: 6)
     }
 
     private var searchField: some View {
@@ -2071,7 +2194,7 @@ struct AppDrawer: View {
            let index = app.windows.firstIndex(where: { $0.id == id }) {
             target = app.windows[(index + 1) % app.windows.count]
         }
-        client.select(.window(target.id))
+        client.performViewerCommand(.select(.window(target.id)))
         withAnimation(.easeOut(duration: 0.18)) { drawerOpen = false }
     }
 }
@@ -2135,5 +2258,48 @@ extension PhonePortraitLayout.Streaming {
         case .desktop: self = .desktop
         case .window: self = .window
         }
+    }
+}
+
+
+private struct DisplayNameEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @State var name: String
+    @FocusState private var focused: Bool
+    let save: (String) -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Display name", text: $name)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .focused($focused)
+                        .submitLabel(.done)
+                        .onSubmit(commit)
+                } footer: {
+                    Text("Saved for this computer in this viewer. Leave empty to use the original name. Maximum 80 characters.")
+                }
+            }
+            .navigationTitle("Rename display")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save", action: commit)
+                        .disabled(ViewerDisplayNames.normalized(name) == nil)
+                }
+            }
+        }
+        .presentationDetents([.height(240)])
+        .presentationDragIndicator(.visible)
+        .onAppear { focused = true }
+    }
+
+    private func commit() {
+        guard ViewerDisplayNames.normalized(name) != nil else { return }
+        save(name)
+        dismiss()
     }
 }

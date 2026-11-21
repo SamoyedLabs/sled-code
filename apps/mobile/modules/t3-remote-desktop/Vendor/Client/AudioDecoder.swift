@@ -26,7 +26,7 @@ final class AudioDecoder {
     }
 
     /// The codecs this decoder plays, as the wire names them (StreamProtocol's AudioCodec.aacELD).
-    static let codecs = ["aac-eld"]
+    static let codecs = ["aac-eld", "aac-lc"]
     static let sampleRate = 48_000.0
     static let channels = 2
 
@@ -40,15 +40,19 @@ final class AudioDecoder {
 
     /// A decoder for AAC-ELD at 48 kHz stereo, `framesPerPacket` frames a packet, with the encoder's
     /// magic cookie (its AudioSpecificConfig).
-    init(framesPerPacket: Int, cookie: Data) throws {
+    init(framesPerPacket: Int, cookie: Data, codec: String = "aac-eld") throws {
         guard (1...8192).contains(framesPerPacket) else { throw Failure(status: -50, step: "the packet size") }
         var input = AudioStreamBasicDescription()
-        input.mFormatID = kAudioFormatMPEG4AAC_ELD
+        switch codec {
+        case "aac-eld": input.mFormatID = kAudioFormatMPEG4AAC_ELD
+        case "aac-lc": input.mFormatID = kAudioFormatMPEG4AAC
+        default: throw Failure(status: -50, step: "the audio codec")
+        }
         input.mSampleRate = Self.sampleRate
         input.mChannelsPerFrame = UInt32(Self.channels)
         var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
         var status = AudioFormatGetProperty(kAudioFormatProperty_FormatInfo, 0, nil, &size, &input)
-        guard status == noErr else { throw Failure(status: status, step: "AAC-ELD's format") }
+        guard status == noErr else { throw Failure(status: status, step: "the audio format") }
         input.mFramesPerPacket = UInt32(framesPerPacket)
         var output = AudioStreamBasicDescription(mSampleRate: Self.sampleRate, mFormatID: kAudioFormatLinearPCM,
                                                  mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked | kAudioFormatFlagIsNonInterleaved,
@@ -57,9 +61,19 @@ final class AudioDecoder {
         var made: AudioConverterRef?
         status = AudioConverterNew(&input, &output, &made)
         guard status == noErr, let converter = made else { throw Failure(status: status, step: "AudioConverterNew") }
-        if !cookie.isEmpty {
-            status = cookie.withUnsafeBytes {
-                AudioConverterSetProperty(converter, kAudioConverterDecompressionMagicCookie, UInt32(cookie.count), $0.baseAddress!)
+        // Media Foundation sends raw AAC-LC ASC; AudioToolbox expects an ES descriptor cookie.
+        let decoderCookie: Data
+        if codec == "aac-lc" {
+            guard cookie == Data([0x11, 0x90]), framesPerPacket == 1024 else {
+                AudioConverterDispose(converter)
+                throw Failure(status: -50, step: "the AAC-LC configuration")
+            }
+            decoderCookie = Data([0x03, 0x19, 0, 0, 0, 0x04, 0x11, 0x40, 0x15, 0, 0, 0,
+                                  0, 1, 0xF4, 0, 0, 1, 0xF4, 0, 0x05, 0x02]) + cookie + Data([0x06, 0x01, 0x02])
+        } else { decoderCookie = cookie }
+        if !decoderCookie.isEmpty {
+            status = decoderCookie.withUnsafeBytes {
+                AudioConverterSetProperty(converter, kAudioConverterDecompressionMagicCookie, UInt32(decoderCookie.count), $0.baseAddress!)
             }
             guard status == noErr else { AudioConverterDispose(converter); throw Failure(status: status, step: "the magic cookie") }
         }

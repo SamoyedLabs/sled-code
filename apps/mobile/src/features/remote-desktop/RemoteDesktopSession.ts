@@ -68,6 +68,7 @@ interface Lease {
 }
 interface Snapshot {
   readonly phase: "idle" | "connecting" | "connected" | "recovering";
+  readonly environmentId: EnvironmentId | null;
   readonly host: string;
   readonly path: "direct" | "relayed" | null;
   readonly error: string | null;
@@ -77,6 +78,7 @@ export interface DesktopNativeState {
     | "connected"
     | "connecting"
     | "closed"
+    | "stopRequested"
     | "path"
     | "network"
     | "needsRestart"
@@ -110,19 +112,26 @@ function retryable(error: unknown): boolean {
   return transientSignaling(error);
 }
 const initialFailure =
-  "Couldn't connect. Enable Remote Desktop on this Mac, pair it below, and grant Control desktop in its Sled connection permissions.";
+  "Couldn't connect. Check that Remote Desktop is enabled on the computer and that its Sled connection allows Control desktop.";
 const recoveryFailure =
-  "The connection couldn't recover. Check the Mac's connection and reconnect.";
+  "The connection couldn't recover. Check the computer's connection and reconnect.";
 const refreshAt = (connectivity: RemoteDesktopStatus["connectivity"]) =>
   connectivity?.relayAvailable ? connectivity.expiresAt - 300_000 : Number.POSITIVE_INFINITY;
 
 /** Owns one user-requested session. Native code owns every frame and input event. */
 export class RemoteDesktopSession {
-  private state: Snapshot = { phase: "idle", host: "", path: null, error: null };
+  private state: Snapshot = {
+    phase: "idle",
+    environmentId: null,
+    host: "",
+    path: null,
+    error: null,
+  };
   private readonly listeners = new Set<() => void>();
   private intent: Intent | null = null;
   private lease: Lease | null = null;
   private generation = 0;
+  private closing: Promise<void> | undefined;
   private networkAvailable = true;
   private pathVersion = 0;
   private handledPathVersion = 0;
@@ -172,10 +181,15 @@ export class RemoteDesktopSession {
     this.attempting = false;
     const active = this.lease;
     this.lease = null;
-    void this.dependencies
-      .native()
-      ?.closeNativeSession()
-      .catch(() => undefined);
+    if (!this.closing) {
+      this.closing = this.dependencies
+        .native()
+        ?.closeNativeSession()
+        .catch(() => undefined)
+        .finally(() => {
+          this.closing = undefined;
+        });
+    }
     if (active && this.intent)
       void this.dependencies.rpc
         .stop(this.intent.target.environmentId, { sessionId: active.sessionId })
@@ -188,13 +202,17 @@ export class RemoteDesktopSession {
     this.recoveryDeadline = undefined;
     this.releaseTransport();
     this.intent = null;
-    this.update({ phase: "idle", path: null, error: null });
+    this.update({ phase: "idle", environmentId: null, path: null, error: null });
   };
   private fail(message: string) {
     this.stop();
     this.update({ error: message });
   }
+  currentEnvironment() {
+    return this.intent?.target.environmentId;
+  }
   async connect(target: Target) {
+    if (this.currentEnvironment() === target.environmentId) return;
     this.stop();
     const intent: Intent = {
       target,
@@ -214,11 +232,13 @@ export class RemoteDesktopSession {
     }
     if (this.intent !== intent) return;
     this.releaseTransport();
+    const teardown = this.closing;
     this.attempting = true;
     const run = this.generation;
     this.handledPathVersion = this.pathVersion;
     this.update({
       phase: recovering ? "recovering" : "connecting",
+      environmentId: intent.target.environmentId,
       host: intent.target.label,
       path: null,
       error: null,
@@ -236,7 +256,7 @@ export class RemoteDesktopSession {
         (!status.permissions.screenRecording || !status.permissions.accessibility)
       )
         throw new SetupRequired(
-          "On your Mac, choose Remote Desktop → Set up permissions to allow Screen Recording and Accessibility, then reconnect.",
+          "Set up Remote Desktop permissions on the computer, then reconnect.",
         );
       if (
         !status.available ||
@@ -250,6 +270,8 @@ export class RemoteDesktopSession {
         throw new RemoteDesktopError({ reason: "identity_mismatch" });
       intent.hostFingerprint = status.hostFingerprint;
       intent.relayAvailable = status.connectivity?.relayAvailable === true;
+      await teardown;
+      if (!this.current(run, intent)) return;
       const view = this.dependencies.native();
       if (!view) throw new Error("Native view unavailable");
       if (recovering) {
@@ -394,6 +416,10 @@ export class RemoteDesktopSession {
     if (event.state === "network") this.networkAvailable = event.available === true;
     const intent = this.intent;
     if (!intent) return;
+    if (event.state === "stopRequested") {
+      this.stop();
+      return;
+    }
     if (event.state === "network" && event.available) intent.preferRelay = false;
     if (event.state === "degraded") {
       if (

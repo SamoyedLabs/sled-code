@@ -105,6 +105,7 @@ export class RemoteEnvironmentAuthorization extends Context.Service<
     readonly authorizeDpopHttp: (input: {
       readonly expectedEnvironmentId: EnvironmentId;
       readonly rejectedAccessToken?: string;
+      readonly refreshRelayAccess?: true;
     }) => Effect.Effect<AuthorizedRemoteHttpEnvironment, ConnectionAttemptError>;
     /**
      * Lets the next direct authorization of this address skip its own descriptor
@@ -461,7 +462,19 @@ export const make = Effect.gen(function* () {
           .get(input.expectedEnvironmentId)
           .pipe(Effect.withSpan("environment.authorization.accessToken.cache"));
         const owner = tokenOwners.get(input.expectedEnvironmentId);
+        if (input.refreshRelayAccess && Option.isSome(cached)) {
+          if (
+            cached.value.environmentId !== input.expectedEnvironmentId ||
+            cached.value.accountId !== identity.accountId ||
+            cached.value.dpopThumbprint !== thumbprint ||
+            (owner?.accessToken === cached.value.accessToken && owner.identity !== identity)
+          ) {
+            return yield* sessionChanged();
+          }
+          yield* removeRejectedToken(input.expectedEnvironmentId, cached.value.accessToken);
+        }
         if (
+          !input.refreshRelayAccess &&
           Option.isSome(cached) &&
           cached.value.environmentId === input.expectedEnvironmentId &&
           cached.value.accountId === identity.accountId &&

@@ -121,6 +121,36 @@ enum RemoteRoute: Equatable {
 /// Finds Macs over Bonjour, connects, and splits the byte stream into messages.
 /// Frame callbacks fire on the network queue; published state hops to main.
 final class StreamClient: ObservableObject {
+    @Published var windowsCapabilities: WindowsCapabilities?
+    @Published var windowsGeometry: WindowsGeometry?
+    @Published var windowsInputReady = false
+    @Published var windowsSelectedOutputID: String?
+    @Published var displayNames: [String: String] = [:]
+    let displayNameStore = ViewerDisplayNames()
+    @Published var windowsFitToken = 0
+    @Published var windowsViewMode = WindowsViewMode.fit
+    var windowsFollowCursor: Bool {
+        get { windowsViewMode == .follow }
+        set { windowsViewMode = newValue ? .follow : (windowsViewMode == .fit ? .fit : .manual) }
+    }
+    let windowsPointer = WindowsPointer()
+    var onViewerSourceWillChange: (() -> Void)?
+    lazy var windowsVideo = WindowsVideoDecoder(queue: queue)
+    var windowsGate = WindowsViewerGate() // queue only
+    var windowsMode = false // queue only
+    var windowsClipboardSupported = false // queue only
+    var windowsStandaloneWinTapSupported = false // queue only
+    var windowsCursorReports = false // queue only
+    var windowsSettingsSupported = false // queue only
+    var windowsRequest: UInt64 = 0 // queue only
+    var windowsSequence: UInt64 = 0 // queue only
+    private var windowsInputAdapter = WindowsInputAdapter() // queue only
+    var windowsSelected: String? // queue only
+    private var windowsSelectionEpoch: UInt64 = 0 // main only
+    private var windowsRequestEpoch: UInt64 = 0 // queue only
+    private var windowsLastCursor: WindowsCursorReport? // main only
+    private var windowsAppliedCursorShape: Data? // main only
+
     // Connection. The setters of what the connect screen shows are internal: the DEBUG harness
     // seeds them.
     @Published var status = StreamClient.lookingOnNetwork {
@@ -1957,7 +1987,7 @@ final class StreamClient: ObservableObject {
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
         // The codecs of the Mac's sound it plays: a Mac sends kind 43 only to a device that lists one.
         return Wire.encode(Hello(appVersion: version, build: build, protocol: SillProtocol.current, device: ClientStatsReporter.deviceName,
-                                 audio: AudioCodec.devicePlays))
+                                 audio: AudioCodec.devicePlays, capabilities: ["windows-desktop-v1", "windows-cursor-v1", "windows-settings-v1", "windows-clipboard-v1"]))
     }()
 
     /// The hello, the first thing on every session connection, written straight to `c` before
@@ -3226,6 +3256,7 @@ final class StreamClient: ObservableObject {
         // address (a LAN address through the remote door) is home, as the Mac's AwayPolicy counts it.
         sound.sessionStarted(away: s.route != .remote(.address))
         session = s
+        displayNames = displayNameStore.names(for: s.macID)
         goodbye = nil
         // Its way in is its route line's (`remoteRoute`, at its first window list), never a link word.
         if route != nil { route = nil }
@@ -3267,6 +3298,16 @@ final class StreamClient: ObservableObject {
     // keep the previous connection alive while a new native session starts.
     var t3ManagedSession = false
     var t3PathChanged: ((Bool) -> Void)?
+    var t3StopRequested: (() -> Void)?
+    func t3PickerPicture(_ done: @escaping (CGImage?) -> Void) {
+        queue.async {
+            guard let kept = self.lastKeyframe else { done(nil); return }
+            KeyframePicture.make(frame: kept.frame, parameterSets: kept.parameterSets, bound: ConnectionList.decodeBound) {
+                done(try? $0.get())
+            }
+        }
+    }
+
     func t3Disconnect() {
         t3ManagedSession = false
         finishDisconnect()
@@ -3285,6 +3326,12 @@ final class StreamClient: ObservableObject {
     }
 
     func disconnect() {
+        if windowsCapabilities != nil { onViewerSourceWillChange?() }
+        releaseViewerInput()
+        if t3ManagedSession, let t3StopRequested {
+            t3StopRequested()
+            return
+        }
         guard freshPictureWait == nil else { return }
         switch freshPictureOnLeaving() {
         case .stored:
@@ -3476,6 +3523,17 @@ final class StreamClient: ObservableObject {
     /// never delivered its window list: the connect screen never left, and its Remote rows must not
     /// vanish for another 3 s. Main thread.
     func tearDown(status: String, restartSearch: Bool = true) {
+        if windowsCapabilities != nil { onViewerSourceWillChange?() }
+        windowsCapabilities = nil; windowsGeometry = nil; windowsInputReady = false
+        windowsSelectedOutputID = nil; windowsFitToken = 0; windowsViewMode = .fit; windowsPointer.reset()
+        windowsSelectionEpoch &+= 1; windowsLastCursor = nil; windowsAppliedCursorShape = nil
+        queue.async {
+            self.windowsMode = false; self.windowsClipboardSupported = false; self.windowsCursorReports = false; self.windowsSettingsSupported = false; self.windowsGate = WindowsViewerGate()
+            self.windowsStandaloneWinTapSupported = false
+            self.windowsVideo.reset(); self.windowsSelected = nil
+            self.windowsRequest = 0; self.windowsSequence = 0
+            self.windowsInputAdapter = WindowsInputAdapter()
+        }
         abandonMove()
         resetPath()
         lastMoveAttempt = nil
@@ -3657,6 +3715,8 @@ final class StreamClient: ObservableObject {
     /// waiting, so the cursor is always where it should be before the button goes down.
     /// Any client → host message. Extensions (viewport, client stats) use this; frames never go this way.
     func send(_ kind: StreamMessageKind, payload: Data) {
+        if windowsCapabilities != nil && !Self.windowsAllows(kind, settings: windowsCapabilities?.streamSettings?.valid == true,
+                                                          clipboard: windowsCapabilities?.clipboard == 1) { return }
         let message = StreamMessage(kind: kind, timestamp: Date().timeIntervalSince1970, isKeyframe: false, payload: payload)
         link.send(message.serialized())
     }
@@ -3677,6 +3737,7 @@ final class StreamClient: ObservableObject {
             guard let self else { return }
             // Every input hands this device the pointer, coalesced moves included, here where the
             // Mac's reports are judged, so none can slip between an input and its count.
+            guard !self.windowsMode else { self.pendingMove = nil; return }
             self.pointerNoteSent(event)
             guard case .pointer(.move, _, _) = event else {
                 self.flushPendingMove()
@@ -3761,6 +3822,7 @@ final class StreamClient: ObservableObject {
     }
 
     private func send(_ kind: StreamMessageKind, _ payload: Data) {
+        if windowsMode && !Self.windowsAllows(kind, settings: windowsSettingsSupported, clipboard: windowsClipboardSupported) { return }
         let message = StreamMessage(kind: kind, timestamp: Date().timeIntervalSince1970,
                                     isKeyframe: false, payload: payload)
         link.send(message.serialized())
@@ -4028,13 +4090,114 @@ final class StreamClient: ObservableObject {
 
     /// On the network queue.
     private func handle(_ header: StreamHeader, _ data: Data) {
+        if windowsMode, windowsGate.pending != nil, header.kind != .frame, header.kind != .audio {
+            connection?.cancel(); return
+        }
         switch header.kind {
+        case .windowsCapabilities:
+            guard data.count <= StreamMessage.maxClientPayload,
+                  let caps = Wire.decode(WindowsCapabilities.self, from: data), caps.valid else { connection?.cancel(); return }
+            let refreshing = windowsMode
+            windowsClipboardSupported = caps.clipboard == 1
+            windowsStandaloneWinTapSupported = caps.standaloneWinTap == 1
+            windowsMode = true; windowsCursorReports = caps.cursor == 1; windowsSettingsSupported = caps.streamSettings?.valid == true; pendingMove = nil
+            let from = connection
+            DispatchQueue.main.async {
+                guard self.connection === from else { return }
+                self.windowsCapabilities = caps
+                if !refreshing {
+                    self.remoteSessionReady(); self.homeSessionReady()
+                    self.connected = true
+                }
+                self.hostClipboardChanged(caps.clipboard == 1 ? 1 : nil)
+                if !refreshing, let output = caps.defaultOutput { self.selectWindowsOutput(output.id) }
+            }
+        case .windowsGeometry:
+            guard windowsMode, data.count <= StreamMessage.maxClientPayload,
+                  let geometry = Wire.decode(WindowsGeometry.self, from: data), geometry.valid else { connection?.cancel(); return }
+            guard geometry.outputId == windowsSelected, geometry.requestId == String(windowsRequest),
+                  windowsGate.replace(geometry) else { return }
+            windowsInputAdapter = WindowsInputAdapter()
+            pendingMove = nil; windowsVideo.reset()
+            lastKeyframe = nil; lastParameterSets = nil
+            let cursorSequence = windowsSequence, cursorReports = windowsCursorReports, selectionEpoch = windowsRequestEpoch
+            let from = connection
+            DispatchQueue.main.async {
+                guard self.connection === from, self.windowsSelectionEpoch == selectionEpoch else { return }
+                self.windowsLastCursor = nil; self.windowsAppliedCursorShape = nil
+                if self.windowsViewMode != .follow { self.windowsViewMode = .fit }
+                self.windowsInputReady = false; self.windowsGeometry = geometry
+                self.cursorShape = nil
+                self.windowsPointer.bind(geometry, sequence: cursorSequence, reports: cursorReports)
+                self.videoSize = CGSize(width: geometry.encodedWidth, height: geometry.encodedHeight)
+            }
+        case .windowsCursor:
+            guard windowsMode, windowsCursorReports else { return }
+            guard let report = WindowsCursorReport.decode(data) else { connection?.cancel(); return }
+            guard let geometry = windowsGate.geometry, geometry.outputId == windowsSelected,
+                  geometry.requestId == String(windowsRequest), report.outputId == geometry.outputId,
+                  report.generation == windowsCounter(geometry.generation), report.request == windowsRequest else { return }
+            let from = connection, selectionEpoch = windowsRequestEpoch
+            DispatchQueue.main.async {
+                guard self.connection === from, self.windowsSelectionEpoch == selectionEpoch,
+                      self.windowsGeometry == geometry else { return }
+                var latest = report
+                if latest.shape == nil { latest.shape = self.windowsLastCursor?.shape }
+                self.windowsLastCursor = latest
+                self.applyWindowsCursor(latest)
+            }
+        case .windowsFrameContext:
+            guard windowsMode, data.count <= StreamMessage.maxClientPayload,
+                  let context = Wire.decode(WindowsFrameContext.self, from: data),
+                  windowsGate.context(context) else { connection?.cancel(); return }
+
         case .parameterSets:
+            if windowsMode {
+                guard let geometry = windowsGate.geometry, geometry.outputId == windowsSelected,
+                      geometry.requestId == String(windowsRequest) else { return }
+                guard let ps = ParameterSets(encoded: data),
+                      windowsVideo.configure(ps, geometry: geometry) else { connection?.cancel(); return }
+                lastParameterSets = ps
+                return
+            }
             if let ps = ParameterSets(encoded: data) {
                 lastParameterSets = ps
                 onParameterSets?(ps)
             }
         case .frame:
+            if windowsMode {
+                guard let context = windowsGate.takeFrame() else { connection?.cancel(); return }
+                guard windowsGate.matches(context), windowsVideo.hasReference || header.isKeyframe else { return }
+                frameCounter += 1
+                let age = (Date().timeIntervalSince1970 - header.timestamp) * 1000
+                if age.isFinite { frameAgeSamples.append(min(max(age, 0), Self.sampleCeilingMs)) }
+                let frameConnection = connection, selectionEpoch = windowsRequestEpoch
+                let firstDisplayed: (() -> Void)? = !windowsGate.ready && header.isKeyframe ? { [weak self] in
+                    guard let self, self.connection === frameConnection,
+                          self.windowsGate.decoded(context, keyframe: true) else { return }
+                    self.send(.windowsFrameReady, Wire.encode(context))
+                    DispatchQueue.main.async {
+                        guard self.connection === frameConnection, self.windowsSelectionEpoch == selectionEpoch,
+                              self.windowsGeometry?.generation == context.generation else { return }
+                        self.windowsInputReady = true
+                    }
+                } : nil
+                frameForSound(header)
+                let decoded = windowsVideo.decode(data, firstDisplayed: firstDisplayed)
+                guard connection === frameConnection else { return }
+                guard decoded else {
+                    windowsGate.suspend()
+                    windowsVideo.reset()
+                    lastKeyframe = nil; lastParameterSets = nil
+                    DispatchQueue.main.async {
+                        guard self.connection === frameConnection else { return }
+                        self.windowsInputReady = false
+                    }
+                    send(.keyframeRequest, Data()); return
+                }
+                if header.isKeyframe, let ps = lastParameterSets { lastKeyframe = (data, ps) }
+                return
+            }
             // Every frame is a sample, stamped on arrival before the hand-off to the display layer:
             // the worst frame of a second is the stutter, and one sample in fifteen missed it.
             // Clocks that disagree can make an age negative; nothing arrives before it was sent, so
@@ -4164,14 +4327,17 @@ final class StreamClient: ObservableObject {
             guard let apps = Wire.decode([AppInfo].self, from: data) else { return }
             DispatchQueue.main.async { self.apps = apps }
         case .cursorShape:
+            guard !windowsMode else { return }
             guard let (hotspot, size, png) = CursorShapeBlob.decode(data), let image = UIImage(data: png) else { return }
             DispatchQueue.main.async { self.cursorShape = CursorShape(image: image, hotspot: hotspot, size: size) }
         case .macPointer:
+            guard !windowsMode else { return }
             receivePointer(data)
         case .audio:
             // The Mac's sound: a format, or packets (StreamClient+Audio, AudioOutput).
             receiveAudio(header, data)
         case .hostSettings:
+            guard !windowsMode || windowsSettingsSupported else { return }
             guard let state = Wire.decode(HostSettingsState.self, from: data) else { return }
             let from = connection
             DispatchQueue.main.async {
@@ -4182,7 +4348,11 @@ final class StreamClient: ObservableObject {
         case .pong:
             // A Paste's receipt (StreamClient+Clipboard): its own random payload, not a time.
             if data.count == ClipboardPolicy.receiptLength {
-                DispatchQueue.main.async { self.clipboardReceiptCame(data) }
+                let from = connection
+                DispatchQueue.main.async {
+                    guard self.connection === from else { return }
+                    self.clipboardReceiptCame(data)
+                }
                 return
             }
             // The host echoes the ping's payload unchanged: our own monotonic send time.
@@ -4373,6 +4543,7 @@ extension StreamClient {
     /// shown, and nothing before this connection's first state (an older Mac never sends one).
     /// Nothing else ever sends a change: not a connect, not a broadcast, not an `onChange`. Main thread.
     func changeSettings(_ change: HostSettingsChange) {
+        guard viewerCapabilities.hostSettings else { return }
         noteAction()
         // The move home carries a session whose remote connection went (`rescue`): a pick now was
         // made against the away state, and held it would reach the Mac on the home connection.
@@ -4394,7 +4565,7 @@ extension StreamClient {
         #endif
         let refused = settings.receive(state)
         if let fps = state.stream?.fps { sound.setStreamFPS(fps) }
-        if state.answering != nil { settingsProblem = nil }
+        if state.answering != nil { settingsProblem = state.settingsNote }
         if !refused.isEmpty { settingsRefusals += 1 }
         scheduleSettingsExpiry()
         rememberDirectWireless(state)
@@ -4850,4 +5021,106 @@ private extension Data {
         _ = Swift.withUnsafeMutableBytes(of: &v) { copyBytes(to: $0, from: startIndex..<(startIndex + 8)) }
         return UInt64(bigEndian: v)
     }
+}
+
+
+extension StreamClient {
+    static func windowsAllows(_ kind: StreamMessageKind, settings: Bool, clipboard: Bool) -> Bool {
+        switch kind {
+        case .hello, .ping, .clientStats, .keyframeRequest, .t3StreamReceipt,
+             .selectWindowsOutput, .windowsInput, .windowsFrameReady: return true
+        case .changeSettings: return settings
+        case .clipboard: return clipboard
+        default: return false
+        }
+    }
+
+    func selectWindowsOutput(_ id: String) {
+        guard windowsCapabilities?.outputs.contains(where: { $0.id == id }) == true else { return }
+        onCaretMayMove?()
+        onViewerSourceWillChange?()
+        releaseViewerInput()
+        windowsSelectedOutputID = id
+        windowsInputReady = false; windowsGeometry = nil
+        windowsPointer.reset(); cursorShape = nil; windowsLastCursor = nil; windowsAppliedCursorShape = nil
+        windowsSelectionEpoch &+= 1
+        let selectionEpoch = windowsSelectionEpoch
+        queue.async {
+            guard self.windowsMode else { return }
+            self.windowsGate.invalidate(); self.windowsInputAdapter = WindowsInputAdapter()
+            self.pendingMove = nil; self.windowsVideo.reset()
+            guard self.windowsRequest < UInt64.max else { self.connection?.cancel(); return }
+            self.windowsRequest += 1; self.windowsSelected = id; self.windowsRequestEpoch = selectionEpoch
+            self.send(.selectWindowsOutput, Wire.encode(SelectWindowsOutput(outputId: id, requestId: String(self.windowsRequest))))
+        }
+    }
+
+    func sendWindowsInput(_ input: InputEvent, geometry: WindowsGeometry) {
+        guard windowsInputReady, windowsGeometry == geometry else { return }
+        if case let .pointer(_, x, y) = input { windowsPointer.update(CGPoint(x: x, y: y)) }
+        if TextInputRules.movesCaret(input) { onCaretMayMove?() }
+        queueWindowsInput(geometry: geometry) { self.windowsInputAdapter.events(input, geometry: geometry) }
+    }
+
+    func sendWindowsWinTap(geometry: WindowsGeometry) {
+        guard windowsCapabilities?.standaloneWinTap == 1 else { return }
+        queueWindowsInput(geometry: geometry) {
+            guard self.windowsStandaloneWinTapSupported else { return [] }
+            return [WindowsInput(outputId: geometry.outputId, generation: geometry.generation,
+                                 sequence: "0", type: "keyTap", hidUsage: 227)]
+        }
+    }
+
+    private func queueWindowsInput(geometry: WindowsGeometry, events: @escaping () -> [WindowsInput]) {
+        guard windowsInputReady, windowsGeometry == geometry else { return }
+        lastInputAt = ProcessInfo.processInfo.systemUptime
+        let revision = windowsPointer.queuedInput()
+        queue.async {
+            guard self.windowsMode, self.windowsGate.ready, self.windowsGate.geometry == geometry else {
+                let sequence = self.windowsSequence
+                DispatchQueue.main.async {
+                    self.windowsPointer.sent(sequence: sequence, revision: revision, geometry: geometry)
+                    if let report = self.windowsLastCursor { self.applyWindowsCursor(report) }
+                }
+                return
+            }
+            let sequence = self.sendWindowsEvents(events())
+            DispatchQueue.main.async {
+                self.windowsPointer.sent(sequence: sequence, revision: revision, geometry: geometry)
+                if let report = self.windowsLastCursor { self.applyWindowsCursor(report) }
+            }
+        }
+    }
+
+    private func applyWindowsCursor(_ report: WindowsCursorReport) {
+        guard windowsPointer.accept(report) else { return }
+        if let blob = report.shape, blob != windowsAppliedCursorShape, let (hotspot, size, png) = CursorShapeBlob.decode(blob), let image = UIImage(data: png) {
+            windowsAppliedCursorShape = blob
+            cursorShape = CursorShape(image: image, hotspot: hotspot, size: size)
+        }
+    }
+
+    private func sendWindowsEvents(_ events: [WindowsInput]) -> UInt64 {
+        for var event in events {
+            guard windowsSequence < UInt64.max else { connection?.cancel(); return windowsSequence }
+            windowsSequence += 1
+            event.sequence = String(windowsSequence)
+            send(.windowsInput, Wire.encode(event))
+        }
+        return windowsSequence
+    }
+
+    func releaseViewerInput() {
+        guard let geometry = windowsGeometry else { return }
+        let revision = windowsPointer.queuedInput()
+        queue.async {
+            guard self.windowsMode, self.windowsGate.geometry == geometry else { return }
+            let sequence = self.sendWindowsEvents(self.windowsInputAdapter.releaseAll(geometry: geometry))
+            DispatchQueue.main.async {
+                self.windowsPointer.sent(sequence: sequence, revision: revision, geometry: geometry)
+                if let report = self.windowsLastCursor { self.applyWindowsCursor(report) }
+            }
+        }
+    }
+
 }

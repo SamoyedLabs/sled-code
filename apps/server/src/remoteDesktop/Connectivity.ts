@@ -1,6 +1,10 @@
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect Crypto does not expose the HMAC required by coturn's REST credential format.
 import * as NodeCrypto from "node:crypto";
-import { RemoteDesktopConnectivity, RemoteDesktopIceServer } from "@t3tools/contracts";
+import {
+  isRemoteDesktopTurnUrl,
+  RemoteDesktopConnectivity,
+  RemoteDesktopIceServer,
+} from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -23,6 +27,8 @@ const CredentialLifetime = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(600),
   Schema.isLessThanOrEqualTo(3600),
 );
+const turnSecretName = "remote-desktop-turn";
+export const maxTurnConfigurationBytes = 16_384;
 const Configuration = Schema.Union([
   Schema.Struct({
     provider: Schema.Literal("cloudflare"),
@@ -33,7 +39,11 @@ const Configuration = Schema.Union([
   }),
   Schema.Struct({
     provider: Schema.Literal("coturn"),
-    urls: RemoteDesktopIceServer.fields.urls,
+    urls: RemoteDesktopIceServer.fields.urls.check(
+      Schema.makeFilter((urls) => urls.some(isRemoteDesktopTurnUrl), {
+        expected: "at least one TURN endpoint",
+      }),
+    ),
     sharedSecret: Secret,
     relayOnly: Schema.optionalKey(Schema.Boolean),
     ttlSeconds: Schema.optionalKey(CredentialLifetime),
@@ -60,6 +70,33 @@ export class Connectivity extends Context.Service<
   }
 >()("t3/remoteDesktop/Connectivity") {}
 
+const readConfiguration = Effect.fn("RemoteDesktopConnectivity.readConfiguration")(function* (
+  bytes: Uint8Array,
+) {
+  if (bytes.byteLength > maxTurnConfigurationBytes)
+    return yield* Effect.fail("configuration-limit");
+  return yield* decodeConfiguration(new TextDecoder().decode(bytes));
+});
+const connectivityError = (cause: unknown) =>
+  new ConnectivityError({ cause: Redacted.make(cause) });
+
+export const setTurnConfiguration = Effect.fn("RemoteDesktopConnectivity.setTurnConfiguration")(
+  function* (bytes: Uint8Array) {
+    yield* readConfiguration(bytes);
+    const secrets = yield* ServerSecretStore.ServerSecretStore;
+    yield* secrets.set(turnSecretName, bytes);
+  },
+  Effect.mapError(connectivityError),
+);
+
+export const clearTurnConfiguration = Effect.fn("RemoteDesktopConnectivity.clearTurnConfiguration")(
+  function* () {
+    const secrets = yield* ServerSecretStore.ServerSecretStore;
+    yield* secrets.remove(turnSecretName);
+  },
+  Effect.mapError(connectivityError),
+);
+
 const make = Effect.gen(function* () {
   const secrets = yield* ServerSecretStore.ServerSecretStore;
   const http = yield* HttpClient.HttpClient;
@@ -72,7 +109,7 @@ const make = Effect.gen(function* () {
   const get = Effect.fn("RemoteDesktopConnectivity.get")(
     function* (ownerId: string) {
       const now = (yield* DateTime.now).epochMilliseconds;
-      const stored = yield* secrets.get("remote-desktop-turn");
+      const stored = yield* secrets.get(turnSecretName);
       if (Option.isNone(stored)) {
         cache.clear();
         return {
@@ -82,11 +119,9 @@ const make = Effect.gen(function* () {
           relayAvailable: false,
         };
       }
-      if (stored.value.byteLength > 16_384) return yield* Effect.fail("configuration-limit");
-      const text = new TextDecoder().decode(stored.value);
+      const configuration = yield* readConfiguration(stored.value);
       const markerBytes = yield* digest.digest(Digest.sha256, stored.value);
       const marker = Array.from(markerBytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-      const configuration = yield* decodeConfiguration(text);
       const ttl = configuration.ttlSeconds ?? 3600;
       const refreshWindow = Math.min(600_000, ttl * 500);
       for (const [key, entry] of cache) {
@@ -108,9 +143,7 @@ const make = Effect.gen(function* () {
           iceServers: [{ urls: configuration.urls, username, credential }],
           expiresAt,
           relayOnly: configuration.relayOnly ?? false,
-          relayAvailable: configuration.urls.some(
-            (url) => url.startsWith("turn:") || url.startsWith("turns:"),
-          ),
+          relayAvailable: true,
         });
       } else {
         const request = yield* HttpClientRequest.bodyJson({ ttl })(
@@ -145,9 +178,7 @@ const make = Effect.gen(function* () {
           iceServers,
           expiresAt,
           relayOnly: configuration.relayOnly ?? false,
-          relayAvailable: iceServers.some((server) =>
-            server.urls.some((url) => !url.startsWith("stun:")),
-          ),
+          relayAvailable: iceServers.some((server) => server.urls.some(isRemoteDesktopTurnUrl)),
         });
         if (!config.relayAvailable) return yield* Effect.fail("provider-missing-relay");
       }
@@ -157,7 +188,7 @@ const make = Effect.gen(function* () {
     lock.withPermits(1),
     Effect.timeout("10 seconds"),
     Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
-    Effect.mapError((cause) => new ConnectivityError({ cause: Redacted.make(cause) })),
+    Effect.mapError(connectivityError),
   );
   return Connectivity.of({ get });
 });

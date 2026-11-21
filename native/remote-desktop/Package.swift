@@ -19,6 +19,7 @@ let package = Package(
         .executableTarget(name: "T3RemoteHost", dependencies: ["SillHostCore", "StreamProtocol", "LiveKitWebRTC"]),
         .binaryTarget(name: "LiveKitWebRTC", path: "Frameworks/LiveKitWebRTC.xcframework"),
         .target(name: "StreamProtocol"),
+        .testTarget(name: "T3TunnelAdmissionTests", dependencies: ["SillHostCore", "StreamProtocol"]),
         .executableTarget(name: "T3IngressProbe", dependencies: ["SillHostCore", "StreamProtocol"]),
         // The Mac host itself (capture, encode, network, input, virtual display), shared by the CLI
         // and the menu bar app; they reach it through `package` access. The folder keeps its old

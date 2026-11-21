@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 import { AuthDesktopOperateScope, AuthStandardClientScopes, sessionGrantsScope } from "./auth.ts";
-import { RemoteDesktopStartInput, RemoteDesktopRestartInput } from "./remoteDesktop.ts";
+import {
+  RemoteDesktopConnectivity,
+  RemoteDesktopStartInput,
+  RemoteDesktopRestartInput,
+} from "./remoteDesktop.ts";
 
 const input = {
   clientNonce: "10000000-0000-4000-8000-000000000001",
@@ -12,6 +16,19 @@ const input = {
 const decode = Schema.decodeUnknownSync(RemoteDesktopStartInput);
 const decodeRestart = Schema.decodeUnknownSync(RemoteDesktopRestartInput);
 describe("remote desktop signaling boundaries", () => {
+  it("requires authenticated TURN endpoints for a relay-only or relay-available claim", () => {
+    const decodeConnectivity = Schema.decodeUnknownSync(RemoteDesktopConnectivity);
+    const stun = { urls: ["stun:stun.example.com"] };
+    const turn = { urls: ["turn:turn.example.com"], username: "user", credential: "password" };
+    const direct = { iceServers: [stun], expiresAt: 1, relayOnly: false, relayAvailable: false };
+    expect(decodeConnectivity(direct)).toEqual(direct);
+    expect(() => decodeConnectivity({ ...direct, relayOnly: true })).toThrow();
+    expect(() => decodeConnectivity({ ...direct, relayAvailable: true })).toThrow();
+    expect(() => decodeConnectivity({ ...direct, iceServers: [turn] })).toThrow();
+    expect(
+      decodeConnectivity({ ...direct, iceServers: [turn], relayOnly: true, relayAvailable: true }),
+    ).toMatchObject({ relayOnly: true, relayAvailable: true });
+  });
   it("does not inherit desktop control from legacy or standard client grants", () => {
     expect(AuthStandardClientScopes).not.toContain(AuthDesktopOperateScope);
     expect(

@@ -45,7 +45,7 @@ DispatchQueue.global().async {
             case "open" where parts.count == 4:
                 let id = parts[1]
                 let expiry = Date().addingTimeInterval(Double(parts[2])!)
-                tunnels[id] = host.t3OpenTunnel(remote: access, fingerprint: Base64URL.decode(parts[3])!,
+                tunnels[id] = host.t3OpenTunnel(remote: access, admission: .paired(Base64URL.decode(parts[3])!),
                     expiresAt: expiry, ready: { port in
                         event(["type": "port", "id": id, "port": port.map(Int.init) ?? 0])
                     }, ended: { event(["type": "closed", "id": id]) })

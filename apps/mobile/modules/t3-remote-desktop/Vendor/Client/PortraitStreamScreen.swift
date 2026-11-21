@@ -192,7 +192,7 @@ struct PortraitStreamScreen: View {
                                              controls: metrics.controlsHeight)
         let half = split.picture
         return ZStack(alignment: .topLeading) {
-            Color.black
+            Palette.canvas
 
             VStack(spacing: split.controls - half) {
                 picturePane(measured: true).padding(8).frame(height: half)
@@ -258,14 +258,14 @@ struct PortraitStreamScreen: View {
         let menusFit = MacMenuButton.fits(width: width, buttons: 5, buttonWidth: metrics.buttonWidth, gap: 12,
                                           thumbWidth: metrics.thumbWidth)
         return HStack(spacing: 12) {
-            appsButton()
+            if client.viewerCapabilities.apps { appsButton() }
 
             windowStrip
                 .opacity(scaleOpen ? 0.2 : 1)      // the slider unfolds over the strip's end
                 .allowsHitTesting(!scaleOpen)
 
             // The Mac's menus, as in the landscape bar: only while the Mac sent some.
-            if client.menus.hasMenus, menusFit {
+            if client.viewerCapabilities.menus, client.menus.hasMenus, menusFit {
                 MacMenuButton(client: client, width: metrics.buttonWidth, height: metrics.buttonHeight,
                               radius: metrics.buttonRadius, iconSize: metrics.buttonIcon, spacing: metrics.buttonSpacing,
                               onOpen: menusOpened, onClose: menusClosed)
@@ -274,15 +274,19 @@ struct PortraitStreamScreen: View {
                     .transition(.opacity)
             }
 
-            TextScaleControl(scale: $textScale, open: $scaleOpen,
-                             width: metrics.buttonWidth, height: metrics.buttonHeight,
-                             radius: metrics.buttonRadius, pointsPerStep: 36)
-                .tourTarget(.textSize)
+            if client.viewerCapabilities.windowTextScale {
+                TextScaleControl(scale: $textScale, open: $scaleOpen,
+                                 width: metrics.buttonWidth, height: metrics.buttonHeight,
+                                 radius: metrics.buttonRadius, pointsPerStep: 36)
+                    .tourTarget(.textSize)
+            } else { fitButton() }
 
-            desktopButton()
-                .opacity(scaleOpen ? 0 : 1)
-                .allowsHitTesting(!scaleOpen)
+            if client.viewerHost == .mac {
+                desktopButton()
+                    .opacity(scaleOpen ? 0 : 1)
+                    .allowsHitTesting(!scaleOpen)
 
+            }
             settingsButton()
                 .opacity(scaleOpen ? 0 : 1)
                 .allowsHitTesting(!scaleOpen)
@@ -331,7 +335,7 @@ struct PortraitStreamScreen: View {
         let rects: [CGRect] = larger ? [layout.pane(video: client.videoSize), layout.row1, layout.keys, layout.trackpad]
                                      : [layout.picture, layout.row1, layout.strip, layout.keys, layout.trackpad]
         return ZStack(alignment: .topLeading) {
-            Color.black
+            Palette.canvas
 
             // While the drawer is open VoiceOver skips what it dims (a double-tap there would reach
             // the Mac, where a tap only closes the drawer): row 1, then the drawer. The drawer and the
@@ -340,7 +344,7 @@ struct PortraitStreamScreen: View {
             // beside them.
             PhoneRows(size: layout.size, rects: rects) {
                 picturePane(measured: false).accessibilityHidden(drawerOpen)
-                phoneRow1(layout, menus: larger && client.menus.hasMenus)
+                phoneRow1(layout, menus: larger && client.viewerCapabilities.menus && client.menus.hasMenus)
                 if !larger {
                     phoneRow2(layout)
                         .opacity(drawerOpen || settingsOpen ? 0 : 1)
@@ -380,13 +384,17 @@ struct PortraitStreamScreen: View {
     /// no touch until it folds. `menus`: Larger Picture's row 1 while the Mac sent menus, the Menus
     /// button after Apps, six to the row (`buttonsBesideMenus`), where the landscape bar has it.
     private func phoneRow1(_ layout: PhonePortraitLayout, menus: Bool) -> some View {
-        let width = (menus ? layout.buttonsBesideMenus : layout.buttons)[PhonePortraitLayout.Button.apps.rawValue].width
+        let width = client.viewerHost == .windows
+            ? (layout.row1.width - 2 * PhonePortraitLayout.gap) / 3
+            : (menus ? layout.buttonsBesideMenus : layout.buttons)[PhonePortraitLayout.Button.apps.rawValue].width
         return HStack(spacing: PhonePortraitLayout.gap) {
-            appsButton(width: width)
-                .opacity(scaleOpen ? 0 : 1)
-                .allowsHitTesting(!scaleOpen)
-                .tourTarget(.apps)
+            if client.viewerCapabilities.apps {
+                appsButton(width: width)
+                    .opacity(scaleOpen ? 0 : 1)
+                    .allowsHitTesting(!scaleOpen)
+                    .tourTarget(.apps)
 
+            }
             if menus {
                 MacMenuButton(client: client, width: layout.menus.width, height: layout.menus.height,
                               radius: metrics.buttonRadius, iconSize: metrics.buttonIcon, spacing: metrics.buttonSpacing,
@@ -396,11 +404,13 @@ struct PortraitStreamScreen: View {
                     .transition(.opacity)
             }
 
-            TextScaleControl(scale: $textScale, open: $scaleOpen,
-                             width: width, height: layout.row1.height,
-                             radius: metrics.buttonRadius, pointsPerStep: menus ? layout.rulerStepBesideMenus : layout.rulerStep,
-                             iconBox: PortraitMetrics.phoneIconBox, iconSpacing: metrics.buttonSpacing)
-                .tourTarget(.textSize)
+            if client.viewerCapabilities.windowTextScale {
+                TextScaleControl(scale: $textScale, open: $scaleOpen,
+                                 width: width, height: layout.row1.height,
+                                 radius: metrics.buttonRadius, pointsPerStep: menus ? layout.rulerStepBesideMenus : layout.rulerStep,
+                                 iconBox: PortraitMetrics.phoneIconBox, iconSpacing: metrics.buttonSpacing)
+                    .tourTarget(.textSize)
+            } else { fitButton(width: width) }
 
             barButton(open: keyboardShown, symbol: "keyboard", label: "Keyboard", width: width,
                       accessibilityLabel: keyboardShown ? "Hide the keyboard" : "Show the keyboard",
@@ -411,11 +421,14 @@ struct PortraitStreamScreen: View {
                 .opacity(scaleOpen ? 0 : 1)
                 .allowsHitTesting(!scaleOpen)
                 .tourTarget(.keyboard)
+                .disabled(!client.viewerInputSession.inputReady)
 
-            desktopButton(width: width)
-                .opacity(scaleOpen ? 0 : 1)
-                .allowsHitTesting(!scaleOpen)
+            if client.viewerHost == .mac {
+                desktopButton(width: width)
+                    .opacity(scaleOpen ? 0 : 1)
+                    .allowsHitTesting(!scaleOpen)
 
+            }
             settingsButton(width: width)
                 .opacity(scaleOpen ? 0 : 1)
                 .allowsHitTesting(!scaleOpen)
@@ -430,7 +443,7 @@ struct PortraitStreamScreen: View {
     /// row 1, whose five share the row (the approved mockup's). The strip still shows a whole
     /// thumbnail and more on every phone.
     private func phoneRow2(_ layout: PhonePortraitLayout) -> some View {
-        let menus = client.menus.hasMenus
+        let menus = client.viewerCapabilities.menus && client.menus.hasMenus
         let strip = menus ? layout.stripBesideMenus : layout.strip
         return ZStack(alignment: .topLeading) {
             windowStrip.frame(width: strip.width, height: strip.height)
@@ -454,27 +467,18 @@ struct PortraitStreamScreen: View {
     /// a phone sends its layout's picture instead (`phone`), the same rect or, with Larger Picture,
     /// the room this pane sits at the top of.
     private func picturePane(measured: Bool) -> some View {
-        ZStack {
-            StreamView(client: client)
-            InputOverlay(videoSize: client.videoSize,
-                         send: { client.sendInput($0) },
-                         setOwnPointer: { client.setOwnPointer($0, from: $1) },
-                         proxy: overlay,
-                         isKeyboardShown: $keyboardShown,
-                         latchedModifiers: latched,
-                         onModifiersConsumed: { latched = [] },
-                         sendGesture: { client.sendGesture($0, fingers: $1) })
-        }
+        StreamPicture(client: client, overlay: overlay, keyboardShown: $keyboardShown,
+                      latched: latched, consumed: { latched = [] })
         .background(Palette.panel)
         .overlay(alignment: .top) { LinkLineView(text: linkLine) }
         .clipShape(streamShape)
-        .overlay(streamShape.strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
+        .overlay(streamShape.strokeBorder(Palette.edge.opacity(0.09), lineWidth: 1))
         .onGeometryChange(for: CGSize.self, of: { $0.size }, action: { if measured { onPanelSize($0) } })
         .tourTarget(.stream)
     }
 
     private var windowStrip: some View {
-        WindowStrip(client: client, width: metrics.thumbWidth, height: metrics.thumbHeight,
+        WindowStrip(client: client, overlay: overlay, width: metrics.thumbWidth, height: metrics.thumbHeight,
                     radius: metrics.thumbRadius, spacing: metrics.thumbSpacing,
                     pad: metrics.thumbPad, fade: metrics.thumbFade, badge: metrics.badge,
                     menuFor: $windowMenu)
@@ -483,22 +487,28 @@ struct PortraitStreamScreen: View {
 
     /// A key row key keeps what the sprite shows (StreamClient.sendFromKeyRow).
     private func keyRow(_ keys: KeyRow.Keys) -> some View {
-        KeyRow(metrics: metrics, keys: keys, latched: $latched, keyboardShown: keyboardShown,
-               send: { client.sendFromKeyRow($0) },
+        let session = client.viewerInputSession
+        return KeyRow(metrics: metrics, keys: keys, latched: $latched, keyboardShown: keyboardShown,
+               send: { client.sendViewerKey($0, captured: session) },
                toggleKeyboard: { overlay.toggleKeyboard() },
-               showSpotlight: client.active == .desktop)
+               showSpotlight: session.host == .mac && client.active == .desktop, windowsHost: session.host == .windows,
+               winTap: session.standaloneWinTap ? { client.performViewerCommand(.windowsWinTap, captured: session) } : nil)
+            .disabled(!session.inputReady)
             .tourTarget(.keys)
     }
 
     private func trackpad(verticalSpan: CGFloat?) -> some View {
-        Trackpad(send: { client.sendInput($0) },
-                 setPointer: { client.setOwnPointer($0, from: .trackpad) },
-                 feed: { let f = client.pointerFeedState; return (f.anchor, f.reseeds) },
-                 onFingers: { client.trackpadFingers($0) },
+        let session = client.viewerInputSession
+        return Trackpad(send: { client.sendViewerInput($0, captured: session) },
+                 setPointer: { client.setViewerPointer($0, from: .trackpad) },
+                 feed: { client.viewerPointerFeed },
+                 onFingers: { if session.host == .mac { client.trackpadFingers($0) } },
                  latched: latched,
                  onModifiersConsumed: { latched = [] },
                  verticalSpan: verticalSpan,
-                 sendGesture: { client.sendGesture($0, fingers: $1) })
+                 sendGesture: { session.capabilities.gestures ? client.sendGesture($0, fingers: $1) : false })
+            .id(session.inputEpoch)
+            .disabled(!session.inputReady)
             .tourTarget(.trackpad)
     }
 
@@ -535,16 +545,21 @@ struct PortraitStreamScreen: View {
                   })
     }
 
+    private func fitButton(width: CGFloat? = nil) -> some View {
+        barButton(open: false, symbol: client.windowsViewActionSymbol, label: client.windowsViewAction, width: width,
+                  accessibilityLabel: client.windowsViewActionLabel, action: { client.toggleWindowsView() })
+    }
+
     private func desktopButton(width: CGFloat? = nil) -> some View {
         barButton(open: client.active == .desktop, symbol: "desktopcomputer", label: "Desktop", width: width,
                   accessibilityLabel: "Show the full Mac desktop",
-                  action: { client.select(.desktop) })
+                  action: { client.performViewerCommand(.select(.desktop)) })
     }
 
     /// Leave's old slot: Disconnect is the Settings panel's pinned last row now.
     private func settingsButton(width: CGFloat? = nil) -> some View {
         barButton(open: settingsOpen, symbol: "gearshape", label: "Settings", width: width,
-                  accessibilityLabel: settingsOpen ? "Close settings" : "Settings for \(client.macName.isEmpty ? "the Mac" : client.macName)",
+                  accessibilityLabel: settingsOpen ? "Close settings" : "Settings for \(client.viewerName)",
                   action: { setSettings(!settingsOpen, true) })
             .tourTarget(.settings)
     }
@@ -726,7 +741,7 @@ private enum Key {
 /// (`.phone`): escape, tab and the four modifiers, six caps across the row; the Keyboard button is
 /// in row 1, and Spotlight is cmd then space on the keyboard (a latched ⌘ turns a typed space into
 /// ⌘Space). Arrows there come from a hardware keyboard.
-private struct KeyRow: View {
+struct KeyRow: View {
     enum Keys { case full, phone }
 
     let metrics: PortraitMetrics
@@ -738,6 +753,8 @@ private struct KeyRow: View {
     /// Spotlight's panel is its own Mac window, so it only shows up in the stream while the whole
     /// desktop is the source. Anywhere else the key would be a cap that does something invisible.
     let showSpotlight: Bool
+    var windowsHost = false
+    var winTap: (() -> Void)? = nil
 
     private static let all: [Key] = [
         .press("esc", HIDKey.escape, "Escape"),
@@ -800,7 +817,8 @@ private struct KeyRow: View {
                     .foregroundStyle(Palette.text)
             }
         case .modifier(let title, let flag, let label):
-            latchKey(key, title, flag, label: label)
+            latchKey(key, windowsHost && flag == .option ? "alt" : windowsHost && flag == .command ? "win" : title,
+                     flag, label: windowsHost && flag == .option ? "Alt" : windowsHost && flag == .command ? "Windows" : label)
         case .keyboard:
             cap(open: keyboardShown,
                 label: keyboardShown ? "Hide the keyboard" : "Show the keyboard",
@@ -824,7 +842,8 @@ private struct KeyRow: View {
         case .press(_, let usage, _), .arrow(_, let usage, _):
             press(usage)
         case .modifier(_, let flag, _):
-            latched.formSymmetricDifference(flag)
+            if windowsHost, flag == .command, latched.isEmpty, let winTap { winTap() }
+            else { KeyChord.tapModifier(flag, latched: &latched).forEach(send) }
         case .keyboard:
             toggleKeyboard()
         case .spotlight:
@@ -842,12 +861,8 @@ private struct KeyRow: View {
     private func cap<Content: View>(open: Bool, label: String, largeContent: String? = nil,
                                     action: @escaping () -> Void,
                                     @ViewBuilder content: () -> Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
         let button = Button(action: action) {
-            content()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(shape.fill(open ? Palette.controlOpen : Palette.control))
-                .contentShape(shape)
+            capFace(open: open, content: content)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
@@ -858,22 +873,49 @@ private struct KeyRow: View {
         }
     }
 
+    private func capFace<Content: View>(open: Bool, @ViewBuilder content: () -> Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
+        return content()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(shape.fill(open ? Palette.controlOpen : Palette.control))
+            .contentShape(shape)
+    }
+
     private func text(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 13, weight: .medium))
             .foregroundStyle(Palette.text)
     }
 
-    /// A latching modifier: it stays lit until something uses it, or until it is tapped again.
     private func latchKey(_ key: Key, _ title: String, _ flag: KeyModifiers, label: String) -> some View {
         let on = latched.contains(flag)
-        return cap(open: on,
-                   label: on ? "\(label), held. Tap to release." : "\(label), hold for the next key",
-                   largeContent: title, action: { tap(key) }) {
-            Text(title)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(on ? Palette.accent : Palette.text)
+        return capFace(open: on) {
+            VStack(spacing: 1) {
+                Text(title).font(.system(size: 13, weight: .medium))
+                if on { Text("held").font(.system(size: 9, weight: .semibold)) }
+            }
+            .foregroundStyle(on ? Palette.accent : Palette.text)
         }
+        .gesture(LongPressGesture(minimumDuration: 0.45, maximumDistance: 12)
+            .exclusively(before: TapGesture())
+            .onEnded { value in
+                switch value {
+                case .first(let completed): if completed { latched.formSymmetricDifference(flag) }
+                case .second: tap(key)
+                }
+            })
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(on ? "Held for the next key or click" : "Released")
+        .accessibilityHint(windowsHost && flag == .command && winTap != nil && !on
+                           ? "Tap to open Raycast. Touch and hold for the next key or click."
+                           : "Tap to press once. Touch and hold for the next key or click. Tap a held key to release it.")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { tap(key) }
+        .accessibilityAction(named: Text(on ? "Release modifier" : "Hold for next key or click")) {
+            latched.formSymmetricDifference(flag)
+        }
+        .sensoryFeedback(.selection, trigger: on)
     }
 
     /// escape, tab and the arrows: down and up, carrying whatever is latched, and the latch is
@@ -895,8 +937,9 @@ private struct KeyRow: View {
                 guard let key = shown.first(where: { $0.title == title }) else {
                     print("input test: no \(title) cap in this key row"); return
                 }
-                tap(key)
-                print("input test: the key row's \(title) tapped; latched now " + InputTest.describe(latched))
+                if case .modifier(_, let flag, _) = key { latched.formSymmetricDifference(flag) }
+                else { tap(key) }
+                print("input test: the key row's \(title) used; latched now " + InputTest.describe(latched))
             }
         }
     }

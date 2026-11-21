@@ -4,7 +4,11 @@ import Network
 
 struct ContentView: View {
     @StateObject private var client: StreamClient
-    init(client: StreamClient = StreamClient()) { _client = StateObject(wrappedValue: client) }
+    private let usesEnvironmentConnections: Bool
+    init(client: StreamClient = StreamClient(), usesEnvironmentConnections: Bool = false) {
+        _client = StateObject(wrappedValue: client)
+        self.usesEnvironmentConnections = usesEnvironmentConnections
+    }
     /// Tells the host what this device sees, once a second while connected. Also covers the DEBUG
     /// harness's `-SillLive 1` session, which runs on this same client.
     @StateObject private var statsReporter = ClientStatsReporter()
@@ -33,14 +37,14 @@ struct ContentView: View {
 
     private var app: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Palette.canvas.ignoresSafeArea()
             if client.connected {
                 StreamScreen(client: client)
-            } else {
+            } else if !usesEnvironmentConnections {
                 ConnectScreen(client: client)
             }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(usesEnvironmentConnections ? nil : .dark)
         // Tells MacMenuHub which window shows this session: the iPad's menu bar shows its menus while
         // it is the app's one window.
         .background(WindowSessionObserver(client: client))
@@ -48,8 +52,10 @@ struct ContentView: View {
             #if DEBUG
             SecondWindow.openFromLaunchArgument()   // -SillSecondWindow 1
             #endif
-            client.startBrowsing()
-            client.startRemote()                 // saved Macs without a key are cleared; DEBUG pairing arguments
+            if !usesEnvironmentConnections {
+                client.startBrowsing()
+                client.startRemote()             // saved Macs without a key are cleared; DEBUG pairing arguments
+            }
             #if DEBUG
             client.connectFromLaunchArgument()   // -SillConnect host:port, for the off-Bonjour test hosts
             Self.orientFromLaunchArgument()      // -SillOrientation landscape|portrait

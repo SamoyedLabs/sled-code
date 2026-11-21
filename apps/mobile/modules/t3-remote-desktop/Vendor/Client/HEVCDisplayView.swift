@@ -193,13 +193,19 @@ final class HEVCDisplayView: UIView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
+        Self.configureCursor(cursorLayer, shape: shape)
+        placeCursor()
+    }
+
+    static func configureCursor(_ cursorLayer: CAShapeLayer, shape: StreamClient.CursorShape?,
+                                scale: CGSize = CGSize(width: 1, height: 1)) {
         if let shape, let cg = shape.image.cgImage, shape.size.width > 0, shape.size.height > 0 {
             cursorLayer.path = nil
             cursorLayer.shadowPath = nil
             cursorLayer.shadowOpacity = 0
             cursorLayer.contents = cg
             cursorLayer.contentsGravity = .resize
-            cursorLayer.bounds = CGRect(origin: .zero, size: shape.size)
+            cursorLayer.bounds = CGRect(origin: .zero, size: CGSize(width: shape.size.width * scale.width, height: shape.size.height * scale.height))
             cursorLayer.anchorPoint = CGPoint(x: shape.hotspot.x / shape.size.width, y: shape.hotspot.y / shape.size.height)
         } else {
             let arrow = Self.arrowPath
@@ -210,7 +216,6 @@ final class HEVCDisplayView: UIView {
             cursorLayer.bounds = arrow.boundingBox
             cursorLayer.anchorPoint = .zero
         }
-        placeCursor()
     }
 
     /// Puts the sprite's tip on the pointer inside the letterboxed video rect, or hides it when

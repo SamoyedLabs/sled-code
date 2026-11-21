@@ -22,7 +22,7 @@ struct HardwareKeyboardPolicy: Equatable {
     /// tour, the Apps drawer (its search field), the Menus pull-down. The Add a Mac card is the connect
     /// screen's, where no input view is on screen.
     enum Taker: String, CaseIterable, Hashable {
-        case settings, pairing, tour, drawer, menus
+        case settings, pairing, tour, drawer, menus, displayName
     }
 
     /// Who holds the keyboard now: nobody, this rule for the hardware keyboard, or the person.

@@ -280,7 +280,7 @@ final class AudioOutput {
         let cookie = f.cookie ?? Data()
         guard model.format(epoch: epoch, framesPerPacket: frames, primingFrames: f.primingFrames ?? 0, cookie: cookie) else { return }
         let playable = AudioDecoder.codecs.contains(codec) && (f.sampleRate ?? 48_000) == 48_000 && (f.channels ?? 2) == 2
-        decoder = playable ? try? AudioDecoder(framesPerPacket: frames, cookie: cookie) : nil
+        decoder = playable ? try? AudioDecoder(framesPerPacket: frames, cookie: cookie, codec: codec) : nil
         playing = (epoch, frames, codec, playable && decoder != nil)
         #if DEBUG
         if playable, decoder != nil {

@@ -17,6 +17,7 @@ const offer = {
 function setup(
   options: {
     holdStart?: boolean;
+    closeNativeSession?: () => Promise<void>;
     changedHost?: boolean;
     failRetries?: boolean;
     deniedPermissions?: boolean;
@@ -34,6 +35,8 @@ function setup(
   let renewFailure: unknown;
   const restartGate = Promise.withResolvers<void>();
   const startGate = Promise.withResolvers<void>();
+  const accepted: string[] = [];
+  const stoppedEnvironments: string[] = [];
   const startEntered = Promise.withResolvers<void>();
   let statusReads = 0;
   let holdRestart = false;
@@ -46,8 +49,10 @@ function setup(
         restartConfigurations.push(configuration);
         return { sessionId: starts.at(-1)!, offer: offer.offer };
       },
-      acceptNativeAnswer: async () => {},
-      closeNativeSession: async () => {},
+      acceptNativeAnswer: async (answer) => {
+        accepted.push(JSON.parse(answer).sessionId);
+      },
+      closeNativeSession: options.closeNativeSession ?? (async () => {}),
     }),
     rpc: {
       status: async () => {
@@ -80,7 +85,7 @@ function setup(
         const sessionId = `10000000-0000-4000-8000-${String(starts.length + 1).padStart(12, "0")}`;
         starts.push(sessionId);
         startEntered.resolve();
-        if (options.holdStart) await startGate.promise;
+        if (options.holdStart && starts.length === 1) await startGate.promise;
         return {
           sessionId,
           clientNonce: offer.clientNonce,
@@ -104,7 +109,8 @@ function setup(
           expiresAt: 30_000,
         };
       },
-      stop: async (_environmentId, input) => {
+      stop: async (environmentId, input) => {
+        stoppedEnvironments.push(environmentId);
         stops.push(input.sessionId);
       },
     },
@@ -114,6 +120,8 @@ function setup(
     session,
     starts,
     stops,
+    accepted,
+    stoppedEnvironments,
     restartGate,
     startGate,
     startEntered,
@@ -245,6 +253,52 @@ describe("remote desktop network recovery", () => {
     expect(f.session.snapshot().phase).toBe("idle");
   });
 
+  it("waits for native input teardown and discards the old host's late answer when switching", async () => {
+    const closeGate = Promise.withResolvers<void>();
+    let switching = false;
+    using f = setup({
+      holdStart: true,
+      closeNativeSession: () => (switching ? closeGate.promise : Promise.resolve()),
+    });
+    const previous = f.session.connect(target);
+    await f.startEntered.promise;
+    const next = { environmentId: EnvironmentId.make("test-pc"), label: "Windows PC" };
+    switching = true;
+    const pending = f.session.connect(next);
+    f.startGate.resolve();
+    await previous;
+    expect(f.starts).toHaveLength(1);
+    expect(f.accepted).toEqual([]);
+    expect(f.stoppedEnvironments).toEqual([target.environmentId]);
+    closeGate.resolve();
+    await pending;
+    await f.session.connect(next);
+    expect(f.starts).toHaveLength(2);
+    expect(f.accepted).toEqual([f.starts[1]]);
+    expect(f.session.snapshot().host).toBe(next.label);
+  });
+
+  it("releases the active host lease while native input teardown gates a new offer", async () => {
+    const closeGate = Promise.withResolvers<void>();
+    let switching = false;
+    using f = setup({
+      closeNativeSession: () => (switching ? closeGate.promise : Promise.resolve()),
+    });
+    await f.session.connect(target);
+    f.session.nativeState({ state: "connected" });
+    switching = true;
+    const next = { environmentId: EnvironmentId.make("test-pc"), label: "Windows PC" };
+    const pending = f.session.connect(next);
+    expect(f.stoppedEnvironments).toEqual([target.environmentId]);
+    expect(f.stops).toEqual([f.starts[0]]);
+    await Promise.resolve();
+    expect(f.starts).toHaveLength(1);
+    closeGate.resolve();
+    await pending;
+    expect(f.starts).toHaveLength(2);
+    expect(f.accepted).toEqual(f.starts);
+  });
+
   it("never silently follows a changed host identity during recovery", async () => {
     using f = setup({ changedHost: true });
     await f.session.connect(target);
@@ -285,16 +339,22 @@ describe("remote desktop network recovery", () => {
     expect(f.stops).toHaveLength(0);
   });
 
-  it("waits for network recovery and never reconnects after explicit stop", async () => {
+  it.each(["header", "settings"])("never reconnects after an explicit %s stop", async (source) => {
     using f = setup();
+    expect(f.session.snapshot().environmentId).toBeNull();
     await f.session.connect(target);
+    expect(f.session.snapshot().environmentId).toBe(target.environmentId);
     f.session.nativeState({ state: "connected" });
     f.session.nativeState({ state: "network", available: false });
     f.session.nativeState({ state: "closed" });
     await vi.advanceTimersByTimeAsync(5_000);
     expect(f.starts).toHaveLength(1);
     f.session.nativeState({ state: "network", available: true });
-    f.session.stop();
+    if (source === "settings") f.session.nativeState({ state: "stopRequested" });
+    else f.session.stop();
+    expect(f.session.snapshot().phase).toBe("idle");
+    expect(f.session.snapshot().environmentId).toBeNull();
+    f.session.nativeState({ state: "closed" });
     await vi.advanceTimersByTimeAsync(60_000);
     expect(f.starts).toHaveLength(1);
     expect(f.session.snapshot().phase).toBe("idle");

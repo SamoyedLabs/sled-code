@@ -1877,6 +1877,58 @@ describe("EnvironmentSupervisor", () => {
     }),
   );
 
+  it.effect("refreshes a relay lease and rejects non-relay connections before minting", () =>
+    Effect.gen(function* () {
+      const relayHarness = yield* makeHarness({
+        prepare: () =>
+          Effect.succeed({
+            ...preparedFor(RELAY_TARGET),
+            httpAuthorization: { _tag: "Dpop", accessToken: "test-token", expiresAtEpochMs: 1000 },
+          }),
+      });
+      const relay = yield* EnvironmentSupervisor.make(RELAY_ENTRY, {
+        initiallyDesired: true,
+      }).pipe(Effect.provide(relayHarness.dependencies));
+      const directHarness = yield* makeHarness();
+      const direct = yield* EnvironmentSupervisor.make(TARGET_ENTRY, {
+        initiallyDesired: true,
+      }).pipe(Effect.provide(directHarness.dependencies));
+      yield* awaitState(relay.state, (state) => state.phase === "connected");
+      yield* awaitState(direct.state, (state) => state.phase === "connected");
+      const mints = yield* Ref.make(0);
+      const refresh = EnvironmentSupervisor.refreshRelayAccess(Ref.update(mints, (n) => n + 1));
+      const scoped = (supervisor: typeof relay) =>
+        refresh.pipe(
+          Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+        );
+
+      expect((yield* Effect.result(scoped(direct)))._tag).toBe("Failure");
+      expect(yield* Ref.get(mints)).toBe(0);
+      yield* scoped(relay);
+      expect(yield* Ref.get(mints)).toBe(1);
+      expect((yield* SubscriptionRef.get(relay.state)).generation).toBe(2);
+      expect(yield* Ref.get(relayHarness.releaseCount)).toBe(1);
+      expect(yield* Ref.get(directHarness.releaseCount)).toBe(0);
+
+      const interruptedRefresh = EnvironmentSupervisor.refreshRelayAccess(
+        Effect.gen(function* () {
+          yield* relayHarness.closeLatestSession();
+          yield* awaitState(relay.state, (state) => state.phase === "backoff");
+        }),
+      ).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, relay));
+      expect((yield* Effect.result(interruptedRefresh))._tag).toBe("Success");
+      expect((yield* SubscriptionRef.get(relay.state)).phase).toBe("connected");
+
+      const disabledRefresh = EnvironmentSupervisor.refreshRelayAccess(
+        relay.disconnect.pipe(
+          Effect.andThen(awaitState(relay.state, (state) => state.phase === "available")),
+        ),
+      ).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, relay));
+      expect((yield* Effect.result(disabledRefresh))._tag).toBe("Failure");
+      expect((yield* SubscriptionRef.get(relay.state)).desired).toBe(false);
+    }),
+  );
+
   it.effect("releases and reconnects a relay session when credentials change", () =>
     Effect.gen(function* () {
       const relaySpans: Array<Tracer.NativeSpan> = [];
