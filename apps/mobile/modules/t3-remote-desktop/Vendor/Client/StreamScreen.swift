@@ -345,7 +345,7 @@ struct StreamScreen: View {
         }
     }
 
-    private var streamSession: some View {
+    private var streamPresentation: some View {
         streamCanvas
         .background(Palette.canvas)
         .overlayPreferenceValue(WindowMenuAnchorKey.self) { anchor in
@@ -377,6 +377,10 @@ struct StreamScreen: View {
         .onChange(of: scaleOpen) { _, open in if open { setSettings(false) } }
         .onChange(of: windowMenu) { _, menu in if menu != nil { setSettings(false) } }
         .ignoresSafeArea(edges: .bottom)
+    }
+
+    private var streamSession: some View {
+        streamPresentation
         .onAppear {
             // A click, a key, a pick, a menu item or a gesture from anywhere on this screen, before it
             // goes out: the input view sends what is still composed, then forgets what was typed, which
@@ -416,7 +420,7 @@ struct StreamScreen: View {
         }
     }
 
-    var body: some View {
+    private var streamViewportObservers: some View {
         streamSession
         // A hardware keyboard (docs/hardware-keyboard-plan.md §2): the input view takes the keyboard by
         // itself while one is attached and nothing open takes it, never as the person's own.
@@ -438,6 +442,10 @@ struct StreamScreen: View {
         // session that stops being away (the move home) asks for its full rate whatever path it took
         // (docs/remote-bundle-plan.md §7.3).
         .onChange(of: client.remoteRoute) { _, _ in sendViewport() }
+    }
+
+    private var streamActivityObservers: some View {
+        streamViewportObservers
         // The link's line over the stream (§6.7): a report arriving or clearing, or the panel, the
         // drawer or the pairing overlay opening or closing over it.
         .onChange(of: linkReportLine, initial: true) { _, _ in updateLinkLine() }
@@ -451,6 +459,10 @@ struct StreamScreen: View {
         .onChange(of: keyboardShown) { _, _ in client.noteAction() }
         .onChange(of: scaleOpen) { _, _ in client.noteAction() }
         .onChange(of: textScale) { _, _ in client.noteAction() }
+    }
+
+    var body: some View {
+        streamActivityObservers
         .onChange(of: tourCard, initial: true) { _, card in tourCardChanged(card) }
         .onChange(of: tourVoiceOver) { _, _ in carryTour(reason: "VoiceOver") }
         // The session is over: a decision still waiting out its beat must not land in the next
